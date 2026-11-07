@@ -1,0 +1,377 @@
+{
+  "id": "custom_cluster",
+  "title": "Custom Cluster",
+  "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
+  "version": "0.1.0",
+  "vendor": "custom",
+  "loggingId": "OCC1",
+  "iconGlyph": "CLU",
+  "shared": [
+    "hud.js",
+    "hud_text.js",
+    "hud_data.js",
+    "hud_themes.js",
+    "layouts.js",
+    "shaders.js",
+    "icons.js",
+    "shift_score.js",
+    "sun.js",
+    "cluster_render_client.js",
+    "calibration.js",
+    "visible.js"
+  ],
+  "signals": {
+    "de.bmw.infotainment.vehicle.CDS": {
+      "statusEngineSpeed2": "rs",
+      "statusEngineTemperature": "rs"
+    },
+    "de.bmw.infotainment.vehicle.CDS2": {
+      "statusLongitudinalAccelerationMassCenter": "rs",
+      "statusLateralAccelerationMassCenter": "rs"
+    },
+    "de.bmw.infotainment.vehicle.Vehicle2": {
+      "statusCarSpeed2": "rs"
+    },
+    "de.bmw.infotainment.drivingexcitement.FES": {
+      "statusSwitchDriveDynamicSport2": "rs",
+      "statusActualValueTorque2": "rs",
+      "statusFESVehicleDynamicSwitchHMI": "rs",
+      "statusVehicleDynamicEngine": "rs"
+    },
+    "de.bmw.infrastructure.VehicleInformation": {
+      "statusGearboxDrive": "s",
+      "DataPowerTrain2": "s"
+    },
+    "com.harman.infotainment.systemfunctions.tasu.tasu.InternalTasu": {
+      "_instances": "SystemFunctionsInternalTasuInst1",
+      "_methods": [
+        "sendTasuRequest"
+      ],
+      "_broadcasts": [
+        "sendTasuResponse"
+      ]
+    },
+    "de.bmw.infotainment.KombiIF": {
+      "statusRangeTankStatus": "rs"
+    },
+    "de.bmw.infotainment.vehicle.Vehicle": {
+      "statusNewCurrentUnitsStatusExt": "rs",
+      "_optional": "the car's pressure and temperature units, for the tyre block"
+    },
+    "de.bmw.infotainment.misc.MDrive": {
+      "dataDisplayGearbox": "s",
+      "_optional": "S or M next to the gear"
+    },
+    "de.bmw.infotainment.vehicle.TPMS": {"statusTyrePressure": "rs", "statusTyreTemperature": "rs", "_optional": "tyre pressures and temperatures in the M theme"},
+    "de.bmw.infrastructure.EnvironmentalInformation": {
+      "ExteriorTemperature": "s"
+    }
+  },
+  "screens": [
+    {
+      "name": "MAIN",
+      "kind": "menu",
+      "title": "Custom Cluster",
+      "settings": true,
+      "items": [
+        [
+          "text",
+          "STATUS",
+          "Starting the cluster"
+        ]
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "hudLayout",
+      "label": "Theme (when not by drive mode)",
+      "type": "choice",
+      "default": "gt3",
+      "options": [
+        [
+          "off",
+          "Off (BMW's own cluster)"
+        ],
+        [
+          "gt3",
+          "GT3"
+        ],
+        [
+          "m",
+          "M"
+        ],
+        [
+          "sport",
+          "Sport"
+        ],
+        [
+          "grid",
+          "Calibration grid"
+        ]
+      ]
+    },
+    {
+      "key": "byMode",
+      "label": "Change with SPORT / COMFORT / ECO PRO",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "inComfort",
+      "label": "In Comfort",
+      "type": "choice",
+      "default": "off",
+      "options": [
+        [
+          "off",
+          "Off (BMW's own cluster)"
+        ],
+        [
+          "gt3",
+          "GT3"
+        ],
+        [
+          "m",
+          "M"
+        ],
+        [
+          "sport",
+          "Sport"
+        ]
+      ]
+    },
+    {
+      "key": "inSport",
+      "label": "In Sport",
+      "type": "choice",
+      "default": "gt3",
+      "options": [
+        [
+          "off",
+          "Off (BMW's own cluster)"
+        ],
+        [
+          "gt3",
+          "GT3"
+        ],
+        [
+          "m",
+          "M"
+        ],
+        [
+          "sport",
+          "Sport"
+        ]
+      ]
+    },
+    {
+      "key": "inEco",
+      "label": "In Eco Pro",
+      "type": "choice",
+      "default": "off",
+      "options": [
+        [
+          "off",
+          "Off (BMW's own cluster)"
+        ],
+        [
+          "gt3",
+          "GT3"
+        ],
+        [
+          "m",
+          "M"
+        ],
+        [
+          "sport",
+          "Sport"
+        ]
+      ]
+    },
+    {
+      "key": "mapWindow",
+      "label": "Leave room for the map",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "key": "units",
+      "label": "Units",
+      "type": "choice",
+      "default": "us",
+      "options": [
+        [
+          "us",
+          "mph, °F, psi"
+        ],
+        [
+          "metric",
+          "km/h, °C, bar"
+        ]
+      ]
+    },
+    {
+      "key": "clock",
+      "label": "Clock",
+      "type": "choice",
+      "default": "12h",
+      "options": [
+        [
+          "12h",
+          "12-hour"
+        ],
+        [
+          "24h",
+          "24-hour"
+        ]
+      ]
+    },
+    {
+      "key": "redline",
+      "label": "Redline (shift light)",
+      "type": "number",
+      "unit": "rpm",
+      "default": 7000,
+      "steps": [
+        5500,
+        6000,
+        6500,
+        7000,
+        7500
+      ]
+    },
+    {
+      "key": "shiftBefore",
+      "label": "Shift point before redline",
+      "type": "number",
+      "unit": "rpm",
+      "default": 300,
+      "steps": [
+        0,
+        100,
+        200,
+        300,
+        500,
+        800,
+        1000
+      ]
+    },
+    {
+      "key": "coldGuard",
+      "label": "Cold-engine rev guard",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "showBoost",
+      "label": "Show boost",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "demo",
+      "label": "Demo data",
+      "type": "choice",
+      "default": "auto",
+      "options": [
+        [
+          "auto",
+          "Auto (until the car sends data)"
+        ],
+        [
+          "on",
+          "On"
+        ],
+        [
+          "off",
+          "Off"
+        ]
+      ]
+    }
+  ],
+  "config": {
+    "target": "panel",
+    "statusName": "Cluster",
+    "socketPath": "/dev/shm/cluster-render/render.sock",
+    "location": {
+      "lat": 35.2271,
+      "lon": -80.8431
+    },
+    "utcOffsetMinutes": null,
+    "_comment": "target panel: the whole 1920x720 instrument cluster, drawn over BMW's gauges. socketPath: cluster-render's documented default. location and utcOffsetMinutes: as in Custom HUD (the clock box). tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a G01 X3 holds 65). engine: the peak crank torque (Nm) and power (kW) the {{torquePct}} and {{powerPct}} tokens count from (an M40i: 500 Nm, 285 kW / 382 hp).",
+    "dme": {
+      "comment": "Boost from the engine unit (DME, ecu 18) over read-only UDS 0x22, only while the sport display sends no boost and a boost readout is shown. Absolute kPa, the outside air pressure (baro) is subtracted. Candidates tried in order, the first plausible one wins. From cauliflowermossgrape's car_vitals (MIT).",
+      "ecu": 18,
+      "boost": [
+        {
+          "did": "F470",
+          "bytes": 2,
+          "at": 3,
+          "factor": 0.03125,
+          "offset": 0,
+          "min": 20,
+          "max": 600,
+          "note": "OBD PID 0x70 boost pressure control: actual boost pressure sensor A (absolute), 1/32 kPa"
+        },
+        {
+          "did": "F487",
+          "bytes": 2,
+          "at": 1,
+          "factor": 0.03125,
+          "offset": 0,
+          "min": 20,
+          "max": 600,
+          "note": "OBD PID 0x87 intake manifold absolute pressure sensor A, 1/32 kPa"
+        },
+        {
+          "did": "F40B",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": 0,
+          "min": 20,
+          "max": 255,
+          "note": "OBD PID 0x0B intake manifold absolute pressure, kPa (max 255 = 1.5 bar boost)"
+        },
+        {
+          "obd": "0B",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": 0,
+          "min": 20,
+          "max": 255,
+          "note": "OBD service 01 PID 0x0B (same as F40B)"
+        }
+      ],
+      "baro": [
+        {
+          "did": "F433",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": 0,
+          "min": 50,
+          "max": 115,
+          "note": "OBD PID 0x33 barometric pressure, kPa (101.3 when not available)"
+        },
+        {
+          "obd": "33",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": 0,
+          "min": 50,
+          "max": 115,
+          "note": "OBD service 01 PID 0x33 (same as F433)"
+        }
+      ]
+    },
+    "tankLitres": 65,
+    "engine": {
+      "torqueNm": 500,
+      "powerKw": 285
+    }
+  }
+}

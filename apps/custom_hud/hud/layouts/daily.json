@@ -1,0 +1,292 @@
+{
+ "schemaVersion": 2,
+ "name": "Daily",
+ "_about": "Calm everyday layout: speed is the hero, with the gear on the left and the clock and oil on the right. Fitted (Nov 5 2026 grid photo) to the part of the HUD the driver sees, x 120..605, y 100..378, with a 6 px margin; the bottom-left x 150..355, y 314..378 is left to BMW's own speed and speed-limit sign, which it keeps drawing over ours in Comfort. To change it, copy this file into the app data folder layouts/ (scripts/deploy.sh); the app reloads it by itself. Widget types and tokens: see the header of hud.js. Modes (hud.js header): cruise moves everything to the right half, clear of BMW's ACC block (x ~240..345, y ~200..312) and speed; nav keeps a small column on the left (gear, clock, oil, x 126..305, y 172..290) under BMW's guidance line (y ~160) and clear of its turn map (x ~310..605); cruiseNav keeps gear, clock and oil in the sliver left of the ACC block. Measured off the Nov 7 2026 HUD photos, not the grid: check on the car. In cruise a row under the oil shows the car ahead: GAP ({{accGap}}) and REL ({{accRel}}), raw until config.acc is calibrated.",
+ "modes": [
+  "cruise",
+  "nav",
+  "cruiseNav"
+ ],
+ "widgets": [
+  {
+   "id": "speed",
+   "type": "text",
+   "text": "{{speed}}",
+   "font": "hero",
+   "x": 277,
+   "y": 166,
+   "w": 170,
+   "h": 73,
+   "class": "overlay",
+   "z": 10,
+   "align": "center",
+   "glow": true,
+   "in": {
+    "cruise": {
+     "x": 429,
+     "y": 128
+    },
+    "nav": false,
+    "cruiseNav": false
+   }
+  },
+  {
+   "id": "speed_unit",
+   "type": "text",
+   "text": "{{u:speed}}",
+   "font": "label",
+   "x": 277,
+   "y": 247,
+   "w": 170,
+   "h": 20,
+   "class": "overlay",
+   "z": 10,
+   "align": "center",
+   "color": "dim",
+   "spacing": 2,
+   "in": {
+    "cruise": {
+     "x": 429,
+     "y": 207
+    },
+    "nav": false,
+    "cruiseNav": false
+   }
+  },
+  {
+   "id": "m_stripe",
+   "type": "stripe",
+   "x": 329,
+   "y": 273,
+   "w": 66,
+   "h": 4,
+   "themes": [
+    "m"
+   ],
+   "class": "content",
+   "z": 5,
+   "in": {
+    "cruise": {
+     "x": 481,
+     "y": 233
+    },
+    "nav": false,
+    "cruiseNav": false
+   }
+  },
+  {
+   "id": "gear",
+   "type": "text",
+   "text": "{{gear}}",
+   "font": "big",
+   "x": 150,
+   "y": 205,
+   "w": 100,
+   "h": 33,
+   "class": "overlay",
+   "z": 10,
+   "align": "center",
+   "glow": true,
+   "in": {
+    "cruise": {
+     "x": 126,
+     "y": 120
+    },
+    "nav": {
+     "x": 126,
+     "y": 178
+    },
+    "cruiseNav": {
+     "x": 126,
+     "y": 172
+    }
+   }
+  },
+  {
+   "id": "clock",
+   "type": "text",
+   "text": "{{time}}",
+   "font": "mid",
+   "x": 470,
+   "y": 214,
+   "w": 90,
+   "h": 27,
+   "class": "overlay",
+   "z": 10,
+   "align": "right",
+   "toggle": "showClock",
+   "in": {
+    "cruise": {
+     "y": 250
+    },
+    "nav": {
+     "x": 126,
+     "y": 222,
+     "align": "left"
+    },
+    "cruiseNav": {
+     "x": 126,
+     "y": 214,
+     "align": "left"
+    }
+   }
+  },
+  {
+   "id": "ampm",
+   "type": "text",
+   "text": "{{ampm}}",
+   "font": "label",
+   "x": 565,
+   "y": 220,
+   "w": 34,
+   "h": 20,
+   "class": "overlay",
+   "z": 10,
+   "color": "dim",
+   "spacing": 1,
+   "toggle": "showClock",
+   "in": {
+    "cruise": {
+     "y": 256
+    },
+    "nav": {
+     "x": 222,
+     "y": 228
+    },
+    "cruiseNav": false
+   }
+  },
+  {
+   "id": "oil_label",
+   "type": "text",
+   "text": "OIL",
+   "font": "small",
+   "x": 470,
+   "y": 265,
+   "w": 40,
+   "h": 17,
+   "class": "content",
+   "z": 10,
+   "color": "dim",
+   "spacing": 1.5,
+   "toggle": "showOil",
+   "in": {
+    "cruise": {
+     "y": 301
+    },
+    "nav": {
+     "x": 126,
+     "y": 266
+    },
+    "cruiseNav": {
+     "x": 126,
+     "y": 258
+    }
+   }
+  },
+  {
+   "id": "oil",
+   "type": "text",
+   "text": "{{oil}}°",
+   "font": "mid",
+   "x": 512,
+   "y": 256,
+   "w": 87,
+   "h": 27,
+   "class": "overlay",
+   "z": 10,
+   "align": "right",
+   "toggle": "showOil",
+   "in": {
+    "cruise": {
+     "y": 292
+    },
+    "nav": {
+     "x": 168,
+     "y": 257,
+     "align": "left"
+    },
+    "cruiseNav": {
+     "x": 160,
+     "y": 249,
+     "w": 70,
+     "align": "left"
+    }
+   }
+  },
+  {
+   "id": "acc_gap_label",
+   "type": "text",
+   "text": "GAP",
+   "font": "small",
+   "x": 405,
+   "y": 343,
+   "w": 40,
+   "h": 17,
+   "class": "content",
+   "z": 10,
+   "color": "dim",
+   "spacing": 1.5,
+   "in": {
+    "normal": false,
+    "nav": false,
+    "cruiseNav": false
+   }
+  },
+  {
+   "id": "acc_gap",
+   "type": "text",
+   "text": "{{accGap}}",
+   "font": "mid",
+   "x": 445,
+   "y": 334,
+   "w": 70,
+   "h": 27,
+   "class": "overlay",
+   "z": 10,
+   "align": "left",
+   "in": {
+    "normal": false,
+    "nav": false,
+    "cruiseNav": false
+   }
+  },
+  {
+   "id": "acc_rel_label",
+   "type": "text",
+   "text": "REL",
+   "font": "small",
+   "x": 516,
+   "y": 343,
+   "w": 36,
+   "h": 17,
+   "class": "content",
+   "z": 10,
+   "color": "dim",
+   "spacing": 1.5,
+   "in": {
+    "normal": false,
+    "nav": false,
+    "cruiseNav": false
+   }
+  },
+  {
+   "id": "acc_rel",
+   "type": "text",
+   "text": "{{accRel}}",
+   "font": "mid",
+   "x": 552,
+   "y": 334,
+   "w": 47,
+   "h": 27,
+   "class": "overlay",
+   "z": 10,
+   "align": "right",
+   "in": {
+    "normal": false,
+    "nav": false,
+    "cruiseNav": false
+   }
+  }
+ ]
+}

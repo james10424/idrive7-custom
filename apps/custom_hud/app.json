@@ -1,0 +1,451 @@
+{
+  "id": "custom_hud",
+  "title": "Custom HUD",
+  "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
+  "version": "0.1.0",
+  "vendor": "custom",
+  "loggingId": "OCH1",
+  "iconGlyph": "HUD",
+  "shared": [
+    "hud.js",
+    "hud_text.js",
+    "hud_data.js",
+    "hud_themes.js",
+    "layouts.js",
+    "shaders.js",
+    "icons.js",
+    "shift_score.js",
+    "sun.js",
+    "cluster_render_client.js",
+    "calibration.js",
+    "visible.js"
+  ],
+  "signals": {
+    "de.bmw.infotainment.vehicle.CDS": {
+      "statusEngineSpeed2": "rs",
+      "statusEngineTemperature": "rs"
+    },
+    "de.bmw.infotainment.vehicle.CDS2": {
+      "statusLongitudinalAccelerationMassCenter": "rs",
+      "statusLateralAccelerationMassCenter": "rs"
+    },
+    "de.bmw.infotainment.vehicle.Vehicle2": {
+      "statusCarSpeed2": "rs"
+    },
+    "de.bmw.infotainment.drivingexcitement.FES": {
+      "statusSwitchDriveDynamicSport2": "rs",
+      "statusActualValueTorque2": "rs",
+      "statusFESVehicleDynamicSwitchHMI": "rs"
+    },
+    "de.bmw.infrastructure.VehicleInformation": {
+      "statusGearboxDrive": "s",
+      "DataPowerTrain2": "s"
+    },
+    "com.harman.infotainment.systemfunctions.tasu.tasu.InternalTasu": {
+      "_instances": "SystemFunctionsInternalTasuInst1",
+      "_methods": [
+        "sendTasuRequest"
+      ],
+      "_broadcasts": [
+        "sendTasuResponse"
+      ]
+    },
+    "de.bmw.infotainment.KombiIF": {
+      "statusRangeTankStatus": "rs"
+    },
+    "de.bmw.infrastructure.EnvironmentalInformation": {
+      "ExteriorTemperature": "s"
+    },
+    "de.bmw.infotainment.navigation.guiding.Guidance": {
+      "_instances": "Main_Instance",
+      "guidanceState": "rs"
+    },
+    "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
+      "functionalLibraryData": "rs"
+    },
+    "de.bmw.dass.GapVehicleAhead": {
+      "DataFrontVehicle": "s",
+      "GapVehicleDrivingAhead": "s"
+    }
+  },
+  "screens": [
+    {
+      "name": "MAIN",
+      "kind": "menu",
+      "title": "Custom HUD",
+      "settings": true,
+      "items": [
+        [
+          "text",
+          "STATUS",
+          "Starting the HUD"
+        ]
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "hudLayout",
+      "label": "Layout (when not by drive mode)",
+      "type": "choice",
+      "default": "daily",
+      "options": [
+        [
+          "off",
+          "Off (BMW's own HUD)"
+        ],
+        [
+          "daily",
+          "Daily"
+        ],
+        [
+          "sport",
+          "Sport"
+        ],
+        [
+          "redline",
+          "Redline"
+        ],
+        [
+          "grid",
+          "Calibration grid"
+        ]
+      ]
+    },
+    {
+      "key": "byMode",
+      "label": "Change with SPORT / COMFORT / ECO PRO",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "inComfort",
+      "label": "In Comfort (Daily by default; BMW keeps its speed bottom-left)",
+      "type": "choice",
+      "default": "daily",
+      "options": [
+        [
+          "off",
+          "Off (BMW's own HUD)"
+        ],
+        [
+          "daily",
+          "Daily"
+        ],
+        [
+          "sport",
+          "Sport"
+        ],
+        [
+          "redline",
+          "Redline"
+        ]
+      ]
+    },
+    {
+      "key": "inSport",
+      "label": "In Sport (off by default: BMW's Sport HUD takes the middle)",
+      "type": "choice",
+      "default": "off",
+      "options": [
+        [
+          "off",
+          "Off (BMW's own HUD)"
+        ],
+        [
+          "daily",
+          "Daily"
+        ],
+        [
+          "sport",
+          "Sport"
+        ],
+        [
+          "redline",
+          "Redline"
+        ]
+      ]
+    },
+    {
+      "key": "inEco",
+      "label": "In Eco Pro (off by default: BMW's own HUD)",
+      "type": "choice",
+      "default": "off",
+      "options": [
+        [
+          "off",
+          "Off (BMW's own HUD)"
+        ],
+        [
+          "daily",
+          "Daily"
+        ],
+        [
+          "sport",
+          "Sport"
+        ],
+        [
+          "redline",
+          "Redline"
+        ]
+      ]
+    },
+    {
+      "key": "makeRoom",
+      "label": "Make room for BMW's guidance and cruise display",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "hudTheme",
+      "label": "Theme",
+      "type": "choice",
+      "default": "auto",
+      "options": [
+        [
+          "auto",
+          "Auto (Night after sunset)"
+        ],
+        [
+          "classic",
+          "Classic"
+        ],
+        [
+          "m",
+          "M"
+        ],
+        [
+          "night",
+          "Night"
+        ]
+      ]
+    },
+    {
+      "key": "dayTheme",
+      "label": "Daytime theme for Auto",
+      "type": "choice",
+      "default": "classic",
+      "options": [
+        [
+          "classic",
+          "Classic"
+        ],
+        [
+          "m",
+          "M"
+        ]
+      ]
+    },
+    {
+      "key": "units",
+      "label": "Units",
+      "type": "choice",
+      "default": "us",
+      "options": [
+        [
+          "us",
+          "mph, °F, psi"
+        ],
+        [
+          "metric",
+          "km/h, °C, bar"
+        ]
+      ]
+    },
+    {
+      "key": "clock",
+      "label": "Clock",
+      "type": "choice",
+      "default": "12h",
+      "options": [
+        [
+          "12h",
+          "12-hour"
+        ],
+        [
+          "24h",
+          "24-hour"
+        ]
+      ]
+    },
+    {
+      "key": "redline",
+      "label": "Redline (shift light)",
+      "type": "number",
+      "unit": "rpm",
+      "default": 7000,
+      "steps": [
+        5500,
+        6000,
+        6500,
+        7000,
+        7500
+      ]
+    },
+    {
+      "key": "shiftBefore",
+      "label": "Shift point before redline",
+      "type": "number",
+      "unit": "rpm",
+      "default": 300,
+      "steps": [
+        0,
+        100,
+        200,
+        300,
+        500,
+        800,
+        1000
+      ]
+    },
+    {
+      "key": "coldGuard",
+      "label": "Cold-engine rev guard (Redline)",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "showClock",
+      "label": "Show clock",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "showOil",
+      "label": "Show oil temperature",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "showCoolant",
+      "label": "Show coolant temperature",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "showBoost",
+      "label": "Show boost (Sport layout)",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "demo",
+      "label": "Demo data",
+      "type": "choice",
+      "default": "auto",
+      "options": [
+        [
+          "auto",
+          "Auto (until the car sends data)"
+        ],
+        [
+          "on",
+          "On"
+        ],
+        [
+          "off",
+          "Off"
+        ]
+      ]
+    }
+  ],
+  "config": {
+    "target": "hud",
+    "statusName": "HUD",
+    "socketPath": "/dev/shm/cluster-render/render.sock",
+    "location": {
+      "lat": 35.2271,
+      "lon": -80.8431
+    },
+    "utcOffsetMinutes": null,
+    "_comment": "socketPath: cluster-render's documented default. location: where the Auto theme works out sunrise and sunset (Charlotte, NC). utcOffsetMinutes: leave null to use the head unit's own time zone; set it (e.g. -300 for EST) only if the HUD clock shows the wrong hour on the car. tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a G01 X3 holds 65).",
+    "dme": {
+      "comment": "Boost from the engine unit (DME, ecu 18) over read-only UDS 0x22, only while the sport display sends no boost and a boost readout is shown. Absolute kPa, the outside air pressure (baro) is subtracted. Candidates tried in order, the first plausible one wins. From cauliflowermossgrape's car_vitals (MIT).",
+      "ecu": 18,
+      "boost": [
+        {
+          "did": "F470",
+          "bytes": 2,
+          "at": 3,
+          "factor": 0.03125,
+          "offset": 0,
+          "min": 20,
+          "max": 600,
+          "note": "OBD PID 0x70 boost pressure control: actual boost pressure sensor A (absolute), 1/32 kPa"
+        },
+        {
+          "did": "F487",
+          "bytes": 2,
+          "at": 1,
+          "factor": 0.03125,
+          "offset": 0,
+          "min": 20,
+          "max": 600,
+          "note": "OBD PID 0x87 intake manifold absolute pressure sensor A, 1/32 kPa"
+        },
+        {
+          "did": "F40B",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": 0,
+          "min": 20,
+          "max": 255,
+          "note": "OBD PID 0x0B intake manifold absolute pressure, kPa (max 255 = 1.5 bar boost)"
+        },
+        {
+          "obd": "0B",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": 0,
+          "min": 20,
+          "max": 255,
+          "note": "OBD service 01 PID 0x0B (same as F40B)"
+        }
+      ],
+      "baro": [
+        {
+          "did": "F433",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": 0,
+          "min": 50,
+          "max": 115,
+          "note": "OBD PID 0x33 barometric pressure, kPa (101.3 when not available)"
+        },
+        {
+          "obd": "33",
+          "bytes": 1,
+          "at": 0,
+          "factor": 1,
+          "offset": 0,
+          "min": 50,
+          "max": 115,
+          "note": "OBD service 01 PID 0x33 (same as F433)"
+        }
+      ]
+    },
+    "tankLitres": 65,
+    "acc": {
+      "comment": "The car ahead and the ACC set speed: raw * factor + offset per token ({{accGap}} gap, {{accRel}} rel, {{accGap2}} gap2, {{accSet}} set). The car's catalog gives no units; the app logs 'car ahead raw: ...' once a second while the car sends it, to calibrate these against BMW's own HUD.",
+      "gap": {
+        "factor": 1,
+        "offset": 0
+      },
+      "rel": {
+        "factor": 1,
+        "offset": 0
+      },
+      "gap2": {
+        "factor": 1,
+        "offset": 0
+      },
+      "set": {
+        "factor": 1,
+        "offset": 0
+      }
+    }
+  }
+}
