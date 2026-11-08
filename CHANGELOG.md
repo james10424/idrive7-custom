@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 8 2026
 
+- **Custom Cluster 0.1.20:** Sport: the speed band in iDrive 8's colours: a cyan outer line, filled a deep cyan-blue brightening to cyan at the value; past the value both bands take the stock dark colours (navy for speed, dark maroon for rpm), sampled from a sharp photo of the car's own Sport view; the rpm fill pink-red; the outer lines about twice as thick as the inner ones; each bracket now runs outer line, a dark gap holding the redline, then the band against the inner line, as BMW's does, while up to the value the fill spans the whole width; the marks are short thick rounded dashes in the middle of the gap (the band narrowed to 32 px to make room); the fuel and oil gauges sit 27 px closer to the brackets.
 - **Custom Cluster 0.1.19:** the tank is 59 L (a 2020 G20 M340i), not 65: the fuel gauge's marks read 59 / 30 / 0 L or 16 / 8 / 0 gal, and its fill is measured against 59 L.
 - **Custom Cluster 0.1.18:** Sport: the fuel gauge's marks are the tank in litres or US gallons by the units setting (65 / 33 / 0 L, 17 / 9 / 0 gal, from config.tankLitres), with L or gal under the top mark, instead of 1 / 1/2 / 0.
 - **Custom Cluster 0.1.17:** Sport: boost and the 12 V battery become two upright boxes left of the speed scale, mirroring the car-ahead box (boost yellow 0 to 1.5 bar, battery green by charge %, each value riding beside the top of its fill, the battery's in V). They are drawn in the main shader, so the layout uses 6 layers instead of 7.

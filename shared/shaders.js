@@ -750,13 +750,15 @@ uniform vec2 u_vbarV;     // their fills 0..1 (< 0: no value)
 uniform vec3 u_vbarC0;    // their fill colours
 uniform vec3 u_vbarC1;
 
-const vec3 BLUE_LINE = vec3(0.36, 0.62, 1.0);
-const vec3 BLUE_BAND = vec3(0.13, 0.3, 0.78);
-const vec3 BLUE_LIT = vec3(0.62, 0.86, 1.0);
+// speed, after iDrive 8 (photo, Nov 8 2026): a cyan line, a medium blue band, filled pale aqua deepening to cyan
+const vec3 BLUE_LINE = vec3(0.24, 0.72, 1.0);
+const vec3 BLUE_BAND = vec3(0.01, 0.2, 0.52);    // past the value: stock iDrive 7 navy (sharp car photo, Nov 8 2026)
+const vec3 BLUE_LIT = vec3(0.12, 0.6, 0.81);
+const vec3 BLUE_LIT2 = vec3(0.05, 0.88, 0.95);
 const vec3 BLUE_IN = vec3(0.2, 0.45, 0.98);
 const vec3 RED_LINE = vec3(0.95, 0.12, 0.16);
-const vec3 RED_BAND = vec3(0.33, 0.06, 0.1);
-const vec3 RED_LIT = vec3(0.93, 0.1, 0.15);
+const vec3 RED_BAND = vec3(0.25, 0.07, 0.13);    // rpm past the value: stock dark maroon (sharp car photo, Nov 8 2026)
+const vec3 RED_LIT = vec3(0.96, 0.14, 0.31);
 const vec3 RED_IN = vec3(0.86, 0.08, 0.13);
 
 float cov(float d) { return clamp(0.5 - d, 0.0, 1.0); }
@@ -782,37 +784,53 @@ float outerSlope(float y) {
 float dIn(vec2 q) { return (q.x - outerX(q.y)) / sqrt(1.0 + outerSlope(q.y) * outerSlope(q.y)); }
 
 // one bracket in the left frame (q mirrored for the right one)
-vec4 bracket(vec2 q, float val, float redFrom, float orange, float ticks, vec3 line, vec3 band, vec3 lit, vec3 inner, vec4 c) {
+// band: its colour past the value, drawn at offA; lit: the fill's colour at the bottom, lit2 at the value
+vec4 bracket(vec2 q, float val, float redFrom, float orange, float ticks, vec3 line, vec3 band, float offA, vec3 lit, vec3 lit2, vec3 inner, vec4 c) {
     float d = dIn(q);
     float t = (u_scale.x - q.y) / (u_scale.x - u_scale.y);    // 0 at the scale's 0
     bool inY = q.y > u_geo.x + 5.0 && q.y < u_geo.z - 4.0;
-    // the band: lit up to the value, white marker on top
-    float inB = (inY ? 1.0 : 0.0) * cov(-(d - 5.0)) * cov(d - 5.0 - u_w);
+    // outer line, a dark gap (the redline marks), then the band against the inner line (BMW's own Sport view, car photo
+    // Nov 8 2026): the band runs from b0 to b1 px inwards
+    float b1 = u_inner - 1.5, b0 = b1 - u_w, f0 = 3.8;
+    float lit_ = inY && t <= val && val > 0.002 ? 1.0 : 0.0;
+    // up to the value the fill spans the whole width, outer line to inner line (iDrive 8 running, photo Nov 8 2026); past
+    // it only the band against the inner line shows, the gap dark (stock photo)
+    float inB = (inY ? 1.0 : 0.0) * cov(-(d - (lit_ > 0.5 ? f0 : b0))) * cov(d - b1);
     if (inB > 0.0) {
-        // empty past the value, as BMW's own Sport view: only a faint tint of the band colour (car photo, Nov 8 2026)
         vec3 col = band;
-        float a = 0.22;
-        if (t <= val) a = 0.96;
-        if (t <= val) col = mix(lit, mix(lit, vec3(1.0), 0.25), clamp((d - 5.0) / u_w, 0.0, 1.0)) * mix(0.8, 1.0, clamp(t / max(val, 0.01), 0.0, 1.0));
+        float a = offA;
+        if (lit_ > 0.5) {
+            a = 0.96;
+            col = mix(lit, lit2, clamp(t / max(val, 0.01), 0.0, 1.0));
+            col = mix(col, vec3(1.0), 0.08 * (1.0 - clamp((d - f0) / (b1 - f0), 0.0, 1.0)));
+        }
         c = over(vec4(col, a * inB), c);
-        float yv = u_scale.x - val * (u_scale.x - u_scale.y);
-        if (val > 0.002) c = over(vec4(1.0, 1.0, 1.0, inB * cov(abs(q.y - yv) - 2.0)), c);
-        // marks at every label, on the band's outer half
+    }
+    // the white marker at the value, across the full width
+    float yv = u_scale.x - val * (u_scale.x - u_scale.y);
+    if (inY && val > 0.002 && d > f0 && d < b1) c = over(vec4(1.0, 1.0, 1.0, cov(abs(q.y - yv) - 2.0)), c);
+    // a mark at every label: a short thick rounded dash in the middle of the gap, clear of the outer line and the band
+    // (stock photo, Nov 8 2026); over the fill below the value
+    if (inY) {
         float kk = floor(t * ticks + 0.5);
         float yk = u_scale.x - kk / ticks * (u_scale.x - u_scale.y);
-        if (kk >= 0.0 && kk <= ticks && d > 7.0 && d < 19.0) c = over(vec4(line, 0.9 * cov(abs(q.y - yk) - 1.2)), c);
-        // redline: yellow dashes, then a solid red line, on the outer edge of the band
-        if (redFrom < 1.5 && d > 8.0 && d < 13.0) {
+        float gm = 0.5 * (f0 + 3.0 + b0), gh = max(0.5, 0.5 * (b0 - f0 - 3.0) - 3.5);   // the gap's middle, the dash's half length
+        float td = length(vec2(max(abs(d - gm) - gh, 0.0), q.y - yk)) - 2.2;
+        if (kk >= 0.0 && kk <= ticks) c = over(vec4(line, 0.95 * cov(td)), c);
+    }
+    if (inY && d > 4.0 && d < b0) {
+        // in the gap by the outer line: the redline, yellow dashes then a solid red line
+        if (redFrom < 1.5 && d > 6.0 && d < 11.0) {
             if (t >= redFrom && t <= 1.02) c = over(vec4(1.0, 0.2, 0.2, 1.0), c);
             else if (t >= orange && t < redFrom && mod(q.y, 16.0) < 7.0) c = over(vec4(1.0, 0.85, 0.1, 1.0), c);
         }
     }
     // the outer line, its top run and its bottom run
     // the slanted line stops at the top and bottom runs (it ran 6 px past them: a spur at each corner, car photo Nov 8 2026)
-    float o = q.y > u_geo.x - 1.0 && q.y < u_geo.z + 1.0 ? cov(abs(d - 1.0) - 1.8) : 0.0;
+    float o = q.y > u_geo.x - 1.0 && q.y < u_geo.z + 1.0 ? cov(abs(d - 0.5) - 3.0) : 0.0;   // ~6 px, twice the inner line (car photo, Nov 8 2026)
     vec2 tl = vec2(outerX(u_geo.x), u_geo.x), bl = vec2(outerX(u_geo.z), u_geo.z);
-    o = max(o, cov(segD(q, tl, vec2(u_topEnd, u_geo.x)) - 2.2));
-    o = max(o, cov(segD(q, bl, bl + vec2(u_inner + 40.0, 0.0)) - 2.2));
+    o = max(o, cov(segD(q, tl, vec2(u_topEnd, u_geo.x)) - 3.0));
+    o = max(o, cov(segD(q, bl, bl + vec2(u_inner + 40.0, 0.0)) - 3.0));
     c = over(vec4(line, 0.35 * exp(-abs(d) / 5.0) * (inY ? 1.0 : 0.0) * step(d, 0.0)), c);
     c = over(vec4(line, o), c);
     // the inner line: down the bracket from the top run to the bottom, no top run of its own (BMW's Sport view has a
@@ -875,8 +893,8 @@ void main() {
     vec2 pm = vec2(u_size.x - p.x, p.y);
     vec4 c = vec4(0.0, 0.0, 0.0, 1.0);
 
-    c = bracket(p, u_speed, 2.0, 2.0, u_ticks.x, BLUE_LINE, BLUE_BAND, BLUE_LIT, BLUE_IN, c);
-    c = bracket(pm, u_rpm, u_redFrom, u_orange, u_ticks.y, RED_LINE, RED_BAND, RED_LIT, RED_IN, c);
+    c = bracket(p, u_speed, 2.0, 2.0, u_ticks.x, BLUE_LINE, BLUE_BAND, 0.95, BLUE_LIT, BLUE_LIT2, BLUE_IN, c);
+    c = bracket(pm, u_rpm, u_redFrom, u_orange, u_ticks.y, RED_LINE, RED_BAND, 0.95, RED_LIT * 0.85, RED_LIT, RED_IN, c);
     // the map window: a rounded hole cut out of the backdrop and brackets, so BMW's map shows clean; the fuel and
     // oil bars and the bottom strip draw over it, as BMW's own Sport view lays them beside the map
     if (u_hole.z > 0.0) {
