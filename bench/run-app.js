@@ -85,6 +85,17 @@ let mode = 'demo', manual = {}, drive = null, nav = null, assist = null;
 setInterval(() => { if (drive !== null) hu.feed('de.bmw.infotainment.drivingexcitement.FES', 'statusFESVehicleDynamicSwitchHMI', { actualValueModeDrivingExperience: drive }); }, 1000);
 // route guidance (Guidance guidanceState, the enum names oap-sdk reads), sent once a second
 setInterval(() => { if (nav !== null) hu.feed('de.bmw.infotainment.navigation.guiding.Guidance', 'guidanceState', nav); }, 1000);
+// while GUIDING: a made-up 24 km route, driven in 4 minutes and then again (finalDestinationInfo, travelledDistance)
+let routeT0 = 0;
+setInterval(() => {
+    if (nav !== 'ACTIVE') { routeT0 = 0; return; }
+    if (!routeT0) routeT0 = Date.now();
+    const total = 24000, done = total * (((Date.now() - routeT0) / 240000) % 1), left = total - done;
+    hu.feed('de.bmw.infotainment.navigation.guiding.Guidance', 'finalDestinationInfo', { travelTime: Math.round(left / 13.9 + 120),
+        delayTime: 120, delayStatus: 'YELLOW', formattedDistance: { distance: (left / 1000).toFixed(1), unit: 'KM', rawDistance: left },
+        distanceFromCurrentToFinalDestination: left, isCheckeredFlag: true });
+    hu.feed('de.bmw.infotainment.navigation.guiding.Guidance', 'travelledDistance', { distance: (done / 1000).toFixed(1), unit: 'KM', rawDistance: done });
+}, 1000);
 // the trip computer (ResetLogic) as the car would send it: 9.8 l/100km since refuelling, scale / 10^digit
 setInterval(() => {
     hu.feed('de.bmw.infotainment.resetlogic.ResetLogic', 'averageConsumption', { consumptionCombustionCurrentScale: 98, consumptionCombustionCurrentDigit: 1,

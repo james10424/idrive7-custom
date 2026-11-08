@@ -741,6 +741,7 @@ uniform vec2 u_holeFadeK; // that fade: feather px, darkness 0..1 at its middle
 uniform vec4 u_strip;     // bottom strip: left end x, top y, height, slant px
 uniform vec3 u_stripFill; // the strip as two bars from the middle out: blue left 0..1, red right 0..1, its last tenth red
                           // (kickdown) when z > 0.5; x < 0 = both halves lit (no signals)
+uniform float u_stripRoute; // >= 0: the strip is the route's progress 0..1, filled blue from its right end leftwards (< 0: off)
 uniform float u_topEnd;   // the top lines run from the bracket to this x (left; mirrored on the right)
 uniform vec4 u_gapRail;   // the car-ahead gauge's box: x, y, w, h (w 0 = none)
 uniform vec2 u_gapG;      // its fill 0..1 up the box (< 0: no car), red when y > 0.5 (closing fast)
@@ -948,6 +949,12 @@ void main() {
             float lit = cov((f - val) * xe) * step(0.001, val);
             if (left && u_stripFill.z > 0.5 && f > 0.9) sc = vec3(0.95, 0.12, 0.16);
             sc = mix(sc * 0.22, sc, lit);
+        }
+        if (u_stripRoute >= 0.0) {
+            // the route: blue from the right end to the progress, the rest a dim track
+            float xr = u_size.x - xl, fr = (xr - p.x) / (xr - xl);
+            sc = mix(vec3(0.06, 0.2, 0.62), vec3(0.15, 0.42, 0.95), fr);
+            sc = mix(sc * 0.2, sc, cov((fr - u_stripRoute) * (xr - xl)) * step(0.001, u_stripRoute));
         }
         c = over(vec4(sc, 0.95 * inside), c);
         float div = cov(abs(mod(p.x - (u_strip.z - sy) * 0.45, 150.0) - 75.0) - 73.8);

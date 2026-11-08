@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Regal dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -61,7 +61,9 @@
     "de.bmw.infotainment.navigation.guiding.Guidance": {
       "_instances": "Main_Instance",
       "guidanceState": "rs",
-      "_optional": "route guidance on / off, for the \"While navigating\" theme"
+      "_optional": "route guidance on / off (the \"While navigating\" theme) and the route's progress (Sport's route bar)",
+      "finalDestinationInfo": "rs",
+      "travelledDistance": "rs"
     },
     "de.bmw.infotainment.vehicle.Vehicle": {
       "statusNewCurrentUnitsStatusExt": "rs",

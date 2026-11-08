@@ -104,7 +104,8 @@
  *             into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r]
  *             ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown
  *             "gapGauge" { box: [x, y, w, h], max (150 m) }: the car ahead as an upright box filled from the bottom up to
- *             the gap, red while closing faster than config.acc.closingKmh (10 km/h); "vbars" [{ box: [x, y, w, h], signal,
+ *             the gap, red while closing faster than config.acc.closingKmh (10 km/h); "routeStrip": true makes the strip the route's
+ *             progress while guiding (travelled / (travelled + left), filled from the right end leftwards); "vbars" [{ box: [x, y, w, h], signal,
  *             range: [lo, hi], color }] (up to 2): more upright boxes like it (boost, battery)
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
@@ -178,6 +179,8 @@
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
  * Regal: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{u:distUc}} (MI, KM),
  * {{lampBrake}} {{lampTurnL}} {{lampTurnR}} {{lampCruise}} (the lamp's text while lit, else empty; config.lamps).
+ * The route while guiding (Guidance finalDestinationInfo / travelledDistance, apps with "navLayout"; "--" else): {{navLeft}} the
+ * distance left as BMW formats it, {{u:navLeft}} its unit (km, mi, m, ft), {{navTime}} the time left h:mm.
  * {{musicTitle}}: the song title BMW's player shows (app.json config.music; HmiMediaState playerMetadata, the line typed TITLE),
  * empty when nothing plays. A text widget with "font": "@sys" draws in the car's own font (any script, sysfont.js), "size" px.
  * The catalog gives no units: app.json config.acc { gap (raw -> m), rel (raw -> km/h), set } is raw * factor + offset
@@ -264,6 +267,8 @@ const BRAKE_LIGHT = { INIT: 0, OFF_BL: 1, ON_BL: 2, SIGNAL_UNGUELTIG: 3 };
 // body.Light StatusFunctionsIndicators controlIndicateDirection (someip-interfaces.json)
 const INDICATE = { BLINKEN_AUS: 0, TIPP_BLINKEN_LINKS_EIN: 1, TIPP_BLINKEN_RECHTS_EIN: 2, DAUER_BLINKEN_LINKS_EIN: 3,
     DAUER_BLINKEN_RECHTS_EIN: 4, BEIDSEITIGES_BLINKEN_EIN: 8, RESERVIERT_NICHT_VERFUEGBAR: 13, RESERVIERT_FEHLER: 14, SIGNAL_UNBEFUELLT: 15 };
+// Guidance formattedDistance units (CommonTypes.DistanceUnit), by name or number
+const ROUTE_UNIT = { KM: 'km', METER: 'm', MILE_US: 'mi', MILE_UK: 'mi', FEET: 'ft', YARD: 'yd', 0: 'ft', 1: 'km', 2: 'm', 3: 'mi', 4: 'mi', 6: 'yd' };
 // the Regal theme's gear row: P R N D, a gap, the gear number; the lit box for each selector state (S lights D, M the number)
 const REGAL_GEARS = { P: 0, R: 1, N: 2, D: 3, S: 3, M: 5 };
 const PEDAL_OK = { SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1 };   // AngleAcceleratorPedal's qualifier: valid
@@ -685,9 +690,13 @@ class HudApp {
     /** BMW's route guidance on / off, for the HUD modes. */
     _startNav() {
         if (!this._modesOn() && !this.ctx.settings.item('navLayout')) return;
-        Promise.resolve().then(() => this.ctx.signals.watch(GUIDANCE.iface, GUIDANCE.instance, {
-            guidanceState: (v) => this._guard('guidance', () => this._onGuidance(v)),
-        }, this.log)).then((s) => {
+        const h = { guidanceState: (v) => this._guard('guidance', () => this._onGuidance(v)) };
+        if (this.ctx.settings.item('navLayout')) {
+            // the route's progress (Sport's route bar): distance and time left to the final destination, distance travelled
+            h.finalDestinationInfo = (v) => this._guard('route', () => this._onRouteInfo(v));
+            h.travelledDistance = (v) => this._guard('route', () => this._onTravelled(v));
+        }
+        Promise.resolve().then(() => this.ctx.signals.watch(GUIDANCE.iface, GUIDANCE.instance, h, this.log)).then((s) => {
             this.navSub = s;
             this.log.info('signal Guidance ' + (s && s.error ? 'error: ' + s.error : 'subscribed'));
         }).catch((e) => this.log.info('route guidance not available: ' + (e && e.message || e)));
@@ -734,6 +743,46 @@ class HudApp {
         return this.sysFont;
     }
 
+    /** finalDestinationInfo: distance left (formattedDistance: BMW's text, its unit, rawDistance), time left (travelTime, s). */
+    _onRouteInfo(v) {
+        if (!v || typeof v !== 'object') return;
+        const fd = v.formattedDistance || {};
+        const raw = isNum(fd.rawDistance) ? fd.rawDistance : isNum(v.distanceFromCurrentToFinalDestination) ? v.distanceFromCurrentToFinalDestination : null;
+        this.route = Object.assign(this.route || {}, {
+            leftRaw: raw, leftText: typeof fd.distance === 'string' ? fd.distance.trim() : null, leftUnit: fd.unit,
+            timeLeft: isNum(v.travelTime) && v.travelTime >= 0 && v.travelTime < 0xFFFFFFFF ? v.travelTime : null, at: Date.now(),
+        });
+        // without a travelled distance, the route's length is the most left seen since guidance started
+        if (isNum(raw)) this.route.startRaw = Math.max(this.route.startRaw || 0, raw);
+        this._logRoute('destination', { distance: fd, travelTime: v.travelTime, delayTime: v.delayTime, delayStatus: v.delayStatus,
+            distanceFromCurrentToFinalDestination: v.distanceFromCurrentToFinalDestination });
+    }
+
+    /** travelledDistance (FormattedDistance): how far along the route we are, for the bar's total (travelled + left). */
+    _onTravelled(v) {
+        if (!v || typeof v !== 'object') return;
+        this.route = Object.assign(this.route || {}, { doneRaw: isNum(v.rawDistance) ? v.rawDistance : null });
+        this._logRoute('travelled', v);
+    }
+
+    /** Route messages as sent, each when it changes, at most every 10 s (to confirm the units on the car). */
+    _logRoute(kind, v) {
+        const now = Date.now(), line = JSON.stringify(v);
+        this.routeLogged = this.routeLogged || {}; this.routeLogAt = this.routeLogAt || {};
+        if (line === this.routeLogged[kind] || now - (this.routeLogAt[kind] || 0) < 10000) return;
+        this.routeLogged[kind] = line; this.routeLogAt[kind] = now;
+        this.log.info('route ' + kind + ' raw ' + line);
+    }
+
+    /** The route's progress 0..1 (travelled / (travelled + left), else 1 - left / the most left seen), null when not guiding
+     *  or not known. */
+    _routeProgress() {
+        const r = this.route;
+        if (!this.navActive || !r || !isNum(r.leftRaw)) return null;
+        if (isNum(r.doneRaw) && r.doneRaw + r.leftRaw > 0) return Math.min(1, Math.max(0, r.doneRaw / (r.doneRaw + r.leftRaw)));
+        return r.startRaw > 0 ? Math.min(1, Math.max(0, 1 - r.leftRaw / r.startRaw)) : null;
+    }
+
     /** guidanceState: INACTIVE 0, CALCULATING_ROUTE 1, ACTIVE 2 (the car's catalog), by name or number; anything else reads as off. */
     _onGuidance(raw) {
         const v = raw && typeof raw === 'object' ? raw.guidanceState : raw;
@@ -744,6 +793,7 @@ class HudApp {
         const on = enumNum(typeof v === 'string' ? v.toUpperCase() : v, GUIDANCE_STATE) === GUIDANCE_STATE.ACTIVE;
         if (on === this.navActive) return;
         this.navActive = on;
+        if (on) this.route = null;               // a new route: its length starts over
         if (this.ctx.settings.item('navLayout') && this._layoutName() !== this.activeName) {
             this.log.info('route guidance ' + (on ? 'on' : 'off') + ': layout ' + this._layoutName());
             this._rebuild();
@@ -1360,6 +1410,15 @@ class HudApp {
             }
             case 'range4': { const v = this._raw('range'); return isNum(v) ? ('0000' + Math.round(us ? v * 0.621371 : v)).slice(-4) : '----'; }
             case 'u:distUc': return us ? 'MI' : 'KM';
+            // the route (while guiding; "--" else): distance left as BMW formats it, its unit, time left h:mm
+            case 'navLeft': { const r = this.route; return this.navActive && r && r.leftText ? r.leftText : '--'; }
+            case 'u:navLeft': { const r = this.route; return this.navActive && r ? (ROUTE_UNIT[r.leftUnit] || '') : ''; }
+            case 'navTime': {
+                const r = this.route;
+                if (!this.navActive || !r || !isNum(r.timeLeft)) return '--';
+                const m = Math.round(r.timeLeft / 60);
+                return Math.floor(m / 60) + ':' + ('0' + (m % 60)).slice(-2);
+            }
             case 'consumption': { const v = this._consumption(); return isNum(v) ? v.toFixed(1) : '--'; }
             case 'u:cons': return this._consUnit();
             case 'volt12': { const v = this._volt12(); return isNum(v) ? v.toFixed(1) : '--'; }
@@ -1710,6 +1769,7 @@ class HudApp {
             });
             c.uniform(ref, 'u_vbarV', [-1, -1]);
             c.uniform(ref, 'u_stripFill', Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
+            c.uniform(ref, 'u_stripRoute', [-1]);
             c.uniform(ref, 'u_topEnd', [w.topEnd]);
         } else if (w.type === 'rdash') {
             const o4 = (r) => (Array.isArray(r) && r.length === 4 ? [r[0] - w.x, r[1] - w.y, r[2], r[3]] : [0, 0, 0, 0]);
@@ -2002,12 +2062,16 @@ class HudApp {
                 const b = w.vbars[i], v = b && b.signal ? this._raw(b.signal) : null, r = (b && b.range) || [0, 1];
                 return isNum(v) ? Math.round(Math.min(1, Math.max(0, (v - r[0]) / (r[1] - r[0]))) * 100) / 100 : -1;
             }) : null;
-            const key = vals.join('|') + (strip ? '|' + strip.join('|') + (hot ? 'h' : '') : '') + (w.gapGauge ? '|' + gv + (gHot ? 'c' : '') : '') + (vbv ? '|' + vbv.join('|') : '');
+            // while guiding, "routeStrip" turns the strip into the route's progress (filled from the right), in 400 steps
+            const rp = w.routeStrip ? this._routeProgress() : null;
+            const route = isNum(rp) ? Math.round(rp * 400) / 400 : -1;
+            const key = vals.join('|') + (strip ? '|' + strip.join('|') + (hot ? 'h' : '') : '') + (w.gapGauge ? '|' + gv + (gHot ? 'c' : '') : '') + (vbv ? '|' + vbv.join('|') : '') + '|' + route;
             if (!force && key === x.last) return;
             x.last = key;
             if (w.gapGauge) x.c.uniform(x.ref, 'u_gapG', [gv, gHot ? 1 : 0]);
             if (vbv) x.c.uniform(x.ref, 'u_vbarV', vbv);
             if (strip) x.c.uniform(x.ref, 'u_stripFill', [strip[0], strip[1], hot ? 1 : 0]);
+            x.c.uniform(x.ref, 'u_stripRoute', [route]);
             x.c.uniform(x.ref, 'u_speed', [vals[0]]);
             x.c.uniform(x.ref, 'u_rpm', [vals[1]]);
             x.c.uniform(x.ref, 'u_fuel', [vals[2]]);

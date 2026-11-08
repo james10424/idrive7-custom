@@ -12,6 +12,7 @@ The look of BMW's newer Live Cockpit Sport view.
 - **Right:** revs as a red bracket on the M40i's 0 to 7000 rpm scale, with yellow and red marks around your redline, with the gear and an oil temperature bar inside it.
 - **Middle:** BMW's map while navigating (or with "Leave room for the map" on), else black.
 - **Bottom:** boost and coolant in the blue and red strip, plus the clock, range and outside temperature.
+- **While navigating:** the strip becomes the route's progress, filling from the right, with the distance left and the time left at its ends.
 
 <p align="center"><img src="../../docs/images/cluster-sport.png" width="900" alt="Sport theme"></p>
 
