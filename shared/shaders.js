@@ -1200,14 +1200,17 @@ void main() {
 }
 `;
 
-const PERCH = `// The Perch layout's girl (GLSL ES 1.00): an original anime girl (slim, about six heads tall, soft shaded) in a white
-// M racing jacket, sitting on the top-left corner of BMW's speed-limit sign, leaning forward with her hands on her knees
-// and her legs hanging off the sign's left side. Drawn from shapes, so no image is uploaded, and animated by the
-// renderer's clock (u_time): her legs swing (the near heel taps the sign), she blinks, breathes, sways and her side
-// ponytail swings. u_drive = (lean, speed, unused, brightness), sent only when a step changes: lean -1..1 is the
-// smoothed longitudinal g (-0.4 g .. +0.4 g): braking tips her further forward, her feet fly up and her eyes go > <;
-// pulling away leans her back with a fist in the air and a grin. Speed 0..1 (0..130 km/h) blows the ponytail out.
-// u_sign is the sign's box (x, y, w, h px from the layer's top left). v_uv (0,0) is the top-left.
+const PERCH = `// The Perch layout's girl (GLSL ES 1.00): an original anime girl, toon shaded as a desktop mascot's 3D model is (a lit
+// side, a cool shadow side away from the light at the top right, a rim light, thin dark-tone outlines), in an open M-blue
+// racing coat with light blue and red trim over a white top with an M-stripe bow, shorts with a belt, tights and boots;
+// silver-to-blue hair with a fringe of separate locks, long side locks and a side ponytail of three strands. She sits on
+// the top-left corner of BMW's speed-limit sign leaning forward, hands on her knees, legs hanging off its left side.
+// Drawn from shapes in "model" units (the sign's corner is fixed, everything else is drawn u_scale times bigger), so
+// nothing is uploaded, and animated by the renderer's clock (u_time): legs swing (the near heel taps the sign), she
+// blinks, breathes, sways, her hair swings. u_drive = (lean, speed, unused, brightness), sent only when a step changes:
+// lean -1..1 is the smoothed longitudinal g (-0.4 g .. +0.4 g): braking tips her forward, feet up, eyes > <; pulling
+// away leans her back with a fist up and a grin. Speed 0..1 (0..130 km/h) blows her hair out. u_sign is the sign's box
+// (x, y, w, h px from the layer's top left). v_uv (0,0) is the top-left.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -1218,21 +1221,28 @@ uniform vec2 u_size;
 uniform float u_time;
 uniform vec4 u_drive;
 uniform vec4 u_sign;
+uniform float u_scale;
 
-const vec3 SKIN = vec3(1.0, 0.86, 0.77);
-const vec3 BLUSH = vec3(1.0, 0.56, 0.6);
-const vec3 HAIR_T = vec3(0.78, 0.9, 1.0);
-const vec3 HAIR_B = vec3(0.42, 0.58, 0.98);
-const vec3 JACKET = vec3(0.95, 0.96, 0.99);
-const vec3 M_LIGHT = vec3(0.31, 0.71, 1.0);
+const vec3 SKIN = vec3(1.0, 0.87, 0.79);
+const vec3 BLUSH = vec3(1.0, 0.52, 0.58);
+const vec3 HAIR_T = vec3(0.93, 0.96, 1.0);
+const vec3 HAIR_M = vec3(0.62, 0.8, 1.0);
+const vec3 HAIR_B = vec3(0.34, 0.52, 1.0);
+const vec3 TOP = vec3(0.96, 0.97, 1.0);
+const vec3 COAT = vec3(0.22, 0.4, 1.0);
+const vec3 LINING = vec3(0.14, 0.26, 0.78);
+const vec3 M_LIGHT = vec3(0.36, 0.76, 1.0);
 const vec3 M_DARK = vec3(0.16, 0.32, 0.98);
-const vec3 M_RED = vec3(0.95, 0.16, 0.2);
-const vec3 SKIRT = vec3(0.2, 0.3, 0.8);
-const vec3 TIGHTS = vec3(0.32, 0.38, 0.66);
-const vec3 BOOT = vec3(0.22, 0.3, 0.72);
-const vec3 IRIS_T = vec3(0.1, 0.2, 0.62);
-const vec3 IRIS_B = vec3(0.4, 0.75, 1.0);
-const vec3 LINE = vec3(0.1, 0.1, 0.24);
+const vec3 M_RED = vec3(0.96, 0.16, 0.2);
+const vec3 SHORTS = vec3(0.18, 0.3, 0.86);
+const vec3 TIGHTS = vec3(0.4, 0.46, 0.76);
+const vec3 BOOT = vec3(0.22, 0.4, 1.0);
+const vec3 IRIS_T = vec3(0.08, 0.14, 0.55);
+const vec3 IRIS_B = vec3(0.45, 0.82, 1.0);
+const vec3 LINE = vec3(0.1, 0.09, 0.22);
+const vec2 LIGHT = vec2(0.55, -0.835);
+
+float gK;   // screen px per drawing unit, for antialiasing
 
 vec2 rot(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
 float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
@@ -1246,6 +1256,8 @@ float sdLimb(vec2 p, vec2 a, vec2 b, float ra, float rb) {
     if (k > k1 * l) return length(lp - vec2(0.0, l)) - rb;
     return dot(lp, vec2(k1, k0)) - ra;
 }
+// the limb's surface direction at p: -1..1 across it (for the toon light)
+vec2 limbN(vec2 p, vec2 a, vec2 b, float r) { vec2 d = normalize(b - a), n = vec2(-d.y, d.x); return n * clamp(dot(p - a, n) / r, -1.0, 1.0); }
 // a trapezoid centred at c: half widths wt (top) and wb (bottom), half height he; y down
 float sdTrap(vec2 p, vec2 c, float wt, float wb, float he) {
     p = p - c; p = vec2(abs(p.x), -p.y);
@@ -1255,168 +1267,294 @@ float sdTrap(vec2 p, vec2 c, float wt, float wb, float he) {
     float s = (cb.x < 0.0 && ca.y < 0.0) ? -1.0 : 1.0;
     return s * sqrt(min(dot(ca, ca), dot(cb, cb)));
 }
-float cov(float d) { return clamp(0.5 - d, 0.0, 1.0); }
-// a soft-shaded part: darker towards its edges (round, as a 3D model in toon light), a thin outline in a dark tone of it
-void part(inout vec4 c, float d, vec3 col, float r) {
-    c = mix(c, vec4(col * 0.42, 1.0), cov(d - 0.8));
-    c = mix(c, vec4(col * mix(0.74, 1.0, smoothstep(0.0, r, -d)), 1.0), cov(d));
+float sdBoxR(vec2 p, vec2 c, vec2 hs) { vec2 q = abs(p - c) - hs + vec2(0.5); return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.5; }
+float cov(float d) { return clamp(0.5 - d * gK, 0.0, 1.0); }
+// a toon-shaded part: n is its surface direction (0 in the middle, length 1 at the edge); a cool shadow on the side away
+// from the light, a rim light on the lit edge, a thin outline in a dark tone of the colour
+void toon(inout vec4 c, float d, vec2 n, vec3 col) {
+    float l = dot(n, LIGHT);
+    vec3 cc = mix(col * vec3(0.7, 0.74, 0.92), col, smoothstep(-0.34, -0.2, l));
+    float rim = smoothstep(0.35, 0.75, l) * smoothstep(-1.0, -0.25, d);
+    cc = mix(cc, min(col * 1.12 + 0.1, vec3(1.0)), rim * 0.65);
+    c = mix(c, vec4(col * 0.36, 1.0), cov(d - 0.5));
+    c = mix(c, vec4(cc, 1.0), cov(d));
 }
 void paint(inout vec4 c, float d, vec3 col, float a) { c = mix(c, vec4(col, 1.0), cov(d) * a); }
+vec3 hairCol(float y) { return y < 4.0 ? mix(HAIR_T, HAIR_M, smoothstep(-14.0, 4.0, y)) : mix(HAIR_M, HAIR_B, smoothstep(4.0, 30.0, y)); }
+
+void limb(inout vec4 c, vec2 p, vec2 a, vec2 b, float ra, float rb, vec3 col) {
+    toon(c, sdLimb(p, a, b, ra, rb), limbN(p, a, b, max(ra, rb)), col);
+}
 
 // a leg: thigh from the hip to the knee, shin hanging at angle a (0 = straight down, + = foot towards the sign)
 void leg(inout vec4 c, vec2 p, vec2 hip, vec2 knee, float a, float shade) {
     vec2 dir = vec2(sin(a), cos(a));
     vec2 ankle = knee + dir * 31.0;
-    part(c, sdLimb(p, hip, knee, 5.6, 3.9), TIGHTS * shade, 3.0);
-    part(c, sdLimb(p, knee, ankle, 3.6, 2.3), TIGHTS * shade, 2.5);
-    paint(c, sdEll(p, knee + vec2(-0.8, -0.6), vec2(1.6, 1.2)), vec3(0.6, 0.66, 0.92) * shade, 0.6);   // knee sheen
-    // boot: from mid-shin down, the M tricolour as a band round its top, the toe pointing at the driver
-    vec2 bootTop = knee + dir * 17.0;
-    float boot = min(sdLimb(p, bootTop, ankle + dir * 1.5, 3.4, 2.9), sdEll(p, ankle + dir * 3.5 + rot(dir, 1.57) * 1.2, vec2(3.4, 2.6)));
-    part(c, boot, BOOT * shade, 2.0);
-    float inBoot = cov(boot + 0.3);
+    limb(c, p, hip, knee, 5.8, 4.0, TIGHTS * shade);
+    limb(c, p, knee, ankle, 3.7, 2.3, TIGHTS * shade);
+    paint(c, sdEll(p, knee + vec2(-1.0, -0.8), vec2(1.7, 1.1)), vec3(0.75, 0.8, 1.0) * shade, 0.55);   // the tights' sheen
+    // boot: from mid-shin, a white toe cap and sole, the M tricolour round its top
+    vec2 bootTop = knee + dir * 16.0, toe = ankle + dir * 3.2 + rot(dir, 1.57) * 1.3;
+    float boot = min(sdLimb(p, bootTop, ankle + dir * 1.2, 3.6, 3.0), sdEll(p, toe, vec2(3.5, 2.7)));
+    toon(c, boot, limbN(p, bootTop, ankle, 3.6), BOOT * shade);
+    float inBoot = cov(boot + 0.25);
+    paint(c, sdEll(p, toe + dir * 0.8, vec2(3.0, 1.7)), TOP * shade, inBoot);
     float along = dot(p - bootTop, dir);
-    paint(c, abs(along - 1.0) - 0.75, M_LIGHT * shade, inBoot);
-    paint(c, abs(along - 2.6) - 0.75, M_DARK * shade * 1.2, inBoot);
-    paint(c, abs(along - 4.2) - 0.75, M_RED * shade, inBoot);
+    paint(c, abs(along - 1.0) - 0.6, M_LIGHT * shade, inBoot);
+    paint(c, abs(along - 2.4) - 0.6, M_DARK * shade * 1.15, inBoot);
+    paint(c, abs(along - 3.8) - 0.6, M_RED * shade, inBoot);
+    paint(c, abs(along - 6.0) - 0.25, BOOT * shade * 0.55, inBoot);   // a seam
 }
 
-// an arm from the shoulder to the hand, the elbow bent to side "out" (+1 / -1), each bone l px
-void arm(inout vec4 c, vec2 p, vec2 sh, vec2 hand, float l, float out_, float shade) {
-    vec2 m = (sh + hand) * 0.5, d = hand - sh;
+// a hand: the palm, four fingers draped forward and down, the thumb on the inner side ("side" +1 / -1)
+void hand(inout vec4 c, vec2 p, vec2 wrist, vec2 fd, float side, float fist, float shade) {
+    vec2 pc = wrist + fd * 1.8;
+    vec2 sd = vec2(-fd.y, fd.x);
+    float palm = sdEll(rot(p - pc, -atan(fd.y, fd.x)), vec2(0.0), vec2(2.1, 1.8));
+    float fingers = 10.0;
+    if (fist < 0.5) {
+        vec2 f2 = normalize(fd + vec2(0.0, 0.7));
+        for (int i = 0; i < 4; i++) {
+            float k = float(i) - 1.5;
+            vec2 r = pc + fd * 1.2 + sd * k * 0.85;
+            fingers = min(fingers, sdLimb(p, r, r + f2 * (2.9 - abs(k) * 0.35), 0.55, 0.42));
+        }
+        fingers = min(fingers, sdLimb(p, pc + sd * side * 1.4, pc + sd * side * 2.4 + fd * 1.6, 0.6, 0.45));   // thumb
+    } else palm = sdEll(p, pc + fd * 0.6, vec2(2.4, 2.3));
+    float d = min(palm, fingers);
+    toon(c, d, (p - pc) / 3.0, SKIN * shade);
+    if (fist < 0.5) for (int i = 0; i < 3; i++) {
+        vec2 r = pc + fd * 1.2 + sd * (float(i) - 1.0) * 0.85;
+        paint(c, sdSeg(p, r, r + normalize(fd + vec2(0.0, 0.7)) * 2.2) - 0.08, SKIN * 0.55, cov(d + 0.2) * 0.8);   // the gaps
+    }
+}
+
+// an arm in the coat's sleeve from the shoulder to the wrist, the elbow bent to side "out", each bone l units
+void arm(inout vec4 c, vec2 p, vec2 sh, vec2 wr, float l, float out_, float fist, float side, float shade) {
+    vec2 m = (sh + wr) * 0.5, d = wr - sh;
     float h = sqrt(max(0.0, l * l - dot(d, d) * 0.25));
     vec2 el = m + normalize(vec2(-d.y, d.x)) * h * out_;
-    part(c, sdLimb(p, sh, el, 3.6, 3.0), JACKET * shade, 2.5);
-    part(c, sdLimb(p, el, hand, 3.0, 2.6), JACKET * shade, 2.5);
-    // the M stripes round the cuff
-    vec2 fd = normalize(hand - el);
-    float cuffD = sdLimb(p, el, hand, 3.0, 2.6), along = dot(p - hand, fd);
-    paint(c, abs(along + 4.5) - 0.6, M_LIGHT, cov(cuffD + 0.3));
-    paint(c, abs(along + 3.2) - 0.6, M_DARK, cov(cuffD + 0.3));
-    paint(c, abs(along + 1.9) - 0.6, M_RED, cov(cuffD + 0.3));
-    part(c, sdEll(p, hand + fd * 2.2, vec2(2.5, 2.2)), SKIN * shade, 1.5);
+    limb(c, p, sh, el, 4.0, 3.4, COAT * shade);
+    vec2 fd = normalize(wr - el);
+    limb(c, p, el, wr - fd * 1.0, 3.4, 3.9, COAT * shade);    // the sleeve flares to the cuff
+    hand(c, p, wr - fd * 1.6, fd, side, fist, shade);
+    // the cuff: a light blue band with a red line, drawn over the wrist
+    float cuff = sdLimb(p, wr - fd * 4.2, wr - fd * 1.0, 3.8, 4.0);
+    toon(c, cuff, limbN(p, el, wr, 4.0), COAT * shade);
+    float along = dot(p - wr, fd);
+    paint(c, abs(along + 2.0) - 0.75, M_LIGHT * shade, cov(cuff + 0.2));
+    paint(c, abs(along + 3.3) - 0.3, M_RED * shade, cov(cuff + 0.2));
 }
 
 void main() {
-    vec2 p = vec2(v_uv.x * u_size.x, v_uv.y * u_size.y);
+    float K = u_scale > 0.0 ? u_scale : 1.0;
+    vec2 px = vec2(v_uv.x * u_size.x, v_uv.y * u_size.y);
+    vec2 sTop = u_sign.xy;                         // the sign's top-left corner, the fixed point of the scale
+    vec2 p = sTop + (px - sTop) / K;               // model units
+    gK = K;
     float t = mod(u_time, 1200.0);
     float lean = clamp(u_drive.x, -1.0, 1.0);
     float spd = clamp(u_drive.y, 0.0, 1.0);
     float brake = max(0.0, -lean), go = max(0.0, lean);
     float moving = smoothstep(0.0, 0.08, spd);
 
-    vec2 sTop = u_sign.xy;                         // the sign's top-left corner
     vec2 hip = sTop + vec2(22.0, -4.0);
     float breath = sin(t * 1.7);
-    // the upper body leans forward, towards her knees (left); further while braking, back while pulling away
     float ang = -0.2 + 0.3 * go - 0.16 * brake + 0.025 * sin(t * 0.8);
 
     vec2 kneeN = sTop + vec2(-2.0, 3.0), kneeF = sTop + vec2(-8.0, -2.0);
     float swing = mix(0.24, 0.12, moving) * (1.0 - brake);
     float w = mix(2.0, 3.0, moving);
     float base = -0.08 + 0.1 * go - 0.45 * brake;
-    float aN = min(base + swing * sin(t * w), 0.03);            // the near heel taps the sign, never through it
-    float aF = min(base - 0.1 + swing * sin(t * w + 2.6), 0.12);
+    float aN = clamp(base + swing * sin(t * w), -0.55, 0.03);          // the near heel taps the sign, never through it
+    float aF = clamp(base - 0.1 + swing * sin(t * w + 2.6), -0.4, 0.12);
 
     vec2 q = rot(p - hip, -ang);                    // her upper body's own frame, hip at 0, y down
     float tilt = 0.06 * sin(t * 0.55) * (1.0 - 0.5 * moving) + 0.1 - 0.1 * brake + 0.05 * go;
-    vec2 head = vec2(0.0, -64.5 + breath * 0.4);
-    vec2 h = rot(q - head, -tilt) / 1.2;            // the head's frame, drawn 1.2x (anime proportions)
+    vec2 head = vec2(0.0, -61.5 + breath * 0.4);
+    vec2 h = rot(q - head, -tilt) / 1.2;            // the head's frame, 1.2x
 
     vec4 c = vec4(0.0);
-
-    // ---- behind: the side ponytail (her left, the screen's right), then the long hair down her back
     float flutter = sin(t * mix(1.6, 8.0, spd)) * mix(0.14, 0.08, spd) + sin(t * 12.0) * 0.05 * spd;
-    vec2 tie = vec2(10.5, -6.0);
-    vec2 d0 = normalize(mix(vec2(0.25, 1.0), vec2(1.0, 0.05), spd * 0.85 + brake * 0.3));
-    vec2 p1 = tie + rot(d0, flutter) * 9.0;
-    vec2 p2 = p1 + rot(d0, flutter * 2.0 + 0.12) * 9.0;
-    vec2 p3 = p2 + rot(d0, flutter * 3.0 + 0.2) * 9.0;
-    float tail = min(min(sdLimb(h, tie, p1, 3.4, 4.2), sdLimb(h, p1, p2, 4.2, 3.2)), sdLimb(h, p2, p3, 3.2, 0.8));
-    vec3 hairCol = mix(HAIR_T, HAIR_B, clamp((h.y + 12.0) / 40.0, 0.0, 1.0));
-    part(c, tail, hairCol, 3.0);
-    float back = min(sdEll(h, vec2(0.0, -2.0), vec2(11.5, 12.2)), sdTrap(h, vec2(0.0, 9.0), 10.5, 9.0, 9.0) - 1.5);
-    part(c, back, mix(HAIR_T, HAIR_B, 0.55), 4.0);
+    float blow = spd * 0.85 + brake * 0.3;
 
-    // ---- far leg and the body
+    // ---- behind everything: the long hair down her back, the side ponytail, the coat's back and lining
+    gK = K * 1.2;
+    {
+        // the crown, and four long locks down each side behind the shoulders, swaying and blown back with speed
+        float backHair = sdEll(h, vec2(0.0, -2.0), vec2(12.6, 13.0));
+        for (int i = 0; i < 8; i++) {
+            float sx = i < 4 ? -1.0 : 1.0, k = mod(float(i), 4.0);
+            vec2 r0 = vec2(sx * (4.0 + k * 2.2), 0.0);
+            float sway = flutter * (2.0 + k) + 0.4 * sin(t * 1.2 + float(i));
+            vec2 r1 = vec2(sx * (8.5 + k * 1.3) + sway * 0.5 + blow * 2.0, 12.0 + k);
+            vec2 r2 = vec2(sx * (9.0 + k * 1.8) + sway + blow * 4.0 * (sx > 0.0 ? 1.0 : 0.5), 22.0 + k * 1.6 - abs(k - 1.5));
+            backHair = min(backHair, min(sdLimb(h, r0, r1, 4.2, 3.6), sdLimb(h, r1, r2, 3.6, 0.3)));
+        }
+        toon(c, backHair, vec2(h.x / 15.0, 0.2), hairCol(h.y) * 0.8);
+    }
+    vec2 tie = vec2(10.8, -6.5);
+    vec2 d0 = normalize(mix(vec2(0.3, 1.0), vec2(1.0, 0.05), blow));
+    for (int s = 0; s < 3; s++) {
+        float fs = float(s) - 1.0;
+        float ph = fs * 0.7;
+        vec2 a0 = tie + vec2(0.5, 0.8) * fs;
+        vec2 a1 = a0 + rot(d0, flutter + fs * 0.12) * 9.5;
+        vec2 a2 = a1 + rot(d0, flutter * 2.0 + 0.15 + fs * 0.18 + 0.05 * sin(t * 1.3 + ph)) * 9.5;
+        vec2 a3 = a2 + rot(d0, flutter * 3.0 + 0.3 + fs * 0.3 + 0.1 * sin(t * 1.1 + ph)) * (8.5 - abs(fs) * 1.5);
+        float dS = min(min(sdLimb(h, a0, a1, 3.0, 3.6), sdLimb(h, a1, a2, 3.6, 2.6)), sdLimb(h, a2, a3, 2.6, 0.25));
+        toon(c, dS, limbN(h, a0, a3, 3.6), hairCol(h.y + 6.0 + fs * 2.0) * (s == 1 ? 1.0 : 0.88));
+        paint(c, sdSeg(h, mix(a1, a2, 0.1) + vec2(0.6, 0.0), mix(a2, a3, 0.7)) - 0.12, HAIR_B * 0.7, cov(dS + 0.6) * 0.8);   // strand line
+    }
+    gK = K;
+    float coatBack = sdTrap(q, vec2(0.0, -17.0), 11.5, 15.5, 28.0) - 1.0;
+    coatBack = min(coatBack, sdLimb(q, vec2(-12.0, 4.0), vec2(-19.0, 14.0), 5.0, 3.0));   // the tail draped over the sign's edge
+    toon(c, coatBack, vec2(q.x / 18.0, 0.4), LINING);
+
+    // ---- far leg, then the body
     leg(c, p, hip + rot(vec2(4.0, -2.0), ang * 0.3), kneeF, aF, 0.8);
-    part(c, sdLimb(q, vec2(0.0, -43.0), vec2(0.0, -53.0), 2.9, 2.7), SKIN * 0.88, 2.0);           // neck, under the collar
-    float hips = sdTrap(q, vec2(0.0, -7.0), 7.5, 11.0, 8.0) - 1.0;
-    part(c, hips, TIGHTS, 4.0);
+    float hips = sdTrap(q, vec2(0.0, -6.0), 8.0, 12.0, 8.0) - 1.0;
+    toon(c, hips, (q - vec2(0.0, -6.0)) / vec2(13.0, 9.0), SHORTS);
+    paint(c, abs(fract((q.x + 40.0) / 3.4) - 0.5) * 3.4 - 0.2, SHORTS * 0.6, cov(hips + 0.4) * smoothstep(-8.0, 0.0, q.y) * 0.8);   // pleats
+    float belt = max(hips + 0.3, abs(q.y + 12.6) - 1.3);
+    paint(c, belt, M_LIGHT, 1.0);
+    toon(c, sdBoxR(q, vec2(0.0, -12.6), vec2(1.6, 1.6)), vec2(0.3, -0.3), vec3(0.85, 0.88, 0.95));  // buckle
     float chest = sdTrap(q, vec2(0.0, -31.0 + breath * 0.25), 11.5, 8.0, 14.0) - 1.5;
-    part(c, chest, JACKET, 5.0);
-    float inJ = cov(chest + 0.6);
-    float st = q.y + q.x * 0.55 + 30.0;
-    paint(c, abs(st - 0.0) - 1.0, M_LIGHT, inJ);
-    paint(c, abs(st - 2.2) - 1.0, M_DARK, inJ);
-    paint(c, abs(st - 4.4) - 1.0, M_RED, inJ);
-    paint(c, sdSeg(q, vec2(0.6, -44.0), vec2(0.6, -18.0)) - 0.3, vec3(0.55, 0.58, 0.7), inJ);   // the zip
-    paint(c, sdTrap(q, vec2(0.0, -17.5), 8.4, 8.6, 1.2), M_DARK, 1.0);                             // the jacket's hem band
-    part(c, sdTrap(q, vec2(0.0, -45.0), 6.5, 4.5, 2.0) - 0.8, M_DARK, 1.5);                         // the collar
+    toon(c, chest, (q - vec2(0.0, -31.0)) / vec2(13.0, 16.0), TOP);
+    paint(c, abs(length((q - vec2(0.0, -40.0)) * vec2(0.7, 1.0)) - 13.0) - 0.15, TOP * 0.72, cov(chest + 1.5) * step(q.y, -24.0) * 0.6);   // a fold under the chest
 
-    // near thigh, then the pleated skirt over its top
+    // near thigh, under the coat's front
     vec2 hipN = hip + rot(vec2(-5.0, 1.0), ang * 0.3);
     leg(c, p, hipN, kneeN, aN, 1.0);
-    float skirt = sdTrap(q, vec2(-1.0, -5.0), 9.5, 14.5, 6.5) - 0.8;
-    part(c, skirt, SKIRT, 3.0);
-    paint(c, abs(fract((q.x + 40.0) / 3.6) - 0.5) * 3.6 - 0.35, SKIRT * 0.62, cov(skirt + 0.5) * smoothstep(-9.0, -2.0, q.y));
 
-    // ---- arms: both hands on her knees; pulling away hard, her far hand (the screen's right) goes up in a fist
-    vec2 shN = hip + rot(vec2(-11.0, -42.0), ang), shF = hip + rot(vec2(11.0, -42.0), ang);
+    // the coat's front panels: open over the top, light blue trim along the opening and the hem
+    float outer = sdTrap(q, vec2(0.0, -17.5), 12.0, 15.0, 27.5) - 0.6;
+    float opening = sdTrap(q, vec2(0.0, -17.0), 4.5, 10.5, 29.0);
+    float panels = max(outer, -opening);
+    toon(c, panels, vec2(sign(q.x) * clamp((abs(q.x) - 7.0) / 9.0, -1.0, 1.0), 0.0), COAT);
+    float inP = cov(panels + 0.2);
+    paint(c, abs(opening) - 0.75, M_LIGHT, inP);
+    paint(c, abs(opening - 1.5) - 0.25, M_RED, inP);
+    paint(c, abs(q.y - 9.6) - 0.8, M_LIGHT, inP);
+    paint(c, sdSeg(q, vec2(-10.5, -30.0), vec2(-12.0, -6.0)) - 0.12, COAT * 0.55, inP);   // fold lines
+    paint(c, sdSeg(q, vec2(10.0, -26.0), vec2(12.5, -4.0)) - 0.12, COAT * 0.55, inP);
+    // stand collar and the M-stripe bow
+    toon(c, sdTrap(q, vec2(0.0, -46.5), 7.5, 6.0, 2.4) - 0.6, vec2(q.x / 9.0, -0.2), COAT);
+    paint(c, abs(q.y + 48.6) - 0.5, M_LIGHT, cov(sdTrap(q, vec2(0.0, -46.5), 7.5, 6.0, 2.4) - 0.4));
+    vec2 bw = q - vec2(0.0, -43.2);
+    for (int i = 0; i < 3; i++) {
+        float k = float(i) - 1.0;
+        vec3 col = i == 0 ? M_LIGHT : (i == 1 ? M_DARK : M_RED);
+        toon(c, sdLimb(bw, vec2(k * 0.9, 0.8), vec2(k * 1.6, 7.5 - abs(k)), 0.85, 0.6), vec2(k * 0.5, 0.0), col);
+    }
+    toon(c, min(sdEll(bw, vec2(-2.3, 0.0), vec2(2.3, 1.5)), sdEll(bw, vec2(2.3, 0.0), vec2(2.3, 1.5))), bw / 4.0, M_LIGHT);
+    toon(c, length(bw) - 1.0, bw, M_DARK);
+
+    // ---- arms: hands on her knees; pulling away hard, her far hand (the screen's right) goes up in a fist
+    vec2 shN = hip + rot(vec2(-11.5, -42.0), ang), shF = hip + rot(vec2(11.5, -42.0), ang);
     float cheer = smoothstep(0.45, 0.8, go);
-    vec2 handN = kneeN + vec2(5.0, -6.0);
-    vec2 handF = mix(kneeF + vec2(13.0, -7.0), shF + vec2(17.0 + sin(t * 9.0) * 1.0, -20.0), cheer);
-    arm(c, p, shN, handN, 22.0, -1.0, 0.92);
-    arm(c, p, shF, handF, 22.0, mix(-1.0, 1.0, cheer), 1.0);
+    vec2 wrN = kneeN + vec2(3.0, -6.5);
+    vec2 wrF = mix(kneeF + vec2(11.0, -8.0), shF + vec2(16.0 + sin(t * 9.0) * 1.0, -17.0), cheer);
+    arm(c, p, shN, wrN, 22.0, -1.0, 0.0, 1.0, 0.92);
+    arm(c, p, shF, wrF, 22.0, mix(-1.0, 1.0, cheer), cheer, -1.0, 1.0);
 
-    // ---- face
-    float rx = 8.8 - 3.4 * clamp((h.y - 1.0) / 9.5, 0.0, 1.0);
-    float face = (length(vec2(h.x / rx, h.y / 10.6)) - 1.0) * min(rx, 10.6);
-    part(c, face, SKIN, 4.0);
+    // ---- neck and head (1.2x)
+    toon(c, sdLimb(q, vec2(0.0, -44.0), vec2(0.0, -49.5), 3.4, 3.1), vec2(q.x / 3.4, 0.0), SKIN * 0.84);
+    gK = K * 1.2;
+    float rx = 8.9 - 3.6 * clamp((h.y - 1.0) / 9.5, 0.0, 1.0);
+    float face = (length(vec2(h.x / rx, h.y / 10.7)) - 1.0) * min(rx, 10.7);
+    toon(c, face, vec2(h.x / 11.0, h.y / 30.0), SKIN);
 
-    // eyes: big anime eyes, dark-to-light irises, a highlight; a blink every few seconds; > < braking; ^ ^ happy
+    // the fringe's locks (used for its shadow on the face, then drawn)
+    float bangs = max(sdEll(h, vec2(0.0, -2.0), vec2(11.9, 12.0)), h.y + 4.5);
+    for (int i = 0; i < 9; i++) {
+        float f = float(i) / 4.0 - 1.0;
+        vec2 r0 = vec2(f * 4.5, -11.0);
+        vec2 tip = vec2(f * 10.6 + 0.7 * sin(f * 3.0), -3.0 + 7.8 * f * f + 0.7 * sin(float(i) * 2.3) + flutter * 1.5 * f);
+        vec2 mid = mix(r0, tip, 0.55) + vec2(f * 1.4, 0.0);
+        bangs = min(bangs, min(sdLimb(h, r0, mid, 3.6, 2.9), sdLimb(h, mid, tip, 2.9, 0.3)));
+    }
+    float locks = 10.0;
+    for (int s = 0; s < 2; s++) {
+        float sx = s == 0 ? -1.0 : 1.0;
+        vec2 l0 = vec2(sx * 8.4, -4.0), l1 = vec2(sx * 9.4, 7.0), l2 = vec2(sx * (9.6 + blow * 2.5 * (sx > 0.0 ? 1.0 : 0.3)) + flutter * 2.0, 21.0);
+        locks = min(locks, min(sdLimb(h, l0, l1, 2.8, 2.5), sdLimb(h, l1, l2, 2.5, 0.3)));
+    }
+    // the fringe's shadow on the forehead
+    paint(c, max(bangs - 1.8, face), SKIN * vec3(0.78, 0.74, 0.86), 1.0);
+
+    // eyes: lash line with an outer flick, a crease, white, a dark-to-light iris with a ring, pupil, two highlights;
+    // a blink every few seconds; > < braking; ^ ^ happy
     float bt = mod(t, 4.6), bt2 = mod(t + 1.9, 12.0);
     float open = (bt < 0.13 || (bt2 > 0.25 && bt2 < 0.36)) ? 0.0 : 1.0;
     float happy = smoothstep(0.5, 0.7, go), squint = smoothstep(0.35, 0.55, brake);
     for (int i = 0; i < 2; i++) {
         float sx = i == 0 ? -1.0 : 1.0;
-        vec2 e = h - vec2(sx * 4.0, 1.6);
+        vec2 e = h - vec2(sx * 4.1, 1.7);
+        vec2 m = vec2(e.x * sx, e.y);                 // mirrored: +x is the eye's outer corner
         if (squint > 0.5) {
-            vec2 m = vec2(e.x * sx, e.y);
-            paint(c, min(sdSeg(m, vec2(-2.0, -1.9), vec2(1.5, 0.0)), sdSeg(m, vec2(-2.0, 1.9), vec2(1.5, 0.0))) - 0.55, LINE, 1.0);
+            paint(c, min(sdSeg(m, vec2(2.2, -2.0), vec2(-1.6, 0.0)), sdSeg(m, vec2(2.2, 2.0), vec2(-1.6, 0.0))) - 0.5, LINE, 1.0);
         } else if (happy > 0.5 || open < 0.5) {
             float k = happy > 0.5 ? 1.0 : -1.0;
-            vec2 ce = vec2(0.0, happy > 0.5 ? 1.3 : -0.8);
-            paint(c, max(abs(length(e - ce) - 2.3) - 0.5, k * (e.y - ce.y)), LINE, 1.0);
+            vec2 ce = vec2(0.0, happy > 0.5 ? 1.4 : -0.8);
+            paint(c, max(abs(length(e - ce) - 2.5) - 0.48, k * (e.y - ce.y)), LINE, 1.0);
+            if (happy < 0.5) paint(c, sdSeg(m, vec2(2.3, 0.0), vec2(3.1, -0.6)) - 0.3, LINE, 1.0);
         } else {
-            paint(c, sdEll(e, vec2(0.0, 0.2), vec2(2.3, 2.9)), vec3(1.0), 1.0);
-            paint(c, sdEll(e, vec2(sx * -0.2, 0.5), vec2(1.8, 2.5)), mix(IRIS_T, IRIS_B, clamp((e.y + 2.0) / 4.5, 0.0, 1.0)), 1.0);
-            paint(c, sdEll(e, vec2(sx * -0.2, 0.2), vec2(0.8, 1.2)), LINE, 0.9);
-            paint(c, length(e - vec2(-0.7, -0.9)) - 0.6, vec3(1.0), 1.0);
-            paint(c, length(e - vec2(0.6, 1.6)) - 0.3, vec3(1.0), 0.8);
-            // the upper lash line, thick and swept out at the corner
-            float lash = abs(length((e - vec2(0.0, 1.8)) * vec2(1.0, 1.25)) - 4.2) - 0.55;
-            paint(c, max(lash, max(e.y + 0.6, abs(e.x) - 2.9 - (sx * e.x > 0.0 ? 0.6 : 0.0))), LINE, 1.0);
+            float white = sdEll(m, vec2(0.15, 0.25), vec2(2.8, 3.3));
+            paint(c, white, vec3(1.0), 1.0);
+            float iris = sdEll(m, vec2(-0.25, 0.6), vec2(2.25, 3.0));
+            float inW = cov(white);
+            paint(c, iris, mix(IRIS_T, IRIS_B, smoothstep(-1.8, 2.6, e.y)), inW);
+            paint(c, abs(iris + 0.15) - 0.22, IRIS_T * 0.8, inW);                                   // the iris ring
+            paint(c, sdEll(m, vec2(-0.25, 0.3), vec2(0.85, 1.35)), LINE, inW * 0.9);                 // pupil
+            paint(c, max(white, e.y + 0.9), IRIS_T * 0.35, inW * 0.45);                            // the lid's shadow
+            paint(c, length(e - vec2(-0.75 * sx + sx * 0.0, -0.9)) - 0.7, vec3(1.0), inW);           // highlights
+            paint(c, length(e - vec2(0.6 * sx, 1.7)) - 0.32, vec3(1.0), inW * 0.85);
+            // the upper lash line, thick, with an outer flick; a fine crease above; a short lower lash
+            float lash = abs(length((m - vec2(0.1, 2.2)) * vec2(1.0, 1.22)) - 4.4) - 0.5;
+            paint(c, max(lash, max(m.y + 0.4, abs(m.x - 0.2) - 2.9)), LINE, 1.0);
+            paint(c, sdLimb(m, vec2(2.4, -2.0), vec2(3.6, -2.7), 0.45, 0.12), LINE, 1.0);
+            paint(c, max(abs(length((m - vec2(0.0, 2.0)) * vec2(1.0, 1.2)) - 5.4) - 0.13, max(m.y + 2.0, abs(m.x) - 2.4)), SKIN * 0.55, 1.0);
+            paint(c, sdSeg(m, vec2(1.0, 3.2), vec2(2.4, 2.6)) - 0.15, LINE, 0.7);
         }
-        paint(c, sdSeg(h, vec2(sx * 2.4, -3.6), vec2(sx * 6.0, -4.3)) - 0.35, HAIR_B * 0.6, 0.9);   // brows
+        paint(c, sdLimb(m, vec2(-2.0, -4.6), vec2(2.6, -5.0), 0.38, 0.15), HAIR_B * 0.55, 0.9);   // brows
     }
-    paint(c, sdEll(h, vec2(-5.0, 5.4), vec2(2.0, 0.9)), BLUSH, 0.5);
-    paint(c, sdEll(h, vec2(5.0, 5.4), vec2(2.0, 0.9)), BLUSH, 0.5);
-    paint(c, length(h - vec2(0.3, 4.6)) - 0.35, SKIN * 0.7, 0.8);                     // nose
-    vec2 mo = h - vec2(0.2, 7.3);
-    if (go > 0.35) part(c, max(sdEll(mo, vec2(0.0), vec2(2.0, 1.7)), -mo.y), M_RED, 1.0);
-    else if (brake > 0.35) part(c, sdEll(mo, vec2(0.0, 0.2), vec2(0.9, 1.1)), M_RED, 1.0);
-    else paint(c, max(abs(length(mo + vec2(0.0, 1.8)) - 1.9) - 0.32, -(mo.y + 0.3)), LINE, 1.0);
+    // blush with a few hatch lines; the nose; the mouth (a smile, a grin pulling away, a little o braking)
+    for (int s = 0; s < 2; s++) {
+        float sx = s == 0 ? -1.0 : 1.0;
+        paint(c, sdEll(h, vec2(sx * 5.4, 5.6), vec2(2.3, 1.0)), BLUSH, 0.42);
+        for (int j = 0; j < 3; j++) { float x0 = sx * (4.4 + float(j) * 0.9); paint(c, sdSeg(h, vec2(x0 + 0.4, 5.0), vec2(x0 - 0.2, 6.1)) - 0.1, BLUSH * 0.8, 0.8); }
+    }
+    paint(c, sdSeg(h, vec2(0.5, 3.8), vec2(0.2, 4.8)) - 0.14, SKIN * 0.62, 1.0);
+    vec2 mo = h - vec2(0.2, 7.4);
+    float talk = smoothstep(0.92, 1.0, sin(t * 0.37)) * (1.0 - brake);
+    if (go > 0.35 || talk > 0.05) {
+        float mouth = max(sdEll(mo, vec2(0.0, -0.1), vec2(2.1, 1.0 + 0.9 * max(talk, go))), -mo.y - 0.2);
+        paint(c, mouth, vec3(0.55, 0.12, 0.2), 1.0);
+        paint(c, max(sdEll(mo, vec2(0.0, 1.2), vec2(1.3, 0.8)), mouth), vec3(1.0, 0.5, 0.55), 1.0);   // tongue
+        paint(c, abs(mouth) - 0.12, LINE, 0.9);
+    } else if (brake > 0.35) {
+        paint(c, sdEll(mo, vec2(0.0, 0.3), vec2(0.9, 1.1)), vec3(0.55, 0.12, 0.2), 1.0);
+    } else paint(c, max(abs(length(mo + vec2(0.0, 2.0)) - 2.1) - 0.24, -(mo.y + 0.3)), LINE, 1.0);
 
-    // bangs: a swept, pointed fringe and long locks framing the face
-    float fringe = h.y - (-3.6 + 3.0 * abs(sin(h.x * 0.5 + 0.9)) + 0.04 * h.x);
-    float bangs = max(sdEll(h, vec2(0.0, -1.0), vec2(11.0, 11.6)), fringe);
-    float locks = min(sdLimb(h, vec2(-8.6, -3.0), vec2(-8.0, 13.0), 2.8, 0.6), sdLimb(h, vec2(8.6, -3.0), vec2(8.2, 12.0), 2.8, 0.6));
-    part(c, min(bangs, locks), hairCol, 4.0);
-    paint(c, abs(length((h - vec2(0.0, -2.0)) * vec2(1.0, 1.4)) - 9.5) - 0.7, vec3(1.0), 0.45 * cov(bangs + 1.0) * step(h.y, -5.0));   // the shine ring
-    // a red ribbon where the ponytail is tied
+    // fringe and side locks over the face: gradient, strand lines, a shine ring
+    float hairF = min(bangs, locks);
+    toon(c, hairF, vec2(h.x / 12.0, (h.y + 2.0) / 13.0), hairCol(h.y));
+    float inH = cov(hairF + 0.3);
+    for (int i = 0; i < 9; i++) {
+        float f = float(i) / 4.0 - 1.0;
+        vec2 r0 = vec2(f * 4.5 + 0.9, -9.5);
+        vec2 tip = vec2(f * 10.6 + 0.7 * sin(f * 3.0), -3.0 + 7.8 * f * f + 0.7 * sin(float(i) * 2.3) + flutter * 1.5 * f);
+        paint(c, sdSeg(h, r0, mix(r0, tip, 0.8) + vec2(f * 0.8, 0.0)) - 0.1, HAIR_B * 0.75, inH * 0.75);
+    }
+    float ring = abs(length((h - vec2(0.0, -1.0)) * vec2(1.0, 1.45)) - 10.0) - 0.75 - 0.35 * sin(h.x * 2.2);
+    paint(c, max(ring, h.y + 4.0), vec3(1.0), inH * 0.7);
+    // a red ribbon where the ponytail is tied: two loops and two tails
     vec2 rb = rot(h - tie, 0.6);
-    part(c, min(min(sdEll(rb, vec2(-2.4, 0.0), vec2(2.4, 1.6)), sdEll(rb, vec2(2.4, 0.0), vec2(2.4, 1.6))), length(rb) - 1.2), M_RED, 1.0);
+    float ribbon = min(min(sdEll(rb, vec2(-2.8, 0.0), vec2(2.8, 1.8)), sdEll(rb, vec2(2.8, 0.0), vec2(2.8, 1.8))),
+        min(sdLimb(rb, vec2(0.0), vec2(-1.5, 4.5 + flutter * 3.0), 1.1, 0.7), sdLimb(rb, vec2(0.0), vec2(1.6, 4.2 - flutter * 3.0), 1.1, 0.7)));
+    toon(c, ribbon, rb / 5.0, M_RED);
+    toon(c, length(rb) - 1.1, rb, M_RED * 0.85);
 
     vec3 rgb = c.rgb / max(c.a, 0.0001);
     gl_FragColor = vec4(rgb * u_drive.w, c.a);

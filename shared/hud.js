@@ -114,7 +114,8 @@
  *             (e.g. "boost" over [0, 1.5] bar, "batt12" over [0, 100] %)
  *   perch     effect layer; shaders.js perch, the Perch layout's girl sitting on BMW's speed-limit sign, legs hanging off
  *             its left side; animated by the renderer's clock (time: true), so only a small u_drive uniform goes up when
- *             the smoothed g or the speed moves a step. "sign" [x, y, w, h] the sign's box in target px ([152, 320, 50, 54])
+ *             the smoothed g or the speed moves a step. "sign" [x, y, w, h] the sign's box in target px ([152, 320, 50, 54]);
+ *             "scale" how many times her drawing is enlarged about the sign's top-left corner (1)
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
  *   grid      calibration: effect layer of lines every "step" px (brighter every "major" steps)
@@ -1971,6 +1972,7 @@ class HudApp {
             const sg = Array.isArray(w.sign) && w.sign.length === 4 ? w.sign : [152, 320, 50, 54];
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_sign', [sg[0] - w.x, sg[1] - w.y, sg[2], sg[3]]);
+            c.uniform(ref, 'u_scale', [isNum(w.scale) ? w.scale : 1]);
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);

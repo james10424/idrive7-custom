@@ -21,8 +21,8 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
 
 - **Daily:** speed is the hero, with the gear, clock and oil.
 - **Sport:** a segmented shift bar, a big gear, speed, a boost gauge, oil and coolant.
-- **Perch:** an original anime girl in an M racing jacket, in the style of a desktop mascot, sits on the corner of BMW's speed-limit sign, leaning forward with her hands on her knees and her legs hanging off its left side so your speed stays clear. No readouts of our own, just her and BMW's HUD.
-  - **Idle:** she swings her legs (a heel taps the sign), blinks, breathes, sways and her side ponytail swings.
+- **Perch:** an original anime girl in an open M-blue racing coat, toon shaded in the style of a desktop mascot, sits on the corner of BMW's speed-limit sign, leaning forward with her hands on her knees and her legs hanging off its left side so your speed stays clear. No readouts of our own, just her and BMW's HUD.
+  - **Idle:** she swings her legs (a heel taps the sign), blinks, breathes, sways, smiles now and then, and her hair swings.
   - **Driving:** pull away hard and she leans back with a fist in the air and a big grin; brake and she tips forward, feet flying up, eyes squeezed shut. The faster you go, the more her ponytail streams out.
   - She is drawn on the GPU from shapes and animated by cluster-render's own clock, so she costs one layer and no pixel memory, and only a tiny update goes up when she changes pose.
   - Redline is gone: if you had it picked anywhere, it switches to Perch.
