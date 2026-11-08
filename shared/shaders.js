@@ -736,6 +736,8 @@ uniform vec4 u_hole;      // map window x, y, w, h, already inset (w 0 = none)
 uniform float u_holeR;    // the hole's corner radius px
 uniform vec4 u_holeCut;   // corners kept black: top w, h and bottom w, h px of a triangle in each, mirrored left / right
 uniform vec4 u_holeMask;  // a rectangle kept black inside the window: x, y, w, h px (w 0 = none)
+uniform vec4 u_holeFade;  // a rectangle darkened inside the window, fading out round it: x, y, w, h px (w 0 = none)
+uniform vec2 u_holeFadeK; // that fade: feather px, darkness 0..1 at its middle
 uniform vec4 u_strip;     // bottom strip: left end x, top y, height, slant px
 uniform vec3 u_stripFill; // the strip as two bars from the middle out: blue left 0..1, red right 0..1, its last tenth red
                           // (kickdown) when z > 0.5; x < 0 = both halves lit (no signals)
@@ -775,14 +777,15 @@ float dIn(vec2 q) { return (q.x - outerX(q.y)) / sqrt(1.0 + outerSlope(q.y) * ou
 // one bracket in the left frame (q mirrored for the right one)
 vec4 bracket(vec2 q, float val, float redFrom, float orange, float ticks, vec3 line, vec3 band, vec3 lit, vec3 inner, vec4 c) {
     float d = dIn(q);
-    float yTopI = u_geo.x + 8.0;                              // the inner line's top run
     float t = (u_scale.x - q.y) / (u_scale.x - u_scale.y);    // 0 at the scale's 0
     bool inY = q.y > u_geo.x + 5.0 && q.y < u_geo.z - 4.0;
     // the band: lit up to the value, white marker on top
     float inB = (inY ? 1.0 : 0.0) * cov(-(d - 5.0)) * cov(d - 5.0 - u_w);
     if (inB > 0.0) {
+        // empty past the value, as BMW's own Sport view: only a faint tint of the band colour (car photo, Nov 8 2026)
         vec3 col = band;
-        float a = 0.96;
+        float a = 0.22;
+        if (t <= val) a = 0.96;
         if (t <= val) col = mix(lit, mix(lit, vec3(1.0), 0.25), clamp((d - 5.0) / u_w, 0.0, 1.0)) * mix(0.8, 1.0, clamp(t / max(val, 0.01), 0.0, 1.0));
         c = over(vec4(col, a * inB), c);
         float yv = u_scale.x - val * (u_scale.x - u_scale.y);
@@ -798,35 +801,52 @@ vec4 bracket(vec2 q, float val, float redFrom, float orange, float ticks, vec3 l
         }
     }
     // the outer line, its top run and its bottom run
-    float o = inY || abs(q.y - u_geo.x) < 6.0 || abs(q.y - u_geo.z) < 6.0 ? cov(abs(d - 1.0) - 1.8) : 0.0;
+    // the slanted line stops at the top and bottom runs (it ran 6 px past them: a spur at each corner, car photo Nov 8 2026)
+    float o = q.y > u_geo.x - 1.0 && q.y < u_geo.z + 1.0 ? cov(abs(d - 1.0) - 1.8) : 0.0;
     vec2 tl = vec2(outerX(u_geo.x), u_geo.x), bl = vec2(outerX(u_geo.z), u_geo.z);
     o = max(o, cov(segD(q, tl, vec2(u_topEnd, u_geo.x)) - 2.2));
     o = max(o, cov(segD(q, bl, bl + vec2(u_inner + 40.0, 0.0)) - 2.2));
     c = over(vec4(line, 0.35 * exp(-abs(d) / 5.0) * (inY ? 1.0 : 0.0) * step(d, 0.0)), c);
     c = over(vec4(line, o), c);
-    // the inner line: down the bracket from its top run to the bottom
-    float il = (q.y > yTopI && q.y < u_geo.z - 6.0) ? cov(abs(d - u_inner) - 1.6) : 0.0;
-    float xi = outerX(yTopI) + u_inner * sqrt(1.0 + outerSlope(yTopI) * outerSlope(yTopI));
-    il = max(il, cov(segD(q, vec2(xi, yTopI), vec2(u_topEnd - 14.0, yTopI)) - 1.6));
+    // the inner line: down the bracket from the top run to the bottom, no top run of its own (BMW's Sport view has a
+    // single line along the top, car photo Nov 8 2026)
+    float il = (q.y > u_geo.x && q.y < u_geo.z - 6.0) ? cov(abs(d - u_inner) - 1.6) : 0.0;
     c = over(vec4(inner, 0.95 * il), c);
     return c;
 }
 
-// a two-tone slanted bar from the empty end b to the full end a, with a thin rail beside it
-vec4 bar(vec2 p, vec4 s, float val, float zones, vec4 c) {
+// a slanted level bar from the empty end b to the full end a, as BMW's own Sport view draws fuel and oil (car photo,
+// Nov 8 2026): flat (horizontal) ends, four segments split by dark lines, lit white from the empty end up to the
+// value, the rest grey, and a thin rail beside it on the side away from its labels (rail -1: left of a bar leaning
+// left, as fuel; +1: right, as oil). zones > 0.5: the rail's last quarter-segment at the cold end is blue and at the
+// hot end red, as BMW's oil gauge.
+vec4 bar(vec2 p, vec4 s, float val, float zones, float rail, vec4 c) {
     vec2 a = s.xy, b = s.zw;
-    float h = 1.0 - segH(p, a, b);
-    vec2 dir = normalize(a - b), nrm = vec2(-dir.y, dir.x);
-    float side = dot(p - b, nrm);
-    float along = segD(p, a, b);
-    if (along > 26.0) return c;
-    float body = cov(abs(side) - 7.0) * cov(segD(p, a, b) - 7.5);
-    vec3 col = vec3(0.92, 0.94, 0.97);
-    if (zones > 0.5 && h > 0.88) col = vec3(1.0, 0.2, 0.22);
-    if (zones > 0.5 && h < 0.1) col = vec3(0.25, 0.5, 1.0);
-    c = over(vec4(0.36, 0.38, 0.44, 0.9 * body), c);
-    c = over(vec4(col, body * step(h, val) * step(0.001, val)), c);
-    c = over(vec4(0.5, 0.52, 0.58, 0.8 * cov(abs(side + 12.0) - 1.0) * cov(segD(p, a, b) - 13.0)), c);
+    float yt = min(a.y, b.y), yb = max(a.y, b.y);
+    if (p.y < yt - 4.0 || p.y > yb + 4.0) return c;
+    // x of the bar's centre line at this y, and the horizontal distance from it
+    float xc = mix(b.x, a.x, (b.y - p.y) / (b.y - a.y));
+    float k = abs((a.x - b.x) / (a.y - b.y)), sec = sqrt(1.0 + k * k);   // horizontal px per perpendicular px
+    float side = (p.x - xc) / sec;                                       // perpendicular px, + right of the line
+    if (abs(side) > 22.0) return c;
+    float ends = cov(yt - p.y) * cov(p.y - yb);                          // flat ends
+    float h = (b.y - p.y) / (b.y - a.y);                                 // 0 empty .. 1 full, along y
+    float seg = fract(h * 4.0);
+    float div = cov(min(seg, 1.0 - seg) * (yb - yt) / 4.0 - 1.1);        // dark lines between the four segments
+    float body = cov(abs(side) - 10.0) * ends;
+    vec3 off = vec3(0.30, 0.32, 0.37), edge = vec3(0.47, 0.49, 0.55);
+    vec3 lit = mix(vec3(0.78, 0.8, 0.84), vec3(0.97, 0.98, 1.0), clamp(h / max(val, 0.05), 0.0, 1.0));
+    bool on = val > 0.001 && h <= val;
+    vec3 col = on ? lit : mix(off, edge, 1.0 - cov(abs(side) - 8.5));
+    c = over(vec4(col, (on ? 1.0 : 0.92) * body), c);
+    c = over(vec4(0.0, 0.0, 0.0, 0.85 * body * div * step(0.02, h) * step(h, 0.98)), c);
+    // the rail
+    float rs = side - rail * 15.0;
+    float r = cov(abs(rs) - 1.3) * ends;
+    vec3 rc = vec3(0.9, 0.92, 0.96);
+    if (zones > 0.5 && h < 0.12) rc = vec3(0.25, 0.5, 1.0);
+    if (zones > 0.5 && h > 0.9) rc = vec3(1.0, 0.2, 0.22);
+    c = over(vec4(rc, 0.95 * r), c);
     return c;
 }
 
@@ -857,9 +877,15 @@ void main() {
             hd = max(hd, -(length(max(mq, 0.0)) + min(max(mq.x, mq.y), 0.0)));
         }
         c.a *= clamp(hd + 0.5, 0.0, 1.0);
+        // a soft dark patch behind our gear, so BMW's map lines don't run through it (car photo, Nov 8 2026)
+        if (u_holeFade.z > 0.0) {
+            vec2 fq = abs(p - (u_holeFade.xy + u_holeFade.zw * 0.5)) - u_holeFade.zw * 0.5;
+            float fd = length(max(fq, 0.0)) + min(max(fq.x, fq.y), 0.0);
+            c.a = max(c.a, u_holeFadeK.y * (1.0 - smoothstep(0.0, u_holeFadeK.x, fd)));
+        }
     }
-    c = bar(p, u_fuelSeg, u_fuel, 0.0, c);
-    c = bar(p, u_oilSeg, u_oil, 1.0, c);
+    c = bar(p, u_fuelSeg, u_fuel, 0.0, -1.0, c);
+    c = bar(p, u_oilSeg, u_oil, 1.0, 1.0, c);
     // the bottom line between the brackets
     if (abs(p.y - u_geo.z) < 3.0 && abs(p.x - u_size.x * 0.5) < u_size.x * 0.5 - outerX(u_geo.z))
         c = over(vec4(mix(BLUE_LINE, RED_LINE, step(u_size.x * 0.5, p.x)) * 0.8, cov(abs(p.y - u_geo.z) - 1.2)), c);

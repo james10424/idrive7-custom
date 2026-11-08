@@ -91,7 +91,8 @@
  *             window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with
  *             "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right
  *             (BMW draws bits of its own Sport view there), and "holeMask" [x, y, w, h] in target px: a rectangle in it
- *             kept black (BMW's speed-limit sign at the window's left edge); "stripSignals" [left, right] turns the strip
+ *             kept black (BMW's speed-limit sign at the window's left edge); "holeFade" [x, y, w, h, feather (30), darkness
+ *             (0.85)]: a rectangle darkened in it, fading out over feather px (behind the gear, so the map doesn't run through it); "stripSignals" [left, right] turns the strip
  *             into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r]
  *             ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
@@ -1532,6 +1533,9 @@ class HudApp {
             c.uniform(ref, 'u_holeR', [this._holeRadius(w)]);
             c.uniform(ref, 'u_holeCut', Array.isArray(w.holeCut) && w.holeCut.length === 4 ? w.holeCut : [0, 0, 0, 0]);
             c.uniform(ref, 'u_holeMask', Array.isArray(w.holeMask) && w.holeMask.length === 4 ? [w.holeMask[0] - w.x, w.holeMask[1] - w.y, w.holeMask[2], w.holeMask[3]] : [0, 0, 0, 0]);
+            const hf = Array.isArray(w.holeFade) && w.holeFade.length >= 4 ? w.holeFade : null;
+            c.uniform(ref, 'u_holeFade', hf ? [hf[0] - w.x, hf[1] - w.y, hf[2], hf[3]] : [0, 0, 0, 0]);
+            c.uniform(ref, 'u_holeFadeK', [hf && isNum(hf[4]) ? hf[4] : 30, hf && isNum(hf[5]) ? hf[5] : 0.85]);
             c.uniform(ref, 'u_strip', w.strip);
             c.uniform(ref, 'u_stripFill', Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
             c.uniform(ref, 'u_topEnd', [w.topEnd]);
