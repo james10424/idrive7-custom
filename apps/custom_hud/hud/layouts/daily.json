@@ -1,7 +1,7 @@
 {
  "schemaVersion": 2,
  "name": "Daily",
- "_about": "Calm everyday layout: speed is the hero, with the gear on the left and the clock and oil on the right. Fitted (Nov 5 2026 grid photo) to the part of the HUD the driver sees, x 120..605, y 100..378, with a 6 px margin; the bottom-left x 150..355, y 314..378 is left to BMW's own speed and speed-limit sign, which it keeps drawing over ours in Comfort. To change it, copy this file into the app data folder layouts/ (scripts/deploy.sh); the app reloads it by itself. Widget types and tokens: see the header of hud.js. Modes (hud.js header): cruise moves everything to the right half, clear of BMW's ACC block (x ~240..345, y ~200..312) and speed; nav keeps a small column on the left (gear, clock, oil, x 126..305, y 172..290) under BMW's guidance line (y ~160) and clear of its turn map (x ~310..605); cruiseNav keeps gear, clock and oil in the sliver left of the ACC block. Measured off the Nov 7 2026 HUD photos, not the grid: check on the car. In normal and cruise a row under the oil shows the car ahead while one is measured: its gap ({{accGap}} m / ft) and its speed against ours ({{accRel}} km/h / mph, minus = closing).",
+ "_about": "Calm everyday layout: speed is the hero, with the gear on the left and the clock and oil on the right. Fitted (Nov 5 2026 grid photo) to the part of the HUD the driver sees, x 120..605, y 100..378, with a 6 px margin; the bottom-left x 150..355, y 314..378 is left to BMW's own speed and speed-limit sign, which it keeps drawing over ours in Comfort. To change it, copy this file into the app data folder layouts/ (scripts/deploy.sh); the app reloads it by itself. Widget types and tokens: see the header of hud.js. Modes (hud.js header): cruise moves everything to the right half, clear of BMW's ACC block (x ~240..345, y ~200..312) and speed; nav keeps a small column on the left (gear, clock, oil, x 126..305, y 172..290) under BMW's guidance line (y ~160) and clear of its turn map (x ~310..605); cruiseNav keeps gear, clock and oil in the sliver left of the ACC block. Measured off the Nov 7 2026 HUD photos, not the grid: check on the car. In every mode a row under the oil shows the car ahead (cruiseNav: the gap only) while one is measured: its gap ({{accGap}} m / ft) and its speed against ours ({{accRel}} km/h / mph, minus = closing).",
  "modes": [
   "cruise",
   "nav",
@@ -94,7 +94,7 @@
     },
     "nav": {
      "x": 126,
-     "y": 178
+     "y": 170
     },
     "cruiseNav": {
      "x": 126,
@@ -121,7 +121,7 @@
     },
     "nav": {
      "x": 126,
-     "y": 222,
+     "y": 212,
      "align": "left"
     },
     "cruiseNav": {
@@ -151,7 +151,7 @@
     },
     "nav": {
      "x": 222,
-     "y": 228
+     "y": 218
     },
     "cruiseNav": false
    }
@@ -176,7 +176,7 @@
     },
     "nav": {
      "x": 126,
-     "y": 266
+     "y": 258
     },
     "cruiseNav": {
      "x": 126,
@@ -203,7 +203,7 @@
     },
     "nav": {
      "x": 168,
-     "y": 257,
+     "y": 249,
      "align": "left"
     },
     "cruiseNav": {
@@ -229,8 +229,14 @@
    "spacing": 1.5,
    "needs": "accGap",
    "in": {
-    "nav": false,
-    "cruiseNav": false
+    "nav": {
+     "x": 126,
+     "y": 291
+    },
+    "cruiseNav": {
+     "x": 126,
+     "y": 291
+    }
    }
   },
   {
@@ -247,8 +253,14 @@
    "align": "right",
    "needs": "accGap",
    "in": {
-    "nav": false,
-    "cruiseNav": false
+    "nav": {
+     "x": 154,
+     "y": 282
+    },
+    "cruiseNav": {
+     "x": 154,
+     "y": 282
+    }
    }
   },
   {
@@ -265,8 +277,14 @@
    "color": "dim",
    "needs": "accGap",
    "in": {
-    "nav": false,
-    "cruiseNav": false
+    "nav": {
+     "x": 202,
+     "y": 288
+    },
+    "cruiseNav": {
+     "x": 202,
+     "y": 288
+    }
    }
   },
   {
@@ -283,7 +301,10 @@
    "align": "right",
    "needs": "accRel",
    "in": {
-    "nav": false,
+    "nav": {
+     "x": 222,
+     "y": 282
+    },
     "cruiseNav": false
    }
   },
@@ -301,7 +322,10 @@
    "color": "dim",
    "needs": "accRel",
    "in": {
-    "nav": false,
+    "nav": {
+     "x": 270,
+     "y": 288
+    },
     "cruiseNav": false
    }
   }
