@@ -91,10 +91,13 @@
  *             window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with
  *             "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right
  *             (BMW draws bits of its own Sport view there), and "holeMask" [x, y, w, h] in target px: a rectangle in it
- *             kept black (BMW's speed-limit sign at the window's left edge)
+ *             kept black (BMW's speed-limit sign at the window's left edge); "stripSignals" [left, right] turns the strip
+ *             into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r]
+ *             ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
- *             pedal is in kickdown and the bar is full
+ *             pedal is in kickdown and the bar is full; "range" [lo, hi] maps the signal from that span onto 0..max
+ *             (e.g. "boost" over [0, 1.5] bar, "batt12" over [0, 100] %)
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
  *   grid      calibration: effect layer of lines every "step" px (brighter every "major" steps)
@@ -1047,6 +1050,7 @@ class HudApp {
         if (name === 'throttle' || name === 'throttle10') { const t = this._throttle(); return isNum(t) ? (name === 'throttle' ? t : t / 10) : null; }
         if (name === 'brake10') return this._brakeLevel();
         if (name === 'volt12') return this._volt12();
+        if (name === 'batt12') return this._batt12();
         const d = this.car.data();
         return Object.prototype.hasOwnProperty.call(d, name) ? d[name] : null;
     }
@@ -1479,6 +1483,7 @@ class HudApp {
             c.uniform(ref, 'u_holeCut', Array.isArray(w.holeCut) && w.holeCut.length === 4 ? w.holeCut : [0, 0, 0, 0]);
             c.uniform(ref, 'u_holeMask', Array.isArray(w.holeMask) && w.holeMask.length === 4 ? [w.holeMask[0] - w.x, w.holeMask[1] - w.y, w.holeMask[2], w.holeMask[3]] : [0, 0, 0, 0]);
             c.uniform(ref, 'u_strip', w.strip);
+            c.uniform(ref, 'u_stripFill', Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
             c.uniform(ref, 'u_topEnd', [w.topEnd]);
         } else if (w.type === 'mdash') {
             const ty = w.tyres || [0, 0, 0], L = w.gaugeL || {}, R = w.gaugeR || {}, b = w.blade || {};
@@ -1714,9 +1719,14 @@ class HudApp {
                 q(isNum(fuel) ? fuel : 0),
                 q(isNum(oil) ? (oil - 50) / 100 : 0),
             ];
-            const key = vals.join('|');
+            // the strip's two bars: each signal over its "stripMax", in 50 steps
+            const ss = Array.isArray(w.stripSignals) ? w.stripSignals : null, sm = Array.isArray(w.stripMax) ? w.stripMax : [100, 10];
+            const strip = ss ? [0, 1].map((i) => { const v = ss[i] ? this._raw(ss[i]) : null; return isNum(v) ? Math.round(Math.min(1, Math.max(0, v / (sm[i] || 1))) * 50) / 50 : 0; }) : null;
+            const hot = !!ss && w.stripHotWhen === 'kickdown' && this._kickdown();
+            const key = vals.join('|') + (strip ? '|' + strip.join('|') + (hot ? 'h' : '') : '');
             if (!force && key === x.last) return;
             x.last = key;
+            if (strip) x.c.uniform(x.ref, 'u_stripFill', [strip[0], strip[1], hot ? 1 : 0]);
             x.c.uniform(x.ref, 'u_speed', [vals[0]]);
             x.c.uniform(x.ref, 'u_rpm', [vals[1]]);
             x.c.uniform(x.ref, 'u_fuel', [vals[2]]);
@@ -1745,7 +1755,8 @@ class HudApp {
             x.c.uniform(x.ref, 'u_value', [v]);
             x.c.uniform(x.ref, 'u_shiftNow', [sp.now ? 1 : 0]);
         } else if (w.type === 'segbar') {
-            const v = this._raw(w.signal);
+            let v = this._raw(w.signal);
+            if (isNum(v) && Array.isArray(w.range) && w.range.length === 2) v = (v - w.range[0]) / (w.range[1] - w.range[0]) * w.max;
             const lit = isNum(v) ? Math.max(0, Math.min(w.max, Math.round(v))) : 0;
             const hot = w.hotWhen === 'kickdown' && this._kickdown() && lit === w.max;   // the last segment in "hotColor"
             const key = lit + (hot ? 'h' : '');

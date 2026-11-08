@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 8 2026
+
+- **Custom Cluster 0.1.12:** Sport: the blue/red bottom strip is now the pedals, filled from its middle out: throttle to the left (last tenth red in kickdown), brake to the right; the boost and coolant text left it. Under the speed scale and below its bracket line, boost (0 to 1.5 bar, yellow) over the 12 V battery (green; bar = charge %, value = volts), each with its value at the end, replace the throttle and brake bars. Bottom row: clock and range at the left, coolant and outside temperature at the right, the middle kept free for a music title. The map-window mask now covers only the strip just above the fuel gauge, so BMW's three-digit speed shows (118 read as 18). The bench draws BMW's real speed.
+
 ## Nov 7 2026
 
 - **Custom Cluster 0.1.11:** the Sport theme's map-window mask moved from under BMW's speed to the window's left edge, where BMW's speed-limit sign poked out above the fuel gauge; the line under BMW's speed shows again. The cluster bench draws that sign.

@@ -708,7 +708,8 @@ const SDASH = `// The Sport theme in one cluster-render "effect" layer (GLSL ES 
 // a blue speed bracket left and a red rev bracket right (the left one mirrored). Each is a thin bright outer
 // line, a band that fills from the bottom (white marker at the value), a dark gap and a thin inner line round a
 // black middle: plain black, or BMW's map through a see-through rounded hole (u_hole; only the fuel and oil bars
-// and the bottom strip draw over it). Two-tone fuel and oil bars inside the brackets, a blue / red strip at the bottom. v_uv (0,0) is
+// and the bottom strip draw over it). Two-tone fuel and oil bars inside the brackets, a blue / red strip at the bottom
+// (optionally two bars from its middle out: the throttle left, the brake right). v_uv (0,0) is
 // the top-left. The backdrop is pure black: the car brightens dark tints (seen Nov 5 2026), so no dark panels.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -736,6 +737,8 @@ uniform float u_holeR;    // the hole's corner radius px
 uniform vec4 u_holeCut;   // corners kept black: top w, h and bottom w, h px of a triangle in each, mirrored left / right
 uniform vec4 u_holeMask;  // a rectangle kept black inside the window: x, y, w, h px (w 0 = none)
 uniform vec4 u_strip;     // bottom strip: left end x, top y, height, slant px
+uniform vec3 u_stripFill; // the strip as two bars from the middle out: blue left 0..1, red right 0..1, its last tenth red
+                          // (kickdown) when z > 0.5; x < 0 = both halves lit (no signals)
 uniform float u_topEnd;   // the top lines run from the bracket to this x (left; mirrored on the right)
 
 const vec3 BLUE_LINE = vec3(0.36, 0.62, 1.0);
@@ -868,7 +871,15 @@ void main() {
         float dx = abs(p.x - u_size.x * 0.5), xe = u_size.x * 0.5 - xl;
         float inside = cov(dx - xe) * cov(-sy) * cov(sy - u_strip.z);
         float f = dx / xe;
-        vec3 sc = p.x < u_size.x * 0.5 ? mix(vec3(0.06, 0.2, 0.62), vec3(0.15, 0.36, 0.92), f) : mix(vec3(0.4, 0.05, 0.1), vec3(0.85, 0.1, 0.16), f);
+        bool left = p.x < u_size.x * 0.5;
+        vec3 sc = left ? mix(vec3(0.06, 0.2, 0.62), vec3(0.15, 0.36, 0.92), f) : mix(vec3(0.4, 0.05, 0.1), vec3(0.85, 0.1, 0.16), f);
+        if (u_stripFill.x >= 0.0) {
+            // filled from the middle out to the value, the rest a dim track
+            float val = left ? u_stripFill.x : u_stripFill.y;
+            float lit = cov((f - val) * xe) * step(0.001, val);
+            if (left && u_stripFill.z > 0.5 && f > 0.9) sc = vec3(0.95, 0.12, 0.16);
+            sc = mix(sc * 0.22, sc, lit);
+        }
         c = over(vec4(sc, 0.95 * inside), c);
         float div = cov(abs(mod(p.x - (u_strip.z - sy) * 0.45, 150.0) - 75.0) - 73.8);
         c = over(vec4(0.02, 0.03, 0.08, 0.5 * inside * div), c);
