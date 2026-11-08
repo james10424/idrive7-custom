@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -18,7 +18,9 @@
     "sun.js",
     "cluster_render_client.js",
     "calibration.js",
-    "visible.js"
+    "visible.js",
+    "sysfont.js",
+    "opentype.js"
   ],
   "signals": {
     "de.bmw.infotainment.vehicle.CDS": {
@@ -81,6 +83,10 @@
     },
     "de.bmw.body.Light": {
       "LampExterior": "s"
+    },
+    "de.bmw.infotainment.hmi.hmimediastate.HmiMediaState": {
+      "_instances": "HMI_CID",
+      "playerMetadata": "rs"
     }
   },
   "screens": [
@@ -475,6 +481,25 @@
         "factor": 1,
         "offset": 0
       }
+    },
+    "music": {
+      "comment": "The song title BMW's player shows (HmiMediaState playerMetadata), drawn in the car's own font so any script works. 'fonts': font files (.ttf/.otf/.ttc) tried in order, each character from the first that has it (macOS ones here, for the bench). When none loads, the app walks 'searchIn' for font files, logs them, and picks up to 'searchMax' by how many scripts they cover (reading at most 'searchMaxBytes').",
+      "fonts": [
+        "/System/Library/Fonts/Hiragino Sans GB.ttc",
+        "/System/Library/Fonts/Supplemental/Arial Unicode.ttf"
+      ],
+      "searchIn": [
+        "/usr/share/fonts",
+        "/usr/local/share/fonts",
+        "/usr/lib/fonts",
+        "/system/fonts",
+        "/fonts",
+        "/etc/fonts",
+        "/var/opt",
+        "/opt"
+      ],
+      "searchMax": 4,
+      "searchMaxBytes": 120000000
     }
   }
 }

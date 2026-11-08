@@ -85,6 +85,16 @@ let mode = 'demo', manual = {}, drive = null, nav = null, assist = null;
 setInterval(() => { if (drive !== null) hu.feed('de.bmw.infotainment.drivingexcitement.FES', 'statusFESVehicleDynamicSwitchHMI', { actualValueModeDrivingExperience: drive }); }, 1000);
 // route guidance (Guidance guidanceState, the enum names oap-sdk reads), sent once a second
 setInterval(() => { if (nav !== null) hu.feed('de.bmw.infotainment.navigation.guiding.Guidance', 'guidanceState', nav); }, 1000);
+// now playing (HmiMediaState playerMetadata, as BMW's player fills it: artist then title): manual "music", else a few
+// titles in different scripts, a new one every 8 s
+const DEMO_SONGS = [['Queen', 'Bohemian Rhapsody'], ['YOASOBI', '夜に駆ける'], ['BTS', '봄날 Spring Day'], ['Кино', 'Группа крови'],
+    ['Daft Punk', 'Harder, Better, Faster, Stronger (Alive 2007 version, extended)']];
+setInterval(() => {
+    const song = mode === 'manual' ? (typeof manual.music === 'string' ? ['', manual.music] : null) : DEMO_SONGS[Math.floor(Date.now() / 8000) % DEMO_SONGS.length];
+    hu.feed('de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', 'playerMetadata', song ? { uiType: 'TWO_LINES',
+        firstLineText: song[0], firstLineType: 'ARTIST', secondLineText: song[1], secondLineType: 'TITLE', threeRowText: '' }
+        : { uiType: 'UNDEFINED', firstLineText: '', firstLineType: 'UNDEFINED', secondLineText: '', secondLineType: 'UNDEFINED', threeRowText: '' });
+}, 1000);
 // BMW's HUD driver assistance block (DisplayDataServer functionalLibraryData, the catalog's enum names): ACC with a car ahead, or all off
 setInterval(() => {
     if (assist === null) return;

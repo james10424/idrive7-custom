@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 8 2026
 
+- **Custom Cluster 0.1.13:** Sport: the song title BMW's player shows, in the middle of the bottom row, drawn at runtime in the car's own font so any script works (opentype.js plus a small rasterizer, no font shipped); cut with … when too long. The car's font paths are not known yet: until they go in config.music.fonts the app searches the usual folders, picks the fonts that cover the most scripts, and logs every font file it finds. The bench feeds demo titles in several scripts.
 - **Custom Cluster 0.1.12:** Sport: the blue/red bottom strip is now the pedals, filled from its middle out: throttle to the left (last tenth red in kickdown), brake to the right; the boost and coolant text left it. Under the speed scale and below its bracket line, boost (0 to 1.5 bar, yellow) over the 12 V battery (green; bar = charge %, value = volts), each with its value at the end, replace the throttle and brake bars. Bottom row: clock and range at the left, coolant and outside temperature at the right, the middle kept free for a music title. The map-window mask now covers only the strip just above the fuel gauge, so BMW's three-digit speed shows (118 read as 18). The bench draws BMW's real speed.
 
 ## Nov 7 2026

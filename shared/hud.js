@@ -158,6 +158,8 @@
  * this one, once a second, 253 with nothing measured; DataFrontVehicle frontVehicleGapX when the car sends that), {{accRel}}
  * its speed against ours in km/h / mph ({{u:rel}}, minus = closing; "--" while we stand still): DataFrontVehicle frontVehicleSpeedX when sent,
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
+ * {{musicTitle}}: the song title BMW's player shows (app.json config.music; HmiMediaState playerMetadata, the line typed TITLE),
+ * empty when nothing plays. A text widget with "font": "@sys" draws in the car's own font (any script, sysfont.js), "size" px.
  * The catalog gives no units: app.json config.acc { gap (raw -> m), rel (raw -> km/h), set } is raw * factor + offset
  * (factor 1, offset 0 until calibrated on the car). A text widget's "needs": "<token>" draws nothing while that token is "--".
  * Pedals and 12 V (app.json config.pedals, the interfaces also in its "signals"): {{throttle}} %: with config.pedal.source "obd"
@@ -219,6 +221,9 @@ const PROGRAMS = { S_MINUS_PROGRAMM: 'S', M_MINUS_PROGRAMM: 'M', 1: 'S', 2: 'M' 
 const MODE_NAME = { comfort: 'Comfort', sport: 'Sport', eco: 'Eco Pro' };
 // BMW's route guidance (oap-sdk navigation/guiding: ACTIVE, INACTIVE, CALCULATING_ROUTE)
 const GUIDANCE = { iface: 'de.bmw.infotainment.navigation.guiding.Guidance', instance: 'Main_Instance' };
+// what BMW's media player shows (the center screen's instance), for {{musicTitle}}
+const MEDIA = { iface: 'de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', instance: 'HMI_CID' };
+const MEDIA_ITEM = { UNDEFINED: 0, ARTIST: 1, ALBUM: 2, TITLE: 3 };
 const GUIDANCE_STATE = { INACTIVE: 0, CALCULATING_ROUTE: 1, ACTIVE: 2 };
 // DisplayDataServer functionalLibraryData enums (the car's SOME/IP catalog, someip-interfaces.json): what BMW's HUD
 // draws for the driver assistance systems. The car may send the names or the numbers.
@@ -599,6 +604,7 @@ class HudApp {
         this._status();
         this._startDme();
         this._startNav();
+        this._startMedia();
     }
 
     /** HUD modes only on the HUD, in apps that have the "makeRoom" setting. */
@@ -613,6 +619,47 @@ class HudApp {
             this.navSub = s;
             this.log.info('signal Guidance ' + (s && s.error ? 'error: ' + s.error : 'subscribed'));
         }).catch((e) => this.log.info('route guidance not available: ' + (e && e.message || e)));
+    }
+
+    /** The song title BMW's player shows (app.json config.music), for {{musicTitle}}. */
+    _startMedia() {
+        if (!this.config.music) return;
+        Promise.resolve().then(() => this.ctx.signals.watch(MEDIA.iface, MEDIA.instance, {
+            playerMetadata: (v) => this._guard('media', () => this._onMedia(v)),
+        }, this.log)).then((s) => {
+            this.mediaSub = s;
+            this.log.info('signal HmiMediaState ' + (s && s.error ? 'error: ' + s.error : 'subscribed'));
+        }).catch((e) => this.log.info('media metadata not available: ' + (e && e.message || e)));
+        // load the font now, not on the first title's paint (the search walks folders once)
+        this.fontT = setTimeout(() => this._guard('font', () => this._sysFont()), 2000);
+    }
+
+    /** playerMetadata: the line whose type is TITLE, else the first line (BMW's player puts the title there). */
+    _onMedia(v) {
+        if (!v || typeof v !== 'object') return;
+        const lines = [[v.firstLineText, v.firstLineType], [v.secondLineText, v.secondLineType]];
+        const hit = lines.find((l) => enumNum(l[1], MEDIA_ITEM) === MEDIA_ITEM.TITLE);
+        const t = String((hit ? hit[0] : v.firstLineText) || '').replace(/\s+/g, ' ').trim();
+        if (t !== this.musicTitle) this.log.info('now playing ' + JSON.stringify(t) + ' (lines ' + JSON.stringify(lines) + ')');
+        this.musicTitle = t;
+    }
+
+    /** The car's own font for text in any script (app.json config.music.fonts: paths tried in order, a fallback chain);
+     *  null when none of them loads. */
+    _sysFont() {
+        if (this.sysFontTried) return this.sysFont;
+        this.sysFontTried = true;
+        const m = this.config.music || {};
+        const sysfont = require('./sysfont');   // only in apps that ship it (app.json "shared")
+        this.sysFont = sysfont.open(m.fonts || [], this.log);
+        if (!this.sysFont && Array.isArray(m.searchIn)) {
+            // none of the listed files: look for the car's own fonts, and log them all so the paths can go in config
+            const r = sysfont.find(m.searchIn, m.searchMax, m.searchMaxBytes, this.log);
+            this.log.info('font files found (' + r.all.length + '): ' + r.all.slice(0, 60).map((f) => f.path + ' ' + Math.round(f.size / 1024) + ' KiB').join(', '));
+            this.sysFont = r.fonts;
+        }
+        if (!this.sysFont) this.log.info('no system font found (config.music.fonts / searchIn): the music title stays blank');
+        return this.sysFont;
     }
 
     /** guidanceState: INACTIVE 0, CALCULATING_ROUTE 1, ACTIVE 2 (the car's catalog), by name or number; anything else reads as off. */
@@ -783,6 +830,8 @@ class HudApp {
         clearInterval(this.dmeTimer);
         clearTimeout(this.statusAskT);
         if (this.navSub) this.navSub.shutdown();
+        if (this.mediaSub) this.mediaSub.shutdown();
+        clearTimeout(this.fontT);
         this.clients.forEach((c) => c.close());
         this.atlases.clear();
     }
@@ -1156,6 +1205,7 @@ class HudApp {
         switch (tok) {
             case 'u:pressure': return us ? 'psi' : 'bar';
             case 'throttle': { const v = this._throttle(); return isNum(v) ? String(Math.round(v)) : '--'; }
+            case 'musicTitle': return this.musicTitle || '';
             case 'volt12': { const v = this._volt12(); return isNum(v) ? v.toFixed(1) : '--'; }
             case 'batt12': { const v = this._batt12(); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'accGap': { const v = this._acc('gap'); return isNum(v) ? String(Math.round(us ? v * 3.28084 : v)) : '--'; }
@@ -1674,7 +1724,13 @@ class HudApp {
             const key = s + '|' + role;
             if (!force && key === x.last) return;
             x.last = key; x.lastPaint = now;
-            const buf = textRaster.drawText(w.w, w.h, s, {
+            let buf;
+            if (w.font === '@sys') {
+                // the car's own font, any script ("size" px, default 80 % of the box)
+                const f = this._sysFont();
+                const m = f && s ? f.mask(w.w, w.h, s, { size: w.size || Math.round(w.h * 0.8), align: w.align }) : Buffer.alloc(w.w * w.h);
+                buf = textRaster.tint(m, w.w, w.h, { color: color(this.theme, role) });
+            } else buf = textRaster.drawText(w.w, w.h, s, {
                 font: w.font, color: color(this.theme, role), align: w.align, spacing: w.spacing,
                 color2: w.color2 && role !== 'hot' ? color(this.theme, w.color2) : null,
                 glow: w.glow ? this.theme.glow : 0,
