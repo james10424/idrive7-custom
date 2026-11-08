@@ -19,13 +19,86 @@ Turns a Live2D model you own into the frames Custom HUD's **Perch** layout draws
 
 3. Open `http://localhost:8095/?inspect` to see the model with a grid in model units, and every part on its own with its id. Use it to fill in the config.
 4. Open `http://localhost:8095/` to bake. It writes `atlas.json`, `atlas.rgba` (what the car loads) and `preview.png` to the folder.
-5. Copy them to the car:
+5. Copy them to the car: see [Deploy to the car](#deploy-to-the-car).
+
+## Deploy to the car
+
+### Where the HUD looks
+
+Custom HUD reads the frames from one fixed folder, `perch/`, inside its own data folder, and nowhere else:
+
+```
+<Custom HUD's app folder>/data/perch/atlas.json
+<Custom HUD's app folder>/data/perch/atlas.rgba
+```
+
+Both files must be there, under exactly those names, straight from the bake (`atlas.rgba` must be exactly width x height x 4 bytes, as `atlas.json` says). `preview.png` is only for you and is not needed on the car. The app folder is `/var/opt/public/oap/oap_<id>/` on the car (OAP picks the id at install), so its data folder is `/var/opt/public/oap/oap_<id>/data/`.
+
+### What you need
+
+- Custom HUD installed on the car from the Store.
+- SSH access to the car as root, from the computer you baked on.
+
+### Steps
+
+1. From the repo folder, run:
 
    ```bash
    ./scripts/deploy.sh root@<car> --perch <folder>
    ```
 
-   Then switch to another layout and back (or restart the app) to load them. On the bench, copy the two atlas files to `bench/.data/custom_hud/perch/`.
+   `<folder>` is the bake's `--out` folder, the one with `atlas.json` and `atlas.rgba` in it. The script checks both files are there and the JSON is valid, finds Custom HUD's folder on the car (it looks for the `package.json` that names `custom_hud`), creates `data/perch/`, copies the two files in and gives them to the app's own user.
+
+2. Make the app load them. It reads the frames only when it builds the layout, and does not watch the folder, so on the center screen open **Custom HUD**, pick another layout, then **Perch** again (or restart the app).
+
+3. Check the app page's status row. With the frames loaded it says "HUD on", "Perch layout", "1 layer" and about "4.0 MiB of 16 MiB pixels". The app's log has a line like `perch frames: 14 of 106x250, tails, 1024x508 RGBA asset, 4.0 MiB of pixel memory`.
+
+### By hand
+
+Without the script, the same thing over SSH:
+
+```bash
+ssh root@<car> 'grep -l "\"name\": \"custom_hud\"" /var/opt/public/oap/oap_*/source/package.json'
+```
+
+That prints `.../oap_<id>/source/package.json`; the app folder is `/var/opt/public/oap/oap_<id>`. Then:
+
+```bash
+ssh root@<car> 'mkdir -p /var/opt/public/oap/oap_<id>/data/perch'
+```
+
+```bash
+scp <folder>/atlas.json <folder>/atlas.rgba root@<car>:/var/opt/public/oap/oap_<id>/data/perch/
+```
+
+```bash
+ssh root@<car> 'chown -R "$(stat -c %u:%g /var/opt/public/oap/oap_<id>/data)" /var/opt/public/oap/oap_<id>/data/perch'
+```
+
+### Updating or removing
+
+- **New bake:** run the deploy again (it overwrites both files), then switch layouts again. The app sees the new files and replaces the old image.
+- **Remove her:** delete `data/perch/` on the car. Perch then draws nothing.
+- **Reinstalling or updating Custom HUD** from the Store keeps its data folder, as far as we know; if Perch says the frames are missing after an update, deploy again.
+
+### When it doesn't show
+
+The status row says why, after "Perch:":
+
+| Status row | Meaning |
+| --- | --- |
+| `no baked frames in .../data/perch` | The folder or `atlas.rgba` is missing: deploy again. |
+| `atlas.json: ...` or `Unexpected ...` | The JSON is not from this bake tool, or was cut short: deploy again. |
+| `atlas.rgba is N bytes, ... needs M` | The two files don't belong together (one from an older bake): deploy both again. |
+| `atlas asset refused` | cluster-render had no room: another app is using most of its 16 MiB of pixel memory. |
+
+Nothing shows during route guidance either: that's on purpose, BMW's turn map uses her corner.
+
+### On the bench
+
+The bench's app data folder is `bench/.data/custom_hud/`, so copy the two files to `bench/.data/custom_hud/perch/` and press **Restart apps**. The bench data folder is ignored by git.
+
+Not yet checked on a car: the app folder path (from the Store's docs) and SSH as root. `scripts/deploy.sh` says so too.
 
 ## What it makes
 
