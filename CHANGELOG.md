@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 7 2026
 
+- **Custom HUD 0.1.5, Custom Cluster 0.1.10:** the car-ahead row reads "--" with no car instead of hiding: DataFrontVehicle's 4093..4095 and object ids 253..255 mean no object (with no car the car sends 4093 everywhere, which read as a real value). Its speed field is no longer used (following a car slowly it read 509): the relative speed comes from the gap's rate. The car-ahead log keeps each message's last value, so an unchanged message is not logged again.
 - **Custom Cluster 0.1.9:** the Sport theme's throttle and brake bars are stacked and run to the bottom bar, the 12 V voltage and battery moved onto the bottom row after the remaining range, and BMW's line under its speed in the map window (whose break marks the speed limit) is kept black.
 - **Custom Cluster 0.1.8:** the throttle bar's last segment turns red in kickdown (the OBD pedal at 87 % or more; 82 flat out, 91 in kickdown on the car).
 - **Custom Cluster 0.1.7:** the throttle bar is empty at rest and full flat out: the OBD pedal reads 14.5 % at rest and 82 % flat out on the car (91 % in kickdown, which stays full).

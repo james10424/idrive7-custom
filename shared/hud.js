@@ -369,9 +369,9 @@ class HudApp {
         this.decelF = null; this.decelAt = 0;   // g, the smoothed deceleration for the brake bar
         this.carOffsetMin = null;        // the car's time zone, minutes from UTC, from the time the cluster shows
         this.battRaw = null; this.battAt = 0;   // the 12 V battery's charge condition as sent
-        this.aheadLogged = '';
+        this.aheadLogged = {};
         this.accSetRaw = null;           // cruiseCtrlSpeedHUD as sent
-        this.aheadLogAt = 0;
+        this.aheadLogAt = {};
         this.carUnits = { press: null, temp: null, psiSeen: false };   // the car's display units, for the TPMS values
         this.program = null;             // 'S' / 'M' from the MDrive gearbox display, else null (D)
         this.fuelL = null; this.rangeKm = null; this.ambient = null;   // KombiIF tank / range, outside temperature
@@ -452,17 +452,21 @@ class HudApp {
             'de.bmw.dass.GapVehicleAhead': {
                 DataFrontVehicle: (v) => {
                     if (!v) return;
-                    const num = (x) => (isNum(x) && x !== 4095 ? x : null);
-                    this.ahead = { gapX: num(v.frontVehicleGapX), gapY: num(v.frontVehicleGapY), speedX: num(v.frontVehicleSpeedX),
-                        speedY: num(v.frontVehicleSpeedY), q: v.qualifierEventDataFunctionFrontVehicle, at: Date.now() };
-                    this._logAhead(v);
+                    // 4093..4095 are "no object / not available" codes (with no car ahead an X3 sends 4093 in every field and
+                    // object id 253, Nov 8 2026), as 253..255 are for the object id
+                    const num = (x) => (isNum(x) && x < 4093 ? x : null);
+                    const id = v.frontVehicleObjectID, none = !isNum(id) || id >= 253;
+                    this.ahead = { gapX: none ? null : num(v.frontVehicleGapX), gapY: none ? null : num(v.frontVehicleGapY),
+                        speedX: none ? null : num(v.frontVehicleSpeedX), speedY: none ? null : num(v.frontVehicleSpeedY),
+                        q: v.qualifierEventDataFunctionFrontVehicle, at: Date.now() };
+                    this._logAhead('front', v);
                 },
                 GapVehicleDrivingAhead: (v) => {
                     if (!v) return;
                     const g = v.gapVehicleDrivingAhead, m = enumNum(v.statusMeasurementVehicleDrivingAhead, AHEAD2_MEASURED);
                     this.ahead2 = { gap: isNum(g) && g < 253 ? g : null, q: v.qualifierFunctionVehicleDrivingAhead, measured: m >= 1 && m <= 4, at: Date.now() };
                     this._gapRate();
-                    this._logAhead(v);
+                    this._logAhead('gap', v);
                 },
             },
             // the accelerator pedal and the brake lights (config.pedals); notify only, so "s" in app.json
@@ -645,10 +649,11 @@ class HudApp {
 
     /** The car-ahead messages as sent, when they change (an X3 repeats the same one every second), at most once a second,
      *  for calibrating config.acc against what BMW's HUD shows. */
-    _logAhead(v) {
+    _logAhead(kind, v) {
         const now = Date.now(), line = JSON.stringify(v);
-        if (line === this.aheadLogged || now - this.aheadLogAt < 1000) return;
-        this.aheadLogged = line; this.aheadLogAt = now;
+        this.aheadLogged = this.aheadLogged || {}; this.aheadLogAt = this.aheadLogAt || {};
+        if (line === this.aheadLogged[kind] || now - (this.aheadLogAt[kind] || 0) < 1000) return;   // each message on its own
+        this.aheadLogged[kind] = line; this.aheadLogAt[kind] = now;
         this.log.info('car ahead raw: ' + line + (isNum(this.accSetRaw) && this.accSetRaw !== 65535 ? ', set speed ' + this.accSetRaw : '') + ', speed ' + this._token('speed'));
     }
 
@@ -685,7 +690,10 @@ class HudApp {
         if (key === 'rel') {
             const own = this._raw('speed');
             if (!isNum(own) || own < 1) return null;        // standing still: "--" (the gap's rate is only noise then)
-            if (a && now - a.at < FRESH_MS && enumNum(a.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE && isNum(a.speedX)) return this._accScale('rel', a.speedX);
+            // DataFrontVehicle's speed only once config.acc.rel says how to read it (use: true): following a car slowly on an
+            // X3 it read 509, not a relative km/h; until then the gap's rate
+            const cr = (this.config.acc && this.config.acc.rel) || {};
+            if (cr.use === true && a && now - a.at < FRESH_MS && enumNum(a.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE && isNum(a.speedX)) return this._accScale('rel', a.speedX);
             const r = this.relFromGap;
             return r && isNum(r.v) && now - r.at < FRESH_MS && isNum(this._gapM()) ? r.v : null;
         }

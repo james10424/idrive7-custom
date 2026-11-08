@@ -101,6 +101,9 @@ setInterval(() => {
     hu.feed('de.bmw.dass.GapVehicleAhead', 'GapVehicleDrivingAhead', { qualifierFunctionVehicleDrivingAhead: 'FUNKTION_VERFUEGBAR',
         statusMeasurementVehicleDrivingAhead: on ? 'ELEMENT__GEMESSEN' : 'KEIN_ELEMENT_GEMESSEN', gapVehicleDrivingAhead: gap,
         vehicleTypeVehicleDrivingAhead: on ? 'ZWEISPURIGES_FAHRZEUG' : 'SIGNAL_UNGUELTIG', lampStatusVehicleDrivingAhead: on ? 'LICHT_AUS' : 'SIGNAL_UNGUELTIG' });
+    // DataFrontVehicle as the car sends it with no object: 4093 in every field, object id 253 (its speed is not used)
+    hu.feed('de.bmw.dass.GapVehicleAhead', 'DataFrontVehicle', { frontVehicleObjectID: 253, frontVehicleSpeedX: 4093, frontVehicleSpeedY: 4093,
+        frontVehicleGapX: 4093, frontVehicleGapY: 4093, qualifierEventDataFunctionFrontVehicle: 'EVENT_DATA_AVAILABLE', qualifierExtendedFunctionFrontVehicle: 'NORMAL_OPERATION_MODE' });
 }, 1000);
 setInterval(() => {
     if (mode !== 'manual') return;
