@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -73,6 +73,12 @@
     "de.bmw.dass.GapVehicleAhead": {
       "DataFrontVehicle": "s",
       "GapVehicleDrivingAhead": "s"
+    },
+    "de.bmw.powertrain.AcceleratorPedal": {
+      "AngleAcceleratorPedal": "s"
+    },
+    "de.bmw.body.Light": {
+      "LampExterior": "s"
     }
   },
   "screens": [
@@ -374,6 +380,28 @@
           "max": 115,
           "note": "OBD service 01 PID 0x33 (same as F433)"
         }
+      ],
+      "volt": [
+        {
+          "did": "F442",
+          "bytes": 2,
+          "at": 0,
+          "factor": 0.001,
+          "offset": 0,
+          "min": 6,
+          "max": 18,
+          "note": "OBD PID 0x42 control module voltage (the 12 V system), 1/1000 V"
+        },
+        {
+          "obd": "42",
+          "bytes": 2,
+          "at": 0,
+          "factor": 0.001,
+          "offset": 0,
+          "min": 6,
+          "max": 18,
+          "note": "OBD service 01 PID 0x42 (same as F442)"
+        }
       ]
     },
     "tankLitres": 65,
@@ -381,6 +409,12 @@
       "torqueNm": 500,
       "powerKw": 285
     },
-    "carAhead": true
+    "carAhead": true,
+    "pedals": true,
+    "pedal": {
+      "comment": "The accelerator pedal: actualValueAngleAcceleratorPedal * factor + offset = %. 0.025 is BMW's usual scaling; the app logs 'accelerator pedal raw ...' every 5 s, to check against a full press.",
+      "factor": 0.025,
+      "offset": 0
+    }
   }
 }
