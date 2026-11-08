@@ -1,8 +1,8 @@
 # Custom HUD
 
-Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant temperatures, and a clock, or a little animated girl sitting on BMW's speed-limit sign. Open **Custom HUD** from the apps menu on the center screen and pick the layout, theme, units and widgets there.
+Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant temperatures, and a clock, or your own Live2D character sitting or standing on BMW's speed-limit sign. Open **Custom HUD** from the apps menu on the center screen and pick the layout, theme, units and widgets there.
 
-<p align="center"><img src="../../docs/images/hud-perch.png" width="520" alt="Perch layout"></p>
+<p align="center"><img src="../../docs/images/hud-daily.png" width="520" alt="Daily layout"></p>
 
 ## Layouts
 
@@ -10,21 +10,20 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
   <tr>
     <th align="center">Daily</th>
     <th align="center">Sport</th>
-    <th align="center">Perch</th>
   </tr>
   <tr>
     <td><img src="../../docs/images/hud-daily.png" width="300" alt="Daily layout"></td>
     <td><img src="../../docs/images/hud-sport.png" width="300" alt="Sport layout"></td>
-    <td><img src="../../docs/images/hud-perch.png" width="300" alt="Perch layout"></td>
   </tr>
 </table>
 
 - **Daily:** speed is the hero, with the gear, clock and oil.
 - **Sport:** a segmented shift bar, a big gear, speed, a boost gauge, oil and coolant.
-- **Perch:** an original anime girl in an open M-blue racing coat, drawn in the style of a desktop mascot (big head, big glossy eyes, slim build, soft layered hair), sits on the corner of BMW's speed-limit sign, leaning forward with her knees together and her hands on them and her legs hanging off its left side so your speed stays clear. No readouts of our own, just her and BMW's HUD.
-  - **Idle:** she swings her legs (a heel taps the sign), blinks, breathes, sways, smiles now and then, and her hair swings.
-  - **Driving:** pull away hard and she leans back with a fist in the air and a big grin; brake and she tips forward, feet flying up, eyes squeezed shut. The faster you go, the more her ponytail streams out.
-  - She is drawn on the GPU from shapes and animated by cluster-render's own clock, so she costs one layer and no pixel memory, and only a tiny update goes up when she changes pose.
+- **Perch:** a Live2D character you own sits on the corner of BMW's speed-limit sign with her legs hanging off its left side, or stands on it (the **Perch** setting picks which). Your speed stays clear. No readouts of our own, just her and BMW's HUD.
+  - **Bring your own model:** no character ships with the app. You bake frames from a Live2D model on your own computer with [tools/live2d_bake](../../tools/live2d_bake/README.md) and copy them to the car with `scripts/deploy.sh <car> --perch <folder>`. Until then the layout draws nothing and the status row says why.
+  - **Idle:** she blinks, breathes and sways, smiles as if talking now and then, her twin tails swing, and sitting, her legs swing from the knees (the near heel eases onto the sign).
+  - **Driving:** pull away hard and she leans back with her happy face; brake and she tips forward with her braking face. The faster you go, the more her twin tails stream out.
+  - The frames go up once as one image (about 2 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up when she changes pose.
   - Redline is gone: if you had it picked anywhere, it switches to Perch.
 
 ## Themes
@@ -52,7 +51,7 @@ Classic, M and Night, plus Auto, which switches to Night at sunset. You choose w
 
 ## Settings
 
-Layout, drive mode switching, theme, daytime theme for Auto, units (mph, °F, psi or km/h, °C, bar), 12- or 24-hour clock, redline and shift point (the Sport shift bar), cold-engine rev guard, which readouts show (clock, oil, coolant, boost), and demo data. Changes show on the HUD right away, and the HUD keeps running after you leave the page.
+Layout, Perch sitting or standing, drive mode switching, theme, daytime theme for Auto, units (mph, °F, psi or km/h, °C, bar), 12- or 24-hour clock, redline and shift point (the Sport shift bar), cold-engine rev guard, which readouts show (clock, oil, coolant, boost), and demo data. Changes show on the HUD right away, and the HUD keeps running after you leave the page.
 
 The page's first row says what the HUD is doing, the drive mode it sees, and why anything is not drawn (for example "waiting: another app has this display").
 

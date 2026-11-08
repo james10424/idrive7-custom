@@ -1,7 +1,7 @@
 {
  "schemaVersion": 2,
  "name": "Perch",
- "_about": "An original anime girl, toon shaded as a desktop mascot, in an open M-blue racing coat sits on the top-left corner of BMW's speed-limit sign, leaning forward with her hands on her knees, legs hanging off its left side so the speed stays clear. Drawn \"scale\" times bigger about the sign's corner (about 170 px tall). One effect layer (shaders.js perch), animated on the renderer's clock: her legs swing and a heel taps the sign, she blinks, breathes and her ponytail sways. She reacts to the car: braking tips her forward with her feet flying up and her eyes going > <, pulling away hard leans her back with a fist in the air, and speed blows her ponytail out. The sign is where the bench draws it (x 152..202, y 320..374), BMW's own sign sits in x 150..355, y 314..378 with the speed: check on the car and move \"sign\" if she floats. She stays in every HUD mode: BMW's ACC block (x ~240..345) and guidance (the right of the window) are clear of her.",
+ "_about": "A character sits or stands (the \"perchPose\" setting) on the top-left corner of BMW's speed-limit sign, clear of the speed. She comes from frames you bake yourself from a Live2D model with tools/live2d_bake and push to the car with scripts/deploy.sh --perch (they never go in this repo: the art belongs to its owner); without them nothing is drawn and the status row says so. One effect layer (shaders.js perch) samples the frame atlas, animated on the renderer's clock: blinks, breathing, a sway, swinging twin tails and, sitting, shins swinging from the knees with the near heel easing onto the sign. She reacts to the car: braking tips her forward with the braking face, pulling away hard leans her back with the happy face, and speed blows her tails out. The bake's \"anchor\" goes on the sign's top-left, here where the bench draws it (x 152..202, y 320..374): check on the car and move \"sign\" if she floats. She stays in every HUD mode: BMW's ACC block (x ~240..345) and guidance (the right of the window) are clear of her.",
  "modes": [
   "cruise",
   "nav",
@@ -12,16 +12,15 @@
    "id": "girl",
    "type": "perch",
    "x": 118,
-   "y": 178,
-   "w": 160,
-   "h": 200,
+   "y": 100,
+   "w": 180,
+   "h": 278,
    "sign": [
     152,
     320,
     50,
     54
-   ],
-   "scale": 1.55
+   ]
   }
  ]
 }

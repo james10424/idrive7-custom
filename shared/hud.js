@@ -112,10 +112,11 @@
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
  *             pedal is in kickdown and the bar is full; "range" [lo, hi] maps the signal from that span onto 0..max
  *             (e.g. "boost" over [0, 1.5] bar, "batt12" over [0, 100] %)
- *   perch     effect layer; shaders.js perch, the Perch layout's girl sitting on BMW's speed-limit sign, legs hanging off
- *             its left side; animated by the renderer's clock (time: true), so only a small u_drive uniform goes up when
- *             the smoothed g or the speed moves a step. "sign" [x, y, w, h] the sign's box in target px ([152, 320, 50, 54]);
- *             "scale" how many times her drawing is enlarged about the sign's top-left corner (1)
+ *   perch     effect layer; shaders.js perch, the Perch layout's character on BMW's speed-limit sign, from frames baked
+ *             offline (tools/live2d_bake) and kept in the app's data folder (perch/<pose>/, the "perchPose" setting, see
+ *             _sprite); animated by the renderer's clock (time: true), so only a small u_drive uniform goes up when the
+ *             smoothed g or the speed moves a step. "sign" [x, y, w, h] the sign's box in target px ([152, 320, 50, 54]):
+ *             the bake's "anchor" goes on its top-left corner. Nothing is drawn without frames (the status row says so)
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
  *   grid      calibration: effect layer of lines every "step" px (brighter every "major" steps)
@@ -215,6 +216,7 @@
  * app exit, and on the car a second unexpected exit uninstalls the app.
  */
 const fs = require('fs');
+const path = require('path');
 const { ClusterRender, DEFAULT_PATH } = require('./cluster_render_client.js');
 const Layouts = require('./layouts');
 const { THEMES, M_STRIPE, LIGHTS, VERDICT, color } = require('./hud_themes');
@@ -436,7 +438,7 @@ class HudApp {
         this.tyres = { p: {}, t: {} };                                  // TPMS pressure (bar) and temperature (C) per corner FL FR RL RR
         this.activeName = null;          // the layout shown now ('off' = nothing)
         this.pixelBytes = 0;             // what the layout's image layers and glyph atlases cost of cluster-render's pixel memory
-        this.atlases = new Map();        // "<conn>:<font>" -> { ref, c, ci, cols, rows, cellW, cellH, chars, bytes }: R8 assets, kept across rebuilds
+        this.atlases = new Map();        // "<conn>:<font>" -> glyph atlas { ref, c, ci, cols, rows, cellW, cellH, chars, bytes } (R8), "sprite:..." -> the Perch frames (_sprite); assets kept across rebuilds
         this.targetState = null;         // { state, holder, reason } of our target
         this.rpmF = null; this.rpmShown = null; this.lastTickT = 0;
         this.themeName = null;
@@ -1081,6 +1083,47 @@ class HudApp {
         return a;
     }
 
+    /**
+     * The Perch layout's baked frames for the "perchPose" setting (sit / stand): <data>/perch/<pose>/atlas.json and
+     * atlas.rgba (straight-alpha RGBA, atlas[0] x atlas[1] px), made by tools/live2d_bake and pushed by
+     * scripts/deploy.sh --perch. They are not in the app: the character's art stays with its owner. Uploaded once as an
+     * RGBA asset per connection and kept in this.atlases (so the pixel memory counts it); a pose change drops the
+     * other pose's asset. Null, with this.problem set, when the files are missing or bad.
+     */
+    _sprite(w, ci) {
+        const pose = this.setting('perchPose') || 'sit';
+        const dir = path.join(this.ctx.dataDir || '.', 'perch', pose);
+        let st;
+        try { st = fs.statSync(path.join(dir, 'atlas.rgba')); } catch (e) { st = null; }
+        const key = 'sprite:' + ci + ':' + dir + ':' + (st ? st.mtimeMs : 0);
+        if (this.atlases.has(key)) return this.atlases.get(key);
+        this.atlases.forEach((a, k) => {
+            if (k.indexOf('sprite:' + ci + ':') === 0) { a.c.drop(a.ref); this.atlases.delete(k); }
+        });
+        try {
+            if (!st) throw new Error('no baked frames in ' + dir + ' (tools/live2d_bake, then scripts/deploy.sh --perch)');
+            const info = JSON.parse(fs.readFileSync(path.join(dir, 'atlas.json'), 'utf8'));
+            const [aw, ah] = info.atlas || [];
+            if (!(aw > 0 && ah > 0 && aw <= 2048 && ah <= 2048)) throw new Error('atlas.json: bad "atlas" size');
+            if (!info.frames || !info.frames.idle || !Array.isArray(info.frame) || !Array.isArray(info.anchor)) throw new Error('atlas.json: needs "frame", "anchor" and frames.idle');
+            const px = fs.readFileSync(path.join(dir, 'atlas.rgba'));
+            if (px.length !== aw * ah * 4) throw new Error('atlas.rgba is ' + px.length + ' bytes, ' + aw + 'x' + ah + ' RGBA needs ' + aw * ah * 4);
+            const c = this._clientAt(ci);
+            const ref = c.asset({ target: this.target, format: 'rgba8', w: aw, h: ah, sampling: 'bilinear' });
+            if (!ref) throw new Error('atlas asset refused (' + aw + 'x' + ah + ')');
+            c.pixels(ref, null, px);
+            const a = { ref, c, ci, info, bytes: aw * ah * 8 };
+            this.atlases.set(key, a);
+            this.log.info('perch frames "' + pose + '": ' + Object.keys(info.frames).length + ' frames of ' + info.frame.join('x') + ', ' +
+                (info.tails ? 'tails, ' : '') + (Array.isArray(info.shins) ? info.shins.length + ' shins, ' : '') + aw + 'x' + ah + ' RGBA asset, ' + mib(a.bytes) + ' of pixel memory');
+            return a;
+        } catch (e) {
+            this.problem = 'Perch: ' + e.message;
+            this.log.warn('widget "' + w.id + '": ' + e.message);
+            return null;
+        }
+    }
+
     _atlasBytes() {
         let n = 0;
         this.atlases.forEach((a) => { n += a.bytes; });
@@ -1681,7 +1724,7 @@ class HudApp {
             sheets + ' image sheets' + (own ? ', ' + own + ' own image layers' : '') + ')' +
             (counts.length > 1 ? ' on ' + counts.length + ' connections (' + counts.join(' + ') + ')' : '') + ', sheet limit ' +
             (maxPx === Infinity ? 'unlimited' : maxPx + ' px') + ', whole-sheet writes ' + bytes + ' bytes, pixel memory ' + mib(px) + ' of 16 MiB' +
-            (atlasBytes ? ' (' + this.atlases.size + ' glyph atlas' + (this.atlases.size > 1 ? 'es' : '') + ' ' + mib(atlasBytes) + ')' : ''));
+            (atlasBytes ? ' (' + this.atlases.size + ' atlas' + (this.atlases.size > 1 ? 'es' : '') + ' ' + mib(atlasBytes) + ')' : ''));
         counts.forEach((k, ci) => {
             if (k > LAYER_BUDGET) this.log.warn('layout "' + layout.name + '" needs ' + k + ' layers on connection ' + (ci + 1) + ', cluster-render draws at most ' + LAYER_BUDGET + ' per connection');
         });
@@ -1789,7 +1832,10 @@ class HudApp {
             c = this._clientAt(this._connOf(w));
             const base = { target: this.target, klass: w.class || 'content', z: w.z || 0, x: w.x, y: w.y, w: w.w, h: w.h };
             if (IMAGE_TYPES[w.type]) ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
-            else ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : shaders[w.type], time: w.type === 'perch' || undefined }, base));
+            else {
+                if (w.type === 'perch' && !this._sprite(w, this._connOf(w))) return;
+                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : shaders[w.type], time: w.type === 'perch' || undefined }, base));
+            }
             if (!ref) { this.log.warn('widget "' + w.id + '": layer refused'); return; }
         }
         const x = { w, ref, c, ci: sheet ? sheet.ci : this._connOf(w), sheet: sheet || null, last: null, lastPaint: 0, px: null };
@@ -1969,10 +2015,28 @@ class HudApp {
             c.uniform(ref, 'u_border', [w.border === undefined ? 2 : w.border]);
             c.uniform(ref, 'u_radius', [w.radius || 0]);
         } else if (w.type === 'perch') {
-            const sg = Array.isArray(w.sign) && w.sign.length === 4 ? w.sign : [152, 320, 50, 54];
+            // the frames go where the bake put the sign's corner: "anchor" (frame px) on the sign's top-left
+            const sp = this._sprite(w, x.ci), j = sp.info, sg = Array.isArray(w.sign) && w.sign.length === 4 ? w.sign : [152, 320, 50, 54];
+            const fr = (k) => (j.frames && j.frames[k]) || j.frames.idle;
+            const rect = (o) => (o && Array.isArray(o.rect) ? o.rect : [0, 0, 0, 0]);
+            c.bind(ref, 'u_atlas', sp.ref);
             c.uniform(ref, 'u_size', [w.w, w.h]);
-            c.uniform(ref, 'u_sign', [sg[0] - w.x, sg[1] - w.y, sg[2], sg[3]]);
-            c.uniform(ref, 'u_scale', [isNum(w.scale) ? w.scale : 1]);
+            c.uniform(ref, 'u_atlasSize', j.atlas);
+            c.uniform(ref, 'u_frame', j.frame);
+            c.uniform(ref, 'u_origin', [sg[0] - w.x - j.anchor[0], sg[1] - w.y - j.anchor[1]]);
+            c.uniform(ref, 'u_fA', fr('idle').concat(fr('half')));
+            c.uniform(ref, 'u_fB', fr('shut').concat(fr('happy')));
+            c.uniform(ref, 'u_fC', fr('brake').concat(fr('talk')));
+            c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.sway === false ? 0 : 1, 0]);
+            const tl = j.tails || null, sh = Array.isArray(j.shins) ? j.shins : [];
+            c.uniform(ref, 'u_tails', rect(tl));
+            c.uniform(ref, 'u_tailsAt', tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1]);
+            ['A', 'B'].forEach((k, i) => {
+                const o = sh[i];
+                c.uniform(ref, 'u_shin' + k, rect(o));
+                c.uniform(ref, 'u_shin' + k + 'At', o ? [o.at[0], o.at[1], o.pivot[0], o.pivot[1]] : [0, 0, 0, 0]);
+            });
+            c.uniform(ref, 'u_shinLim', [sh[0] && isNum(sh[0].limit) ? sh[0].limit : 0.05, sh[1] && isNum(sh[1].limit) ? sh[1].limit : 0.15]);
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);
