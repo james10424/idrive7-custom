@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -23,7 +23,8 @@
   "signals": {
     "de.bmw.infotainment.vehicle.CDS": {
       "statusEngineSpeed2": "rs",
-      "statusEngineTemperature": "rs"
+      "statusEngineTemperature": "rs",
+      "statusBattery2": "rs"
     },
     "de.bmw.infotainment.vehicle.CDS2": {
       "statusLongitudinalAccelerationMassCenter": "rs",
@@ -415,6 +416,11 @@
     "pedal": {
       "comment": "The accelerator pedal: actualValueAngleAcceleratorPedal * factor + offset = %. 0.025 is BMW's usual scaling; the app logs 'accelerator pedal raw ...' every 5 s, to check against a full press.",
       "factor": 0.025,
+      "offset": 0
+    },
+    "battery": {
+      "comment": "The 12 V battery's charge: conditionBatteryChargingCondition * factor + offset = %. BMW's charge condition is normally 0..100; if the logged '12 V battery charge condition raw' goes past 100, it is half-percent steps: set factor 0.5.",
+      "factor": 1,
       "offset": 0
     }
   }

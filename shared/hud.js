@@ -158,6 +158,8 @@
  * Pedals and 12 V (app.json config.pedals, the interfaces also in its "signals"): {{throttle}} % (powertrain.AcceleratorPedal
  * actualValueAngleAcceleratorPedal * config.pedal.factor, 0.025 by default, while its qualifier says valid), {{volt12}} the
  * 12 V system in V (OBD PID 0x42 from the engine unit, config.dme.volt, asked every 2 s while a shown widget uses it);
+ * {{batt12}} the 12 V battery's charge, % (vehicle.CDS statusBattery2 conditionBatteryChargingCondition * config.battery.factor, 1
+ * by default, 255 = none; logged raw on change to check the scaling).
  * segbar signals "throttle10" (0..10) and "brake10": while the brake lights are on (body.Light controlFunctionBrakeLight, all
  * the car gives of the brake), how hard the car slows on a log scale, 10 * ln(1 + a / 0.05 g) / ln(1 + 1 g / 0.05 g) (0.1 g
  * about 4, 0.3 g 6, 0.6 g 8, 1 g 10), at least 1; 10 without a deceleration reading.
@@ -358,6 +360,7 @@ class HudApp {
         this.pedalLogged = 0;
         this.decelF = null; this.decelAt = 0;   // g, the smoothed deceleration for the brake bar
         this.carOffsetMin = null;        // the car's time zone, minutes from UTC, from the time the cluster shows
+        this.battRaw = null; this.battAt = 0;   // the 12 V battery's charge condition as sent
         this.aheadLogged = '';
         this.accSetRaw = null;           // cruiseCtrlSpeedHUD as sent
         this.aheadLogAt = 0;
@@ -466,6 +469,15 @@ class HudApp {
                     }
                 },
             },
+            // the 12 V battery's charge condition (config.pedals, with the 12 V voltage)
+            'de.bmw.infotainment.vehicle.CDS': {
+                statusBattery2: (v) => {
+                    const c = v && v.conditionBatteryChargingCondition;
+                    const raw = isNum(c) && c !== 255 ? c : null;
+                    if (raw !== this.battRaw) this.log.info('12 V battery charge condition raw ' + c);
+                    this.battRaw = raw; this.battAt = Date.now();
+                },
+            },
             'de.bmw.body.Light': {
                 LampExterior: (v) => {
                     const b = enumNum(v && v.controlFunctionBrakeLight, BRAKE_LIGHT);
@@ -500,7 +512,7 @@ class HudApp {
         // (the runtime spec has no "signals": the interface must also be in app.json "signals")
         if (!this._modesOn()) delete extra['de.bmw.infotainment.displaydataserver.DisplayDataServer'];
         if (!this._modesOn() && this.config.carAhead !== true) delete extra['de.bmw.dass.GapVehicleAhead'];
-        if (this.config.pedals !== true) { delete extra['de.bmw.powertrain.AcceleratorPedal']; delete extra['de.bmw.body.Light']; }
+        if (this.config.pedals !== true) { delete extra['de.bmw.powertrain.AcceleratorPedal']; delete extra['de.bmw.body.Light']; delete extra['de.bmw.infotainment.vehicle.CDS']; }
         this.car = new Car(this.ctx, ['rpm', 'speed', 'temps', 'accel', 'gear', 'torque'], extra);
         this.car.setRedline(this.setting('redline'));
         this.score = new ShiftScore(this.car, () => ({
@@ -1037,6 +1049,15 @@ class HudApp {
         return Math.max(1, Math.min(10, v));
     }
 
+    /** The 12 V battery's charge 0..100 % (raw * config.battery.factor), null when not sent; the demo drive's made up. */
+    _batt12() {
+        if (isNum(this.battRaw)) {
+            const c = this.config.battery || {};
+            return Math.max(0, Math.min(100, this.battRaw * (isNum(c.factor) ? c.factor : 1) + (isNum(c.offset) ? c.offset : 0)));
+        }
+        return this.car.data().demo ? 82 : null;
+    }
+
     /** The 12 V system in V, null when the engine unit has not answered lately; the demo drive's made up. */
     _volt12() {
         if (isNum(this.volt12) && Date.now() - this.volt12At < VOLT_MS * 3) return this.volt12;
@@ -1078,6 +1099,7 @@ class HudApp {
             case 'u:pressure': return us ? 'psi' : 'bar';
             case 'throttle': { const v = this._throttle(); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'volt12': { const v = this._volt12(); return isNum(v) ? v.toFixed(1) : '--'; }
+            case 'batt12': { const v = this._batt12(); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'accGap': { const v = this._acc('gap'); return isNum(v) ? String(Math.round(us ? v * 3.28084 : v)) : '--'; }
             case 'u:gap': return us ? 'FT' : 'M';
             case 'accRel': { const v = this._acc('rel'); return isNum(v) ? String(Math.round(us ? v * 0.621371 : v)) : '--'; }   // the HUD fonts have no '+'
