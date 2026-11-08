@@ -90,7 +90,8 @@
  *             emptyX, emptyY], "strip" [left end x, y, h, slant], "topEnd" x; the middle is black, and the map
  *             window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with
  *             "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right
- *             (BMW draws bits of its own Sport view there)
+ *             (BMW draws bits of its own Sport view there), and "holeMask" [x, y, w, h] in target px: a rectangle in it
+ *             kept black (BMW's line under its speed, with the speed-limit break)
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
  *             pedal is in kickdown and the bar is full
@@ -1468,6 +1469,7 @@ class HudApp {
             c.uniform(ref, 'u_hole', this._hole(w));
             c.uniform(ref, 'u_holeR', [this._holeRadius(w)]);
             c.uniform(ref, 'u_holeCut', Array.isArray(w.holeCut) && w.holeCut.length === 4 ? w.holeCut : [0, 0, 0, 0]);
+            c.uniform(ref, 'u_holeMask', Array.isArray(w.holeMask) && w.holeMask.length === 4 ? [w.holeMask[0] - w.x, w.holeMask[1] - w.y, w.holeMask[2], w.holeMask[3]] : [0, 0, 0, 0]);
             c.uniform(ref, 'u_strip', w.strip);
             c.uniform(ref, 'u_topEnd', [w.topEnd]);
         } else if (w.type === 'mdash') {
