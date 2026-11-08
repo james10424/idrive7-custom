@@ -777,13 +777,23 @@ class HudApp {
         this.fontT = setTimeout(() => this._guard('font', () => this._sysFont()), 2000);
     }
 
-    /** playerMetadata: the line whose type is TITLE, else the first line (BMW's player puts the title there). */
+    /** playerMetadata: the line whose type is TITLE; else a line not typed ARTIST or ALBUM, the second first (BMW's
+     *  player fills the artist then the title: the car showed "Aimer", the artist, from the first line, Nov 8 2026);
+     *  else the first line. A type name we don't know is matched by the word in it (…TITLE, …ARTIST). */
     _onMedia(v) {
         if (!v || typeof v !== 'object') return;
         const lines = [[v.firstLineText, v.firstLineType], [v.secondLineText, v.secondLineType]];
-        const hit = lines.find((l) => enumNum(l[1], MEDIA_ITEM) === MEDIA_ITEM.TITLE);
+        const kind = (ty) => {
+            const n = enumNum(ty, MEDIA_ITEM);
+            if (n >= 0 && n !== null) return n;
+            const s = String(ty || '').toUpperCase();
+            return /TITLE/.test(s) ? MEDIA_ITEM.TITLE : /ARTIST/.test(s) ? MEDIA_ITEM.ARTIST : /ALBUM/.test(s) ? MEDIA_ITEM.ALBUM : 0;
+        };
+        const has = (l) => String(l[0] || '').trim() !== '';
+        const hit = lines.find((l) => has(l) && kind(l[1]) === MEDIA_ITEM.TITLE) ||
+            [lines[1], lines[0]].find((l) => has(l) && kind(l[1]) !== MEDIA_ITEM.ARTIST && kind(l[1]) !== MEDIA_ITEM.ALBUM);
         const t = String((hit ? hit[0] : v.firstLineText) || '').replace(/\s+/g, ' ').trim();
-        if (t !== this.musicTitle) this.log.info('now playing ' + JSON.stringify(t) + ' (lines ' + JSON.stringify(lines) + ')');
+        if (t !== this.musicTitle) this.log.info('now playing ' + JSON.stringify(t) + ' (lines ' + JSON.stringify(lines) + ', uiType ' + JSON.stringify(v.uiType) + ')');
         this.musicTitle = t;
     }
 

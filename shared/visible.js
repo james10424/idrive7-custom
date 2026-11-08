@@ -16,6 +16,9 @@ const HOOD = [
     [1000, 1], [1100, 2], [1200, 5], [1300, 10], [1400, 19], [1500, 37], [1600, 67], [1700, 84], [1800, 128], [1900, 196],
     [1920, 240],
 ];
+/** The dash camera hangs in front of the panel's top middle, from the top down to y ~132 (car photo of the Regal
+ *  theme, Nov 8 2026): [x0, y0, x1, y1]. */
+const CAMERA = [760, 0, 1200, 135];
 /** BMW draws a solid black box over our panel here (its gear slot): [x0, y0, x1, y1]. */
 const BLACK_BOX = [1406, 342, 1597, 419];
 /** BMW's seat-belt warning light is drawn over us here: [x0, y0, x1, y1]. */
@@ -66,6 +69,9 @@ function check(widgets, target) {
                 const worst = under.reduce((a, b) => (b.d > a.d ? b : a));
                 out.push(id + ': ' + worst.what + ' ' + worst.d + ' px under the hood');
             }
+            if (overlaps(w, CAMERA)) {
+                out.push(id + ': behind the dash camera x' + CAMERA[0] + '-' + CAMERA[2] + ' y' + CAMERA[1] + '-' + CAMERA[3]);
+            }
             if (overlaps(w, BLACK_BOX)) {
                 out.push(id + ': overlaps BMW\'s gear box x' + BLACK_BOX[0] + '-' + BLACK_BOX[2] + ' y' + BLACK_BOX[1] + '-' + BLACK_BOX[3]);
             }
@@ -88,4 +94,4 @@ function check(widgets, target) {
     return out;
 }
 
-module.exports = { HOOD, BLACK_BOX, BELT, GEAR, HUD_WINDOW, hoodY, check };
+module.exports = { HOOD, CAMERA, BLACK_BOX, BELT, GEAR, HUD_WINDOW, hoodY, check };

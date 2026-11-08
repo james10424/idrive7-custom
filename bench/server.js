@@ -113,7 +113,7 @@ function sceneMeta() {
 function helloMsg() {
     return { t: 'hello', targets: TARGETS, apps: apps.map((a) => ({ id: a.id, view: appView(a) })), view: appView(apps[0]),
         app: APP_IDS.join(' + '), cap: layerCap, pixelCap: PIXEL_BYTES,
-        geometry: { HOOD: visible.HOOD, BLACK_BOX: visible.BLACK_BOX, BELT: visible.BELT, GEAR: visible.GEAR, HUD_WINDOW: visible.HUD_WINDOW } };
+        geometry: { HOOD: visible.HOOD, CAMERA: visible.CAMERA, BLACK_BOX: visible.BLACK_BOX, BELT: visible.BELT, GEAR: visible.GEAR, HUD_WINDOW: visible.HUD_WINDOW } };
 }
 let sceneTimer = null;
 function sceneChanged() {

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Generates apps/custom_cluster/hud/layouts/regal.json: the Regal theme, after a 1987 Buick Regal's dash (photo
-1474x448, scaled 1.3 and moved down 110 px so the pods' tops clear the hood; the bottom row under it holds the music
+1474x448, scaled 1.3 and moved down 155 px (DY below) so the pods' tops clear the hood and the centre clears the dash camera; the bottom row under it holds the music
 title). Edit the numbers here and run it: python3 tools/gen_regal.py"""
 import json, math, os
 
@@ -113,6 +113,18 @@ wd.append(text('pod_temp', W - 180 + 7 - 62, 612, 62, 25, '{{ambientN}}', 'r_seg
 wd.append(text('pod_tunit', W - 180 + 10, 618, 34, 21, '{{u:temp}}', 'r_lbl', 'vfd', 'left'))
 wd.append(centred('lamp_turn_r', W - 180, 575, 100, 17, '{{lampTurnR}}', 'r_tiny', 'green'))
 wd.append(centred('lamp_cruise', W - 180, 496, 112, 17, '{{lampCruise}}', 'r_tiny', 'lampTextG'))
+
+# the dash sits DY px lower than drawn above: the pods' outer top corners clear the hood (x 90 / 1830 hidden above
+# y ~150) and the centre panel's top lines up with the pods', clear of the dash camera (x ~760..1200, down to y ~132;
+# car photo, Nov 8 2026). The song title row below stays where it is.
+DY = 45
+BOX_KEYS = ('podL', 'podWin', 'ctr', 'win1', 'win2', 'vfdL', 'vfdR', 'fuelG', 'podG', 'led', 'led2', 'gearBox', 'lampB',
+            'arrow', 'batIcon')
+for k in BOX_KEYS:
+    wd[0][k][1] += DY
+wd[0]['spd'] = [wd[0]['spd'][0]] + [v + DY for v in wd[0]['spd'][1:]]   # pivot y, number row, tick row
+for w in wd[1:]:
+    w['y'] += DY
 
 # the bottom row: the song title, centred on the screen (630..1290: clear of BMW's belt light and gear letter)
 wd.append({'id': 'music_title', 'type': 'text', 'z': 5, 'x': 630, 'y': 674, 'w': 660, 'h': 34, 'text': '{{musicTitle}}',
