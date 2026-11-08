@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 8 2026
 
+- **Custom Cluster 0.1.18:** Sport: the fuel gauge's marks are the tank in litres or US gallons by the units setting (65 / 33 / 0 L, 17 / 9 / 0 gal, from config.tankLitres), with L or gal under the top mark, instead of 1 / 1/2 / 0.
 - **Custom Cluster 0.1.17:** Sport: boost and the 12 V battery become two upright boxes left of the speed scale, mirroring the car-ahead box (boost yellow 0 to 1.5 bar, battery green by charge %, each value riding beside the top of its fill, the battery's in V). They are drawn in the main shader, so the layout uses 6 layers instead of 7.
 - **Custom Cluster 0.1.16:** Sport: the speed and rpm numbers fade in as the value comes near, as iDrive 8 does: full white at the label, their own colour one label away (halfway between two labels both are half lit), instead of only the nearest one lighting up.
 - **Custom Cluster 0.1.15:** Sport: the car ahead as a gauge right of the rpm scale instead of the GAP text row: an upright box filled from the bottom up to the gap (0 to 150 m) with the metres riding beside the top of the fill, the relative speed under it; the fill and numbers turn red while the car ahead closes faster than 10 km/h (config.acc.closingKmh). Nothing shows with no car ahead. A few text boxes no longer overlap their neighbours, so the layout packs into 7 layers and 6.1 MiB (was 8 and 10.4). The music title is centred under the pedal strip's middle.
