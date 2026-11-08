@@ -18,6 +18,7 @@
  *               middle of the figure when left out): it goes on
  *               the Perch widget's "feet" point; anchorPx [x, y] px added to it on the HUD (right, down)
  *   hide        ["part id"]: left out entirely
+ *   cut         { "drawable id": model y }: that drawable's triangles wholly below the y left out (in the idle pose)
  *   heightPx    her height on the HUD in px (200), or pxPerUnit: HUD px per model unit
  *   waist       model y the upper body breathes above (40% down the figure)
  *   headY       model y across her face (15% down the figure): where the bake measures how far each lean moves her
@@ -163,8 +164,11 @@ class Renderer {
         gl.enableVertexAttribArray(this.loc.pos); gl.vertexAttribPointer(this.loc.pos, 2, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.bufUv); gl.bufferData(gl.ARRAY_BUFFER, d.vertexUvs[i], gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.loc.uv); gl.vertexAttribPointer(this.loc.uv, 2, gl.FLOAT, false, 0, 0);
-        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.bufIdx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, d.indices[i], gl.DYNAMIC_DRAW);
-        gl.drawElements(gl.TRIANGLES, d.indexCounts ? d.indexCounts[i] : d.indices[i].length, gl.UNSIGNED_SHORT, 0);
+        const cut = this.L.cut && this.L.cut.get(i);
+        const idx = cut || d.indices[i];
+        if (!idx.length) return;
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.bufIdx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.DYNAMIC_DRAW);
+        gl.drawElements(gl.TRIANGLES, cut ? cut.length : (d.indexCounts ? d.indexCounts[i] : d.indices[i].length), gl.UNSIGNED_SHORT, 0);
     }
 }
 
@@ -267,6 +271,28 @@ function alphaBox(cv) {
     return x1 < 0 ? null : [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
 }
 
+/* "cut": { drawable id: model y }: drop that drawable's triangles lying wholly below the y, measured once in the idle pose
+ * and dropped by index from then on (so they stay dropped as she moves): for a drawable that carries something you may
+ * leave out inside a mesh you need, e.g. text built into a face mesh. */
+function makeCuts(L, cut, params) {
+    L.cut = new Map();
+    if (!cut) return;
+    setParams(L, params);
+    L.model.update();
+    const d = L.model.drawables;
+    Object.keys(cut).forEach((id) => {
+        const i = d.ids.indexOf(id);
+        if (i < 0) { log('  (no drawable "' + id + '")'); return; }
+        const v = d.vertexPositions[i], ix = d.indices[i], n = d.indexCounts ? d.indexCounts[i] : ix.length, keep = [];
+        for (let k = 0; k < n; k += 3) {
+            const below = [ix[k], ix[k + 1], ix[k + 2]].every((q) => v[2 * q + 1] < cut[id]);
+            if (!below) keep.push(ix[k], ix[k + 1], ix[k + 2]);
+        }
+        L.cut.set(i, new Uint16Array(keep));
+        log('  cut ' + id + ': ' + (n - keep.length) / 3 + ' of ' + n / 3 + ' triangles');
+    });
+}
+
 async function bake(L, cfg) {
     const pad = cfg.pad || 2;
     const hidden = cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
@@ -274,6 +300,7 @@ async function bake(L, cfg) {
     const tails = tailsIn ? (i) => tailsIn(i) && !hidden(i) : null;
     const R = new Renderer(L);
     const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
+    makeCuts(L, cfg.cut, Object.assign({}, cfg.params, idle));
     // one box for every frame and sprite: the whole figure at idle, with a margin for the swaying tails
     setParams(L, Object.assign({}, cfg.params, idle));
     L.model.update();

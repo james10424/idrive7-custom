@@ -115,7 +115,7 @@
  *   perch     effect layer; shaders.js perch, the Perch layout's standing character, from frames baked offline
  *             (tools/live2d_bake) and kept in the app's data folder (perch/, see _sprite); animated by the renderer's
  *             clock (time: true), so only a small u_drive uniform goes up when the smoothed g or the speed moves a step.
- *             "feet" [x, y] target px where the bake's "anchor" (between her feet) goes ([510, 377]). Nothing is drawn
+ *             "feet" [x, y] target px where the bake's "anchor" (between her feet) goes ([480, 377]). Nothing is drawn
  *             without frames (the status row says so)
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
@@ -2020,7 +2020,7 @@ class HudApp {
             c.uniform(ref, 'u_radius', [w.radius || 0]);
         } else if (w.type === 'perch') {
             // the bake's "anchor" (frame px, between her feet) goes on the widget's "feet" point
-            const sp = this._sprite(w, x.ci), j = sp.info, ft = Array.isArray(w.feet) && w.feet.length === 2 ? w.feet : [510, 377];
+            const sp = this._sprite(w, x.ci), j = sp.info, ft = Array.isArray(w.feet) && w.feet.length === 2 ? w.feet : [480, 377];
             const fr = (k) => (j.frames && j.frames[k]) || j.frames.idle;
             const rect = (o) => (o && Array.isArray(o.rect) ? o.rect : [0, 0, 0, 0]);
             c.bind(ref, 'u_atlas', sp.ref);
