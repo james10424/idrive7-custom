@@ -299,7 +299,7 @@
    "class": "overlay",
    "z": 10,
    "align": "right",
-   "needs": "accRel",
+   "needs": "accGap",
    "in": {
     "nav": {
      "x": 222,
@@ -320,7 +320,7 @@
    "class": "overlay",
    "z": 10,
    "color": "dim",
-   "needs": "accRel",
+   "needs": "accGap",
    "in": {
     "nav": {
      "x": 270,

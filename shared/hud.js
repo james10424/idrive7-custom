@@ -151,7 +151,7 @@
  * The car ahead (de.bmw.dass.GapVehicleAhead; "--" without a car measured or data older than 3 s): {{accGap}} the gap in m / ft
  * ({{u:gap}}), from GapVehicleDrivingAhead gapVehicleDrivingAhead while its status says a car is measured (an X3 sends only
  * this one, once a second, 253 with nothing measured; DataFrontVehicle frontVehicleGapX when the car sends that), {{accRel}}
- * its speed against ours in km/h / mph ({{u:rel}}, minus = closing): DataFrontVehicle frontVehicleSpeedX when sent,
+ * its speed against ours in km/h / mph ({{u:rel}}, minus = closing; "--" while we stand still): DataFrontVehicle frontVehicleSpeedX when sent,
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
  * The catalog gives no units: app.json config.acc { gap (raw -> m), rel (raw -> km/h), set } is raw * factor + offset
  * (factor 1, offset 0 until calibrated on the car). A text widget's "needs": "<token>" draws nothing while that token is "--".
@@ -675,6 +675,8 @@ class HudApp {
         const now = Date.now(), a = this.ahead;
         if (key === 'gap') return this._gapM();
         if (key === 'rel') {
+            const own = this._raw('speed');
+            if (!isNum(own) || own < 1) return null;        // standing still: "--" (the gap's rate is only noise then)
             if (a && now - a.at < FRESH_MS && enumNum(a.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE && isNum(a.speedX)) return this._accScale('rel', a.speedX);
             const r = this.relFromGap;
             return r && isNum(r.v) && now - r.at < FRESH_MS && isNum(this._gapM()) ? r.v : null;

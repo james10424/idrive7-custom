@@ -758,7 +758,7 @@
       "font": "s_val",
       "color": "fg",
       "align": "right",
-      "needs": "accRel"
+      "needs": "accGap"
     },
     {
       "id": "acc_rel_unit",
@@ -771,7 +771,7 @@
       "text": "{{u:rel}}",
       "font": "s_unit",
       "color": "dim",
-      "needs": "accRel"
+      "needs": "accGap"
     },
     {
       "id": "pedal_thr_label",
