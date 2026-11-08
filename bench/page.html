@@ -341,6 +341,28 @@
     ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 4; ctx.setLineDash([30, 30]);
     ctx.beginPath(); ctx.moveTo(400, 222); ctx.lineTo(400, 480); ctx.stroke(); ctx.setLineDash([]);
   }
+  // What BMW's own Sport view draws inside the map window (car photo, Nov 7 2026, measured into cluster px): its speed
+  // with the line under it on the left, its gear on the right, and in the corners its bracket ends and a gauge icon
+  // (top) and hatched dial ends (bottom), which a layout's "holeCut" keeps black.
+  function drawStockMapWindow() {
+    const fg = '#f2f2f0';
+    ctx.strokeStyle = 'rgba(200,205,215,.8)'; ctx.lineWidth = 3;
+    [[416, 1], [1504, -1]].forEach(([x0, side]) => {
+      ctx.beginPath(); ctx.moveTo(x0, 284); ctx.lineTo(x0 + 178 * side, 120); ctx.stroke();            // bracket ends
+      ctx.beginPath(); ctx.moveTo(x0, 250); ctx.lineTo(x0 + 140 * side, 120); ctx.stroke();
+      ctx.save(); ctx.beginPath(); ctx.moveTo(x0, 431); ctx.lineTo(x0, 600); ctx.lineTo(x0 + 68 * side, 600); ctx.closePath(); ctx.clip();
+      ctx.fillStyle = 'rgba(120,125,135,.6)'; ctx.fillRect(Math.min(x0, x0 + 68 * side), 431, 68, 169);
+      ctx.strokeStyle = 'rgba(200,205,215,.7)'; ctx.lineWidth = 1;                                       // hatched dial end
+      for (let i = -10; i < 30; i++) { ctx.beginPath(); ctx.moveTo(x0 - 80, 431 + i * 8); ctx.lineTo(x0 + 80, 431 + i * 8 + 40); ctx.stroke(); }
+      ctx.restore();
+    });
+    ctx.strokeStyle = 'rgba(200,205,215,.8)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(505, 194, 11, Math.PI * 0.9, Math.PI * 2.1); ctx.stroke();                 // gauge icon
+    ctx.fillStyle = fg; ctx.font = 'bold 62px -apple-system, Helvetica, sans-serif'; ctx.fillText('0', 486, 394);
+    ctx.font = 'bold 24px -apple-system, Helvetica, sans-serif'; ctx.fillText('km/h', 552, 394);
+    ctx.strokeStyle = fg; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(416, 414); ctx.lineTo(698, 414); ctx.stroke();
+    ctx.font = 'bold 64px -apple-system, Helvetica, sans-serif'; ctx.fillText('P', 1268, 372);
+  }
   // a rough stand-in for BMW's own cluster: two angular gauges and the map window (416,120 1088x480, from the car photo of Nov 4)
   function drawStockCluster() {
     ctx.fillStyle = '#05070a'; ctx.fillRect(0, 0, VW, VH);
@@ -348,6 +370,7 @@
     ctx.strokeStyle = '#2c5a8a'; ctx.lineWidth = 3;
     for (let i = 0; i < 9; i++) { ctx.beginPath(); ctx.moveTo(416 + i * 136, 120); ctx.lineTo(416 + i * 136, 600); ctx.stroke(); }
     ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = '28px sans-serif'; ctx.fillText('map window', 860, 370);
+    drawStockMapWindow();
     [[210, 1], [1710, -1]].forEach(([cx, side]) => {
       ctx.strokeStyle = '#c9ced6'; ctx.lineWidth = 6; ctx.beginPath();
       ctx.moveTo(cx - 120 * side, 60); ctx.lineTo(cx + 60 * side, 60); ctx.lineTo(cx + 150 * side, 360); ctx.lineTo(cx + 60 * side, 660); ctx.lineTo(cx - 120 * side, 660); ctx.stroke();

@@ -88,7 +88,9 @@
  *             width, "inner" (the inner line's distance from the outer one), "scale" [y of 0, y of the top mark],
  *             "ticks" [speed, rpm], "rpmMax" (speed follows SPEED_SCALE), "fuelSeg" / "oilSeg" [fullX, fullY,
  *             emptyX, emptyY], "strip" [left end x, y, h, slant], "topEnd" x; the middle is black, and the map
- *             window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill)
+ *             window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with
+ *             "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right
+ *             (BMW draws bits of its own Sport view there)
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
@@ -454,7 +456,10 @@ class HudApp {
                 },
             },
         };
-        if (!this._modesOn()) { delete extra['de.bmw.infotainment.displaydataserver.DisplayDataServer']; delete extra['de.bmw.dass.GapVehicleAhead']; }
+        // the HUD modes' signal only with them; the car ahead with them or app.json config.carAhead (the cluster's Sport)
+        // (the runtime spec has no "signals": the interface must also be in app.json "signals")
+        if (!this._modesOn()) delete extra['de.bmw.infotainment.displaydataserver.DisplayDataServer'];
+        if (!this._modesOn() && this.config.carAhead !== true) delete extra['de.bmw.dass.GapVehicleAhead'];
         this.car = new Car(this.ctx, ['rpm', 'speed', 'temps', 'accel', 'gear', 'torque'], extra);
         this.car.setRedline(this.setting('redline'));
         this.score = new ShiftScore(this.car, () => ({
@@ -1280,6 +1285,7 @@ class HudApp {
             c.uniform(ref, 'u_oilSeg', w.oilSeg);
             c.uniform(ref, 'u_hole', this._hole(w));
             c.uniform(ref, 'u_holeR', [this._holeRadius(w)]);
+            c.uniform(ref, 'u_holeCut', Array.isArray(w.holeCut) && w.holeCut.length === 4 ? w.holeCut : [0, 0, 0, 0]);
             c.uniform(ref, 'u_strip', w.strip);
             c.uniform(ref, 'u_topEnd', [w.topEnd]);
         } else if (w.type === 'mdash') {

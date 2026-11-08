@@ -729,6 +729,7 @@ uniform vec4 u_fuelSeg;   // full end x, y, empty end x, y
 uniform vec4 u_oilSeg;
 uniform vec4 u_hole;      // map window x, y, w, h, already inset (w 0 = none)
 uniform float u_holeR;    // the hole's corner radius px
+uniform vec4 u_holeCut;   // corners kept black: top w, h and bottom w, h px of a triangle in each, mirrored left / right
 uniform vec4 u_strip;     // bottom strip: left end x, top y, height, slant px
 uniform float u_topEnd;   // the top lines run from the bracket to this x (left; mirrored on the right)
 
@@ -834,6 +835,14 @@ void main() {
         vec2 hs = u_hole.zw * 0.5;
         vec2 q = abs(p - (u_hole.xy + hs)) - (hs - vec2(u_holeR));
         float hd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - u_holeR;
+        // BMW's own Sport view draws bracket ends, a gauge icon and hatched dial ends in the window's corners (car
+        // photo, Nov 7 2026): a triangle in each stays black (distance into it > 0)
+        vec2 lp = p - u_hole.xy;
+        lp.x = min(lp.x, u_hole.z - lp.x);
+        if (u_holeCut.x > 0.0)
+            hd = max(hd, (1.0 - lp.x / u_holeCut.x - lp.y / u_holeCut.y) * u_holeCut.x * u_holeCut.y / length(u_holeCut.xy));
+        if (u_holeCut.z > 0.0)
+            hd = max(hd, (1.0 - lp.x / u_holeCut.z - (u_hole.w - lp.y) / u_holeCut.w) * u_holeCut.z * u_holeCut.w / length(u_holeCut.zw));
         c.a *= clamp(hd + 0.5, 0.0, 1.0);
     }
     c = bar(p, u_fuelSeg, u_fuel, 0.0, c);
