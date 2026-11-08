@@ -1,6 +1,6 @@
 # Custom HUD
 
-Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant temperatures, and a clock, or your own Live2D character sitting or standing on BMW's speed-limit sign. Open **Custom HUD** from the apps menu on the center screen and pick the layout, theme, units and widgets there.
+Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant temperatures, and a clock, or your own Live2D character standing in the corner of the HUD. Open **Custom HUD** from the apps menu on the center screen and pick the layout, theme, units and widgets there.
 
 <p align="center"><img src="../../docs/images/hud-daily.png" width="520" alt="Daily layout"></p>
 
@@ -19,11 +19,12 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
 
 - **Daily:** speed is the hero, with the gear, clock and oil.
 - **Sport:** a segmented shift bar, a big gear, speed, a boost gauge, oil and coolant.
-- **Perch:** a Live2D character you own sits on the corner of BMW's speed-limit sign with her legs hanging off its left side, or stands on it (the **Perch** setting picks which). Your speed stays clear. No readouts of our own, just her and BMW's HUD.
+- **Perch:** a Live2D character you own stands at the bottom right of the HUD, clear of BMW's speed and speed-limit sign. No readouts of our own, just her and BMW's HUD.
   - **Bring your own model:** no character ships with the app. You bake frames from a Live2D model on your own computer with [tools/live2d_bake](../../tools/live2d_bake/README.md) and copy them to the car with `scripts/deploy.sh <car> --perch <folder>`. Until then the layout draws nothing and the status row says why.
-  - **Idle:** she blinks, breathes and sways, smiles as if talking now and then, her twin tails swing, and sitting, her legs swing from the knees (the near heel eases onto the sign).
-  - **Driving:** pull away hard and she leans back with her happy face; brake and she tips forward with her braking face. The faster you go, the more her twin tails stream out.
-  - The frames go up once as one image (about 2 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up when she changes pose.
+  - **Like standing on a bus:** pull away and she leans right, brake and she leans left, with the model's own body and head moving (her happy face when you pull away hard, her braking face when you brake hard). When the car settles she sways back past upright once or twice before standing still. Her twin tails move with her head.
+  - **Idle:** she blinks, breathes, sways a little and smiles as if talking now and then. The faster you go, the more her twin tails spread, lift and flutter.
+  - **During route guidance** she steps aside, because BMW's turn map and street name fill her corner; she comes back when the route ends.
+  - The frames go up once as one image (about 4 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up while she moves.
   - Redline is gone: if you had it picked anywhere, it switches to Perch.
 
 ## Themes
@@ -51,7 +52,7 @@ Classic, M and Night, plus Auto, which switches to Night at sunset. You choose w
 
 ## Settings
 
-Layout, Perch sitting or standing, drive mode switching, theme, daytime theme for Auto, units (mph, °F, psi or km/h, °C, bar), 12- or 24-hour clock, redline and shift point (the Sport shift bar), cold-engine rev guard, which readouts show (clock, oil, coolant, boost), and demo data. Changes show on the HUD right away, and the HUD keeps running after you leave the page.
+Layout, drive mode switching, theme, daytime theme for Auto, units (mph, °F, psi or km/h, °C, bar), 12- or 24-hour clock, redline and shift point (the Sport shift bar), cold-engine rev guard, which readouts show (clock, oil, coolant, boost), and demo data. Changes show on the HUD right away, and the HUD keeps running after you leave the page.
 
 The page's first row says what the HUD is doing, the drive mode it sees, and why anything is not drawn (for example "waiting: another app has this display").
 

@@ -1201,14 +1201,15 @@ void main() {
 `;
 
 const PERCH = `// The Perch layout's character (GLSL ES 1.00), from frames baked offline (tools/live2d_bake) into one RGBA atlas
-// asset (u_atlas, straight alpha, u_atlasSize px): the body in six expressions (idle, eyes half shut, shut, happy,
-// braking, talking), and optionally the twin tails and the two shins as their own sprites. Nothing is uploaded after
-// the atlas; she is animated on the renderer's clock (u_time): blinks crossfade idle -> half -> shut, the upper body
-// breathes and sways (a stretch and a shear above the hip line), the tails swing in a wave and blow back with speed,
-// the shins swing from the knees (the near one eases onto the sign's edge). u_drive = (lean, speed, unused,
-// brightness), sent only when a step changes: lean -1..1 is the smoothed longitudinal g: braking tips her forward and
-// fades in the braking face, pulling away leans her back and fades in the happy face. Positions are in frame px;
-// u_origin is where the frame's top-left sits in the layer. v_uv (0,0) is the top-left.
+// asset (u_atlas, straight alpha, u_atlasSize px). She stands, as on a bus: the bake posed her at u_leanN lean angles
+// (11) with the model's own body and head rotation, from a full lean left with the braking face to a full lean right
+// with the happy face, close enough together that the shader can blend the two nearest to u_drive.x without a double
+// image (-1 hard braking .. +1 pulling away hard; the app gives it a spring, so she sways back past upright when the car
+// settles). Upright she blinks
+// (idle -> half -> shut, eased) and now and then smiles as if talking. The twin tails are their own sprite: a wave runs
+// down them and speed blows them out. The upper body breathes (a slight stretch above the waist). Nothing is uploaded
+// after the atlas; she is animated on the renderer's clock (u_time). u_drive = (lean, speed, unused, brightness).
+// Positions are in frame px; u_origin is where the frame's top-left sits in the layer. v_uv (0,0) is the top-left.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -1223,16 +1224,13 @@ uniform vec2 u_atlasSize;
 uniform vec2 u_frame;       // frame w, h
 uniform vec2 u_origin;      // the frame's top-left in layer px
 uniform vec4 u_fA;          // idle.xy, half.xy (atlas px of each frame's top-left)
-uniform vec4 u_fB;          // shut.xy, happy.xy
-uniform vec4 u_fC;          // brake.xy, talk.xy
-uniform vec4 u_hip;         // hip line y, head top y (frame px), sway 0..1, 0
+uniform vec4 u_fB;          // shut.xy, talk.xy
+uniform vec4 u_lean[8];     // the lean angles' frames, left to right, two per vec4 (atlas px of each frame's top-left)
+uniform vec4 u_head[4];     // how far her head sits from upright at each angle (px), four per vec4
+uniform float u_leanN;      // how many angles (odd, up to 16; the middle one is upright)
+uniform vec4 u_hip;         // waist y, head y (frame px), breathing 0..1, 0
 uniform vec4 u_tails;       // atlas rect of the tails sprite (w = 0: none)
 uniform vec4 u_tailsAt;     // its top-left in frame px, root y in the sprite, length px
-uniform vec4 u_shinA;       // atlas rect of a shin sprite (w = 0: none)
-uniform vec4 u_shinAAt;     // its top-left in frame px (at rest), knee pivot in the sprite
-uniform vec4 u_shinB;
-uniform vec4 u_shinBAt;
-uniform vec2 u_shinLim;     // the furthest each shin may swing towards the sign (rad), A and B
 
 // a sprite pixel: atlas rect r, point p in sprite px; premultiplied; transparent outside the rect
 vec4 tap(vec4 r, vec2 p) {
@@ -1240,63 +1238,73 @@ vec4 tap(vec4 r, vec2 p) {
     vec4 t = texture2D(u_atlas, (r.xy + p) / u_atlasSize);
     return vec4(t.rgb * t.a, t.a);
 }
-vec2 rot(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
-float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
 vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
+
+// the body at lean angle i (0 .. u_leanN - 1); the middle one is upright, with the blink and the talking smile.
+// GLSL ES 1.00 only promises constant indexes into uniform arrays in a fragment shader, hence the loops
+vec4 leanAt(float i, vec2 fb, vec4 upright) {
+    if (abs(i - (u_leanN - 1.0) * 0.5) < 0.5) return upright;
+    vec2 at = vec2(0.0);
+    for (int k = 0; k < 8; k++) {
+        float j = i - float(k) * 2.0;
+        if (abs(j) < 0.5) at = u_lean[k].xy;
+        if (abs(j - 1.0) < 0.5) at = u_lean[k].zw;
+    }
+    return tap(vec4(at, u_frame), fb);
+}
+float headAt(float i) {
+    float v = 0.0;
+    for (int k = 0; k < 4; k++) {
+        float j = i - float(k) * 4.0;
+        if (abs(j) < 0.5) v = u_head[k].x;
+        if (abs(j - 1.0) < 0.5) v = u_head[k].y;
+        if (abs(j - 2.0) < 0.5) v = u_head[k].z;
+        if (abs(j - 3.0) < 0.5) v = u_head[k].w;
+    }
+    return v;
+}
 
 void main() {
     vec2 px = vec2(v_uv.x * u_size.x, v_uv.y * u_size.y);
     vec2 f = px - u_origin;                         // frame px
     float t = mod(u_time, 1200.0);
     float lean = clamp(u_drive.x, -1.0, 1.0), spd = clamp(u_drive.y, 0.0, 1.0);
-    float brake = max(0.0, -lean), go = max(0.0, lean);
-    float moving = smoothstep(0.0, 0.08, spd);
+    float brake = max(0.0, -lean);
 
-    // the upper body: breathing stretches it from the hip line up, a slow sway and the lean shear it sideways
-    float hipY = u_hip.x, up = max(0.0, hipY - f.y), hh = max(1.0, hipY - u_hip.y);
-    float breath = sin(t * 1.7);
-    float shear = (0.012 * sin(t * 0.8) * u_hip.z + 0.07 * go - 0.06 * brake);
+    // breathing: a slight stretch above the waist
+    float hipY = u_hip.x, up = max(0.0, hipY - f.y);
     vec2 fb = f;
-    if (f.y < hipY) fb.y = hipY - up / (1.0 + 0.008 * breath * u_hip.z);
-    fb.x = f.x - shear * up;
-    fb.y += 2.5 * brake * up / hh;                 // braking: she dips forward
+    if (f.y < hipY) fb.y = hipY - up / (1.0 + 0.008 * sin(t * 1.7) * u_hip.z);
 
-    // eyes: idle -> half -> shut as the blink runs, eased; then the happy, braking and talking faces fade over it
+    // upright: idle -> half -> shut as the blink runs, eased; the talking smile fades over it
     float bt = mod(t, 4.6), bt2 = mod(t + 1.9, 12.0);
     float blink = smoothstep(0.0, 0.07, bt) * (1.0 - smoothstep(0.1, 0.24, bt))
         + smoothstep(0.25, 0.31, bt2) * (1.0 - smoothstep(0.34, 0.46, bt2));
-    vec4 r = vec4(0.0, 0.0, u_frame);
     vec4 cIdle = tap(vec4(u_fA.xy, u_frame), fb), cHalf = tap(vec4(u_fA.zw, u_frame), fb), cShut = tap(vec4(u_fB.xy, u_frame), fb);
-    vec4 body = blink < 0.5 ? mix(cIdle, cHalf, blink * 2.0) : mix(cHalf, cShut, blink * 2.0 - 1.0);
-    float happy = smoothstep(0.45, 0.75, go), squint = smoothstep(0.3, 0.6, brake);
-    float talk = smoothstep(0.85, 1.0, sin(t * 0.37)) * (1.0 - brake) * (1.0 - happy);
-    if (talk > 0.001) body = mix(body, tap(vec4(u_fC.zw, u_frame), fb), talk);
-    if (happy > 0.001) body = mix(body, tap(vec4(u_fB.zw, u_frame), fb), happy);
-    if (squint > 0.001) body = mix(body, tap(vec4(u_fC.xy, u_frame), fb), squint);
+    vec4 upright = blink < 0.5 ? mix(cIdle, cHalf, blink * 2.0) : mix(cHalf, cShut, blink * 2.0 - 1.0);
+    float talk = smoothstep(0.85, 1.0, sin(t * 0.37)) * (1.0 - smoothstep(0.0, 0.3, abs(lean)));
+    if (talk > 0.001) upright = mix(upright, tap(vec4(u_fB.zw, u_frame), fb), talk);
 
-    vec4 c = body;
+    // the lean: blend the two nearest baked angles (a small idle sway keeps her alive at a standstill)
+    float last = max(1.0, u_leanN - 1.0);
+    float k = clamp((lean + 0.05 * sin(t * 0.8) + 1.0) * 0.5 * last, 0.0, last);
+    float i0 = min(floor(k), last - 1.0), fr = k - i0;   // linear: an eased blend would pause at every baked angle
+    float i1 = i0 + 1.0;
+    vec4 c = u_leanN < 2.5 ? upright : mix(leanAt(i0, fb, upright), leanAt(i1, fb, upright), fr);
 
-    // shins: swing from the knee, fixed-rate motions blended (so speed never jumps their phase)
-    float swing = mix(0.2, 0.1, moving) * (1.0 - brake);
-    float base = -0.06 + 0.08 * go - 0.4 * brake;
-    if (u_shinA.z > 0.0) {
-        float a = smin(base + swing * mix(sin(t * 2.0), sin(t * 3.0), moving), u_shinLim.x, 0.12);
-        vec2 knee = u_shinAAt.xy + u_shinAAt.zw;
-        c = over(c, tap(u_shinA, u_shinAAt.zw + rot(f - knee, -a)));
-    }
-    if (u_shinB.z > 0.0) {
-        float a = smin(base - 0.08 + swing * mix(sin(t * 2.0 + 2.6), sin(t * 3.0 + 2.6), moving), u_shinLim.y, 0.12);
-        vec2 knee = u_shinBAt.xy + u_shinBAt.zw;
-        c = over(c, tap(u_shinB, u_shinBAt.zw + rot(f - knee, -a)));
-    }
-
-    // twin tails, behind: a wave runs down them, speed and braking blow them out
+    // twin tails, behind. They hang from her head, so they move with it as she leans (the ends trailing a little);
+    // a wave runs down them, faster and wider with speed, and the wind spreads them out and lifts them
     if (u_tails.z > 0.0) {
-        vec2 tp = fb - u_tailsAt.xy;
+        vec2 tp = f - u_tailsAt.xy;
         float w = clamp((tp.y - u_tailsAt.z) / max(1.0, u_tailsAt.w), 0.0, 1.0);
-        float flutter = sin(t * 1.6 - w * 2.4) * 0.14 * (1.0 - spd) + (sin(t * 7.0 - w * 3.0) * 0.06 + sin(t * 11.0 + 1.3 - w * 3.0) * 0.035) * spd;
-        float side = sign(tp.x - u_tails.z * 0.5);          // each tail swings out on its own side
-        tp.x -= (flutter * 18.0 + side * (spd * 0.85 + brake * 0.3) * 10.0) * w * w;
+        float head = mix(headAt(i0), headAt(i1), fr);
+        // each tail swings out on its own side, fading to nothing across the middle (a hard split would tear it)
+        float side = clamp((tp.x - u_tails.z * 0.5) / (u_tails.z * 0.25), -1.0, 1.0);
+        float wave = sin(t * 1.6 - w * 2.4) * 2.5 * (1.0 - spd)
+            + (sin(t * 6.0 - w * 4.0) * 3.0 + sin(t * 10.3 + 1.3 - w * 5.0) * 1.5) * spd;
+        float spread = side * (spd * 22.0 + brake * 6.0) * pow(w, 1.4);
+        tp.x -= head * (1.0 - 0.35 * w) + (wave + spread) * w;
+        tp.y += spd * 14.0 * w * w;                            // lifted by the wind
         c = over(c, tap(u_tails, tp));
     }
 

@@ -5,9 +5,9 @@
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
 #   ./scripts/deploy.sh root@<car> --perch <bake output folder>      (the Perch layout's baked frames)
 #
-# --perch copies the folder's sit/ and stand/ (atlas.json + atlas.rgba each, from tools/live2d_bake) to the app's
-# data folder, <app>/data/perch/. They stay out of this repo: the character's art belongs to its owner. The app
-# picks them up the next time it builds the layout (switch the Perch pose, or the layout, or restart the app).
+# --perch copies the folder's atlas.json and atlas.rgba (from tools/live2d_bake) to the app's data folder,
+# <app>/data/perch/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
+# next time it builds the layout (switch to another layout and back, or restart the app).
 #
 # With no files it pushes the app's built-in layouts from apps/<app>/hud/layouts/.
 # They land in the app's data folder, <app>/data/layouts/, where a file overrides the
@@ -37,10 +37,8 @@ PERCH_SRC=""
 if [ "${1:-}" = "--perch" ]; then
     [ $# -eq 2 ] && [ -d "$2" ] || { echo "Usage: $(basename "$0") <car-ssh-host> --perch <bake output folder>" >&2; exit 1; }
     PERCH_SRC="$2"; shift 2
-    for pose in sit stand; do
-        [ -f "$PERCH_SRC/$pose/atlas.json" ] || continue
-        python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$PERCH_SRC/$pose/atlas.json" || { echo "Not valid JSON: $PERCH_SRC/$pose/atlas.json" >&2; exit 1; }
-    done
+    [ -f "$PERCH_SRC/atlas.json" ] && [ -f "$PERCH_SRC/atlas.rgba" ] || { echo "No atlas.json and atlas.rgba in $PERCH_SRC" >&2; exit 1; }
+    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$PERCH_SRC/atlas.json" || { echo "Not valid JSON: $PERCH_SRC/atlas.json" >&2; exit 1; }
 fi
 LAYOUT_DIR="$(dirname "$SCRIPT_DIR")/apps/${APP_ID}/hud/layouts"
 if [ $# -eq 0 ] && [ -z "$PERCH_SRC" ]; then set -- "$LAYOUT_DIR"/*.json; fi
@@ -60,15 +58,10 @@ echo "App folder on the car: ${APP_DIR}"
 
 if [ -n "$PERCH_SRC" ]; then
     OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
-    n=0
-    for pose in sit stand; do
-        [ -f "$PERCH_SRC/$pose/atlas.rgba" ] || continue
-        ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/perch/${pose}'"
-        scp "$PERCH_SRC/$pose/atlas.json" "$PERCH_SRC/$pose/atlas.rgba" "${CAR_HOST}:${APP_DIR}/data/perch/${pose}/"
-        n=$((n + 1))
-    done
+    ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/perch'"
+    scp "$PERCH_SRC/atlas.json" "$PERCH_SRC/atlas.rgba" "${CAR_HOST}:${APP_DIR}/data/perch/"
     ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/perch'"
-    echo "Pushed ${n} Perch pose(s) to ${APP_DIR}/data/perch. Switch the Perch pose (or restart the app) to load them."
+    echo "Pushed the Perch frames to ${APP_DIR}/data/perch. Switch to another layout and back (or restart the app) to load them."
     exit 0
 fi
 

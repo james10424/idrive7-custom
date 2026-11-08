@@ -112,11 +112,11 @@
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
  *             pedal is in kickdown and the bar is full; "range" [lo, hi] maps the signal from that span onto 0..max
  *             (e.g. "boost" over [0, 1.5] bar, "batt12" over [0, 100] %)
- *   perch     effect layer; shaders.js perch, the Perch layout's character on BMW's speed-limit sign, from frames baked
- *             offline (tools/live2d_bake) and kept in the app's data folder (perch/<pose>/, the "perchPose" setting, see
- *             _sprite); animated by the renderer's clock (time: true), so only a small u_drive uniform goes up when the
- *             smoothed g or the speed moves a step. "sign" [x, y, w, h] the sign's box in target px ([152, 320, 50, 54]):
- *             the bake's "anchor" goes on its top-left corner. Nothing is drawn without frames (the status row says so)
+ *   perch     effect layer; shaders.js perch, the Perch layout's standing character, from frames baked offline
+ *             (tools/live2d_bake) and kept in the app's data folder (perch/, see _sprite); animated by the renderer's
+ *             clock (time: true), so only a small u_drive uniform goes up when the smoothed g or the speed moves a step.
+ *             "feet" [x, y] target px where the bake's "anchor" (between her feet) goes ([510, 377]). Nothing is drawn
+ *             without frames (the status row says so)
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
  *   grid      calibration: effect layer of lines every "step" px (brighter every "major" steps)
@@ -236,7 +236,10 @@ const LAYER_BUDGET = 8;          // cluster-render's limit per client connection
 const MAX_CONN = 4;              // connections a layout may ask for ("conn"): 32 layers service-wide / 8 per connection
 const PIXEL_BYTES = 16 * 1024 * 1024;   // cluster-render's pixel memory for every app's images together (CompositorLimits.pixel_bytes)
 const SHEET_AREA_FRAC = 4;       // the first sheet size limit: 1/4 of the target area (see the header)
-const PERCH_TAU_MS = 450;        // the Perch girl's lean and speed follow the car this smoothly
+const PERCH_MS = 16;              // the Perch character's own update rate (60 Hz)
+const PERCH_TAU_MS = 450;        // the Perch character's speed follows the car this smoothly
+const PERCH_SPRING_K = 25;        // her lean's spring (1/s^2): about 0.8 Hz
+const PERCH_SPRING_C = 3.5;       // its damping (1/s): a sway or two past upright, then still
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
@@ -1047,6 +1050,7 @@ class HudApp {
         if (this.navSub) this.navSub.shutdown();
         if (this.mediaSub) this.mediaSub.shutdown();
         clearTimeout(this.fontT);
+        this.widgets.forEach((x) => { if (x.timer) clearInterval(x.timer); });
         this.clients.forEach((c) => c.close());
         this.atlases.clear();
     }
@@ -1084,15 +1088,14 @@ class HudApp {
     }
 
     /**
-     * The Perch layout's baked frames for the "perchPose" setting (sit / stand): <data>/perch/<pose>/atlas.json and
+     * The Perch layout's baked frames: <data>/perch/atlas.json and
      * atlas.rgba (straight-alpha RGBA, atlas[0] x atlas[1] px), made by tools/live2d_bake and pushed by
      * scripts/deploy.sh --perch. They are not in the app: the character's art stays with its owner. Uploaded once as an
-     * RGBA asset per connection and kept in this.atlases (so the pixel memory counts it); a pose change drops the
-     * other pose's asset. Null, with this.problem set, when the files are missing or bad.
+     * RGBA asset per connection and kept in this.atlases (so the pixel memory counts it); new files (a later bake)
+     * drop the old asset. Null, with this.problem set, when the files are missing or bad.
      */
     _sprite(w, ci) {
-        const pose = this.setting('perchPose') || 'sit';
-        const dir = path.join(this.ctx.dataDir || '.', 'perch', pose);
+        const dir = path.join(this.ctx.dataDir || '.', 'perch');
         let st;
         try { st = fs.statSync(path.join(dir, 'atlas.rgba')); } catch (e) { st = null; }
         const key = 'sprite:' + ci + ':' + dir + ':' + (st ? st.mtimeMs : 0);
@@ -1114,8 +1117,8 @@ class HudApp {
             c.pixels(ref, null, px);
             const a = { ref, c, ci, info, bytes: aw * ah * 8 };
             this.atlases.set(key, a);
-            this.log.info('perch frames "' + pose + '": ' + Object.keys(info.frames).length + ' frames of ' + info.frame.join('x') + ', ' +
-                (info.tails ? 'tails, ' : '') + (Array.isArray(info.shins) ? info.shins.length + ' shins, ' : '') + aw + 'x' + ah + ' RGBA asset, ' + mib(a.bytes) + ' of pixel memory');
+            this.log.info('perch frames: ' + Object.keys(info.frames).length + ' of ' + info.frame.join('x') + ', ' +
+                (info.tails ? 'tails, ' : '') + aw + 'x' + ah + ' RGBA asset, ' + mib(a.bytes) + ' of pixel memory');
             return a;
         } catch (e) {
             this.problem = 'Perch: ' + e.message;
@@ -1661,6 +1664,7 @@ class HudApp {
     _rebuildInner() {
         if (!this.client.ready) return; // the 'ready' handler calls us again
         this._layerRefs().forEach((r) => r.c.drop(r.ref));
+        this.widgets.forEach((x) => { if (x.timer) clearInterval(x.timer); });
         this.widgets.clear();
         this.sheets = [];
         this.pixelBytes = 0;
@@ -2015,28 +2019,32 @@ class HudApp {
             c.uniform(ref, 'u_border', [w.border === undefined ? 2 : w.border]);
             c.uniform(ref, 'u_radius', [w.radius || 0]);
         } else if (w.type === 'perch') {
-            // the frames go where the bake put the sign's corner: "anchor" (frame px) on the sign's top-left
-            const sp = this._sprite(w, x.ci), j = sp.info, sg = Array.isArray(w.sign) && w.sign.length === 4 ? w.sign : [152, 320, 50, 54];
+            // the bake's "anchor" (frame px, between her feet) goes on the widget's "feet" point
+            const sp = this._sprite(w, x.ci), j = sp.info, ft = Array.isArray(w.feet) && w.feet.length === 2 ? w.feet : [510, 377];
             const fr = (k) => (j.frames && j.frames[k]) || j.frames.idle;
             const rect = (o) => (o && Array.isArray(o.rect) ? o.rect : [0, 0, 0, 0]);
             c.bind(ref, 'u_atlas', sp.ref);
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_atlasSize', j.atlas);
             c.uniform(ref, 'u_frame', j.frame);
-            c.uniform(ref, 'u_origin', [sg[0] - w.x - j.anchor[0], sg[1] - w.y - j.anchor[1]]);
+            c.uniform(ref, 'u_origin', [ft[0] - w.x - j.anchor[0], ft[1] - w.y - j.anchor[1]]);
             c.uniform(ref, 'u_fA', fr('idle').concat(fr('half')));
-            c.uniform(ref, 'u_fB', fr('shut').concat(fr('happy')));
-            c.uniform(ref, 'u_fC', fr('brake').concat(fr('talk')));
-            c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.sway === false ? 0 : 1, 0]);
-            const tl = j.tails || null, sh = Array.isArray(j.shins) ? j.shins : [];
+            c.uniform(ref, 'u_fB', fr('shut').concat(fr('talk')));
+            // the lean angles (odd count, up to 16; without them she is always upright)
+            const ln = Array.isArray(j.lean) && j.lean.length >= 3 ? j.lean.slice(0, 15) : [fr('idle')];
+            const lflat = [], hflat = [];
+            for (let i = 0; i < 16; i++) { const v = ln[i] || [0, 0]; lflat.push(v[0], v[1]); }
+            for (let i = 0; i < 16; i++) hflat.push(Array.isArray(j.leanShift) && isNum(j.leanShift[i]) ? j.leanShift[i] : 0);
+            c.uniform(ref, 'u_lean', lflat, { type: 'vec4' });
+            c.uniform(ref, 'u_head', hflat, { type: 'vec4' });
+            c.uniform(ref, 'u_leanN', [ln.length]);
+            c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.breathe === false ? 0 : 1, 0]);
+            // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
+            // moved only every third frame would step. A message goes up only when the lean or speed changes a step
+            x.timer = setInterval(() => this._guard('widget ' + w.id, () => this._update(x, Date.now(), false)), PERCH_MS);
+            const tl = j.tails || null;
             c.uniform(ref, 'u_tails', rect(tl));
             c.uniform(ref, 'u_tailsAt', tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1]);
-            ['A', 'B'].forEach((k, i) => {
-                const o = sh[i];
-                c.uniform(ref, 'u_shin' + k, rect(o));
-                c.uniform(ref, 'u_shin' + k + 'At', o ? [o.at[0], o.at[1], o.pivot[0], o.pivot[1]] : [0, 0, 0, 0]);
-            });
-            c.uniform(ref, 'u_shinLim', [sh[0] && isNum(sh[0].limit) ? sh[0].limit : 0.05, sh[1] && isNum(sh[1].limit) ? sh[1].limit : 0.15]);
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);
@@ -2084,7 +2092,7 @@ class HudApp {
         const rpm = this._raw('rpm');
         const flashing = isNum(rpm) && rpm >= this.setting('redline') - 150;
         this.flash = flashing ? Math.floor(now / 62.5) % 2 === 0 : false;
-        this.widgets.forEach((x) => this._guard('widget ' + x.w.id, () => this._update(x, now, false)));
+        this.widgets.forEach((x) => { if (!x.timer) this._guard('widget ' + x.w.id, () => this._update(x, now, false)); });
     }
 
     /** BMW-like tach: a 120 ms filter, and a readout that moves in 50 rpm steps, only by 40 rpm or more. */
@@ -2301,15 +2309,23 @@ class HudApp {
             x.c.uniform(x.ref, 'u_peak', [peak]);
             x.c.uniform(x.ref, 'u_shiftNow', [sp.now ? 1 : 0]);
         } else if (w.type === 'perch') {
-            // lean: the longitudinal g over PERCH_TAU_MS, -0.4 g .. +0.4 g to -1 .. 1; speed 0..130 km/h to 0..1;
-            // both smoothed, sent in steps of 0.01 (a small uniform message, at most one a tick) so she moves without visible steps
+            // lean: the longitudinal g, -0.4 g .. +0.4 g to -1 .. 1, through a spring; speed 0..130 km/h to 0..1, eased
+            // over PERCH_TAU_MS; both sent in steps of 0.002 (a small uniform message, at most one per PERCH_MS, and only while she moves)
             const d = this.car.data(), dt = x.at ? Math.min(500, now - x.at) : 0;
             x.at = now;
+            // standing on a bus: the lean is a spring pulled towards the g (about 0.8 Hz, lightly damped), so she leans
+            // into a pull, then sways back past upright and settles when it ends
             const g = isNum(d.gLong) ? Math.max(-0.4, Math.min(0.4, d.gLong)) / 0.4 : 0;
-            x.lean = isNum(x.lean) ? x.lean + (g - x.lean) * (1 - Math.exp(-dt / PERCH_TAU_MS)) : g;
-            const v = this._raw('speed'), sv = isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0, step = (f) => Math.round(f * 100) / 100;
+            if (!isNum(x.lean)) { x.lean = g; x.leanV = 0; }
+            for (let left = dt / 1000; left > 0; left -= 0.01) {
+                const h = Math.min(0.01, left);
+                x.leanV += (PERCH_SPRING_K * (g - x.lean) - PERCH_SPRING_C * x.leanV) * h;
+                x.lean = Math.max(-1.2, Math.min(1.2, x.lean + x.leanV * h));
+            }
+            const v = this._raw('speed'), sv = isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0, step = (f) => Math.round(f * 500) / 500;
             x.spd = isNum(x.spd) ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / PERCH_TAU_MS)) : sv;
-            const u = [step(x.lean), step(x.spd), 0, this.themeName === 'night' ? 0.8 : 1];
+            // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
+            const u = [step(Math.tanh(x.lean * 1.15)), step(x.spd), 0, this.themeName === 'night' ? 0.8 : 1];
             const key = u.join('|');
             if (!force && key === x.last) return;
             x.last = key;

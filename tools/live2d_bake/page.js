@@ -1,27 +1,26 @@
 'use strict';
-/* Perch bake page (served by serve.js). A small WebGL renderer on Live2D's Cubism Core: drawables in render order,
+/* Perch bake page (served by serve.js): the standing frames. A small WebGL renderer on Live2D's Cubism Core: drawables in render order,
  * clipping masks through the stencil buffer, normal / additive / multiplicative blending, multiply and screen colours.
  * No physics: the model is posed by parameters only, and the HUD's shader adds the motion.
  *
  * CONFIG (the --config file, kept next to the model):
  *   params      { id: value } set on every frame (e.g. a watermark off, a toggle on)
- *   frames      { idle | half | shut | happy | brake | talk: { params: { id: value }, expressions: ["X.exp3.json"] } }
- *               each frame's own parameters, on top of "params"; missing frames reuse idle
+ *   frames      { idle | half | shut | talk: { params: { id: value }, expressions: ["X.exp3.json"] } }: each frame's
+ *               own parameters, on top of "params": the blink (eyes open, half, shut) and a smile with the mouth open
+ *   lean        { steps: 11, params: { id: value at a full lean right }, left: { id: value }, right: { id: value },
+ *               face: 0.6 }: her, standing on a bus, leaning with the model's body and head rotation, baked at "steps"
+ *               angles from a full lean left (the car braking) to a full lean right (pulling away); each angle's params
+ *               are "params" times -1 .. 1. From "face" on, the left ones add "left" (the braking face) and the right
+ *               ones "right" (the happy face). Neighbouring angles are close enough to blend without a double image
  *   tails       ["part id", ...]: drawn in their own sprite (swung by the HUD), hidden in the body frames
  *   tailsRoot   0..1: where the tails hang from, as a fraction down the tails sprite (0.15)
- *   stand       { height: px, anchor: [fx, fy] }: the figure's height on the HUD; anchor = the point on the sign's corner,
- *               as fractions of the figure's box (0.5, 1 = between the feet)
- *   sit         { height, anchor, legs: [{ parts: ["part id"], hip: [x, y], knee: [x, y], thigh: [angle deg, length 0..1],
- *               limit: rad }, ...] (the near leg first), skirt: ["part id"] }: hip and knee in model units (see ?inspect,
- *               which prints the figure's box); each leg is cut at the knee: the thigh turns to "angle" (0 = straight
- *               down, 90 = pointing left) and shortens to "length" of itself (seen end-on), the shin hangs from the new
- *               knee in its own sprite, which the HUD swings
- *   pxPerUnit   HUD px per model unit, both poses (so she is the same size sitting and standing)
- *   waist       model y the upper body breathes and sways above
- *   stand.hide / sit.hide  ["part id"]: left out of that pose entirely (e.g. long ribbons that would hang like legs)
+ *   anchor      [x, y] the model point between her feet (model units, y up, as ?inspect's grid shows them): it goes on
+ *               the Perch widget's "feet" point; anchorPx [x, y] px added to it on the HUD (right, down)
+ *   hide        ["part id"]: left out entirely
+ *   pxPerUnit   HUD px per model unit (her size on the HUD)
+ *   waist       model y the upper body breathes and leans above
+ *   headY       model y across her face (1.3): where the bake measures how far each lean moves her head
  *   pad         px of transparent border round each sprite (2)
- * Anchors and hip / knee points are in model units (y up), as ?inspect's grid shows them; "anchor" is the model point that
- * goes on the sign's top-left corner, "anchorPx" px added to it on the HUD (right, down).
  */
 const C = window.Live2DCubismCore;
 const logEl = document.getElementById('log'), view = document.getElementById('view');
@@ -43,17 +42,13 @@ async function loadModel() {
 }
 
 /* ---------- renderer ---------- */
-const VS = `attribute vec2 a_pos; attribute vec2 a_uv; attribute float a_s;
-uniform vec4 u_xf; varying vec2 v_uv; varying float v_s;
-void main() { gl_Position = vec4(a_pos * u_xf.xy + u_xf.zw, 0.0, 1.0); v_uv = vec2(a_uv.x, 1.0 - a_uv.y); v_s = a_s; }`;
+const VS = `attribute vec2 a_pos; attribute vec2 a_uv;
+uniform vec4 u_xf; varying vec2 v_uv;
+void main() { gl_Position = vec4(a_pos * u_xf.xy + u_xf.zw, 0.0, 1.0); v_uv = vec2(a_uv.x, 1.0 - a_uv.y); }`;
 const FS = `precision mediump float;
-uniform sampler2D u_tex; uniform float u_op; uniform vec4 u_mul; uniform vec4 u_scr; uniform float u_clip; uniform float u_mask; uniform float u_leg;
-varying vec2 v_uv; varying float v_s;
+uniform sampler2D u_tex; uniform float u_op; uniform vec4 u_mul; uniform vec4 u_scr; uniform float u_mask;
+varying vec2 v_uv;
 void main() {
-    // v_s: how far down the leg (0 hip, 1 knee) plus 100 x the leg's number
-    float leg = floor((v_s + 50.0) / 100.0), sl = v_s - leg * 100.0;
-    if (u_clip > 0.5 && u_clip < 1.5 && sl >= 1.0) discard;               // 1: the thigh side of the knee only
-    if (u_clip > 1.5 && (sl < 1.0 || abs(leg - u_leg) > 0.5)) discard;     // 2: one leg's shin only
     vec4 t = texture2D(u_tex, v_uv);
     if (u_mask > 0.5) { if (t.a < 0.5) discard; gl_FragColor = vec4(0.0); return; }
     vec3 rgb = t.rgb * u_mul.rgb;
@@ -71,9 +66,9 @@ class Renderer {
         const p = this.prog = gl.createProgram();
         gl.attachShader(p, sh(gl.VERTEX_SHADER, VS)); gl.attachShader(p, sh(gl.FRAGMENT_SHADER, FS)); gl.linkProgram(p);
         gl.useProgram(p);
-        this.loc = { pos: gl.getAttribLocation(p, 'a_pos'), uv: gl.getAttribLocation(p, 'a_uv'), s: gl.getAttribLocation(p, 'a_s') };
-        this.u = {}; ['u_xf', 'u_tex', 'u_op', 'u_mul', 'u_scr', 'u_clip', 'u_mask', 'u_leg'].forEach((n) => { this.u[n] = gl.getUniformLocation(p, n); });
-        this.bufPos = gl.createBuffer(); this.bufUv = gl.createBuffer(); this.bufS = gl.createBuffer(); this.bufIdx = gl.createBuffer();
+        this.loc = { pos: gl.getAttribLocation(p, 'a_pos'), uv: gl.getAttribLocation(p, 'a_uv') };
+        this.u = {}; ['u_xf', 'u_tex', 'u_op', 'u_mul', 'u_scr', 'u_mask'].forEach((n) => { this.u[n] = gl.getUniformLocation(p, n); });
+        this.bufPos = gl.createBuffer(); this.bufUv = gl.createBuffer(); this.bufIdx = gl.createBuffer();
         gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
         this.tex = L.imgs.map((img) => {
             const t = gl.createTexture();
@@ -89,7 +84,7 @@ class Renderer {
     }
 
     /* Draw the model into a w x h canvas: box [x0, y0, x1, y1] in model units fills it (y up). opts.only(i) /
-     * opts.skip(i): which drawables; opts.geom(i): { pos, s, clip } replacing a drawable's vertices (sit legs). */
+     * opts.skip(i): which drawables. */
     draw(w, h, box, opts) {
         const gl = this.gl, d = this.L.model.drawables, o = opts || {};
         this.canvas.width = w; this.canvas.height = h;
@@ -106,8 +101,6 @@ class Renderer {
             if (!C.Utils.hasIsVisibleBit(d.dynamicFlags[i]) || d.opacities[i] <= 0.001) return;
             if (o.only && !o.only(i)) return;
             if (o.skip && o.skip(i)) return;
-            const g = o.geom ? o.geom(i) : null;
-            if (g && g.hide) return;
             const masks = d.masks[i], n = d.maskCounts[i];
             if (n > 0) {
                 gl.enable(gl.STENCIL_TEST);
@@ -115,7 +108,7 @@ class Renderer {
                 gl.colorMask(false, false, false, false);
                 gl.stencilFunc(gl.ALWAYS, 1, 0xff); gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
                 gl.uniform1f(this.u.u_mask, 1);
-                for (let k = 0; k < n; k++) this._mesh(masks[k], o.geom ? o.geom(masks[k]) : null, true);
+                for (let k = 0; k < n; k++) this._mesh(masks[k]);
                 gl.uniform1f(this.u.u_mask, 0);
                 gl.colorMask(true, true, true, true);
                 const inv = C.Utils.hasIsInvertedMaskBit(d.constantFlags[i]);
@@ -129,29 +122,21 @@ class Renderer {
             const mc = d.multiplyColors, sc = d.screenColors;
             gl.uniform4f(this.u.u_mul, mc ? mc[i * 4] : 1, mc ? mc[i * 4 + 1] : 1, mc ? mc[i * 4 + 2] : 1, 1);
             gl.uniform4f(this.u.u_scr, sc ? sc[i * 4] : 0, sc ? sc[i * 4 + 1] : 0, sc ? sc[i * 4 + 2] : 0, 0);
-            this._mesh(i, g, false);
+            this._mesh(i);
             if (n > 0) gl.disable(gl.STENCIL_TEST);
         });
         return this.canvas;
     }
 
-    _mesh(i, g, isMask) {
+    _mesh(i) {
         const gl = this.gl, d = this.L.model.drawables;
-        const pos = g && g.pos ? g.pos : d.vertexPositions[i];
-        const nv = d.vertexCounts[i];
-        const s = g && g.s ? g.s : new Float32Array(nv);
-        gl.uniform1f(this.u.u_clip, g && !isMask ? (g.clip || 0) : 0);
-        gl.uniform1f(this.u.u_leg, g && g.leg !== undefined ? g.leg : 0);
+        const pos = d.vertexPositions[i];
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.tex[d.textureIndices[i]]);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.bufPos); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.loc.pos); gl.vertexAttribPointer(this.loc.pos, 2, gl.FLOAT, false, 0, 0);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.bufUv); gl.bufferData(gl.ARRAY_BUFFER, d.vertexUvs[i], gl.DYNAMIC_DRAW);
         gl.enableVertexAttribArray(this.loc.uv); gl.vertexAttribPointer(this.loc.uv, 2, gl.FLOAT, false, 0, 0);
-        if (this.loc.s >= 0) {
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.bufS); gl.bufferData(gl.ARRAY_BUFFER, s, gl.DYNAMIC_DRAW);
-            gl.enableVertexAttribArray(this.loc.s); gl.vertexAttribPointer(this.loc.s, 1, gl.FLOAT, false, 0, 0);
-        }
         gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.bufIdx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, d.indices[i], gl.DYNAMIC_DRAW);
         gl.drawElements(gl.TRIANGLES, d.indexCounts ? d.indexCounts[i] : d.indices[i].length, gl.UNSIGNED_SHORT, 0);
     }
@@ -188,16 +173,13 @@ function inParts(L, ids) {
         return hit;
     };
 }
-function bounds(L, only, geom) {
+function bounds(L, only) {
     const d = L.model.drawables;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (let i = 0; i < d.count; i++) {
         if (!C.Utils.hasIsVisibleBit(d.dynamicFlags[i]) || d.opacities[i] <= 0.001 || (only && !only(i))) continue;
-        const g = geom ? geom(i) : null;
-        if (g && g.hide) continue;
-        const v = g && g.pos ? g.pos : d.vertexPositions[i];
+        const v = d.vertexPositions[i];
         for (let k = 0; k < v.length; k += 2) {
-            if (g && g.s && g.clip === 1) { const sv = g.s[k / 2]; if (sv - Math.floor((sv + 50) / 100) * 100 >= 1) continue; }
             x0 = Math.min(x0, v[k]); x1 = Math.max(x1, v[k]); y0 = Math.min(y0, v[k + 1]); y1 = Math.max(y1, v[k + 1]);
         }
     }
@@ -217,7 +199,7 @@ async function inspect(L, cfg) {
     const full = R.draw(W, H, box);
     const big = document.createElement('canvas'); big.className = 'big'; big.width = W; big.height = H;
     const g2 = big.getContext('2d'); g2.drawImage(full, 0, 0);
-    // a grid every 0.1 model units, labelled, to read hip and knee positions off
+    // a grid every 0.1 model units, labelled, to read positions off (the anchor between her feet, the waist, the face)
     g2.strokeStyle = 'rgba(255,80,80,.5)'; g2.fillStyle = '#f66'; g2.font = '11px monospace';
     for (let v = Math.ceil(box[1] * 10) / 10; v <= box[3]; v += 0.1) { const y = H - (v - box[1]) / (box[3] - box[1]) * H; g2.beginPath(); g2.moveTo(0, y); g2.lineTo(W, y); g2.stroke(); g2.fillText(v.toFixed(1), 2, y - 2); }
     for (let v = Math.ceil(box[0] * 10) / 10; v <= box[2]; v += 0.1) { const x = (v - box[0]) / (box[2] - box[0]) * W; g2.beginPath(); g2.moveTo(x, 0); g2.lineTo(x, H); g2.stroke(); g2.fillText(v.toFixed(1), x + 2, 12); }
@@ -259,141 +241,101 @@ function alphaBox(cv) {
     return x1 < 0 ? null : [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
 }
 
-/* The sit pose: each leg's vertices bent at the knee. Every vertex of the legs' parts (and of any drawable lying
- * wholly below "below", such as a shoe's decoration) goes with the leg whose hip is nearest in x; s per vertex is 0 at
- * the hip and 1 at the knee (the cut), plus 100 x the leg's number. */
-function legBender(L, P) {
-    const d = L.model.drawables, legs = P.legs;
-    const inLegs = inParts(L, [].concat.apply([], legs.map((g) => g.parts)));
-    const cache = new Map();
-    return (i) => {
-        if (cache.has(i)) return cache.get(i);
-        const v = d.vertexPositions[i], n = v.length / 2;
-        let ymax = -Infinity; for (let k = 1; k < v.length; k += 2) ymax = Math.max(ymax, v[k]);
-        if (!inLegs(i) && !(isFinite(P.below) && ymax < P.below)) { cache.set(i, null); return null; }
-        const pos = new Float32Array(v.length), s = new Float32Array(n), knees = [];
-        let first = -1;
-        for (let k = 0; k < n; k++) {
-            const x = v[2 * k], y = v[2 * k + 1];
-            let j = 0, bd = Infinity;
-            legs.forEach((g, q) => { const dd = Math.abs(x - g.hip[0] - (g.knee[0] - g.hip[0]) * 0.5); if (dd < bd) { bd = dd; j = q; } });
-            if (first < 0) first = j;
-            const g = legs[j];
-            const [hx, hy] = g.hip, [kx, ky] = g.knee, Lt = hy - ky;
-            const th = g.thigh[0] * Math.PI / 180, len = g.thigh[1];
-            const ax = -Math.sin(th), ay = -Math.cos(th), px = Math.cos(th), py = -Math.sin(th);
-            const nkx = hx + ax * Lt * len, nky = hy + ay * Lt * len;           // the knee, moved
-            knees[j] = [nkx, nky];
-            const sv = (hy - y) / Lt;
-            const cx = hx + (kx - hx) * Math.min(1, Math.max(0, sv));     // the leg's centre line at this height
-            const u = x - cx;
-            const tx = hx + ax * Lt * len * sv + px * u, ty = hy + ay * Lt * len * sv + py * u;
-            const sx = nkx + (x - kx), sy = nky - (sv - 1) * Lt;            // the shin hangs straight down from the new knee
-            const bb = Math.min(1, Math.max(0, (sv - 0.9) / 0.2)), e = bb * bb * (3 - 2 * bb);
-            pos[2 * k] = tx + (sx - tx) * e; pos[2 * k + 1] = ty + (sy - ty) * e;
-            s[k] = sv + 100 * j;
-        }
-        const r = { pos, s, knees };
-        cache.set(i, r);
-        return r;
-    };
-}
-/* The moved knees, per leg, in model units */
-function kneesOf(P) {
-    return P.legs.map((g) => {
-        const Lt = g.hip[1] - g.knee[1], th = g.thigh[0] * Math.PI / 180;
-        return [g.hip[0] - Math.sin(th) * Lt * g.thigh[1], g.hip[1] - Math.cos(th) * Lt * g.thigh[1]];
-    });
-}
-
 async function bake(L, cfg) {
-    for (const pose of ['stand', 'sit']) {
-        const P = cfg[pose];
-        if (!P) { log(pose + ': not in the config, skipped'); continue; }
-        log(pose + ':');
-        const ppu = cfg.pxPerUnit || 60, pad = cfg.pad || 2;
-        const hidden = P.hide && P.hide.length ? inParts(L, P.hide) : () => false;
-        const tailsIn = cfg.tails && cfg.tails.length ? inParts(L, cfg.tails) : null;
-        const tails = tailsIn ? (i) => tailsIn(i) && !hidden(i) : null;
-        const bend = pose === 'sit' && P.legs ? legBender(L, P) : null;
-        const R = new Renderer(L);
-        // every frame's geometry: the bent legs, thighs in the body (clip 1), shins in their own sprites (clip 2)
-        const geomBody = bend ? (i) => { const b = bend(i); return b ? { pos: b.pos, s: b.s, clip: 1 } : null; } : null;
-        const geomShin = (j) => (i) => { const b = bend(i); return b ? { pos: b.pos, s: b.s, clip: 2, leg: j } : { hide: true }; };
-        // one box for every frame and sprite of the pose: the whole figure at idle, legs bent, tails swung room
-        setParams(L, Object.assign({}, cfg.params, (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {}));
+    const ppu = cfg.pxPerUnit || 60, pad = cfg.pad || 2;
+    const hidden = cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
+    const tailsIn = cfg.tails && cfg.tails.length ? inParts(L, cfg.tails) : null;
+    const tails = tailsIn ? (i) => tailsIn(i) && !hidden(i) : null;
+    const R = new Renderer(L);
+    const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
+    // one box for every frame and sprite: the whole figure at idle, with a margin for the swaying tails
+    setParams(L, Object.assign({}, cfg.params, idle));
+    L.model.update();
+    let box = bounds(L, (i) => !hidden(i));
+    const m = 0.08; box = [box[0] - m, box[1] - 0.02, box[2] + m, box[3] + 0.02];
+    const fw = Math.ceil((box[2] - box[0]) * ppu), fh = Math.ceil((box[3] - box[1]) * ppu);
+    const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
+    log('frame ' + fw + 'x' + fh + ' px');
+    const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
+    const body = { skip: (i) => hidden(i) || (tails ? tails(i) : false) };
+    const names = ['idle', 'half', 'shut', 'talk'], frames = {};
+    for (const n of names) {
+        const f = (cfg.frames && cfg.frames[n]) || {};
+        const ex = await expressionParams(f.expressions);
+        setParams(L, Object.assign({}, cfg.params, ex, f.params || {}));
         L.model.update();
-        const allGeom = bend ? (i) => { const b = bend(i); return b ? { pos: b.pos, s: b.s } : null; } : null;
-        let box = bounds(L, (i) => !hidden(i), allGeom);
-        const m = 0.08; box = [box[0] - m, box[1] - 0.02, box[2] + m, box[3] + 0.02];
-        const fw = Math.ceil((box[2] - box[0]) * ppu), fh = Math.ceil((box[3] - box[1]) * ppu);
-        const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
-        log('  frame ' + fw + 'x' + fh + ' px');
-        const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
-        // body frames
-        const names = ['idle', 'half', 'shut', 'happy', 'brake', 'talk'], frames = {};
-        for (const n of names) {
-            const f = (cfg.frames && cfg.frames[n]) || {};
-            const ex = await expressionParams(f.expressions);
-            setParams(L, Object.assign({}, cfg.params, ex, f.params || {}));
-            L.model.update();
-            frames[n] = render({ skip: (i) => hidden(i) || (tails ? tails(i) : false), geom: geomBody || undefined });
-        }
-        setParams(L, Object.assign({}, cfg.params, (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {}));
-        L.model.update();
-        const sprites = [];
-        let tl = null;
-        if (tails) {
-            const cv = render({ only: tails }), bb = alphaBox(cv);
-            if (bb) tl = { cv, bb };
-        }
-        const shins = [];
-        if (bend) P.legs.forEach((g, j) => {
-            const cv = render({ geom: geomShin(j), skip: hidden }), bb = alphaBox(cv);
-            const kn = kneesOf(P)[j], knee = toFrame(kn[0], kn[1]);
-            if (bb) shins.push({ cv, bb, knee, limit: g.limit });
-        });
-        // pack: frames in rows, then the sprites, into a power-of-two-ish atlas no wider than 1024
-        const items = names.map((n) => ({ n, cv: frames[n], bb: [0, 0, fw, fh] }));
-        if (tl) items.push({ n: 'tails', cv: tl.cv, bb: tl.bb });
-        shins.forEach((sh, j) => items.push({ n: 'shin' + j, cv: sh.cv, bb: sh.bb }));
-        const W = 1024;
-        let x = 0, y = 0, rowH = 0;
-        items.forEach((it) => {
-            const w = it.bb[2] + 2 * pad, h = it.bb[3] + 2 * pad;
-            if (x + w > W) { x = 0; y += rowH; rowH = 0; }
-            it.at = [x + pad, y + pad]; x += w; rowH = Math.max(rowH, h);
-        });
-        let AW = 64; while (AW < Math.max.apply(null, items.map((it) => it.at[0] + it.bb[2] + pad))) AW *= 2;
-        const AH = y + rowH;
-        const atlas = document.createElement('canvas'); atlas.width = AW; atlas.height = AH;
-        const ag = atlas.getContext('2d');
-        items.forEach((it) => ag.drawImage(it.cv, it.bb[0], it.bb[1], it.bb[2], it.bb[3], it.at[0], it.at[1], it.bb[2], it.bb[3]));
-        const byN = {}; items.forEach((it) => { byN[it.n] = it; });
-        const anchor = toFrame(P.anchor[0], P.anchor[1]);
-        const ap = P.anchorPx || [0, 0];
-        const info = {
-            version: 1, pose, atlas: [AW, AH], frame: [fw, fh],
-            frames: Object.fromEntries(names.map((n) => [n, byN[n].at])),
-            anchor: [Math.round(anchor[0] - ap[0]), Math.round(anchor[1] - ap[1])],
-            hipY: Math.round(toFrame(0, cfg.waist || 0.5)[1]), headY: Math.round(toFrame(0, box[3])[1]),
-        };
-        if (tl) {
-            const t = byN.tails;
-            info.tails = { rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]], at: [t.bb[0], t.bb[1]], rootY: Math.round(t.bb[3] * (cfg.tailsRoot || 0.15)), length: Math.round(t.bb[3] * (1 - (cfg.tailsRoot || 0.15))) };
-        }
-        if (shins.length) info.shins = shins.map((sh, j) => {
-            const t = byN['shin' + j];
-            return { rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]], at: [t.bb[0], t.bb[1]], pivot: [Math.round(sh.knee[0] - t.bb[0]), Math.round(sh.knee[1] - t.bb[1])], limit: isFinite(sh.limit) ? sh.limit : (j ? 0.15 : 0.03) };
-        });
-        // write: raw straight-alpha RGBA (what the HUD uploads), the description, a preview
-        const px = ag.getImageData(0, 0, AW, AH).data;
-        await fetch('/out/' + pose + '/atlas.rgba', { method: 'POST', body: new Blob([px]) });
-        await fetch('/out/' + pose + '/atlas.json', { method: 'POST', body: JSON.stringify(info, null, 1) });
-        await fetch('/out/' + pose + '/preview.png', { method: 'POST', body: await new Promise((r) => atlas.toBlob(r, 'image/png')) });
-        log('  atlas ' + AW + 'x' + AH + ' (' + (AW * AH * 4 / 1048576).toFixed(2) + ' MiB, ' + (AW * AH * 8 / 1048576).toFixed(2) + ' MiB of the HUD pixel memory), ' + items.length + ' sprites');
-        const show = document.createElement('img'); show.src = atlas.toDataURL(); view.appendChild(show);
+        frames[n] = render(body);
     }
+    // the lean angles, left to right; the middle one is upright (idle itself, not baked again)
+    const LN = (cfg.lean && cfg.lean.steps) || 11, lp = (cfg.lean && cfg.lean.params) || {}, faceAt = (cfg.lean && cfg.lean.face) || 0.6;
+    const leanNames = [];
+    for (let k = 0; k < LN; k++) {
+        const a = -1 + 2 * k / (LN - 1);
+        if (Math.abs(a) < 1e-6) { leanNames.push('idle'); continue; }
+        const q = {};
+        Object.keys(lp).forEach((id) => { q[id] = lp[id] * a; });
+        if (a <= -faceAt + 1e-6) Object.assign(q, (cfg.lean && cfg.lean.left) || {});
+        if (a >= faceAt - 1e-6) Object.assign(q, (cfg.lean && cfg.lean.right) || {});
+        setParams(L, Object.assign({}, cfg.params, idle, q));
+        L.model.update();
+        const n = 'lean' + k;
+        frames[n] = render(body);
+        names.push(n); leanNames.push(n);
+    }
+    setParams(L, Object.assign({}, cfg.params, idle));
+    L.model.update();
+    let tl = null;
+    if (tails) {
+        const cv = render({ only: tails }), bb = alphaBox(cv);
+        if (bb) tl = { cv, bb };
+    }
+    // pack the frames in rows no wider than 1024, then the tails
+    const items = names.map((n) => ({ n, cv: frames[n], bb: [0, 0, fw, fh] }));
+    if (tl) items.push({ n: 'tails', cv: tl.cv, bb: tl.bb });
+    let x = 0, y = 0, rowH = 0;
+    items.forEach((it) => {
+        const w = it.bb[2] + 2 * pad, h = it.bb[3] + 2 * pad;
+        if (x + w > 1024) { x = 0; y += rowH; rowH = 0; }
+        it.at = [x + pad, y + pad]; x += w; rowH = Math.max(rowH, h);
+    });
+    let AW = 64; while (AW < Math.max.apply(null, items.map((it) => it.at[0] + it.bb[2] + pad))) AW *= 2;
+    const AH = y + rowH;
+    const atlas = document.createElement('canvas'); atlas.width = AW; atlas.height = AH;
+    const ag = atlas.getContext('2d');
+    items.forEach((it) => ag.drawImage(it.cv, it.bb[0], it.bb[1], it.bb[2], it.bb[3], it.at[0], it.at[1], it.bb[2], it.bb[3]));
+    const byN = {}; items.forEach((it) => { byN[it.n] = it; });
+    // where her head is in each lean frame (the alpha centroid of a band across the head), so the HUD can slide the
+    // two nearest lean angles onto each other while it blends them instead of fading one through the other
+    const headMid = Math.round(toFrame(0, cfg.headY || 1.3)[1]);
+    const bandY0 = Math.max(0, headMid - Math.round(fh * 0.04)), bandY1 = Math.min(fh, headMid + Math.round(fh * 0.04));
+    const headX = (cv) => {
+        const dd = cv.getContext('2d').getImageData(0, bandY0, fw, bandY1 - bandY0).data;
+        let sx = 0, sa = 0;
+        for (let k = 0; k < dd.length; k += 4) { const a = dd[k + 3]; sx += ((k / 4) % fw) * a; sa += a; }
+        return sa ? sx / sa : fw / 2;
+    };
+    const x0 = headX(frames.idle);
+    const shift = leanNames.map((n) => Math.round((headX(frames[n]) - x0) * 10) / 10);
+    log('head shift per lean angle (px): ' + shift.join(', '));
+    const an = cfg.anchor || [0, box[1]], ap = cfg.anchorPx || [0, 0], anchor = toFrame(an[0], an[1]);
+    const info = {
+        version: 1, atlas: [AW, AH], frame: [fw, fh],
+        frames: Object.fromEntries(names.map((n) => [n, byN[n].at])),
+        lean: leanNames.map((n) => byN[n].at),
+        anchor: [Math.round(anchor[0] - ap[0]), Math.round(anchor[1] - ap[1])],
+        hipY: Math.round(toFrame(0, cfg.waist || 0.5)[1]), headY: Math.round((bandY0 + bandY1) / 2), leanShift: shift,
+    };
+    if (tl) {
+        const t = byN.tails, root = cfg.tailsRoot || 0.15;
+        info.tails = { rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]], at: [t.bb[0], t.bb[1]], rootY: Math.round(t.bb[3] * root), length: Math.round(t.bb[3] * (1 - root)) };
+    }
+    // write: raw straight-alpha RGBA (what the HUD uploads), the description, a preview
+    const px = ag.getImageData(0, 0, AW, AH).data;
+    await fetch('/out/atlas.rgba', { method: 'POST', body: new Blob([px]) });
+    await fetch('/out/atlas.json', { method: 'POST', body: JSON.stringify(info, null, 1) });
+    await fetch('/out/preview.png', { method: 'POST', body: await new Promise((r) => atlas.toBlob(r, 'image/png')) });
+    log('atlas ' + AW + 'x' + AH + ' (' + (AW * AH * 4 / 1048576).toFixed(2) + ' MiB, ' + (AW * AH * 8 / 1048576).toFixed(2) + ' MiB of the HUD pixel memory), ' + items.length + ' sprites');
+    const show = document.createElement('img'); show.src = atlas.toDataURL(); view.appendChild(show);
 }
 
 (async () => {

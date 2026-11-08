@@ -10,7 +10,7 @@ Redraws the whole instrument cluster as a 1987 Buick Regal dash, and switches to
 
 ## Custom HUD
 
-Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant, or your own Live2D character sitting on BMW's speed-limit sign. Three layouts, each in Classic, M and Night colours. It makes room for BMW's own HUD content: the layout moves aside while route guidance or the ACC display is up, and shows the gap to the car ahead in cruise. [Read more](apps/custom_hud/README.md)
+Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant, or your own Live2D character standing in the corner of the HUD. Three layouts, each in Classic, M and Night colours. It makes room for BMW's own HUD content: the layout moves aside while route guidance or the ACC display is up, and shows the gap to the car ahead in cruise. [Read more](apps/custom_hud/README.md)
 
 <p align="center"><img src="docs/images/hud-daily.png" width="520" alt="Daily layout on the HUD"></p>
 

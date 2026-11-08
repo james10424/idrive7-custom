@@ -6,9 +6,9 @@
  *   node tools/live2d_bake/serve.js --model <...>/Model.model3.json --core <...>/live2dcubismcore.min.js \
  *       --config <bake config .json> --out <folder> [--port 8095]
  *
- * then open http://localhost:8095/ in a browser: the page renders the model with Live2D's Cubism Core (which you get
- * from Live2D's Cubism SDK for Web under their license; it is not in this repo) and writes <out>/sit/ and <out>/stand/
- * (atlas.json, atlas.rgba, preview.png). Push them with scripts/deploy.sh <car> --perch <out>.
+ * then open http://localhost:8095/ in a browser: the page renders the model, standing, with Live2D's Cubism Core (which
+ * you get from Live2D's Cubism SDK for Web under their license; it is not in this repo) and writes <out>/atlas.json,
+ * atlas.rgba and preview.png. Push them with scripts/deploy.sh <car> --perch <out>.
  * http://localhost:8095/?inspect shows the model with its parts, parameters and drawables, to write the config.
  *
  * Nothing of the model ever goes in this repo: keep the config and the output next to the model.
@@ -41,9 +41,9 @@ function send(res, file) {
 http.createServer((req, res) => {
     const u = decodeURIComponent(req.url.split('?')[0]);
     if (req.method === 'POST' && u.indexOf('/out/') === 0) {
-        // /out/<pose>/<file>: written under --out, nowhere else
+        // /out/<file> (or /out/inspect/<file>): written under --out, nowhere else
         const rel = path.normalize(u.slice(5));
-        if (rel.startsWith('..') || path.isAbsolute(rel) || !/^(sit|stand|inspect)\/[\w.-]+$/.test(rel)) { res.writeHead(400); res.end('bad path'); return; }
+        if (rel.startsWith('..') || path.isAbsolute(rel) || !/^(inspect\/)?[\w.-]+$/.test(rel)) { res.writeHead(400); res.end('bad path'); return; }
         const chunks = [];
         req.on('data', (c) => chunks.push(c));
         req.on('end', () => {

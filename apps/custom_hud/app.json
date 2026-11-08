@@ -119,22 +119,6 @@
       ]
     },
     {
-      "key": "perchPose",
-      "label": "Perch: sitting or standing on the sign",
-      "type": "choice",
-      "default": "sit",
-      "options": [
-        [
-          "sit",
-          "Sitting, legs hanging"
-        ],
-        [
-          "stand",
-          "Standing"
-        ]
-      ]
-    },
-    {
       "key": "byMode",
       "label": "Change with SPORT / COMFORT / ECO PRO",
       "type": "bool",

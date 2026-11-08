@@ -1,25 +1,21 @@
 {
  "schemaVersion": 2,
  "name": "Perch",
- "_about": "A character sits or stands (the \"perchPose\" setting) on the top-left corner of BMW's speed-limit sign, clear of the speed. She comes from frames you bake yourself from a Live2D model with tools/live2d_bake and push to the car with scripts/deploy.sh --perch (they never go in this repo: the art belongs to its owner); without them nothing is drawn and the status row says so. One effect layer (shaders.js perch) samples the frame atlas, animated on the renderer's clock: blinks, breathing, a sway, swinging twin tails and, sitting, shins swinging from the knees with the near heel easing onto the sign. She reacts to the car: braking tips her forward with the braking face, pulling away hard leans her back with the happy face, and speed blows her tails out. The bake's \"anchor\" goes on the sign's top-left, here where the bench draws it (x 152..202, y 320..374): check on the car and move \"sign\" if she floats. She stays in every HUD mode: BMW's ACC block (x ~240..345) and guidance (the right of the window) are clear of her.",
+ "_about": "A character stands at the bottom right of the visible window (her feet at x 510, y 377), clear of BMW's speed and speed-limit sign. She comes from frames you bake yourself from a Live2D model with tools/live2d_bake and push to the car with scripts/deploy.sh --perch (they never go in this repo: the art belongs to its owner); without them nothing is drawn and the status row says so. One effect layer (shaders.js perch) samples the frame atlas, animated on the renderer's clock: blinks, breathing and swinging twin tails. She stands as on a bus: pulling away leans her right (the happy face when hard), braking leans her left (the braking face), and she sways back past upright when the car settles; speed blows her tails out. Modes: cruise keeps her where she is (BMW's ACC block is at x ~240..345); during route guidance BMW's turn map fills the right of the window and its street-name line crosses the left, so nav and cruiseNav draw nothing and BMW's HUD shows until the route ends.",
  "modes": [
-  "cruise",
-  "nav",
-  "cruiseNav"
+  "cruise"
  ],
  "widgets": [
   {
    "id": "girl",
    "type": "perch",
-   "x": 118,
+   "x": 430,
    "y": 100,
-   "w": 180,
+   "w": 175,
    "h": 278,
-   "sign": [
-    152,
-    320,
-    50,
-    54
+   "feet": [
+    510,
+    377
    ]
   }
  ]
