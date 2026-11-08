@@ -1236,7 +1236,12 @@ class HudApp {
     _drawnNote() {
         const ts = this.targetState;
         if (ts && (ts.state === 'waiting' || ts.state === 'parked') && ts.holder) {
-            return ts.holder === 'foreign' ? ', waiting: another app has this display' : ', waiting: BMW is using this display';
+            // holder "none" is no BMW content: on iDrive 7 it is the cluster panel holding the scene id the HUD shares
+            // ("scene id in use by another target"); a stock holder says which wait it is (a pop-up or guidance, or the slot)
+            if (ts.holder === 'foreign') return ', waiting: another app has this display';
+            if (ts.holder === 'stock') return ', waiting: BMW is using this display' + (ts.reason && ts.reason !== 'slot in use' ? ' (' + ts.reason + ')' : '');
+            if (/scene id in use/.test(ts.reason || '')) return ', waiting: the cluster layout has the scene the HUD shares';
+            return ', waiting' + (ts.reason ? ': ' + ts.reason : '');
         }
         const refused = this.refused ? ', refused ' + this.refused : '';
         const refs = this._layerRefs();
