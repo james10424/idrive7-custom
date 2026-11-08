@@ -155,8 +155,11 @@
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
  * The catalog gives no units: app.json config.acc { gap (raw -> m), rel (raw -> km/h), set } is raw * factor + offset
  * (factor 1, offset 0 until calibrated on the car). A text widget's "needs": "<token>" draws nothing while that token is "--".
- * Pedals and 12 V (app.json config.pedals, the interfaces also in its "signals"): {{throttle}} % (powertrain.AcceleratorPedal
- * actualValueAngleAcceleratorPedal * config.pedal.factor, 0.025 by default, while its qualifier says valid), {{volt12}} the
+ * Pedals and 12 V (app.json config.pedals, the interfaces also in its "signals"): {{throttle}} %: with config.pedal.source "obd"
+ * OBD PID 0x49 from the engine unit (config.dme.pedal, every 250 ms while shown; config.pedal.obdRange [at rest, flat out] maps
+ * it to 0..100), else powertrain.AcceleratorPedal actualValueAngleAcceleratorPedal * config.pedal.factor (0.025) while its
+ * qualifier says valid (on an X3 that value jumped about during a slow press, Nov 7 2026: its high byte looks like the
+ * message's alive counter, so the message seems misdecoded), {{volt12}} the
  * 12 V system in V (OBD PID 0x42 from the engine unit, config.dme.volt, asked every 2 s while a shown widget uses it);
  * {{batt12}} the 12 V battery's charge, % (vehicle.CDS statusBattery2 conditionBatteryChargingCondition * config.battery.factor, 1
  * by default, 255 = none; logged raw on change to check the scaling).
@@ -228,6 +231,7 @@ const REL_TAU_MS = 1500;          // the smoothing of a relative speed worked ou
 const BRAKE_LIGHT = { INIT: 0, OFF_BL: 1, ON_BL: 2, SIGNAL_UNGUELTIG: 3 };
 const PEDAL_OK = { SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1 };   // AngleAcceleratorPedal's qualifier: valid
 const VOLT_MS = 2000;             // the 12 V reading's interval
+const PEDAL_MS = 250;             // the OBD pedal reading's interval
 const BRAKE_G0 = 0.05, BRAKE_GMAX = 1.0;   // the brake bar's log scale: deceleration in g where it bends, and where it is full
 const BRAKE_TAU_MS = 150;         // the deceleration's smoothing for the brake bar
 const MODE_TEXT = { cruise: "BMW's driver assistance", nav: "BMW's guidance", cruiseNav: "BMW's guidance and driver assistance" };
@@ -358,6 +362,8 @@ class HudApp {
         this.volt12 = null; this.volt12At = 0;   // V, the 12 V system from the engine unit
         this.needsVolt = false;          // a shown widget uses volt12 (the engine unit is only asked then)
         this.pedalLogged = 0;
+        this.pedalObd = null; this.pedalObdAt = 0; this.pedalObdLogged = null;   // %, the pedal from the engine unit (OBD PID 0x49)
+        this.needsPedal = false;         // a shown widget uses the throttle (the engine unit is only asked then)
         this.decelF = null; this.decelAt = 0;   // g, the smoothed deceleration for the brake bar
         this.carOffsetMin = null;        // the car's time zone, minutes from UTC, from the time the cluster shows
         this.battRaw = null; this.battAt = 0;   // the 12 V battery's charge condition as sent
@@ -708,8 +714,8 @@ class HudApp {
     /** Boost from the engine unit when the sport display's value isn't there (config.dme, read-only UDS). */
     _startDme() {
         const dme = this.config.dme;
-        if (!dme || !((Array.isArray(dme.boost) && dme.boost.length) || (Array.isArray(dme.volt) && dme.volt.length))) return;
-        let rd = null, busy = false, baro = 101.3, baroAt = 0;
+        if (!dme || !['boost', 'volt', 'pedal'].some((k) => Array.isArray(dme[k]) && dme[k].length)) return;
+        let rd = null, busy = false, baro = 101.3, baroAt = 0, boostAskAt = 0;
         try {
             const { Diag } = require('./kit/diag');
             const { DidReader } = require('./kit/dids');
@@ -721,17 +727,31 @@ class HudApp {
         this.dmeTimer = setInterval(() => this._guard('engine unit boost', () => {
             const now = Date.now();
             if (busy || this.car.data().demo) return;
-            const wantVolt = this.needsVolt && Array.isArray(dme.volt) && now - this.volt12At > VOLT_MS;
-            const wantBoost = this.needsBoost && Array.isArray(dme.boost) && now - this.boostFesAt >= FRESH_MS;
-            if (!wantVolt && !wantBoost) return;
+            // one question per tick, the pedal first (it moves the most), each only while a shown widget uses it
+            const wantPedal = this.needsPedal && Array.isArray(dme.pedal) && now - this.pedalObdAt >= PEDAL_MS;
+            const wantVolt = !wantPedal && this.needsVolt && Array.isArray(dme.volt) && now - this.volt12At > VOLT_MS;
+            const wantBoost = !wantPedal && !wantVolt && this.needsBoost && Array.isArray(dme.boost) &&
+                now - this.boostFesAt >= FRESH_MS && now - boostAskAt >= 400;
+            if (!wantPedal && !wantVolt && !wantBoost) return;
             busy = true;
             (async () => {
+                if (wantPedal) {
+                    const v = await rd.value('pedal', dme.pedal);
+                    this.pedalObdAt = Date.now();
+                    this.pedalObd = isNum(v) ? v : null;
+                    if (isNum(v) && Math.round(v) !== this.pedalObdLogged && now - this.pedalLogged > 200) {   // for config.pedal.obdRange
+                        this.pedalObdLogged = Math.round(v); this.pedalLogged = now;
+                        this.log.info('accelerator pedal (OBD) ' + v.toFixed(1) + ' %');
+                    }
+                    return;
+                }
                 if (wantVolt) {
                     const v = await rd.value('volt', dme.volt);
                     this.volt12At = Date.now();
                     this.volt12 = isNum(v) ? v : null;
-                    if (!wantBoost) return;
+                    return;
                 }
+                boostAskAt = now;
                 if (now - baroAt > 60000 && Array.isArray(dme.baro)) {
                     baroAt = now;
                     const b = await rd.value('baro', dme.baro);
@@ -740,7 +760,7 @@ class HudApp {
                 const m = await rd.value('boost', dme.boost);
                 if (isNum(m)) { this.boostDme = (m - baro) / 100; this.boostDmeAt = Date.now(); }
             })().catch((e) => this.log.info('engine unit boost: ' + (e && e.message || e))).then(() => { busy = false; });
-        }), 400);
+        }), 100);
     }
 
     stop() {
@@ -1024,6 +1044,15 @@ class HudApp {
     /** The accelerator pedal 0..100 % (raw * config.pedal.factor), null when not valid or older than 3 s; the demo drive's
      *  own (sim.js throttle 0..1). */
     _throttle() {
+        const c0 = this.config.pedal || {};
+        if (c0.source === 'obd') {
+            // OBD PID 0x49 reads its own %, mapped from config.pedal.obdRange [at rest, flat out] to 0..100
+            const r = Array.isArray(c0.obdRange) && c0.obdRange.length === 2 ? c0.obdRange : [0, 100];
+            if (isNum(this.pedalObd) && Date.now() - this.pedalObdAt < 1000)
+                return Math.max(0, Math.min(100, (this.pedalObd - r[0]) / (r[1] - r[0]) * 100));
+            const d0 = this.car.data();
+            return d0.demo ? (isNum(d0.throttle) ? Math.max(0, Math.min(100, d0.throttle * 100)) : 0) : null;
+        }
         if (this.pedal && Date.now() - this.pedal.at < FRESH_MS) {
             const c = this.config.pedal || {};
             return Math.max(0, Math.min(100, this.pedal.raw * (isNum(c.factor) ? c.factor : 0.025) + (isNum(c.offset) ? c.offset : 0)));
@@ -1233,7 +1262,7 @@ class HudApp {
         this.activeMode = mode;
         this.modeOff = false;
         if (name === 'off') {
-            this.problem = null; this.layoutTheme = null; this.needsBoost = false; this.needsVolt = false;
+            this.problem = null; this.layoutTheme = null; this.needsBoost = false; this.needsVolt = false; this.needsPedal = false;
             this.log.info('off: nothing drawn, BMW\'s own ' + (this.target === 'panel' ? 'cluster' : 'HUD') + ' shows');
             return;
         }
@@ -1244,7 +1273,7 @@ class HudApp {
             return;
         }
         if (mode !== 'normal' && (layout.modes || []).indexOf(mode) < 0) {
-            this.problem = null; this.layoutTheme = null; this.needsBoost = false; this.needsVolt = false;
+            this.problem = null; this.layoutTheme = null; this.needsBoost = false; this.needsVolt = false; this.needsPedal = false;
             this.activeName = 'off'; this.modeOff = true;
             this.log.info('layout "' + layout.name + '" has no ' + mode + ' variant: nothing drawn, ' + MODE_TEXT[mode] + ' shows');
             return;
@@ -1257,6 +1286,7 @@ class HudApp {
         const shown = layout.widgets.map((w) => this._inMode(w, mode)).filter((w) => w && !(w.toggle && !this._toggleOn(w.toggle)) && !(w.themes && w.themes.indexOf(this.themeName) < 0));
         this.needsBoost = /boost/.test(JSON.stringify(shown));
         this.needsVolt = /volt12/.test(JSON.stringify(shown));
+        this.needsPedal = /throttle/.test(JSON.stringify(shown));
         // plan the layers first (a sheet's size is only known once every member is placed), then make them
         // in that order: within a class and z, cluster-render puts the newer layer on top. Small sheets
         // first; a bigger limit only when the layer budget needs it (see the header).

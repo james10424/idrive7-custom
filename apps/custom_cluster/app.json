@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -404,6 +404,38 @@
           "max": 18,
           "note": "OBD service 01 PID 0x42 (same as F442)"
         }
+      ],
+      "pedal": [
+        {
+          "did": "F449",
+          "bytes": 1,
+          "at": 0,
+          "factor": 0.392157,
+          "offset": 0,
+          "min": 0,
+          "max": 100,
+          "note": "OBD PID 0x49 accelerator pedal position D, A * 100 / 255 %"
+        },
+        {
+          "obd": "49",
+          "bytes": 1,
+          "at": 0,
+          "factor": 0.392157,
+          "offset": 0,
+          "min": 0,
+          "max": 100,
+          "note": "OBD service 01 PID 0x49 (same as F449)"
+        },
+        {
+          "did": "F44A",
+          "bytes": 1,
+          "at": 0,
+          "factor": 0.392157,
+          "offset": 0,
+          "min": 0,
+          "max": 100,
+          "note": "OBD PID 0x4A accelerator pedal position E"
+        }
       ]
     },
     "tankLitres": 65,
@@ -414,7 +446,12 @@
     "carAhead": true,
     "pedals": true,
     "pedal": {
-      "comment": "The accelerator pedal: actualValueAngleAcceleratorPedal * factor + offset = %. 0.025 is BMW's usual scaling; the app logs 'accelerator pedal raw ...' every 5 s, to check against a full press.",
+      "comment": "The throttle bar. source obd: OBD PID 0x49 (accelerator pedal position D) from the engine unit, every 250 ms while shown; obdRange [at rest, flat out] in its own % maps to 0..100 (many engines read about 15 at rest and 80 flat out: the app logs 'accelerator pedal (OBD) ... %' on change, set the two from a release and a full press). Without source obd: the AcceleratorPedal message's actualValueAngleAcceleratorPedal * factor + offset, which on an X3 jumped about (misdecoded).",
+      "source": "obd",
+      "obdRange": [
+        0,
+        100
+      ],
       "factor": 0.025,
       "offset": 0
     },
@@ -422,6 +459,21 @@
       "comment": "The 12 V battery's charge: conditionBatteryChargingCondition * factor + offset = %. BMW's charge condition is normally 0..100; if the logged '12 V battery charge condition raw' goes past 100, it is half-percent steps: set factor 0.5.",
       "factor": 1,
       "offset": 0
+    },
+    "acc": {
+      "comment": "The car ahead: raw * factor + offset. gap: GapVehicleDrivingAhead's raw value to metres, 0.1 m steps (the 1:1 reading was 10 times BMW's own on the car); rel: DataFrontVehicle's speed to km/h when the car sends it; set: cruiseCtrlSpeedHUD.",
+      "gap": {
+        "factor": 0.1,
+        "offset": 0
+      },
+      "rel": {
+        "factor": 1,
+        "offset": 0
+      },
+      "set": {
+        "factor": 1,
+        "offset": 0
+      }
     }
   }
 }

@@ -95,8 +95,9 @@ setInterval(() => {
         trafficJamAssist: { steeringWheel: on ? 'LDM_STW_GREEN' : 'LDM_STW_OFF' }, cruiseCtrlSpeedHUD: on ? 152 : 0,
     });
     // the car ahead (de.bmw.dass.GapVehicleAhead) as an X3 sends it: only GapVehicleDrivingAhead, once a second, 253 and
-    // "nothing measured" without a car; with ACC on here a measured car whose gap swings 30..50 m over ~25 s
-    const t = Date.now() / 4000, gap = on ? Math.round(40 + 10 * Math.sin(t)) : 253;
+    // "nothing measured" without a car; with ACC on here a measured car whose gap swings 15..25 m over ~25 s (raw in 0.1 m
+    // steps, as the car's reading was 10 times BMW's own at 1:1)
+    const t = Date.now() / 4000, gap = on ? Math.round(200 + 50 * Math.sin(t)) : 253;
     hu.feed('de.bmw.dass.GapVehicleAhead', 'GapVehicleDrivingAhead', { qualifierFunctionVehicleDrivingAhead: 'FUNKTION_VERFUEGBAR',
         statusMeasurementVehicleDrivingAhead: on ? 'ELEMENT__GEMESSEN' : 'KEIN_ELEMENT_GEMESSEN', gapVehicleDrivingAhead: gap,
         vehicleTypeVehicleDrivingAhead: on ? 'ZWEISPURIGES_FAHRZEUG' : 'SIGNAL_UNGUELTIG', lampStatusVehicleDrivingAhead: on ? 'LICHT_AUS' : 'SIGNAL_UNGUELTIG' });
