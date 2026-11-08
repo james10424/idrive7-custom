@@ -20,6 +20,8 @@ const HOOD = [
 const BLACK_BOX = [1406, 342, 1597, 419];
 /** BMW's seat-belt warning light is drawn over us here: [x0, y0, x1, y1]. */
 const BELT = [587, 663, 626, 700];
+/** BMW's gear letter in the bottom row, drawn over us (P / R / N / D; car photo with the Sport theme, Nov 7 2026). */
+const GEAR = [1404, 679, 1442, 713];
 /** The part of the 800x480 HUD target seen through the windshield (eye-position dependent). */
 const HUD_WINDOW = { x: 120, y: 100, w: 485, h: 278 };
 
@@ -67,6 +69,9 @@ function check(widgets, target) {
             if (overlaps(w, BLACK_BOX)) {
                 out.push(id + ': overlaps BMW\'s gear box x' + BLACK_BOX[0] + '-' + BLACK_BOX[2] + ' y' + BLACK_BOX[1] + '-' + BLACK_BOX[3]);
             }
+            if (overlaps(w, GEAR)) {
+                out.push(id + ': overlaps BMW\'s gear letter x' + GEAR[0] + '-' + GEAR[2] + ' y' + GEAR[1] + '-' + GEAR[3]);
+            }
             if (overlaps(w, BELT)) {
                 out.push(id + ': overlaps BMW\'s seat-belt light x' + BELT[0] + '-' + BELT[2] + ' y' + BELT[1] + '-' + BELT[3]);
             }
@@ -83,4 +88,4 @@ function check(widgets, target) {
     return out;
 }
 
-module.exports = { HOOD, BLACK_BOX, BELT, HUD_WINDOW, hoodY, check };
+module.exports = { HOOD, BLACK_BOX, BELT, GEAR, HUD_WINDOW, hoodY, check };

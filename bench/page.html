@@ -241,8 +241,18 @@
       // BMW's gear box: solid black, as the car paints it over us
       const [bx0, by0, bx1, by1] = geo.BLACK_BOX;
       ctx.fillStyle = '#000'; ctx.fillRect(bx0, by0, bx1 - bx0, by1 - by0);
+      ctx.fillStyle = '#f2f2f0'; ctx.font = 'bold 54px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(bmwGear(), (bx0 + bx1) / 2, by1 - 14); ctx.textAlign = 'left';
       ctx.strokeStyle = '#ff8c1a'; ctx.lineWidth = 1; ctx.strokeRect(bx0 + .5, by0 + .5, bx1 - bx0 - 1, by1 - by0 - 1);
       labelBox('BMW gear box', bx0 + 2, by0 + 2, '#ff8c1a');
+      // BMW's gear letter in the bottom row (the Sport view), drawn over us
+      if (geo.GEAR) {
+        const [gx0, gy0, gx1, gy1] = geo.GEAR;
+        ctx.fillStyle = '#f2f2f0'; ctx.font = 'bold 34px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText(bmwGear().charAt(0), (gx0 + gx1) / 2, gy1 - 4); ctx.textAlign = 'left';
+        ctx.strokeStyle = '#ff8c1a'; ctx.strokeRect(gx0 + .5, gy0 + .5, gx1 - gx0 - 1, gy1 - gy0 - 1);
+        labelBox('BMW gear', gx0 - 20, gy0 - 18, '#ff8c1a');
+      }
       // the seat-belt warning light
       const [sx0, sy0, sx1, sy1] = geo.BELT;
       ctx.fillStyle = 'rgba(232,55,44,.55)'; ctx.fillRect(sx0, sy0, sx1 - sx0, sy1 - sy0);
@@ -342,7 +352,7 @@
     ctx.beginPath(); ctx.moveTo(400, 222); ctx.lineTo(400, 480); ctx.stroke(); ctx.setLineDash([]);
   }
   // What BMW's own Sport view draws inside the map window (car photo, Nov 7 2026, measured into cluster px): its speed
-  // with the line under it on the left, its gear on the right, and in the corners its bracket ends and a gauge icon
+  // with the line under it on the left (the big gear right of it in that photo is the theme's own), and in the corners its bracket ends and a gauge icon
   // (top) and hatched dial ends (bottom), which a layout's "holeCut" keeps black.
   function drawStockMapWindow() {
     const fg = '#f2f2f0';
@@ -361,7 +371,11 @@
     ctx.fillStyle = fg; ctx.font = 'bold 62px -apple-system, Helvetica, sans-serif'; ctx.fillText('0', 486, 394);
     ctx.font = 'bold 24px -apple-system, Helvetica, sans-serif'; ctx.fillText('km/h', 552, 394);
     ctx.strokeStyle = fg; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(416, 414); ctx.lineTo(698, 414); ctx.stroke();
-    ctx.font = 'bold 64px -apple-system, Helvetica, sans-serif'; ctx.fillText('P', 1268, 372);
+  }
+  // BMW's gear as its cluster shows it, from the app's values: P parked (no gear or a standstill in gear 0), else D and the gear
+  function bmwGear() {
+    const g = lastValues.gear;
+    return typeof g === 'number' && g > 0 ? 'D' + g : 'P';
   }
   // a rough stand-in for BMW's own cluster: two angular gauges and the map window (416,120 1088x480, from the car photo of Nov 4)
   function drawStockCluster() {
@@ -382,7 +396,11 @@
     // BMW's gear slot: a solid black box the car paints over everything (measured Nov 5 2026)
     const box = geo ? geo.BLACK_BOX : [1406, 342, 1597, 419];
     ctx.fillStyle = '#000'; ctx.fillRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
-    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = '24px sans-serif'; ctx.fillText('D 7', box[0] + 60, box[1] + 50);
+    ctx.fillStyle = '#f2f2f0'; ctx.font = 'bold 54px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(bmwGear(), (box[0] + box[2]) / 2, box[3] - 14); ctx.textAlign = 'left';
+    const gb = geo && geo.GEAR ? geo.GEAR : [1404, 679, 1442, 713];   // its bottom-row gear letter (the Sport view)
+    ctx.font = 'bold 34px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(bmwGear().charAt(0), (gb[0] + gb[2]) / 2, gb[3] - 4); ctx.textAlign = 'left';
   }
 
   // ?clean=1: no outlines, for screenshots
@@ -525,7 +543,7 @@
       a.textContent = 'app: ' + m.state; a.className = 'pill ' + (m.state === 'running' ? 'ok' : 'bad');
     } else if (m.t === 'values') {
       lastValues = m.values;
-      if (view === 'hud') dirty = true;
+      dirty = true;   // BMW's speed (HUD) and gear (cluster) stand-ins follow the values
       if (m.mode !== mode) setMode(m.mode, true);
       if (mode === 'demo') SIGNALS.forEach(([k]) => {
         const v = m.values[k];

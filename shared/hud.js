@@ -463,9 +463,13 @@ class HudApp {
                     const raw = v && v.actualValueAngleAcceleratorPedal;
                     const ok = enumNum(v && v.qualifierActualValueAngleAcceleratorPedal, PEDAL_OK) === 1;
                     this.pedal = ok && isNum(raw) ? { raw, at: Date.now() } : null;
-                    if (isNum(raw) && Date.now() - this.pedalLogged > 5000) {      // for calibrating config.pedal
-                        this.pedalLogged = Date.now();
-                        this.log.info('accelerator pedal raw ' + raw + ' (' + (v && v.qualifierActualValueAngleAcceleratorPedal) + ')');
+                    // for working out config.pedal: every change, at most 5 a second, with the pedal message's other values (a
+                    // slow press on the car showed the bar jumping, Nov 7 2026: wrong field or scaling)
+                    const line = raw + ' virtual ' + (v && v.actualValueAngleAcceleratorPedalVirtual) + ' gradient ' + (v && v.gradientActualValueAngleAcceleratorPedal) +
+                        ' (' + (v && v.qualifierActualValueAngleAcceleratorPedal) + ')';
+                    if (line !== this.pedalLine && Date.now() - this.pedalLogged > 200) {
+                        this.pedalLogged = Date.now(); this.pedalLine = line;
+                        this.log.info('accelerator pedal raw ' + line);
                     }
                 },
             },
