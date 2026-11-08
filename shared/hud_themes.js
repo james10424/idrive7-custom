@@ -73,6 +73,18 @@ const THEMES = {
         ink: [12, 12, 14, 255], accent: [226, 36, 44, 255], well: [0, 0, 0, 255], redTrack: [90, 16, 20, 255],
         chrome: [182, 188, 198, 255], grey: [160, 166, 176, 255], grey2: [104, 110, 122, 255], faint: [96, 104, 118, 255],
     },
+    // Regal (layout regal.json, after a 1987 Buick Regal's dash): white numbers, the orange VFD, green lamps. Extra roles:
+    // vfd (the VFD's orange), kmh (the km/h row), lampText (on the lit BRAKE lamp), green (turn and cruise lamps).
+    regal: {
+        name: 'Regal',
+        fg: [240, 240, 240, 255], dim: [170, 172, 178, 255], track: [80, 80, 84, 255], arc: [255, 96, 24, 255],
+        glow: 0, stripe: false,
+        bar: { low: [255, 96, 24], mid: [255, 96, 24], high: [255, 42, 42], midAt: 'shift' },
+        rev: { from: [255, 96, 24], to: [255, 96, 24] },
+        bg: [0, 0, 0, 255], panel: [0, 0, 0, 255], line: [160, 164, 172, 255], head: [226, 228, 232, 255],
+        ink: [12, 12, 14, 255], accent: [255, 96, 24, 255], well: [0, 0, 0, 255],
+        vfd: [255, 92, 22, 255], kmh: [222, 112, 52, 255], lampText: [255, 222, 200, 255], green: [60, 235, 100, 255], amber: [255, 160, 40, 255],
+    },
 };
 // every theme: the shift-point red, used by "hot" (the gear and SHIFT at the shift point, the rev bar past it)
 Object.keys(THEMES).forEach((k) => { THEMES[k].hot = [255, 42, 42, 255]; });

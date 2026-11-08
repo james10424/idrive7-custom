@@ -80,6 +80,12 @@
  *             readouts are text widgets with {{tyreP:FL}} .. {{tyreT:RR}} and {{u:pressure}}), "gaugeL" / "gaugeR" { cx, cy, r, (a dial as the M8's: a thin glass bracket whose outer edge is the circle cx, cy, r, lit from the bottom up to the value, drawn over the card; the right one is the left one's mirror)
  *             signal, min, max }, "mark" [x, y, scale], "segbars" [{ x, y, w, h, max, signal } x up to 4] (the
  *             setup level bars, "segSlant" px; the segment at round(signal) is red). Positions in target px.
+ *   rdash     effect layer; the whole Regal theme (shaders.js rdash), every box [x, y, w, h] in target px: "podL" (left pod frame,
+ *             the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows),
+ *             "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the
+ *             numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMid" (55, the middle), "spdStep" (5, between marks; the first mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" / "podG" [pivot x, y,
+ *             tick r0, r1], "podSignals" [{ signal, range }] x 2, "led" with "ledN" and "rpmMax", "gearBox" + "gearPitch" (the lit
+ *             gear of P R N D S M), "lampB" (the BRAKE lamp; mirrored: SERVICE ENGINE SOON, unlit), "arrow" [x, y, size], "batIcon" [x, y]
  *   mtach     effect layer; the M rev bar: "side" left|right, "max" rpm, and in target px for the LEFT bar
  *             "y0" (0 rpm), "y8" (max), "ym" (the bend), "xm" (outer edge x at the bend; the right bar gives
  *             its own, mirrored), "kTop" / "kBot" (x per y px above / below the bend), "round", "wBot" / "wTop" / "wBend"
@@ -168,6 +174,8 @@
  * this one, once a second, 253 with nothing measured; DataFrontVehicle frontVehicleGapX when the car sends that), {{accRel}}
  * its speed against ours in km/h / mph ({{u:rel}}, minus = closing; "--" while we stand still): DataFrontVehicle frontVehicleSpeedX when sent,
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
+ * Regal: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{u:distUc}} (MI, KM),
+ * {{lampBrake}} {{lampTurnL}} {{lampTurnR}} {{lampCruise}} (the lamp's text while lit, else empty; config.lamps).
  * {{musicTitle}}: the song title BMW's player shows (app.json config.music; HmiMediaState playerMetadata, the line typed TITLE),
  * empty when nothing plays. A text widget with "font": "@sys" draws in the car's own font (any script, sysfont.js), "size" px.
  * The catalog gives no units: app.json config.acc { gap (raw -> m), rel (raw -> km/h), set } is raw * factor + offset
@@ -251,6 +259,11 @@ const AHEAD2_Q = { FUNKTION_VERFUEGBAR: 1, FUNKTION_VERFUEGBAR__MINUS__EINGESCHR
 const AHEAD2_MEASURED = { KEIN_ELEMENT_GEMESSEN: 0, NEUES_ELEMENT__GEMESSEN: 1, ELEMENT__GEMESSEN: 2, ELEMENT__GEMESSEN__MINUS__TEILWEISE_VERDECKT: 3, ELEMENT_PRAEDIZIERT: 4 };
 const REL_TAU_MS = 1500;          // the smoothing of a relative speed worked out from the gap
 const BRAKE_LIGHT = { INIT: 0, OFF_BL: 1, ON_BL: 2, SIGNAL_UNGUELTIG: 3 };
+// body.Light StatusFunctionsIndicators controlIndicateDirection (someip-interfaces.json)
+const INDICATE = { BLINKEN_AUS: 0, TIPP_BLINKEN_LINKS_EIN: 1, TIPP_BLINKEN_RECHTS_EIN: 2, DAUER_BLINKEN_LINKS_EIN: 3,
+    DAUER_BLINKEN_RECHTS_EIN: 4, BEIDSEITIGES_BLINKEN_EIN: 8, RESERVIERT_NICHT_VERFUEGBAR: 13, RESERVIERT_FEHLER: 14, SIGNAL_UNBEFUELLT: 15 };
+// the Regal theme's gear row
+const REGAL_GEARS = ['P', 'R', 'N', 'D', 'S', 'M'];
 const PEDAL_OK = { SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1 };   // AngleAcceleratorPedal's qualifier: valid
 const VOLT_MS = 2000;             // the 12 V reading's interval
 const PEDAL_MS = 250;             // the OBD pedal reading's interval
@@ -381,6 +394,9 @@ class HudApp {
         this.relFromGap = null;          // km/h, the gap's smoothed rate of change ({ v, gapM, at })
         this.pedal = null;               // { raw, at }: the accelerator pedal as sent, while valid
         this.brakeOn = null;             // the brake lights (true / false), null until the car says
+        this.turn = null;                // the indicators: 'L', 'R', 'LR' (hazards) or '' (body.Light StatusFunctionsIndicators)
+        this.accOn = false;              // BMW's HUD has the ACC car or distance bars up (the Regal CRUISE lamp)
+        this.mileage = null;             // the odometer as sent (MileageSupreme, taken as km)
         this.volt12 = null; this.volt12At = 0;   // V, the 12 V system from the engine unit
         this.needsVolt = false;          // a shown widget uses volt12 (the engine unit is only asked then)
         this.pedalLogged = 0;
@@ -540,6 +556,22 @@ class HudApp {
                     const b = enumNum(v && v.controlFunctionBrakeLight, BRAKE_LIGHT);
                     this.brakeOn = b === BRAKE_LIGHT.ON_BL ? true : b === BRAKE_LIGHT.OFF_BL ? false : null;
                 },
+                // the indicators (the Regal theme's turn lamps): controlIndicateDirection 1 / 3 left, 2 / 4 right, 8 hazards
+                StatusFunctionsIndicators: (v) => {
+                    const raw = v && v.controlIndicateDirection, d = enumNum(raw, INDICATE);
+                    const t = d === 1 || d === 3 ? 'L' : d === 2 || d === 4 ? 'R' : d === 8 ? 'LR' : d === 0 ? '' : null;
+                    if (t !== this.turn) this.log.info('indicators raw ' + raw + (v && v.activeFunctionIndicateDirection !== undefined ? ' / ' + v.activeFunctionIndicateDirection : ''));
+                    this.turn = t; this.turnAt = Date.now();
+                },
+            },
+            // the odometer (the Regal theme's VFD): MileageSupreme, unit unconfirmed (taken as km; logged raw on change)
+            'de.bmw.infrastructure.MileageSupreme': {
+                mileageSupreme: (v) => {
+                    const m = v && v.mileageSupreme;
+                    const km = isNum(m) && m > 0 && m < 0xFFFFFF ? m : null;
+                    if (km !== this.mileage) this.log.info('odometer raw ' + JSON.stringify(v));
+                    this.mileage = km;
+                },
             },
             'de.bmw.infotainment.drivingexcitement.FES': {
                 statusSwitchDriveDynamicSport2: (v) => {
@@ -567,10 +599,12 @@ class HudApp {
         };
         // the HUD modes' signal only with them; the car ahead with them or app.json config.carAhead (the cluster's Sport)
         // (the runtime spec has no "signals": the interface must also be in app.json "signals")
-        if (!this._modesOn()) delete extra['de.bmw.infotainment.displaydataserver.DisplayDataServer'];
+        if (!this._modesOn() && this.config.lamps !== true) delete extra['de.bmw.infotainment.displaydataserver.DisplayDataServer'];
+        if (this.config.lamps !== true) delete extra['de.bmw.infrastructure.MileageSupreme'];
         if (!this._modesOn() && this.config.carAhead !== true) delete extra['de.bmw.dass.GapVehicleAhead'];
         if (!this.config.consumption) delete extra['de.bmw.infotainment.resetlogic.ResetLogic'];
-        if (this.config.pedals !== true) { delete extra['de.bmw.powertrain.AcceleratorPedal']; delete extra['de.bmw.body.Light']; delete extra['de.bmw.infotainment.vehicle.CDS']; }
+        if (this.config.pedals !== true) { delete extra['de.bmw.powertrain.AcceleratorPedal']; delete extra['de.bmw.infotainment.vehicle.CDS']; }
+        if (this.config.pedals !== true && this.config.lamps !== true) delete extra['de.bmw.body.Light'];
         this.car = new Car(this.ctx, ['rpm', 'speed', 'temps', 'accel', 'gear', 'torque'], extra);
         this.car.setRedline(this.setting('redline'));
         this.score = new ShiftScore(this.car, () => ({
@@ -725,6 +759,7 @@ class HudApp {
             this.assistRaw = raw;
             this.log.info('driver assistance on the HUD: symbol ' + v.ldmSym + ' ' + v.ldmSymColor + ', ACC ' + acc.symbolACC + ' ' + acc.barsColorACC + ', wheel ' + sta.steeringWheel);
         }
+        this.accOn = !!car || !!bars;
         const on = (!!sym && !!col) || !!car || !!bars || (!!wheel && wheel !== STA_WHEEL.LDM_STW_GREY);
         if (on === this.assistActive) return;
         this.assistActive = on;
@@ -1240,6 +1275,22 @@ class HudApp {
         return d.demo ? (isNum(d.rpm) && d.rpm > 400 ? 14.1 : 12.6) : null;
     }
 
+    /** The Regal lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
+     *  that side (hazards: both); the demo drive blinks left now and then. Cruise: BMW's ACC car or bars up. */
+    _brakeLit() { return this._brake(); }
+
+    _turnLit(side) {
+        const now = Date.now();
+        let t = this.turn !== null && now - (this.turnAt || 0) < 5000 ? this.turn : null;
+        if (t === null && this.car.data().demo) t = Math.floor(now / 6000) % 4 === 1 ? 'L' : '';
+        return !!t && t.indexOf(side) >= 0 && Math.floor(now / 400) % 2 === 0;
+    }
+
+    _cruiseLit() { return this.accOn || (!!this.car.data().demo && Math.floor(Date.now() / 10000) % 3 === 2); }
+
+    /** The odometer in km, null when the car has not sent it; the demo drive's made up. */
+    _odometer() { return isNum(this.mileage) ? this.mileage : this.car.data().demo ? 37415 : null; }
+
     /** Where the red and orange marks start on a rev scale that ends at `max` rpm, as fractions 0..1: red from the
      *  redline, but always covering at least the last 500 rpm (the M40i's scale ends right at its 7000 redline),
      *  orange over the 700 rpm before the red. */
@@ -1280,6 +1331,17 @@ class HudApp {
             case 'u:pressure': return us ? 'psi' : 'bar';
             case 'throttle': { const v = this._throttle(); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'musicTitle': return this.musicTitle || '';
+            // the Regal theme's lamps: their text while lit, else nothing
+            case 'lampBrake': return this._brakeLit() ? 'BRAKE' : '';
+            case 'lampTurnL': return this._turnLit('L') ? 'LT. TURN' : '';
+            case 'lampTurnR': return this._turnLit('R') ? 'RT. TURN' : '';
+            case 'lampCruise': return this._cruiseLit() ? 'CRUISE' : '';
+            case 'odometer': {         // 6 digits, km or mi by the units setting
+                const v = this._odometer();
+                return isNum(v) ? ('000000' + Math.floor(us ? v * 0.621371 : v)).slice(-6) : '------';
+            }
+            case 'range4': { const v = this._raw('range'); return isNum(v) ? ('0000' + Math.round(us ? v * 0.621371 : v)).slice(-4) : '----'; }
+            case 'u:distUc': return us ? 'MI' : 'KM';
             case 'consumption': { const v = this._consumption(); return isNum(v) ? v.toFixed(1) : '--'; }
             case 'u:cons': return this._consUnit();
             case 'volt12': { const v = this._volt12(); return isNum(v) ? v.toFixed(1) : '--'; }
@@ -1291,6 +1353,7 @@ class HudApp {
             case 'accSet': { const v = this._acc('set'); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'speed': { const v = this._raw('speed'); return fix(isNum(v) ? (us ? v * 0.621371 : v) : v, 0); }
             case 'u:speed': return us ? 'MPH' : 'KM/H';
+            case 'mph': { const v = this._raw('speed'); return isNum(v) ? String(Math.round(Math.max(0, v) * 0.621371)) : '--'; }   // mph whatever the units (Regal)
             case 'oil': case 'coolant': { const v = this._raw(tok); return fix(isNum(v) ? (us ? v * 9 / 5 + 32 : v) : v, 0); }
             case 'boost': { const v = this._raw('boost'); return us ? fix(isNum(v) ? v * 14.5038 : v, 1) : fix(v, 2); }
             case 'u:boost': return us ? 'PSI' : 'BAR';
@@ -1630,6 +1693,23 @@ class HudApp {
             c.uniform(ref, 'u_vbarV', [-1, -1]);
             c.uniform(ref, 'u_stripFill', Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
             c.uniform(ref, 'u_topEnd', [w.topEnd]);
+        } else if (w.type === 'rdash') {
+            const o4 = (r) => (Array.isArray(r) && r.length === 4 ? [r[0] - w.x, r[1] - w.y, r[2], r[3]] : [0, 0, 0, 0]);
+            const sp = w.spd || [0, 0, 0, 0], sv = w.spdVirt || [300, 45];
+            c.uniform(ref, 'u_size', [w.w, w.h]);
+            ['podL', 'podWin', 'ctr', 'win1', 'win2', 'vfdL', 'vfdR', 'led', 'gearBox', 'lampB'].forEach((k) => {
+                c.uniform(ref, 'u_' + k, o4(w[k]));
+            });
+            c.uniform(ref, 'u_spd', [sp[0] - w.x, sp[1] - w.y, sp[2] - w.y, sp[3] - w.y]);
+            c.uniform(ref, 'u_spdVirt', [sv[0], sv[1] * Math.PI / 180]);
+            c.uniform(ref, 'u_spdK', [w.spdMid || 55, w.spdMax || 85, w.spdStep || 5]);
+            const fg = w.fuelG || [0, 0, 0, 0], pg = w.podG || [0, 0, 0, 0], ar = w.arrow || [0, 0, 0], bi = w.batIcon || [-99, -99];
+            c.uniform(ref, 'u_fuelG', [fg[0] - w.x, fg[1] - w.y, fg[2], fg[3]]);
+            c.uniform(ref, 'u_podG', [pg[0] - w.x, pg[1] - w.y, pg[2], pg[3]]);
+            c.uniform(ref, 'u_arrow', [ar[0] - w.x, ar[1] - w.y, ar[2]]);
+            c.uniform(ref, 'u_batIcon', [bi[0] - w.x, bi[1] - w.y]);
+            c.uniform(ref, 'u_gearV', [w.gearPitch || 0, -1]);
+            c.uniform(ref, 'u_lamps', [0, 0, 0, 0]);
         } else if (w.type === 'mdash') {
             const ty = w.tyres || [0, 0, 0], L = w.gaugeL || {}, R = w.gaugeR || {}, b = w.blade || {};
             const bars = Array.isArray(w.segbars) ? w.segbars.slice(0, 4) : [];
@@ -1914,6 +1994,36 @@ class HudApp {
             x.c.uniform(x.ref, 'u_rpm', [vals[1]]);
             x.c.uniform(x.ref, 'u_fuel', [vals[2]]);
             x.c.uniform(x.ref, 'u_oil', [vals[3]]);
+        } else if (w.type === 'rdash') {
+            const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 500) / 500;
+            const sp = this._raw('speed'), rpm = this._raw('rpm'), fuel = this._raw('fuel'), max = w.rpmMax || 8000;
+            // the pods' gauges: each "podSignals" entry's signal over its range, bottom to top
+            const pods = [0, 1].map((i) => {
+                const g = (w.podSignals || [])[i], v = g && g.signal ? this._raw(g.signal) : null, r = (g && g.range) || [0, 1];
+                return isNum(v) ? q((v - r[0]) / (r[1] - r[0])) : 0;
+            });
+            const n = w.ledN || 16;
+            const led = isNum(rpm) ? Math.floor(Math.max(0, rpm) / max * n + 0.5) / n : 0;
+            const shiftAt = Math.floor(this._shift().rpm / max * n) / n;
+            const stage = this._token('stage'), gi = REGAL_GEARS.indexOf(stage);
+            const lamps = [this._brakeLit() ? 1 : 0, this._turnLit('L') ? 1 : 0, this._turnLit('R') ? 1 : 0, 0];
+            // speed on the 0..spdMax mph scale with spdMid at its middle, each half linear
+            const mid = w.spdMid || 55, top = w.spdMax || 85, mph = isNum(sp) ? Math.max(0, sp * 0.621371) : 0;
+            // below the first mark ("spdStep", 5 mph) the needle drops to its rest under the row ("spdRest" deg past the 0, 12)
+            const st = w.spdStep || 5, half = (w.spdVirt || [300, 45])[1], rest = -(isNum(w.spdRest) ? w.spdRest : 12) / (2 * half);
+            const f5 = 0.5 * st / mid;
+            let f = mph <= mid ? 0.5 * mph / mid : 0.5 + 0.5 * (mph - mid) / (top - mid);
+            if (mph < st) f = rest + (f5 - rest) * mph / st;
+            const vals = [Math.round(Math.min(1, Math.max(-0.5, f)) * 500) / 500, q(isNum(fuel) ? fuel : 0)];
+            const key = vals.join('|') + '|' + pods.join('|') + '|' + led + '|' + shiftAt + '|' + gi + '|' + lamps.join('');
+            if (!force && key === x.last) return;
+            x.last = key;
+            x.c.uniform(x.ref, 'u_speedV', [vals[0]]);
+            x.c.uniform(x.ref, 'u_fuelV', [vals[1]]);
+            x.c.uniform(x.ref, 'u_podV', pods);
+            x.c.uniform(x.ref, 'u_ledV', [n, led, shiftAt]);
+            x.c.uniform(x.ref, 'u_gearV', [w.gearPitch || 0, gi]);
+            x.c.uniform(x.ref, 'u_lamps', lamps);
         } else if (w.type === 'mdash') {
             const vals = x.gauges.map(([u, G]) => {
                 const v = G.signal ? this._raw(G.signal) : null;

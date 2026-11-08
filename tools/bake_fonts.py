@@ -65,13 +65,110 @@ CLUSTER_FONTS = [
     ('s_unit', 'Barlow-Medium.ttf', 24, LOWER + UPPER + DIGITS + '°/-. '),
     ('s_label', 'BarlowSemiCondensed-SemiBold.ttf', 30, UPPER + DIGITS + ' .'),
     ('s_gl', 'Michroma-Regular.ttf', 21, DIGITS + '/', 1),
+    # Regal (1987 Buick Regal dash): tall condensed white numbers, small print, and the orange VFD's seven segments
+    ('r_num', 'BarlowCondensed-SemiBold.ttf', 50, DIGITS),
+    ('r_gl', 'BarlowCondensed-SemiBold.ttf', 34, DIGITS + 'EF'),
+    ('r_lbl', 'Barlow-Medium.ttf', 21, UPPER + DIGITS + ' ./'),
+    ('r_kmh', 'Barlow-Medium.ttf', 18, LOWER + DIGITS + '/•'),
+    ('r_tiny', 'Barlow-Medium.ttf', 16, UPPER + ' .'),
+    ('r_vfd', 'BarlowSemiCondensed-SemiBold.ttf', 25, UPPER + ' '),
+    ('r_seg', 'SEG', 44, DIGITS + '- '),
+    ('r_seg_m', 'SEG', 32, DIGITS + '-: '),
+    ('r_seg_s', 'SEG', 21, DIGITS + '-. '),
 ]
 FONTS = {'custom_hud': HUD_FONTS, 'custom_cluster': CLUSTER_FONTS}
 PAD = 2
 ATLAS_W = 1024
 
 
+# seven-segment digits (a VFD's): segment a..g as [x0, y0, x1, y1] lines in a 0..1 x 0..2 cell, before slant
+SEG_LINES = {'a': (0, 0, 1, 0), 'b': (1, 0, 1, 1), 'c': (1, 1, 1, 2), 'd': (0, 2, 1, 2), 'e': (0, 1, 0, 2), 'f': (0, 0, 0, 1), 'g': (0, 1, 1, 1)}
+SEG_ON = {'0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abgcd', '4': 'fgbc', '5': 'afgcd', '6': 'afgedc', '7': 'abc', '8': 'abcdefg',
+          '9': 'abcdfg', '-': 'g'}
+
+
+def seg_glyph(c, H):
+    """One glyph drawn at 4x and scaled down: hexagonal segments with small gaps, slanted like a VFD's."""
+    K = 4
+    t = 0.14 * H * K               # segment thickness
+    W = 0.5 * H * K                # digit width (segment centre lines)
+    slant = 0.07
+    m = t * 0.75                   # margin round the centre lines
+    gap = 0.035 * H * K
+    img = Image.new('L', (int(W + 2 * m + slant * H * K) + 2, int(H * K) + 2), 0)
+    d = ImageDraw.Draw(img)
+    unit = (H * K - t) / 2         # half the height between the top and bottom centre lines
+    def P(x, y):                   # cell coords (x 0..1 across, y 0..2 down) -> px, slanted
+        px, py = m + x * W, t / 2 + y * unit
+        return (px + slant * (H * K - py), py)
+    if c in SEG_ON:
+        for sname in SEG_ON[c]:
+            x0, y0, x1, y1 = SEG_LINES[sname]
+            a, b = P(x0, y0), P(x1, y1)
+            vx, vy = b[0] - a[0], b[1] - a[1]
+            L = (vx * vx + vy * vy) ** 0.5
+            ux, uy = vx / L, vy / L
+            nx, ny = -uy * t / 2, ux * t / 2
+            a = (a[0] + ux * gap, a[1] + uy * gap); b = (b[0] - ux * gap, b[1] - uy * gap)
+            tip = t / 2
+            d.polygon([a, (a[0] + ux * tip + nx, a[1] + uy * tip + ny), (b[0] - ux * tip + nx, b[1] - uy * tip + ny), b,
+                       (b[0] - ux * tip - nx, b[1] - uy * tip - ny), (a[0] + ux * tip - nx, a[1] + uy * tip - ny)], fill=255)
+    elif c == ':':
+        img = Image.new('L', (int(t * 2.2), int(H * K) + 2), 0)
+        d = ImageDraw.Draw(img)
+        for yy in (0.32, 0.72):
+            cx, cy = t * 1.1 + slant * H * K * (1 - yy) * 0.5, yy * H * K
+            d.rectangle([cx - t / 2, cy - t / 2, cx + t / 2, cy + t / 2], fill=255)
+    elif c == '.':
+        img = Image.new('L', (int(t * 1.6), int(H * K) + 2), 0)
+        d = ImageDraw.Draw(img)
+        d.rectangle([t * 0.3, H * K - t, t * 1.3, H * K], fill=255)
+    return img.resize((max(1, img.width // K), max(1, img.height // K)), Image.LANCZOS)
+
+
+def bake_seg(out, name, H, chars):
+    """Like bake(), for the seven-segment VFD digits (no font file): every digit the same cell, tabular."""
+    height = H + 2 * PAD
+    imgs = {c: seg_glyph(c, H) for c in chars if c != ' '}
+    tab = imgs['8'].width + round(0.16 * H)
+    cells = []
+    for c in chars:
+        if c == ' ':
+            cells.append((c, None, 0, tab))
+            continue
+        g = imgs[c]
+        img = Image.new('L', (g.width + 2 * PAD, height), 0)
+        img.paste(g, (PAD, PAD))
+        adv = tab if c in DIGITS or c == '-' else g.width + round(0.1 * H)
+        cells.append((c, img, -PAD, adv))
+    x = y = 0
+    placed = {}
+    for c, img, ox, adv in cells:
+        if img is None:
+            continue
+        if x + img.width > ATLAS_W:
+            x, y = 0, y + height
+        placed[c] = (x, y)
+        x += img.width
+    atlas = Image.new('L', (ATLAS_W, y + height), 0)
+    glyphs = {}
+    for c, img, ox, adv in cells:
+        if img is None:
+            glyphs[c] = {'x': 0, 'y': 0, 'w': 0, 'h': 0, 'ox': 0, 'advance': adv}
+            continue
+        gx, gy = placed[c]
+        atlas.paste(img, (gx, gy))
+        glyphs[c] = {'x': gx, 'y': gy, 'w': img.width, 'h': img.height, 'ox': ox, 'advance': adv}
+    meta = {'source': 'seven segments', 'size': H, 'cellHeight': height, 'baseline': PAD + H, 'glyphs': glyphs,
+            'width': ATLAS_W, 'height': atlas.height, 'alpha': base64.b64encode(atlas.tobytes()).decode('ascii')}
+    with open(os.path.join(out, name + '.json'), 'w') as f:
+        json.dump(meta, f, separators=(',', ':'), ensure_ascii=False)
+    print('%-6s %3dpx  seven segments  %d glyphs' % (name, H, len(glyphs)))
+
+
 def bake(out, name, file, size, chars, stroke=0, weight=None, subs=None):
+    if file == 'SEG':
+        return bake_seg(out, name, size, chars)
     """stroke: px of extra weight round every glyph (Michroma has one weight). weight: a named instance of a
     variable font (Orbitron: Regular .. Black), for the M theme's squared BMW-style gear, speed and numbers.
     subs: {char: glyph drawn for it} (Orbitron's zero is slashed; the M8's is plain, so its O stands in)."""

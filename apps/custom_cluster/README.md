@@ -41,6 +41,16 @@ The look of BMW's newer Live Cockpit Sport view.
 
 <p align="center"><img src="../../docs/images/cluster-sport.png" width="900" alt="Sport theme"></p>
 
+### Regal (1987)
+
+The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needles and an orange VFD.
+
+- **Left pod:** a 12 V voltmeter (8 to 16 V), with the BRAKE lamp and the left turn arrow under it.
+- **Right pod:** coolant temperature, with the right turn arrow and CRUISE (lit while ACC is on).
+- **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. The orange windows show the speed (mph or km/h by the units setting), the odometer and P R N D S M on the left, and the clock and range on the right.
+- **Middle, bottom:** the fuel needle and an LED rev bar that turns yellow from your shift point.
+- **Bottom:** the song title. There is no map window.
+
 More themes are on the way.
 
 ## Off and drive modes
