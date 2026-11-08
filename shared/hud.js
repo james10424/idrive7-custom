@@ -1101,7 +1101,7 @@ class HudApp {
     /* ---------------- status line (the center screen's first row) ---------------- */
 
     /** fn(text) whenever the status line changes. */
-    onStatus(fn) { this.statusListeners.push(fn); if (this.lastStatus) fn(this.lastStatus); }
+    onStatus(fn) { this.statusListeners.push(fn); if (this.lastStatus) fn(this.lastStatus, this.lastDetail || ''); }
 
     /** The "navLayout" switch is in force: the app has that setting (the cluster), it names a layout, and BMW is guiding. */
     _navSwitch() {
@@ -1206,22 +1206,29 @@ class HudApp {
         const name = this._layoutLabel(this.activeName);
         const d = this.car.data();
         const demo = d.demo ? ', demo data' : '';
-        const drawn = this._drawnNote();
         const conns = this._connCount();
         const layers = ', ' + this._layerCount(this._layerRefs().length) + (conns > 1 ? ' on ' + conns + ' connections' : '')
             + (this.pixelBytes ? ', ' + mib(this.pixelBytes) + ' of 16 MiB pixels' : '')
             + (this.activeMode !== 'normal' ? ', ' + this.activeMode + ' mode' : '');
-        if (this.layoutTheme) return this.label + ' on' + mode + ': ' + name + ' theme' + layers + demo + drawn;
+        if (this.layoutTheme) return this.label + ' on' + mode + ': ' + name + ' theme' + layers + demo;
         const theme = THEMES[this.themeName] ? THEMES[this.themeName].name : this.themeName;
         const auto = this.setting('hudTheme') === 'auto' ? ' (Auto)' : '';
-        return this.label + ' on' + mode + ': ' + name + ' layout, ' + theme + ' theme' + auto + layers + demo + drawn;
+        return this.label + ' on' + mode + ': ' + name + ' layout, ' + theme + ' theme' + auto + layers + demo;
+    }
+
+    /** The status page's second row: why layers aren't drawn ("Waiting: BMW is using this display", "3 of 5 drawn (...)",
+     *  "Refused ..."), "" when all is drawn or nothing shows. */
+    statusDetail() {
+        if (!this.client.ready || this.problem || this.activeName === 'off') return '';
+        const n = this._drawnNote().replace(/^, /, '');
+        return n ? n.charAt(0).toUpperCase() + n.slice(1) : '';
     }
 
     _status() {
-        const s = this.statusText();
-        if (s === this.lastStatus) return;
-        this.lastStatus = s;
-        this.statusListeners.forEach((fn) => { try { fn(s); } catch (e) { this.log.warn('status listener: ' + e); } });
+        const s = this.statusText(), d = this.statusDetail();
+        if (s === this.lastStatus && d === this.lastDetail) return;
+        this.lastStatus = s; this.lastDetail = d;
+        this.statusListeners.forEach((fn) => { try { fn(s, d); } catch (e) { this.log.warn('status listener: ' + e); } });
     }
 
 /* ---------------- theme, units, values ---------------- */

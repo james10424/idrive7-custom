@@ -52,10 +52,11 @@ Module._load = function (req) {
 };
 
 // the center screen's status row
-let status = '';
+let status = '', detail = '';
 const text = ui.text;
 ui.text = (n, t, row, cell) => {
-    if (n === 'STATUS' && !row) { status = String(t); send({ t: 'status', s: status }); }
+    if (n === 'STATUS' && !row) { status = String(t); send({ t: 'status', s: status, d: detail }); }
+    if (n === 'DETAIL' && !row) { detail = String(t).trim(); send({ t: 'status', s: status, d: detail }); }
     return text(n, t, row, cell);
 };
 

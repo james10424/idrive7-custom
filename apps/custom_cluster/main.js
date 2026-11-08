@@ -22,7 +22,8 @@ mgu.run({
             ctx.ui.text('STATUS', 'Cluster failed to start: ' + (e && e.message || e));
             return;
         }
-        hud.onStatus((s) => { ctx.ui.text('STATUS', s); });
+        // the status row, and under it why layers aren't drawn (waiting, refused), so the long reason isn't cut off
+        hud.onStatus((s, detail) => { ctx.ui.text('STATUS', s); ctx.ui.text('DETAIL', detail || ' '); });
         hud.start();
         process.on('exit', () => { try { hud.stop(); } catch (e) { /* exiting anyway */ } });
     },

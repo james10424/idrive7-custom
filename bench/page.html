@@ -47,7 +47,7 @@
   label.chk { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
   .srow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 6px 0; }
   .srow select { max-width: 170px; }
-  .status { font-size: 13px; padding: 8px 10px; margin: 4px 0 10px; border-radius: 6px; background: rgba(127,127,127,.12); }
+  .status { font-size: 13px; padding: 8px 10px; margin: 4px 0 10px; border-radius: 6px; background: rgba(127,127,127,.12); white-space: pre-line; }
 </style>
 </head>
 <body>
@@ -555,7 +555,7 @@
       if (m.values && m.values.units) { units = m.values.units; dirty = true; }
       renderSettings(m);
     } else if (m.t === 'status') {
-      document.getElementById('status').textContent = m.s;
+      document.getElementById('status').textContent = m.s + (m.d ? '\n' + m.d : '');
     } else if (m.t === 'app') {
       const a = document.getElementById('appState');
       a.textContent = 'app: ' + m.state; a.className = 'pill ' + (m.state === 'running' ? 'ok' : 'bad');

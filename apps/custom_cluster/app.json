@@ -126,6 +126,11 @@
           "text",
           "STATUS",
           "Starting the cluster"
+        ],
+        [
+          "text",
+          "DETAIL",
+          " "
         ]
       ]
     }
