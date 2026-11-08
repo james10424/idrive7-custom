@@ -1,8 +1,8 @@
 # Custom HUD
 
-Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant temperatures, and a clock. Open **Custom HUD** from the apps menu on the center screen and pick the layout, theme, units and widgets there.
+Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant temperatures, and a clock, or a little animated girl sitting on BMW's speed-limit sign. Open **Custom HUD** from the apps menu on the center screen and pick the layout, theme, units and widgets there.
 
-<p align="center"><img src="../../docs/images/hud-redline.gif" width="520" alt="Redline layout"></p>
+<p align="center"><img src="../../docs/images/hud-perch.png" width="520" alt="Perch layout"></p>
 
 ## Layouts
 
@@ -10,21 +10,22 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
   <tr>
     <th align="center">Daily</th>
     <th align="center">Sport</th>
-    <th align="center">Redline</th>
+    <th align="center">Perch</th>
   </tr>
   <tr>
     <td><img src="../../docs/images/hud-daily.png" width="300" alt="Daily layout"></td>
     <td><img src="../../docs/images/hud-sport.png" width="300" alt="Sport layout"></td>
-    <td><img src="../../docs/images/hud-redline.png" width="300" alt="Redline layout at the shift point"></td>
+    <td><img src="../../docs/images/hud-perch.png" width="300" alt="Perch layout"></td>
   </tr>
 </table>
 
 - **Daily:** speed is the hero, with the gear, clock and oil.
 - **Sport:** a segmented shift bar, a big gear, speed, a boost gauge, oil and coolant.
-- **Redline:** a slanted rev bar with 12 shift lights, a big gear, your shift point and your last shift with its grade.
-  - **Shift lights:** they come on from 3000 rpm and fill up to the shift point. At the shift point everything goes red and SHIFT shows.
-  - **Shift grades:** every upshift is graded on its peak rpm. EARLY means more than 250 rpm under the shift point, LATE more than 200 over it, COLD REV the same while the cold guard is on, LIMITER within 60 rpm of the redline, and anything in between is SPOT ON.
-  - **Cold-engine guard:** until the oil reaches 80°C, the shift point starts at 4500 rpm and climbs as the oil warms up.
+- **Perch:** an original anime girl in an M racing jacket, in the style of a desktop mascot, sits on the corner of BMW's speed-limit sign, leaning forward with her hands on her knees and her legs hanging off its left side so your speed stays clear. No readouts of our own, just her and BMW's HUD.
+  - **Idle:** she swings her legs (a heel taps the sign), blinks, breathes, sways and her side ponytail swings.
+  - **Driving:** pull away hard and she leans back with a fist in the air and a big grin; brake and she tips forward, feet flying up, eyes squeezed shut. The faster you go, the more her ponytail streams out.
+  - She is drawn on the GPU from shapes and animated by cluster-render's own clock, so she costs one layer and no pixel memory, and only a tiny update goes up when she changes pose.
+  - Redline is gone: if you had it picked anywhere, it switches to Perch.
 
 ## Themes
 
@@ -51,7 +52,7 @@ Classic, M and Night, plus Auto, which switches to Night at sunset. You choose w
 
 ## Settings
 
-Layout, drive mode switching, theme, daytime theme for Auto, units (mph, °F, psi or km/h, °C, bar), 12- or 24-hour clock, redline, shift point before redline, cold-engine rev guard, which readouts show (clock, oil, coolant, boost), and demo data. Changes show on the HUD right away, and the HUD keeps running after you leave the page.
+Layout, drive mode switching, theme, daytime theme for Auto, units (mph, °F, psi or km/h, °C, bar), 12- or 24-hour clock, redline and shift point (the Sport shift bar), cold-engine rev guard, which readouts show (clock, oil, coolant, boost), and demo data. Changes show on the HUD right away, and the HUD keeps running after you leave the page.
 
 The page's first row says what the HUD is doing, the drive mode it sees, and why anything is not drawn (for example "waiting: another app has this display").
 

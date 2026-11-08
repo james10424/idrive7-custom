@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -109,8 +109,8 @@
           "Sport"
         ],
         [
-          "redline",
-          "Redline"
+          "perch",
+          "Perch"
         ],
         [
           "grid",
@@ -143,8 +143,8 @@
           "Sport"
         ],
         [
-          "redline",
-          "Redline"
+          "perch",
+          "Perch"
         ]
       ]
     },
@@ -167,8 +167,8 @@
           "Sport"
         ],
         [
-          "redline",
-          "Redline"
+          "perch",
+          "Perch"
         ]
       ]
     },
@@ -191,8 +191,8 @@
           "Sport"
         ],
         [
-          "redline",
-          "Redline"
+          "perch",
+          "Perch"
         ]
       ]
     },
@@ -306,7 +306,7 @@
     },
     {
       "key": "coldGuard",
-      "label": "Cold-engine rev guard (Redline)",
+      "label": "Cold-engine rev guard",
       "type": "bool",
       "default": true
     },
@@ -432,6 +432,9 @@
           "note": "OBD service 01 PID 0x33 (same as F433)"
         }
       ]
+    },
+    "choiceAliases": {
+      "redline": "perch"
     },
     "tankLitres": 65,
     "acc": {

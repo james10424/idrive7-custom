@@ -112,6 +112,9 @@
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
  *             pedal is in kickdown and the bar is full; "range" [lo, hi] maps the signal from that span onto 0..max
  *             (e.g. "boost" over [0, 1.5] bar, "batt12" over [0, 100] %)
+ *   perch     effect layer; shaders.js perch, the Perch layout's girl sitting on BMW's speed-limit sign, legs hanging off
+ *             its left side; animated by the renderer's clock (time: true), so only a small u_drive uniform goes up when
+ *             the smoothed g or the speed moves a step. "sign" [x, y, w, h] the sign's box in target px ([152, 320, 50, 54])
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
  *   grid      calibration: effect layer of lines every "step" px (brighter every "major" steps)
@@ -230,6 +233,7 @@ const LAYER_BUDGET = 8;          // cluster-render's limit per client connection
 const MAX_CONN = 4;              // connections a layout may ask for ("conn"): 32 layers service-wide / 8 per connection
 const PIXEL_BYTES = 16 * 1024 * 1024;   // cluster-render's pixel memory for every app's images together (CompositorLimits.pixel_bytes)
 const SHEET_AREA_FRAC = 4;       // the first sheet size limit: 1/4 of the target area (see the header)
+const PERCH_TAU_MS = 250;        // the Perch girl's lean follows the g this smoothly
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
@@ -452,6 +456,9 @@ class HudApp {
         const s = this.ctx.settings.item(key);
         const v = this.ctx.settings.get(key);
         if (!s) return v;
+        // a choice that was renamed or replaced (app.json config.choiceAliases, e.g. the HUD's Redline layout is now Perch)
+        const alias = s.type === 'choice' && this.config.choiceAliases && this.config.choiceAliases[v];
+        if (alias && (s.options || []).some((o) => o[0] === alias)) return alias;
         const ok = s.type === 'bool' ? typeof v === 'boolean'
             : s.type === 'choice' ? (s.options || []).some((o) => o[0] === v)
                 : s.type === 'number' ? isNum(v) && (!s.steps || s.steps.indexOf(v) >= 0) : true;
@@ -1781,7 +1788,7 @@ class HudApp {
             c = this._clientAt(this._connOf(w));
             const base = { target: this.target, klass: w.class || 'content', z: w.z || 0, x: w.x, y: w.y, w: w.w, h: w.h };
             if (IMAGE_TYPES[w.type]) ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
-            else ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : shaders[w.type] }, base));
+            else ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : shaders[w.type], time: w.type === 'perch' || undefined }, base));
             if (!ref) { this.log.warn('widget "' + w.id + '": layer refused'); return; }
         }
         const x = { w, ref, c, ci: sheet ? sheet.ci : this._connOf(w), sheet: sheet || null, last: null, lastPaint: 0, px: null };
@@ -1960,6 +1967,10 @@ class HudApp {
             c.uniform(ref, 'u_headH', [w.head || 0]);
             c.uniform(ref, 'u_border', [w.border === undefined ? 2 : w.border]);
             c.uniform(ref, 'u_radius', [w.radius || 0]);
+        } else if (w.type === 'perch') {
+            const sg = Array.isArray(w.sign) && w.sign.length === 4 ? w.sign : [152, 320, 50, 54];
+            c.uniform(ref, 'u_size', [w.w, w.h]);
+            c.uniform(ref, 'u_sign', [sg[0] - w.x, sg[1] - w.y, sg[2], sg[3]]);
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);
@@ -2223,6 +2234,19 @@ class HudApp {
             x.c.uniform(x.ref, 'u_shift', [sp.rpm]);
             x.c.uniform(x.ref, 'u_peak', [peak]);
             x.c.uniform(x.ref, 'u_shiftNow', [sp.now ? 1 : 0]);
+        } else if (w.type === 'perch') {
+            // lean: the longitudinal g smoothed over PERCH_TAU_MS, -0.4 g .. +0.4 g to -1 .. 1; speed 0..130 km/h to 0..1;
+            // sent in steps of 0.05, so the uniform goes out only when she would visibly move (the shader animates the rest)
+            const d = this.car.data(), dt = x.at ? Math.min(500, now - x.at) : 0;
+            x.at = now;
+            const g = isNum(d.gLong) ? Math.max(-0.4, Math.min(0.4, d.gLong)) / 0.4 : 0;
+            x.lean = isNum(x.lean) ? x.lean + (g - x.lean) * (1 - Math.exp(-dt / PERCH_TAU_MS)) : g;
+            const v = this._raw('speed'), step = (f) => Math.round(f * 20) / 20;
+            const u = [step(x.lean), step(isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0), 0, this.themeName === 'night' ? 0.8 : 1];
+            const key = u.join('|');
+            if (!force && key === x.last) return;
+            x.last = key;
+            x.c.uniform(x.ref, 'u_drive', u);
         } else if (w.type === 'lights') {
             const rpm = this._raw('rpm'), sp = this._shift(), n = w.count || 12;
             // the lights fill from "from" rpm (3000) up to the shift point; a "from" at or past it means the last 500 rpm

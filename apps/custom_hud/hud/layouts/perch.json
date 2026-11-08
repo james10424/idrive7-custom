@@ -1,0 +1,26 @@
+{
+ "schemaVersion": 2,
+ "name": "Perch",
+ "_about": "An original anime girl (about six heads tall, soft shaded) in an M racing jacket sits on the top-left corner of BMW's speed-limit sign, leaning forward with her hands on her knees, legs hanging off its left side so the speed stays clear. One effect layer (shaders.js perch), animated on the renderer's clock: her legs swing and a heel taps the sign, she blinks, breathes and her ponytail sways. She reacts to the car: braking tips her forward with her feet flying up and her eyes going > <, pulling away hard leans her back with a fist in the air, and speed blows her ponytail out. The sign is where the bench draws it (x 152..202, y 320..374), BMW's own sign sits in x 150..355, y 314..378 with the speed: check on the car and move \"sign\" if she floats. She stays in every HUD mode: BMW's ACC block (x ~240..345) and guidance (the right of the window) are clear of her.",
+ "modes": [
+  "cruise",
+  "nav",
+  "cruiseNav"
+ ],
+ "widgets": [
+  {
+   "id": "girl",
+   "type": "perch",
+   "x": 118,
+   "y": 212,
+   "w": 100,
+   "h": 166,
+   "sign": [
+    152,
+    320,
+    50,
+    54
+   ]
+  }
+ ]
+}
