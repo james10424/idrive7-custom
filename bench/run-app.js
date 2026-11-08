@@ -94,11 +94,12 @@ setInterval(() => {
         activeCruiseControl: { symbolACC: on ? 'LDM_CAR_NORMAL' : 'LDM_CAR_OFF', barsColorACC: on ? 'LDM_ACTIVE' : 'LDM_OFF', accBarsHUD: on ? 3 : 0 },
         trafficJamAssist: { steeringWheel: on ? 'LDM_STW_GREEN' : 'LDM_STW_OFF' }, cruiseCtrlSpeedHUD: on ? 152 : 0,
     });
-    // the car ahead (de.bmw.dass.GapVehicleAhead), raw: a gap that swings 300..500 and the speed with it; 4095 = none
-    const t = Date.now() / 4000, gap = on ? Math.round(400 + 100 * Math.sin(t)) : 4095, rel = on ? Math.round(2048 + 30 * Math.cos(t)) : 4095;
-    hu.feed('de.bmw.dass.GapVehicleAhead', 'DataFrontVehicle', { frontVehicleObjectID: on ? 1 : 255, frontVehicleGapX: gap, frontVehicleGapY: on ? 0 : 4095,
-        frontVehicleSpeedX: rel, frontVehicleSpeedY: on ? 0 : 4095, qualifierEventDataFunctionFrontVehicle: on ? 'EVENT_DATA_AVAILABLE' : 'EVENT_DATA_NOT_AVAILABLE' });
-    hu.feed('de.bmw.dass.GapVehicleAhead', 'GapVehicleDrivingAhead', { gapVehicleDrivingAhead: on ? 18 : 255, qualifierFunctionVehicleDrivingAhead: on ? 'FUNKTION_VERFUEGBAR' : 'FUNKTION_NICHT_VERFUEGBAR' });
+    // the car ahead (de.bmw.dass.GapVehicleAhead) as an X3 sends it: only GapVehicleDrivingAhead, once a second, 253 and
+    // "nothing measured" without a car; with ACC on here a measured car whose gap swings 30..50 m over ~25 s
+    const t = Date.now() / 4000, gap = on ? Math.round(40 + 10 * Math.sin(t)) : 253;
+    hu.feed('de.bmw.dass.GapVehicleAhead', 'GapVehicleDrivingAhead', { qualifierFunctionVehicleDrivingAhead: 'FUNKTION_VERFUEGBAR',
+        statusMeasurementVehicleDrivingAhead: on ? 'ELEMENT__GEMESSEN' : 'KEIN_ELEMENT_GEMESSEN', gapVehicleDrivingAhead: gap,
+        vehicleTypeVehicleDrivingAhead: on ? 'ZWEISPURIGES_FAHRZEUG' : 'SIGNAL_UNGUELTIG', lampStatusVehicleDrivingAhead: on ? 'LICHT_AUS' : 'SIGNAL_UNGUELTIG' });
 }, 1000);
 setInterval(() => {
     if (mode !== 'manual') return;

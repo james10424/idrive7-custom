@@ -145,10 +145,13 @@
  * (gauge labels for 1.4 / 0.7 bar in the display unit) {{stage}} (P R N, D / S / M by the shifter programme) {{gearInD}} (gear number while in D) {{mode}} (COMFORT, SPORT, SPORT PLUS, SPORT INDIVIDUAL, ECO PRO, ...)
  * {{temp:<deg C>}} (that temperature in the display unit, °F rounded to 10, for gauge labels) {{setup:engine|chassis|steering|gearbox}} (what that part is set to in the drive mode now)
  * {{time}} {{ampm}} {{u:temp}} (°F / °C) {{gLat}} {{gLong}} (g, 2 decimals) {{signal:<car.data() key>}} (raw, 1 decimal).
- * ACC (the car ahead, de.bmw.dass.GapVehicleAhead; "--" without a car ahead or data older than 3 s): {{accGap}} (DataFrontVehicle
- * frontVehicleGapX), {{accRel}} (frontVehicleSpeedX, signed), {{accGap2}} (GapVehicleDrivingAhead gapVehicleDrivingAhead),
- * {{accSet}} (the set speed BMW's HUD shows, DisplayDataServer cruiseCtrlSpeedHUD). The catalog gives no units: each is
- * raw * factor + offset from app.json config.acc { gap, rel, gap2, set } (factor 1, offset 0 until calibrated on the car).
+ * The car ahead (de.bmw.dass.GapVehicleAhead; "--" without a car measured or data older than 3 s): {{accGap}} the gap in m / ft
+ * ({{u:gap}}), from GapVehicleDrivingAhead gapVehicleDrivingAhead while its status says a car is measured (an X3 sends only
+ * this one, once a second, 253 with nothing measured; DataFrontVehicle frontVehicleGapX when the car sends that), {{accRel}}
+ * its speed against ours in km/h / mph ({{u:rel}}, minus = closing): DataFrontVehicle frontVehicleSpeedX when sent,
+ * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
+ * The catalog gives no units: app.json config.acc { gap (raw -> m), rel (raw -> km/h), set } is raw * factor + offset
+ * (factor 1, offset 0 until calibrated on the car). A text widget's "needs": "<token>" draws nothing while that token is "--".
  * Redline (shift_score.js): {{rpm10}} (rpm to 10) {{shiftAt}} {{lastShift}} {{lastGears}} (4 > 5)
  * {{verdict}} {{shiftPrompt}} (SHIFT at the shift point) {{coldNote}} (only while the oil is cold).
  * Units follow the "units" setting: us = mph, °F, psi; metric = km/h, °C, bar.
@@ -208,6 +211,9 @@ const STA_WHEEL = { LDM_STW_OFF: 0, LDM_STW_GREY: 1, LDM_STW_GREEN: 2, LDM_STW_Y
 // GapVehicleAhead qualifiers: DataFrontVehicle's (2 = no data) and GapVehicleDrivingAhead's (6 error, 14 not available, 15 not filled)
 const AHEAD_Q = { EVENT_DATA_AVAILABLE: 0, EVENT_DATA_AVAILABLE_REDUCED: 1, EVENT_DATA_NOT_AVAILABLE: 2 };
 const AHEAD2_Q = { FUNKTION_VERFUEGBAR: 1, FUNKTION_VERFUEGBAR__MINUS__EINGESCHRAENKT: 3, FUNKTION_MELDET_FEHLER: 6, FUNKTION_NICHT_VERFUEGBAR: 14, SIGNAL_UNBEFUELLT: 15 };
+// GapVehicleDrivingAhead statusMeasurementVehicleDrivingAhead: 1..4 is a car measured (new, measured, partly hidden, predicted)
+const AHEAD2_MEASURED = { KEIN_ELEMENT_GEMESSEN: 0, NEUES_ELEMENT__GEMESSEN: 1, ELEMENT__GEMESSEN: 2, ELEMENT__GEMESSEN__MINUS__TEILWEISE_VERDECKT: 3, ELEMENT_PRAEDIZIERT: 4 };
+const REL_TAU_MS = 1500;          // the smoothing of a relative speed worked out from the gap
 const MODE_TEXT = { cruise: "BMW's driver assistance", nav: "BMW's guidance", cruiseNav: "BMW's guidance and driver assistance" };
 /** An enum field as a number: its wire number, or its name looked up in items (unknown names: null). */
 function enumNum(v, items) {
@@ -329,7 +335,9 @@ class HudApp {
         this.assistRaw = undefined;      // the last summary of it, for the log
         this.activeMode = 'normal';      // the HUD mode the layers were built for
         this.ahead = null;               // the car ahead, raw: { gapX, gapY, speedX, speedY, q, at } (DataFrontVehicle)
-        this.ahead2 = null;              // { gap, q, at } (GapVehicleDrivingAhead)
+        this.ahead2 = null;              // { gap, q, measured, at } (GapVehicleDrivingAhead)
+        this.relFromGap = null;          // km/h, the gap's smoothed rate of change ({ v, gapM, at })
+        this.aheadLogged = '';
         this.accSetRaw = null;           // cruiseCtrlSpeedHUD as sent
         this.aheadLogAt = 0;
         this.carUnits = { press: null, temp: null, psiSeen: false };   // the car's display units, for the TPMS values
@@ -416,8 +424,9 @@ class HudApp {
                 },
                 GapVehicleDrivingAhead: (v) => {
                     if (!v) return;
-                    const g = v.gapVehicleDrivingAhead;
-                    this.ahead2 = { gap: isNum(g) && g !== 255 ? g : null, q: v.qualifierFunctionVehicleDrivingAhead, at: Date.now() };
+                    const g = v.gapVehicleDrivingAhead, m = enumNum(v.statusMeasurementVehicleDrivingAhead, AHEAD2_MEASURED);
+                    this.ahead2 = { gap: isNum(g) && g < 253 ? g : null, q: v.qualifierFunctionVehicleDrivingAhead, measured: m >= 1 && m <= 4, at: Date.now() };
+                    this._gapRate();
                     this._logAhead(v);
                 },
             },
@@ -564,28 +573,52 @@ class HudApp {
         this._modeChanged();
     }
 
-    /** The car-ahead messages as sent, at most once a second, for calibrating config.acc against what BMW's HUD shows. */
+    /** The car-ahead messages as sent, when they change (an X3 repeats the same one every second), at most once a second,
+     *  for calibrating config.acc against what BMW's HUD shows. */
     _logAhead(v) {
-        const now = Date.now();
-        if (now - this.aheadLogAt < 1000) return;
-        this.aheadLogAt = now;
-        this.log.info('car ahead raw: ' + JSON.stringify(v) + (isNum(this.accSetRaw) ? ', set speed ' + this.accSetRaw : '') + ', speed ' + this._token('speed'));
+        const now = Date.now(), line = JSON.stringify(v);
+        if (line === this.aheadLogged || now - this.aheadLogAt < 1000) return;
+        this.aheadLogged = line; this.aheadLogAt = now;
+        this.log.info('car ahead raw: ' + line + (isNum(this.accSetRaw) && this.accSetRaw !== 65535 ? ', set speed ' + this.accSetRaw : '') + ', speed ' + this._token('speed'));
     }
 
-    /** An ACC value for a token: raw * factor + offset (config.acc[key]), or null when missing, stale or not available. */
-    _acc(key) {
-        const now = Date.now(), a = this.ahead, b = this.ahead2;
-        const okA = a && now - a.at < FRESH_MS && enumNum(a.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE;
-        const q2 = b ? enumNum(b.q, AHEAD2_Q) : null;
-        const okB = b && now - b.at < FRESH_MS && [6, 14, 15].indexOf(q2) < 0;
-        let raw = null;
-        if (key === 'gap') raw = okA ? a.gapX : null;
-        else if (key === 'rel') raw = okA ? a.speedX : null;
-        else if (key === 'gap2') raw = okB ? b.gap : null;
-        else if (key === 'set') raw = this.assistActive ? this.accSetRaw : null;
-        if (!isNum(raw)) return null;
+    /** raw * factor + offset from config.acc[key]. */
+    _accScale(key, raw) {
         const c = (this.config.acc && this.config.acc[key]) || {};
         return raw * (isNum(c.factor) ? c.factor : 1) + (isNum(c.offset) ? c.offset : 0);
+    }
+
+    /** The gap in m: DataFrontVehicle's while it is fresh and available, else GapVehicleDrivingAhead's while a car is measured. */
+    _gapM() {
+        const now = Date.now(), a = this.ahead, b = this.ahead2;
+        if (a && now - a.at < FRESH_MS && enumNum(a.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE && isNum(a.gapX)) return this._accScale('gap', a.gapX);
+        if (b && now - b.at < FRESH_MS && b.measured && isNum(b.gap) && [6, 14, 15].indexOf(enumNum(b.q, AHEAD2_Q)) < 0) return this._accScale('gap', b.gap);
+        return null;
+    }
+
+    /** The relative speed from the gap's rate of change (km/h, minus = closing), smoothed over REL_TAU_MS; reset without a gap. */
+    _gapRate() {
+        const now = Date.now(), g = this._gapM(), r = this.relFromGap;
+        if (!isNum(g)) { this.relFromGap = null; return; }
+        if (!r) { this.relFromGap = { v: null, gapM: g, at: now }; return; }
+        const dt = now - r.at;
+        if (dt < 200) return;
+        const inst = (g - r.gapM) / (dt / 1000) * 3.6;
+        const k = 1 - Math.exp(-dt / REL_TAU_MS);
+        this.relFromGap = { v: isNum(r.v) ? r.v + (inst - r.v) * k : inst, gapM: g, at: now };
+    }
+
+    /** An ACC value: 'gap' m, 'rel' km/h (DataFrontVehicle's speed when sent, else the gap's rate), 'set'; null when missing or stale. */
+    _acc(key) {
+        const now = Date.now(), a = this.ahead;
+        if (key === 'gap') return this._gapM();
+        if (key === 'rel') {
+            if (a && now - a.at < FRESH_MS && enumNum(a.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE && isNum(a.speedX)) return this._accScale('rel', a.speedX);
+            const r = this.relFromGap;
+            return r && isNum(r.v) && now - r.at < FRESH_MS && isNum(this._gapM()) ? r.v : null;
+        }
+        if (key === 'set') return this.assistActive && isNum(this.accSetRaw) && this.accSetRaw !== 65535 ? this._accScale('set', this.accSetRaw) : null;
+        return null;
     }
 
     /** The HUD mode now: normal, cruise, nav or cruiseNav (see the header). */
@@ -944,8 +977,11 @@ class HudApp {
         if (tok.indexOf('tyreT:') === 0) { const v = this._tyre('t', tok.slice(6)); return isNum(v) ? String(Math.round(us ? v * 9 / 5 + 32 : v)) : '--'; }
         switch (tok) {
             case 'u:pressure': return us ? 'psi' : 'bar';
-            case 'accGap': case 'accGap2': case 'accSet': { const v = this._acc(tok === 'accGap' ? 'gap' : tok === 'accGap2' ? 'gap2' : 'set'); return isNum(v) ? String(Math.round(v)) : '--'; }
-            case 'accRel': { const v = this._acc('rel'); return isNum(v) ? (v > 0 ? '+' : '') + Math.round(v) : '--'; }
+            case 'accGap': { const v = this._acc('gap'); return isNum(v) ? String(Math.round(us ? v * 3.28084 : v)) : '--'; }
+            case 'u:gap': return us ? 'FT' : 'M';
+            case 'accRel': { const v = this._acc('rel'); return isNum(v) ? String(Math.round(us ? v * 0.621371 : v)) : '--'; }   // the HUD fonts have no '+'
+            case 'u:rel': return us ? 'MPH' : 'KM/H';
+            case 'accSet': { const v = this._acc('set'); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'speed': { const v = this._raw('speed'); return fix(isNum(v) ? (us ? v * 0.621371 : v) : v, 0); }
             case 'u:speed': return us ? 'MPH' : 'KM/H';
             case 'oil': case 'coolant': { const v = this._raw(tok); return fix(isNum(v) ? (us ? v * 9 / 5 + 32 : v) : v, 0); }
@@ -1420,7 +1456,7 @@ class HudApp {
             x.c.uniform(x.ref, 'u_text', this._atlasCodes(x, s), { type: 'vec4' });
         } else if (w.type === 'text') {
             if (!force && now - x.lastPaint < (w.rate || TEXT_MS)) return;
-            const s = this._resolve(w.text);
+            const s = w.needs && this._token(w.needs) === '--' ? '' : this._resolve(w.text);
             let role = w.color || 'fg';
             if (w.colorBy === 'verdict' && this.score.last) role = VERDICT[this.score.last.verdict] || role;
             if (w.near && this._nearMark(w.near[0]) === w.near[1]) role = w.nearColor || 'fg';

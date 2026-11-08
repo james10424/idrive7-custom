@@ -1,7 +1,7 @@
 {
  "schemaVersion": 2,
  "name": "Daily",
- "_about": "Calm everyday layout: speed is the hero, with the gear on the left and the clock and oil on the right. Fitted (Nov 5 2026 grid photo) to the part of the HUD the driver sees, x 120..605, y 100..378, with a 6 px margin; the bottom-left x 150..355, y 314..378 is left to BMW's own speed and speed-limit sign, which it keeps drawing over ours in Comfort. To change it, copy this file into the app data folder layouts/ (scripts/deploy.sh); the app reloads it by itself. Widget types and tokens: see the header of hud.js. Modes (hud.js header): cruise moves everything to the right half, clear of BMW's ACC block (x ~240..345, y ~200..312) and speed; nav keeps a small column on the left (gear, clock, oil, x 126..305, y 172..290) under BMW's guidance line (y ~160) and clear of its turn map (x ~310..605); cruiseNav keeps gear, clock and oil in the sliver left of the ACC block. Measured off the Nov 7 2026 HUD photos, not the grid: check on the car. In cruise a row under the oil shows the car ahead: GAP ({{accGap}}) and REL ({{accRel}}), raw until config.acc is calibrated.",
+ "_about": "Calm everyday layout: speed is the hero, with the gear on the left and the clock and oil on the right. Fitted (Nov 5 2026 grid photo) to the part of the HUD the driver sees, x 120..605, y 100..378, with a 6 px margin; the bottom-left x 150..355, y 314..378 is left to BMW's own speed and speed-limit sign, which it keeps drawing over ours in Comfort. To change it, copy this file into the app data folder layouts/ (scripts/deploy.sh); the app reloads it by itself. Widget types and tokens: see the header of hud.js. Modes (hud.js header): cruise moves everything to the right half, clear of BMW's ACC block (x ~240..345, y ~200..312) and speed; nav keeps a small column on the left (gear, clock, oil, x 126..305, y 172..290) under BMW's guidance line (y ~160) and clear of its turn map (x ~310..605); cruiseNav keeps gear, clock and oil in the sliver left of the ACC block. Measured off the Nov 7 2026 HUD photos, not the grid: check on the car. In normal and cruise a row under the oil shows the car ahead while one is measured: its gap ({{accGap}} m / ft) and its speed against ours ({{accRel}} km/h / mph, minus = closing).",
  "modes": [
   "cruise",
   "nav",
@@ -221,14 +221,14 @@
    "font": "small",
    "x": 405,
    "y": 343,
-   "w": 40,
+   "w": 26,
    "h": 17,
    "class": "content",
    "z": 10,
    "color": "dim",
    "spacing": 1.5,
+   "needs": "accGap",
    "in": {
-    "normal": false,
     "nav": false,
     "cruiseNav": false
    }
@@ -238,34 +238,33 @@
    "type": "text",
    "text": "{{accGap}}",
    "font": "mid",
-   "x": 445,
+   "x": 433,
    "y": 334,
-   "w": 70,
+   "w": 45,
    "h": 27,
    "class": "overlay",
    "z": 10,
-   "align": "left",
+   "align": "right",
+   "needs": "accGap",
    "in": {
-    "normal": false,
     "nav": false,
     "cruiseNav": false
    }
   },
   {
-   "id": "acc_rel_label",
+   "id": "acc_gap_unit",
    "type": "text",
-   "text": "REL",
-   "font": "small",
-   "x": 516,
-   "y": 343,
-   "w": 36,
-   "h": 17,
-   "class": "content",
+   "text": "{{u:gap}}",
+   "font": "label",
+   "x": 481,
+   "y": 340,
+   "w": 20,
+   "h": 20,
+   "class": "overlay",
    "z": 10,
    "color": "dim",
-   "spacing": 1.5,
+   "needs": "accGap",
    "in": {
-    "normal": false,
     "nav": false,
     "cruiseNav": false
    }
@@ -275,15 +274,33 @@
    "type": "text",
    "text": "{{accRel}}",
    "font": "mid",
-   "x": 552,
+   "x": 506,
    "y": 334,
-   "w": 47,
+   "w": 45,
    "h": 27,
    "class": "overlay",
    "z": 10,
    "align": "right",
+   "needs": "accRel",
    "in": {
-    "normal": false,
+    "nav": false,
+    "cruiseNav": false
+   }
+  },
+  {
+   "id": "acc_rel_unit",
+   "type": "text",
+   "text": "{{u:rel}}",
+   "font": "label",
+   "x": 556,
+   "y": 340,
+   "w": 40,
+   "h": 20,
+   "class": "overlay",
+   "z": 10,
+   "color": "dim",
+   "needs": "accRel",
+   "in": {
     "nav": false,
     "cruiseNav": false
    }
