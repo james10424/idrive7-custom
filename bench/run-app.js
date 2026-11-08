@@ -85,6 +85,11 @@ let mode = 'demo', manual = {}, drive = null, nav = null, assist = null;
 setInterval(() => { if (drive !== null) hu.feed('de.bmw.infotainment.drivingexcitement.FES', 'statusFESVehicleDynamicSwitchHMI', { actualValueModeDrivingExperience: drive }); }, 1000);
 // route guidance (Guidance guidanceState, the enum names oap-sdk reads), sent once a second
 setInterval(() => { if (nav !== null) hu.feed('de.bmw.infotainment.navigation.guiding.Guidance', 'guidanceState', nav); }, 1000);
+// the trip computer (ResetLogic) as the car would send it: 9.8 l/100km since refuelling, scale / 10^digit
+setInterval(() => {
+    hu.feed('de.bmw.infotainment.resetlogic.ResetLogic', 'averageConsumption', { consumptionCombustionCurrentScale: 98, consumptionCombustionCurrentDigit: 1,
+        consumptionElectricCurrentScale: 65535, consumptionElectricCurrentDigit: 0, combustionUnit: 'CONSUMPTION_KM', electricUnit: 'DEFAULT' });
+}, 2000);
 // now playing (HmiMediaState playerMetadata, as BMW's player fills it: artist then title): manual "music", else a few
 // titles in different scripts, a new one every 8 s
 const DEMO_SONGS = [['Queen', 'Bohemian Rhapsody'], ['YOASOBI', '夜に駆ける'], ['BTS', '봄날 Spring Day'], ['Кино', 'Группа крови'],

@@ -159,6 +159,8 @@
  * {{spd:<i>}} (speed scale label i of SPEED_SCALE: 0..200 mph, 0..320 km/h) {{range}} {{u:distLc}} (mi, km) {{ambient}} (outside, signed: +75) {{u:speedLc}} (mph, km/h) {{ampmLc}} (am, pm) {{torque}} {{u:torque}} (lb-ft, Nm) {{torquePct}} {{powerPct}} (% of config.engine's peak) {{boostHi}} {{boostMid}}
  * (gauge labels for 1.4 / 0.7 bar in the display unit) {{stage}} (P R N, D / S / M by the shifter programme) {{gearInD}} (gear number while in D) {{mode}} (COMFORT, SPORT, SPORT PLUS, SPORT INDIVIDUAL, ECO PRO, ...)
  * {{temp:<deg C>}} (that temperature in the display unit, °F rounded to 10, for gauge labels) {{setup:engine|chassis|steering|gearbox}} (what that part is set to in the drive mode now)
+ * {{consumption}} {{u:cons}}: average consumption for the period picked on the center screen, in the car's unit (l/100km, mpg,
+ * km/l; ResetLogic averageConsumption, scale / 10^digit, else bcDataAll's raw * config.consumption.factor 0.1).
  * {{fuelFull}} {{fuelHalf}} (the tank's full and half marks, config.tankLitres, in L or US gal) {{u:fuel}} (L / gal)
  * {{time}} {{ampm}} {{u:temp}} (°F / °C) {{gLat}} {{gLong}} (g, 2 decimals) {{signal:<car.data() key>}} (raw, 1 decimal).
  * The car ahead (de.bmw.dass.GapVehicleAhead; "--" without a car measured or data older than 3 s): {{accGap}} the gap in m / ft
@@ -232,6 +234,8 @@ const GUIDANCE = { iface: 'de.bmw.infotainment.navigation.guiding.Guidance', ins
 // what BMW's media player shows (the center screen's instance), for {{musicTitle}}
 const MEDIA = { iface: 'de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', instance: 'HMI_CID' };
 const MEDIA_ITEM = { UNDEFINED: 0, ARTIST: 1, ALBUM: 2, TITLE: 3 };
+// the trip computer's consumption unit (ResetLogicTypes.StatusUnitConsumptionBC)
+const CONS_UNIT = { DEFAULT: 0, CONSUMPTION_KM: 1, CONSUMPTION_UK: 2, CONSUMPTION_US: 3, CONSUMPTION_KML: 4, CONSUMPTION_KGH2_100KM: 5, CONSUMPTION_KGH2_100MI: 6 };
 const GUIDANCE_STATE = { INACTIVE: 0, CALCULATING_ROUTE: 1, ACTIVE: 2 };
 // DisplayDataServer functionalLibraryData enums (the car's SOME/IP catalog, someip-interfaces.json): what BMW's HUD
 // draws for the driver assistance systems. The car may send the names or the numbers.
@@ -432,6 +436,27 @@ class HudApp {
                     this.rangeKm = isNum(r) && r >= 0 && r < 4095 ? r : null;
                 },
             },
+            // the trip computer for the period picked on the center screen (this trip, since refuelling, individual, long term):
+            // average consumption (app.json config.consumption); raw values logged on change to check the scaling
+            'de.bmw.infotainment.resetlogic.ResetLogic': {
+                averageConsumption: (v) => {
+                    if (!v) return;
+                    const sc = v.consumptionCombustionCurrentScale, dg = v.consumptionCombustionCurrentDigit;
+                    this.consAvg = isNum(sc) && sc < 65535 && isNum(dg) && dg >= 0 && dg <= 3 ? sc / Math.pow(10, dg) : null;
+                    this.consUnit = enumNum(v.combustionUnit, CONS_UNIT);
+                    this.consAt = Date.now();
+                    this._logCons('average', v);
+                },
+                bcDataAll: (v) => {
+                    if (!v) return;
+                    const d = v.bcData || {};
+                    this.consPeriod = d.resetOption !== undefined ? d.resetOption : v.activeResetLogic;
+                    this.consBc = isNum(d.consumptionAverage) && d.consumptionAverage < 65535 ? d.consumptionAverage : null;
+                    if (v.bcUnits && v.bcUnits.consumption !== undefined) this.consUnitBc = enumNum(v.bcUnits.consumption, CONS_UNIT);
+                    this.consBcAt = Date.now();
+                    this._logCons('bc', { period: this.consPeriod, active: v.activeResetLogic, avg: d.consumptionAverage, now: d.currentConsumption, speed: d.speedAverage, units: v.bcUnits });
+                },
+            },
             // tyre pressure and temperature per corner, in the car's own display units (_tyreBar / _tyreC).
             // The car never notifies these (BMW's own x_call only ever reads them), so they are polled.
             'de.bmw.infotainment.vehicle.TPMS': {
@@ -544,6 +569,7 @@ class HudApp {
         // (the runtime spec has no "signals": the interface must also be in app.json "signals")
         if (!this._modesOn()) delete extra['de.bmw.infotainment.displaydataserver.DisplayDataServer'];
         if (!this._modesOn() && this.config.carAhead !== true) delete extra['de.bmw.dass.GapVehicleAhead'];
+        if (!this.config.consumption) delete extra['de.bmw.infotainment.resetlogic.ResetLogic'];
         if (this.config.pedals !== true) { delete extra['de.bmw.powertrain.AcceleratorPedal']; delete extra['de.bmw.body.Light']; delete extra['de.bmw.infotainment.vehicle.CDS']; }
         this.car = new Car(this.ctx, ['rpm', 'speed', 'temps', 'accel', 'gear', 'torque'], extra);
         this.car.setRedline(this.setting('redline'));
@@ -757,6 +783,34 @@ class HudApp {
         }
         if (key === 'set') return this.assistActive && isNum(this.accSetRaw) && this.accSetRaw !== 65535 ? this._accScale('set', this.accSetRaw) : null;
         return null;
+    }
+
+    /** Average consumption for the period picked on the center screen, in the car's unit; null when not sent lately. */
+    _consumption() {
+        const now = Date.now();
+        if (isNum(this.consAvg) && now - this.consAt < 120000) return this.consAvg;
+        if (isNum(this.consBc) && now - this.consBcAt < 120000) {
+            const c = this.config.consumption || {};
+            return this.consBc * (isNum(c.factor) ? c.factor : 0.1) + (isNum(c.offset) ? c.offset : 0);
+        }
+        return this.car.data().demo ? 9.8 : null;
+    }
+
+    /** The consumption's unit label: the car's own (l/100km, mpg, km/l), else by the units setting. */
+    _consUnit() {
+        const u = isNum(this.consUnit) && this.consUnit > 0 ? this.consUnit : this.consUnitBc;
+        if (u === CONS_UNIT.CONSUMPTION_US || u === CONS_UNIT.CONSUMPTION_UK) return 'mpg';
+        if (u === CONS_UNIT.CONSUMPTION_KML) return 'km/l';
+        if (u === CONS_UNIT.CONSUMPTION_KM) return 'l/100km';
+        return this.setting('units') === 'us' ? 'mpg' : 'l/100km';
+    }
+
+    _logCons(kind, v) {
+        const line = JSON.stringify(v);
+        this.consLines = this.consLines || {};
+        if (this.consLines[kind] === line) return;
+        this.consLines[kind] = line;
+        this.log.info('consumption ' + kind + ' raw ' + line);
     }
 
     /** The car ahead getting closer faster than config.acc.closingKmh (10 km/h). */
@@ -1226,6 +1280,8 @@ class HudApp {
             case 'u:pressure': return us ? 'psi' : 'bar';
             case 'throttle': { const v = this._throttle(); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'musicTitle': return this.musicTitle || '';
+            case 'consumption': { const v = this._consumption(); return isNum(v) ? v.toFixed(1) : '--'; }
+            case 'u:cons': return this._consUnit();
             case 'volt12': { const v = this._volt12(); return isNum(v) ? v.toFixed(1) : '--'; }
             case 'batt12': { const v = this._batt12(); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'accGap': { const v = this._acc('gap'); return isNum(v) ? String(Math.round(us ? v * 3.28084 : v)) : '--'; }

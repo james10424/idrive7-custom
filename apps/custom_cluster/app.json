@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -87,6 +87,10 @@
     "de.bmw.infotainment.hmi.hmimediastate.HmiMediaState": {
       "_instances": "HMI_CID",
       "playerMetadata": "rs"
+    },
+    "de.bmw.infotainment.resetlogic.ResetLogic": {
+      "averageConsumption": "rs",
+      "bcDataAll": "rs"
     }
   },
   "screens": [
@@ -500,6 +504,11 @@
       ],
       "searchMax": 4,
       "searchMaxBytes": 120000000
+    },
+    "consumption": {
+      "comment": "Average consumption for the period picked on the center screen (ResetLogic). averageConsumption carries its own decimals (scale / 10^digit) and is used when sent; else bcDataAll's raw consumptionAverage * factor + offset (0.1 is a guess until checked against the stock display: the raw values are logged).",
+      "factor": 0.1,
+      "offset": 0
     }
   }
 }
