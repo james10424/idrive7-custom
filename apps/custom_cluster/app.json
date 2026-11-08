@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -446,14 +446,15 @@
     "carAhead": true,
     "pedals": true,
     "pedal": {
-      "comment": "The throttle bar. source obd: OBD PID 0x49 (accelerator pedal position D) from the engine unit, every 250 ms while shown; obdRange [at rest, flat out] in its own % maps to 0..100 (an X3 M40i reads 14.5 at rest, 82 flat out and 91 in kickdown, Nov 7 2026: the app logs 'accelerator pedal (OBD) ... %' on change, set the two from a release and a full press). Without source obd: the AcceleratorPedal message's actualValueAngleAcceleratorPedal * factor + offset, which on an X3 jumped about (misdecoded).",
+      "comment": "The throttle bar. source obd: OBD PID 0x49 (accelerator pedal position D) from the engine unit, every 250 ms while shown; obdRange [at rest, flat out] in its own % maps to 0..100 (an X3 M40i reads 14.5 at rest, 82 flat out and 91 in kickdown, Nov 7 2026: the app logs 'accelerator pedal (OBD) ... %' on change, set the two from a release and a full press). Without source obd: the AcceleratorPedal message's actualValueAngleAcceleratorPedal * factor + offset, which on an X3 jumped about (misdecoded). kickdown: the OBD reading at or past which the bar's last segment turns red (between flat out, 82, and kickdown, 91).",
       "source": "obd",
       "obdRange": [
         14.5,
         82
       ],
       "factor": 0.025,
-      "offset": 0
+      "offset": 0,
+      "kickdown": 87
     },
     "battery": {
       "comment": "The 12 V battery's charge: conditionBatteryChargingCondition * factor + offset = %. BMW's charge condition is normally 0..100; if the logged '12 V battery charge condition raw' goes past 100, it is half-percent steps: set factor 0.5.",

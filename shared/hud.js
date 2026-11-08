@@ -92,7 +92,8 @@
  *             "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right
  *             (BMW draws bits of its own Sport view there)
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
- *             "gap" px between segments (8)
+ *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
+ *             pedal is in kickdown and the bar is full
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
  *   grid      calibration: effect layer of lines every "step" px (brighter every "major" steps)
@@ -1061,6 +1062,15 @@ class HudApp {
         return d.demo ? (isNum(d.throttle) ? Math.max(0, Math.min(100, d.throttle * 100)) : 0) : null;
     }
 
+    /** The pedal in kickdown: the OBD pedal at or past config.pedal.kickdown (87 %: an X3 M40i reads 82 flat out and 91 in
+     *  kickdown); the demo drive's at full throttle. */
+    _kickdown() {
+        const c = this.config.pedal || {};
+        if (c.source === 'obd' && isNum(this.pedalObd) && Date.now() - this.pedalObdAt < 1000) return this.pedalObd >= (isNum(c.kickdown) ? c.kickdown : 87);
+        const d = this.car.data();
+        return !!d.demo && isNum(d.throttle) && d.throttle >= 1;
+    }
+
     /** The brake lights on; the demo drive's while it slows down. */
     _brake() {
         if (this.brakeOn !== null) return this.brakeOn;
@@ -1529,6 +1539,8 @@ class HudApp {
             c.uniform(ref, 'u_offC', rgba(color(t, 'track')));
             c.uniform(ref, 'u_slant', [w.slant || 0]);
             c.uniform(ref, 'u_gap', [isNum(w.gap) ? w.gap : 8]);
+            c.uniform(ref, 'u_hotSeg', [-1]);
+            c.uniform(ref, 'u_hotC', rgba(color(t, w.hotColor || 'hot')));
         } else if (w.type === 'revbar') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_top', [w.top || 8]);
@@ -1725,9 +1737,12 @@ class HudApp {
         } else if (w.type === 'segbar') {
             const v = this._raw(w.signal);
             const lit = isNum(v) ? Math.max(0, Math.min(w.max, Math.round(v))) : 0;
-            if (!force && lit === x.last) return;
-            x.last = lit;
+            const hot = w.hotWhen === 'kickdown' && this._kickdown() && lit === w.max;   // the last segment in "hotColor"
+            const key = lit + (hot ? 'h' : '');
+            if (!force && key === x.last) return;
+            x.last = key;
             x.c.uniform(x.ref, 'u_lit', [lit]);
+            x.c.uniform(x.ref, 'u_hotSeg', [hot ? w.max - 1 : -1]);
         } else if (w.type === 'revbar') {
             const rpm = this._raw('rpm'), sp = this._shift();
             const v = isNum(rpm) ? Math.round(Math.max(0, rpm) / 10) * 10 : 0;

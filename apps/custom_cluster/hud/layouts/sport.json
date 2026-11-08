@@ -797,7 +797,8 @@
       "max": 10,
       "slant": 6,
       "color": "arc",
-      "gap": 4
+      "gap": 4,
+      "hotWhen": "kickdown"
     },
     {
       "id": "pedal_brk_label",

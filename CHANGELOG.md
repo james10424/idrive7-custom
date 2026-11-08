@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 7 2026
 
+- **Custom Cluster 0.1.8:** the throttle bar's last segment turns red in kickdown (the OBD pedal at 87 % or more; 82 flat out, 91 in kickdown on the car).
 - **Custom Cluster 0.1.7:** the throttle bar is empty at rest and full flat out: the OBD pedal reads 14.5 % at rest and 82 % flat out on the car (91 % in kickdown, which stays full).
 - **Custom HUD 0.1.4, Custom Cluster 0.1.6:** the car ahead's gap is in 0.1 m steps (it read 10 times BMW's own), and its relative speed with it. The Sport throttle bar reads the engine unit's OBD pedal position (PID 0x49, 4 times a second): the car's AcceleratorPedal message jumped about during a slow press (its high byte looks like the message's alive counter). The OBD value is logged on change; config.pedal.obdRange maps its rest and flat-out readings to 0..100.
 - **Custom HUD 0.1.3, Custom Cluster 0.1.5:** the car ahead's relative speed reads "--" while we stand still (the gap's rate is only noise then), and its row stays up as long as a car is measured. The throttle bar jumped about during a slow press on the car, so the accelerator pedal message is now logged on every change (up to 5 a second) with its other values, to find the right field and scaling. The layout check also warns about widgets over BMW's bottom-row gear letter, and the cluster bench draws BMW's gear (its gear box and that letter).
