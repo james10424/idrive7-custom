@@ -1,8 +1,8 @@
 {
   "id": "custom_cluster",
   "title": "Custom Cluster",
-  "description": "Redraws the instrument cluster: GT3 race dash, M-style, Sport or an 1980s Regal, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.22",
+  "description": "Redraws the instrument cluster: a 1987 Regal dash, or a Sport view round BMW's map while navigating",
+  "version": "0.1.23",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -57,6 +57,11 @@
     "de.bmw.infotainment.KombiIF": {
       "statusRangeTankStatus": "rs",
       "statusShowTimeDate": "rs"
+    },
+    "de.bmw.infotainment.navigation.guiding.Guidance": {
+      "_instances": "Main_Instance",
+      "guidanceState": "rs",
+      "_optional": "route guidance on / off, for the \"While navigating\" theme"
     },
     "de.bmw.infotainment.vehicle.Vehicle": {
       "statusNewCurrentUnitsStatusExt": "rs",
@@ -120,29 +125,21 @@
   "settings": [
     {
       "key": "hudLayout",
-      "label": "Theme (when not by drive mode)",
+      "label": "Theme",
       "type": "choice",
-      "default": "gt3",
+      "default": "regal",
       "options": [
         [
           "off",
           "Off (BMW's own cluster)"
         ],
         [
-          "gt3",
-          "GT3"
-        ],
-        [
-          "m",
-          "M"
+          "regal",
+          "Regal (1987)"
         ],
         [
           "sport",
           "Sport"
-        ],
-        [
-          "regal",
-          "Regal (1987)"
         ],
         [
           "grid",
@@ -151,98 +148,32 @@
       ]
     },
     {
-      "key": "byMode",
-      "label": "Change with SPORT / COMFORT / ECO PRO",
-      "type": "bool",
-      "default": true
-    },
-    {
-      "key": "inComfort",
-      "label": "In Comfort",
+      "key": "navLayout",
+      "label": "While navigating",
       "type": "choice",
-      "default": "off",
+      "default": "sport",
       "options": [
+        [
+          "sport",
+          "Sport, with the map"
+        ],
+        [
+          "regal",
+          "Regal (1987)"
+        ],
         [
           "off",
           "Off (BMW's own cluster)"
         ],
         [
-          "gt3",
-          "GT3"
-        ],
-        [
-          "m",
-          "M"
-        ],
-        [
-          "sport",
-          "Sport"
-        ],
-        [
-          "regal",
-          "Regal (1987)"
-        ]
-      ]
-    },
-    {
-      "key": "inSport",
-      "label": "In Sport",
-      "type": "choice",
-      "default": "gt3",
-      "options": [
-        [
-          "off",
-          "Off (BMW's own cluster)"
-        ],
-        [
-          "gt3",
-          "GT3"
-        ],
-        [
-          "m",
-          "M"
-        ],
-        [
-          "sport",
-          "Sport"
-        ],
-        [
-          "regal",
-          "Regal (1987)"
-        ]
-      ]
-    },
-    {
-      "key": "inEco",
-      "label": "In Eco Pro",
-      "type": "choice",
-      "default": "off",
-      "options": [
-        [
-          "off",
-          "Off (BMW's own cluster)"
-        ],
-        [
-          "gt3",
-          "GT3"
-        ],
-        [
-          "m",
-          "M"
-        ],
-        [
-          "sport",
-          "Sport"
-        ],
-        [
-          "regal",
-          "Regal (1987)"
+          "same",
+          "No change (the theme above)"
         ]
       ]
     },
     {
       "key": "mapWindow",
-      "label": "Leave room for the map",
+      "label": "Leave room for the map (always on while navigating)",
       "type": "bool",
       "default": false
     },

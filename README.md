@@ -2,14 +2,10 @@
 
 <p align="center">Apps for BMW iDrive 7 head units (MGU), installed through the community MGU Store. A reworked fork of [bimmer-lab/apps](https://github.com/bimmer-lab/apps) whose apps install next to the originals: they have their own ids (`custom_hud`, `custom_cluster`).</p>
 
-<p align="center"><img src="docs/images/cluster-gt3.gif" width="900" alt="GT3 race dash on the instrument cluster"></p>
-
 ## Custom Cluster
 
-Redraws the whole instrument cluster in a theme of your choice: a GT3 race dash, an M-style cluster, or a Sport view. Pick the theme on the center screen, or let it follow the SPORT / COMFORT / ECO PRO buttons. [Read more](apps/custom_cluster/README.md)
+Redraws the whole instrument cluster as a 1987 Buick Regal dash, and switches to a Sport view round BMW's map while route guidance is on. [Read more](apps/custom_cluster/README.md)
 
-<p align="center"><img src="docs/images/cluster-gt3-shift.png" width="900" alt="GT3 theme at the shift point"></p>
-<p align="center"><img src="docs/images/cluster-m.png" width="900" alt="M theme"></p>
 <p align="center"><img src="docs/images/cluster-sport.png" width="900" alt="Sport theme"></p>
 
 ## Custom HUD
@@ -44,7 +40,7 @@ The Store builds each app on the car from this repo. No BMW code is in it. Both 
 - [bimmer-lab/apps](https://github.com/bimmer-lab/apps) (MIT): the original HUD Widgets and Cluster Themes this repo starts from.
 - [cauliflowermossgrape/idrive7-apps](https://github.com/cauliflowermossgrape/idrive7-apps): the MGU App Kit (MIT) these apps are built on, and the Redline app the shift scoring comes from.
 - [robertnisipeanu/idrive-apps](https://github.com/robertnisipeanu/idrive-apps): cluster-render, which draws on the HUD and the cluster.
-- Barlow, Michroma and Orbitron typefaces (SIL Open Font License).
+- Barlow and Michroma typefaces (SIL Open Font License).
 
 ## Licence
 

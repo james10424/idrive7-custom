@@ -39,39 +39,21 @@ HUD_FONTS = [
 ]
 # Custom Cluster, 1920x720 LCD. GT3: the race-dash look, Barlow Condensed.
 CLUSTER_FONTS = [
-    ('gear', 'BarlowCondensed-Bold.ttf', 330, DIGITS + 'PRND-'),
-    ('big', 'BarlowCondensed-Bold.ttf', 124, DIGITS + '.-'),   # 124: "20.3 PSI" fits a 280 px box beside the hood
-    ('value', 'BarlowCondensed-Bold.ttf', 92, DIGITS + '.:- PRND'),
-    ('small', 'BarlowCondensed-Bold.ttf', 50, DIGITS + '.:-° '),
     ('unit', 'BarlowCondensed-SemiBold.ttf', 34, UPPER + DIGITS + '/°%>·.: -'),
     ('head', 'BarlowCondensed-SemiBold.ttf', 24, UPPER + DIGITS + '/°%>·.: -'),
-    ('scale', 'BarlowCondensed-SemiBold.ttf', 30, DIGITS),
-    # M: the wide squared numbers (Michroma, SIL OFL) and Barlow for the small print
-    ('m_num', 'Orbitron[wght].ttf', 30, DIGITS, 0, 'Black', {'0': 'O'}),
-    ('m_gear', 'Orbitron[wght].ttf', 96, 'PRNDSM-' + DIGITS, 2, 'Black', {'0': 'O'}),
-    ('m_speed', 'Orbitron[wght].ttf', 60, DIGITS + '-', 2, 'Black', {'0': 'O'}),
-    ('m_gl', 'Orbitron[wght].ttf', 21, DIGITS + '/.-', 0, 'Black', {'0': 'O'}),
-    ('m_val', 'Barlow-Medium.ttf', 54, DIGITS + ':+-.'),
-    ('m_mid', 'Orbitron[wght].ttf', 28, DIGITS + ':+-.', 0, 'Bold', {'0': 'O'}),
-    ('m_tyre', 'Orbitron[wght].ttf', 21, DIGITS + '.-', 0, 'Bold', {'0': 'O'}),
-    ('m_unit', 'Barlow-Medium.ttf', 30, LOWER + UPPER + '°/-.'),
-    ('m_label', 'Orbitron[wght].ttf', 17, UPPER + ' ', 0, 'Bold'),
-    ('m_tiny', 'Barlow-Medium.ttf', 22, LOWER + DIGITS + 'CF./ -°'),
     # Sport: BMW Live Cockpit style, the wide numbers in Michroma like BMW's own
     ('s_scale', 'Michroma-Regular.ttf', 27, DIGITS, 1),
     ('s_speed', 'Michroma-Regular.ttf', 74, DIGITS + '-', 3),
     ('s_gear', 'Michroma-Regular.ttf', 70, DIGITS + 'PRNDSM-', 3),
     ('s_val', 'Michroma-Regular.ttf', 26, DIGITS + ':+-.', 1),
     ('s_unit', 'Barlow-Medium.ttf', 24, LOWER + UPPER + DIGITS + '°/-. '),
-    ('s_label', 'BarlowSemiCondensed-SemiBold.ttf', 30, UPPER + DIGITS + ' .'),
     ('s_gl', 'Michroma-Regular.ttf', 21, DIGITS + '/', 1),
     # Regal (1987 Buick Regal dash): tall condensed white numbers, small print, and the orange VFD's seven segments
     ('r_num', 'BarlowCondensed-SemiBold.ttf', 50, DIGITS),
     ('r_gl', 'BarlowCondensed-SemiBold.ttf', 34, DIGITS + 'EF'),
     ('r_lbl', 'Barlow-Medium.ttf', 21, UPPER + DIGITS + ' ./'),
-    ('r_kmh', 'Barlow-Medium.ttf', 18, LOWER + DIGITS + '/•'),
     ('r_tiny', 'Barlow-Medium.ttf', 16, UPPER + ' .'),
-    ('r_vfd', 'BarlowSemiCondensed-SemiBold.ttf', 25, UPPER + ' '),
+    ('r_vfd', 'BarlowSemiCondensed-SemiBold.ttf', 25, UPPER + DIGITS + ' '),
     ('r_seg', 'SEG', 44, DIGITS + '- '),
     ('r_seg_m', 'SEG', 32, DIGITS + '-: '),
     ('r_seg_s', 'SEG', 21, DIGITS + '-. '),

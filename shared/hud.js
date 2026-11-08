@@ -10,8 +10,10 @@
  * Which display: app.json config.target, "hud" (800x480, the windshield HUD; the default) or
  * "panel" (1920x720, the whole instrument cluster, drawn over BMW's own gauges).
  * config.statusName names it on the status row ("HUD", "Cluster").
- * Which layout: with the "byMode" setting on and the car's drive mode known (FES
- * statusFESVehicleDynamicSwitchHMI), the "inComfort" / "inSport" / "inEco" setting; otherwise "hudLayout".
+ * Which layout: while BMW's route guidance is on, the "navLayout" setting (apps that have it: the cluster; "same" = no
+ * switch; the map window is open then whatever "mapWindow" says); else, with the "byMode" setting on (apps that have it) and
+ * the car's drive mode known (FES statusFESVehicleDynamicSwitchHMI), the "inComfort" / "inSport" / "inEco" setting;
+ * otherwise "hudLayout".
  * The layout name "off" draws nothing, so BMW's own HUD or cluster shows (and the other app can have the
  * shared scene: cluster-render never shows the HUD and the cluster panel at once).
  * HUD modes (the "makeRoom" setting, HUD apps that have it): BMW's own HUD content doesn't show where our
@@ -85,7 +87,7 @@
  *             "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the
  *             numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMid" (55, the middle), "spdStep" (5, between marks; the first mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" / "podG" [pivot x, y,
  *             tick r0, r1], "podSignals" [{ signal, range }] x 2, "led" with "ledN" and "rpmMax", "gearBox" + "gearPitch" (the lit
- *             gear of P R N D S M), "lampB" (the BRAKE lamp; mirrored: SERVICE ENGINE SOON, unlit), "arrow" [x, y, size], "batIcon" [x, y]
+ *             box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the BRAKE lamp; mirrored: SERVICE ENGINE SOON, unlit), "arrow" [x, y, size], "batIcon" [x, y]
  *   mtach     effect layer; the M rev bar: "side" left|right, "max" rpm, and in target px for the LEFT bar
  *             "y0" (0 rpm), "y8" (max), "ym" (the bend), "xm" (outer edge x at the bend; the right bar gives
  *             its own, mirrored), "kTop" / "kBot" (x per y px above / below the bend), "round", "wBot" / "wTop" / "wBend"
@@ -262,8 +264,8 @@ const BRAKE_LIGHT = { INIT: 0, OFF_BL: 1, ON_BL: 2, SIGNAL_UNGUELTIG: 3 };
 // body.Light StatusFunctionsIndicators controlIndicateDirection (someip-interfaces.json)
 const INDICATE = { BLINKEN_AUS: 0, TIPP_BLINKEN_LINKS_EIN: 1, TIPP_BLINKEN_RECHTS_EIN: 2, DAUER_BLINKEN_LINKS_EIN: 3,
     DAUER_BLINKEN_RECHTS_EIN: 4, BEIDSEITIGES_BLINKEN_EIN: 8, RESERVIERT_NICHT_VERFUEGBAR: 13, RESERVIERT_FEHLER: 14, SIGNAL_UNBEFUELLT: 15 };
-// the Regal theme's gear row
-const REGAL_GEARS = ['P', 'R', 'N', 'D', 'S', 'M'];
+// the Regal theme's gear row: P R N D, a gap, the gear number; the lit box for each selector state (S lights D, M the number)
+const REGAL_GEARS = { P: 0, R: 1, N: 2, D: 3, S: 3, M: 5 };
 const PEDAL_OK = { SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1 };   // AngleAcceleratorPedal's qualifier: valid
 const VOLT_MS = 2000;             // the 12 V reading's interval
 const PEDAL_MS = 250;             // the OBD pedal reading's interval
@@ -430,6 +432,8 @@ class HudApp {
 
     /** A setting's value, or its default when the saved value isn't one the schema allows. */
     setting(key) {
+        // while the "navLayout" switch is in force the map window is open, whatever "mapWindow" says
+        if (key === 'mapWindow' && this._navSwitch()) return true;
         const s = this.ctx.settings.item(key);
         const v = this.ctx.settings.get(key);
         if (!s) return v;
@@ -680,7 +684,7 @@ class HudApp {
 
     /** BMW's route guidance on / off, for the HUD modes. */
     _startNav() {
-        if (!this._modesOn()) return;
+        if (!this._modesOn() && !this.ctx.settings.item('navLayout')) return;
         Promise.resolve().then(() => this.ctx.signals.watch(GUIDANCE.iface, GUIDANCE.instance, {
             guidanceState: (v) => this._guard('guidance', () => this._onGuidance(v)),
         }, this.log)).then((s) => {
@@ -740,6 +744,11 @@ class HudApp {
         const on = enumNum(typeof v === 'string' ? v.toUpperCase() : v, GUIDANCE_STATE) === GUIDANCE_STATE.ACTIVE;
         if (on === this.navActive) return;
         this.navActive = on;
+        if (this.ctx.settings.item('navLayout') && this._layoutName() !== this.activeName) {
+            this.log.info('route guidance ' + (on ? 'on' : 'off') + ': layout ' + this._layoutName());
+            this._rebuild();
+            return;
+        }
         this._modeChanged();
     }
 
@@ -1001,8 +1010,17 @@ class HudApp {
     /** fn(text) whenever the status line changes. */
     onStatus(fn) { this.statusListeners.push(fn); if (this.lastStatus) fn(this.lastStatus); }
 
-    /** The layout name to show now: per drive mode when that's on and known, else the plain setting. */
+    /** The "navLayout" switch is in force: the app has that setting (the cluster), it names a layout, and BMW is guiding. */
+    _navSwitch() {
+        if (!this.navActive || !this.ctx.settings.item('navLayout')) return false;
+        const v = this.setting('navLayout');
+        return !!v && v !== 'same';
+    }
+
+    /** The layout name to show now: the "navLayout" one while guiding, else per drive mode when that's on and known (apps
+     *  with "byMode"), else the plain setting. */
     _layoutName() {
+        if (this._navSwitch()) return this.setting('navLayout');
         if (this.setting('byMode') === true && this.driveMode && MODE_KEY[this.driveMode]) {
             const v = this.setting(MODE_KEY[this.driveMode]);
             if (v) return v;
@@ -1088,7 +1106,7 @@ class HudApp {
         }
         if (this.problem) return this.label + ': ' + this.problem;
         const byMode = this.setting('byMode') === true;
-        const mode = byMode ? (this.driveMode ? ' (' + MODE_NAME[this.driveMode] + ')' : ' (drive mode not seen yet)') : '';
+        const mode = this._navSwitch() ? ' (navigating)' : byMode ? (this.driveMode ? ' (' + MODE_NAME[this.driveMode] + ')' : ' (drive mode not seen yet)') : '';
         const what = this.target === 'panel' ? 'cluster' : 'HUD';
         if (this.activeName === 'off' && this.modeOff) return this.label + ' off while ' + MODE_TEXT[this.activeMode] + ' shows' + mode;
         if (this.activeName === 'off') return this.label + ' off' + mode + ": BMW's own " + what + ' shows';
@@ -2005,7 +2023,7 @@ class HudApp {
             const n = w.ledN || 16;
             const led = isNum(rpm) ? Math.floor(Math.max(0, rpm) / max * n + 0.5) / n : 0;
             const shiftAt = Math.floor(this._shift().rpm / max * n) / n;
-            const stage = this._token('stage'), gi = REGAL_GEARS.indexOf(stage);
+            const stage = this._token('stage'), gi = Object.prototype.hasOwnProperty.call(REGAL_GEARS, stage) ? REGAL_GEARS[stage] : -1;
             const lamps = [this._brakeLit() ? 1 : 0, this._turnLit('L') ? 1 : 0, this._turnLit('R') ? 1 : 0, 0];
             // speed on the 0..spdMax mph scale with spdMid at its middle, each half linear
             const mid = w.spdMid || 55, top = w.spdMax || 85, mph = isNum(sp) ? Math.max(0, sp * 0.621371) : 0;

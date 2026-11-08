@@ -1,34 +1,8 @@
 # Custom Cluster
 
-Redraws the whole instrument cluster in a theme of your choice. Open **Custom Cluster** from the apps menu on the center screen and pick the theme there.
-
-<p align="center"><img src="../../docs/images/cluster-gt3.gif" width="900" alt="GT3 race dash"></p>
+Redraws the whole instrument cluster: a 1987 Buick Regal dash, switching to a Sport view round BMW's map while you navigate. Open **Custom Cluster** from the apps menu on the center screen to change it.
 
 ## Themes
-
-### GT3
-
-A race dash.
-
-- **Top:** 18 round shift lights (green, yellow, red, then blue) and a segmented rev bar. The lights come on from 3000 rpm and fill up to your shift point.
-- **Left:** speed, rpm, and your last shift with its grade.
-- **Middle:** the gear, with water and oil temperatures.
-- **Right:** boost, your shift point, and the clock.
-- **At the shift point** the lights, the rev bar, the rpm and the gear all go red.
-
-<p align="center"><img src="../../docs/images/cluster-gt3.png" width="900" alt="GT3 theme"></p>
-<p align="center"><img src="../../docs/images/cluster-gt3-map.png" width="900" alt="GT3 theme with room for the map"></p>
-
-### M
-
-A current M8's cluster, traced off a photo of it and drawn on black.
-
-- **Middle:** two bowed glass rev blades either side of the gear and speed, reading 0 to 7000 rpm like the M40i's own cluster. A red marker rides each blade at the rpm, the blade glows below it, and orange and red marks sit before and past your redline. The gear shows with its shifter programme: P, D3, S3 or M3.
-- **Left:** a near-black card with the tyre block: pressure and temperature at each corner round a car glyph (from the car's tyre monitor, read every 10 seconds, in the car's own units). The fuel dial sits over the card's lower corner, drawn like the M8's: a thin glass bracket inside a hatched chrome bezel, lit from the bottom up to the level, with a red streak at the level and another at the reserve.
-- **Right:** what the engine, chassis, steering and gearbox are set to, as rows with a step bar (two above BMW's black gear box and two below it, since the car paints over that spot), and the oil temperature dial, the same glass bracket (blue streak at the cold end, red at the hot end). The rows follow the drive mode buttons: Eco Pro, Comfort, Sport, Sport Plus and Sport Individual. The car only reports that an Individual setup is on, not what each part is set to, so those rows read INDIVIDUAL.
-- **Bottom:** range, the clock, and the outside temperature.
-
-<p align="center"><img src="../../docs/images/cluster-m.png" width="900" alt="M theme"></p>
 
 ### Sport
 
@@ -36,7 +10,7 @@ The look of BMW's newer Live Cockpit Sport view.
 
 - **Left:** speed as a blue bracket on BMW's 0 to 200 mph scale (0 to 320 km/h), with the digital speed and a fuel bar inside it.
 - **Right:** revs as a red bracket on the M40i's 0 to 7000 rpm scale, with yellow and red marks around your redline, with the gear and an oil temperature bar inside it.
-- **Middle:** black, or BMW's map with "Leave room for the map" on.
+- **Middle:** BMW's map while navigating (or with "Leave room for the map" on), else black.
 - **Bottom:** boost and coolant in the blue and red strip, plus the clock, range and outside temperature.
 
 <p align="center"><img src="../../docs/images/cluster-sport.png" width="900" alt="Sport theme"></p>
@@ -47,22 +21,23 @@ The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needle
 
 - **Left pod:** a 12 V voltmeter (8 to 16 V), with the BRAKE lamp and the left turn arrow under it.
 - **Right pod:** coolant temperature, with the right turn arrow and CRUISE (lit while ACC is on).
-- **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. The orange windows show the speed (mph or km/h by the units setting), the odometer and P R N D S M on the left, and the clock and range on the right.
+- **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. The orange windows show the speed (mph or km/h by the units setting), the odometer and P R N D with the gear number on the left, and the clock and range on the right.
 - **Middle, bottom:** the fuel needle and an LED rev bar that turns yellow from your shift point.
 - **Bottom:** the song title. There is no map window.
 
 More themes are on the way.
 
-## Off and drive modes
+## Navigation and Off
 
+- **While navigating:** while BMW's route guidance is on, the cluster switches to this theme (Sport by default, with the map window open), and back to your theme when the route ends.
 - **Off (BMW's own cluster):** pick it as the theme and the app draws nothing, so BMW's cluster comes back.
-- **Change with SPORT / COMFORT / ECO PRO** (on by default): the cluster follows the drive mode buttons, with a theme for each mode. Out of the box, Sport shows GT3, and Comfort and Eco Pro show BMW's own cluster. Until the car reports a mode, the plain theme setting is used.
-- **With Custom HUD:** the cluster theme and the HUD cannot show at the same time, because cluster-render has one screen slot for both. With the defaults, Sport gets the cluster theme and Comfort gets the HUD, so they take turns.
+- **With Custom HUD:** the cluster theme and the HUD cannot show at the same time, because cluster-render has one screen slot for both. While a cluster theme shows, the HUD stays off.
 
 ## Settings
 
-- **Theme**, and one per drive mode.
-- **Leave room for the map:** cuts a window out of the dash so BMW's map shows through, moves the gear and temperatures to the sides, and slims the rev bar. Works in GT3 and Sport.
+- **Theme:** Regal or Sport (or Off).
+- **While navigating:** Sport with the map, Regal, Off, or no change.
+- **Leave room for the map:** keeps Sport's map window open even when not navigating. Regal has no map window.
 - **Units:** mph, °F, psi or km/h, °C, bar.
 - **Clock:** 12-hour or 24-hour.
 - **Redline:** where the red marks start on the rev scales (they always cover at least the last 500 rpm, and the yellow marks sit in the 700 rpm before them).
@@ -80,11 +55,11 @@ More themes are on the way.
 
 ## On the car
 
-Tested on a 2020 X3 M40i. GT3 draws complete. The car draws at most 8 layers per connection, and every theme fits in that. Still to be checked:
+Tested on a 2020 M340i. The car draws at most 8 layers per connection, and every theme fits in that. Still to be checked:
 
-- whether M and Sport draw complete (if not, the first row of the app's page says how many parts are drawn and why the rest are not);
+- whether Sport and Regal draw complete (if not, the first row of the app's page says how many parts are drawn and why the rest are not);
 - whether BMW's warning lights still show over the dash (start the car with a seat belt off and look);
-- the drive mode switching and the map window's position;
+- the switch to Sport when route guidance starts, and the map window's position;
 - how the colours and edges look on the real screen.
 
 Version history is in the repo's [CHANGELOG.md](../../CHANGELOG.md).
