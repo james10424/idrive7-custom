@@ -1269,6 +1269,9 @@ float sdTrap(vec2 p, vec2 c, float wt, float wb, float he) {
 }
 float sdBoxR(vec2 p, vec2 c, vec2 hs) { vec2 q = abs(p - c) - hs + vec2(0.5); return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.5; }
 float cov(float d) { return clamp(0.5 - d * gK, 0.0, 1.0); }
+// smooth min / max: x eased into the limit over k, so a swing slows into a stop instead of hitting it
+float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
+float smax(float a, float b, float k) { return -smin(-a, -b, k); }
 // a toon-shaded part: n is its surface direction (0 in the middle, length 1 at the edge); a cool shadow on the side away
 // from the light, a rim light on the lit edge, a thin outline in a dark tone of the colour
 void toon(inout vec4 c, float d, vec2 n, vec3 col) {
@@ -1364,10 +1367,10 @@ void main() {
 
     vec2 kneeN = sTop + vec2(-2.0, 3.0), kneeF = sTop + vec2(-8.0, -2.0);
     float swing = mix(0.24, 0.12, moving) * (1.0 - brake);
-    float w = mix(2.0, 3.0, moving);
+    float oscN = mix(sin(t * 2.0), sin(t * 3.0), moving), oscF = mix(sin(t * 2.0 + 2.6), sin(t * 3.0 + 2.6), moving);
     float base = -0.08 + 0.1 * go - 0.45 * brake;
-    float aN = clamp(base + swing * sin(t * w), -0.55, 0.03);          // the near heel taps the sign, never through it
-    float aF = clamp(base - 0.1 + swing * sin(t * w + 2.6), -0.4, 0.12);
+    float aN = smax(smin(base + swing * oscN, 0.03, 0.12), -0.55, 0.12);    // the near heel eases onto the sign, never through it
+    float aF = smax(smin(base - 0.1 + swing * oscF, 0.12, 0.12), -0.4, 0.12);
 
     vec2 q = rot(p - hip, -ang);                    // her upper body's own frame, hip at 0, y down
     float tilt = 0.06 * sin(t * 0.55) * (1.0 - 0.5 * moving) + 0.1 - 0.1 * brake + 0.05 * go;
@@ -1375,7 +1378,7 @@ void main() {
     vec2 h = rot(q - head, -tilt) / 1.2;            // the head's frame, 1.2x
 
     vec4 c = vec4(0.0);
-    float flutter = sin(t * mix(1.6, 8.0, spd)) * mix(0.14, 0.08, spd) + sin(t * 12.0) * 0.05 * spd;
+    float flutter = sin(t * 1.6) * 0.14 * (1.0 - spd) + (sin(t * 7.0) * 0.06 + sin(t * 11.0 + 1.3) * 0.035) * spd;
     float blow = spd * 0.85 + brake * 0.3;
 
     // ---- behind everything: the long hair down her back, the side ponytail, the coat's back and lining
@@ -1486,20 +1489,24 @@ void main() {
     // eyes: lash line with an outer flick, a crease, white, a dark-to-light iris with a ring, pupil, two highlights;
     // a blink every few seconds; > < braking; ^ ^ happy
     float bt = mod(t, 4.6), bt2 = mod(t + 1.9, 12.0);
-    float open = (bt < 0.13 || (bt2 > 0.25 && bt2 < 0.36)) ? 0.0 : 1.0;
-    float happy = smoothstep(0.5, 0.7, go), squint = smoothstep(0.35, 0.55, brake);
+    float blink = smoothstep(0.0, 0.07, bt) * (1.0 - smoothstep(0.1, 0.24, bt))
+        + smoothstep(0.25, 0.31, bt2) * (1.0 - smoothstep(0.34, 0.46, bt2));
+    float happy = smoothstep(0.45, 0.75, go), squint = smoothstep(0.3, 0.6, brake);
+    float open = clamp(1.0 - max(blink, max(happy, squint)), 0.0, 1.0);
     for (int i = 0; i < 2; i++) {
         float sx = i == 0 ? -1.0 : 1.0;
         vec2 e = h - vec2(sx * 4.1, 1.7);
         vec2 m = vec2(e.x * sx, e.y);                 // mirrored: +x is the eye's outer corner
-        if (squint > 0.5) {
+        if (open < 0.18 && squint > 0.5) {
             paint(c, min(sdSeg(m, vec2(2.2, -2.0), vec2(-1.6, 0.0)), sdSeg(m, vec2(2.2, 2.0), vec2(-1.6, 0.0))) - 0.5, LINE, 1.0);
-        } else if (happy > 0.5 || open < 0.5) {
+        } else if (open < 0.18) {
             float k = happy > 0.5 ? 1.0 : -1.0;
             vec2 ce = vec2(0.0, happy > 0.5 ? 1.4 : -0.8);
             paint(c, max(abs(length(e - ce) - 2.5) - 0.48, k * (e.y - ce.y)), LINE, 1.0);
             if (happy < 0.5) paint(c, sdSeg(m, vec2(2.3, 0.0), vec2(3.1, -0.6)) - 0.3, LINE, 1.0);
         } else {
+            // the lids close towards the lower lash line: the open eye squashed by "open"
+            m.y = (m.y - 3.4) / max(open, 0.18) + 3.4; e.y = m.y;
             float white = sdEll(m, vec2(0.15, 0.25), vec2(2.8, 3.3));
             paint(c, white, vec3(1.0), 1.0);
             float iris = sdEll(m, vec2(-0.25, 0.6), vec2(2.25, 3.0));
@@ -1527,14 +1534,16 @@ void main() {
     }
     paint(c, sdSeg(h, vec2(0.5, 3.8), vec2(0.2, 4.8)) - 0.14, SKIN * 0.62, 1.0);
     vec2 mo = h - vec2(0.2, 7.4);
-    float talk = smoothstep(0.92, 1.0, sin(t * 0.37)) * (1.0 - brake);
-    if (go > 0.35 || talk > 0.05) {
-        float mouth = max(sdEll(mo, vec2(0.0, -0.1), vec2(2.1, 1.0 + 0.9 * max(talk, go))), -mo.y - 0.2);
+    float talk = smoothstep(0.85, 1.0, sin(t * 0.37)) * (1.0 - brake);
+    float mOpen = max(talk, smoothstep(0.2, 0.6, go));
+    if (mOpen > 0.03) {
+        float mouth = max(sdEll(mo, vec2(0.0, -0.1), vec2(mix(1.6, 2.1, mOpen), 0.2 + 1.7 * mOpen)), -mo.y - 0.2);
         paint(c, mouth, vec3(0.55, 0.12, 0.2), 1.0);
         paint(c, max(sdEll(mo, vec2(0.0, 1.2), vec2(1.3, 0.8)), mouth), vec3(1.0, 0.5, 0.55), 1.0);   // tongue
         paint(c, abs(mouth) - 0.12, LINE, 0.9);
-    } else if (brake > 0.35) {
-        paint(c, sdEll(mo, vec2(0.0, 0.3), vec2(0.9, 1.1)), vec3(0.55, 0.12, 0.2), 1.0);
+    } else if (brake > 0.2) {
+        float oh = smoothstep(0.2, 0.6, brake);
+        paint(c, sdEll(mo, vec2(0.0, 0.3), vec2(mix(1.5, 0.9, oh), mix(0.3, 1.1, oh))), vec3(0.55, 0.12, 0.2), 1.0);
     } else paint(c, max(abs(length(mo + vec2(0.0, 2.0)) - 2.1) - 0.24, -(mo.y + 0.3)), LINE, 1.0);
 
     // fringe and side locks over the face: gradient, strand lines, a shine ring

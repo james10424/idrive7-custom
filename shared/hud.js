@@ -234,7 +234,7 @@ const LAYER_BUDGET = 8;          // cluster-render's limit per client connection
 const MAX_CONN = 4;              // connections a layout may ask for ("conn"): 32 layers service-wide / 8 per connection
 const PIXEL_BYTES = 16 * 1024 * 1024;   // cluster-render's pixel memory for every app's images together (CompositorLimits.pixel_bytes)
 const SHEET_AREA_FRAC = 4;       // the first sheet size limit: 1/4 of the target area (see the header)
-const PERCH_TAU_MS = 250;        // the Perch girl's lean follows the g this smoothly
+const PERCH_TAU_MS = 450;        // the Perch girl's lean and speed follow the car this smoothly
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
@@ -2237,14 +2237,15 @@ class HudApp {
             x.c.uniform(x.ref, 'u_peak', [peak]);
             x.c.uniform(x.ref, 'u_shiftNow', [sp.now ? 1 : 0]);
         } else if (w.type === 'perch') {
-            // lean: the longitudinal g smoothed over PERCH_TAU_MS, -0.4 g .. +0.4 g to -1 .. 1; speed 0..130 km/h to 0..1;
-            // sent in steps of 0.05, so the uniform goes out only when she would visibly move (the shader animates the rest)
+            // lean: the longitudinal g over PERCH_TAU_MS, -0.4 g .. +0.4 g to -1 .. 1; speed 0..130 km/h to 0..1;
+            // both smoothed, sent in steps of 0.01 (a small uniform message, at most one a tick) so she moves without visible steps
             const d = this.car.data(), dt = x.at ? Math.min(500, now - x.at) : 0;
             x.at = now;
             const g = isNum(d.gLong) ? Math.max(-0.4, Math.min(0.4, d.gLong)) / 0.4 : 0;
             x.lean = isNum(x.lean) ? x.lean + (g - x.lean) * (1 - Math.exp(-dt / PERCH_TAU_MS)) : g;
-            const v = this._raw('speed'), step = (f) => Math.round(f * 20) / 20;
-            const u = [step(x.lean), step(isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0), 0, this.themeName === 'night' ? 0.8 : 1];
+            const v = this._raw('speed'), sv = isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0, step = (f) => Math.round(f * 100) / 100;
+            x.spd = isNum(x.spd) ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / PERCH_TAU_MS)) : sv;
+            const u = [step(x.lean), step(x.spd), 0, this.themeName === 'night' ? 0.8 : 1];
             const key = u.join('|');
             if (!force && key === x.last) return;
             x.last = key;
