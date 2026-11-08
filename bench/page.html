@@ -352,7 +352,8 @@
     ctx.beginPath(); ctx.moveTo(400, 222); ctx.lineTo(400, 480); ctx.stroke(); ctx.setLineDash([]);
   }
   // What BMW's own Sport view draws inside the map window (car photo, Nov 7 2026, measured into cluster px): its speed
-  // with the line under it on the left (the big gear right of it in that photo is the theme's own), and in the corners its bracket ends and a gauge icon
+  // with the line under it and its speed-limit sign on the left (the big gear right of it in that photo is the theme's
+  // own), and in the corners its bracket ends and a gauge icon
   // (top) and hatched dial ends (bottom), which a layout's "holeCut" keeps black.
   function drawStockMapWindow() {
     const fg = '#f2f2f0';
@@ -371,6 +372,11 @@
     ctx.fillStyle = fg; ctx.font = 'bold 62px -apple-system, Helvetica, sans-serif'; ctx.fillText('0', 486, 394);
     ctx.font = 'bold 24px -apple-system, Helvetica, sans-serif'; ctx.fillText('km/h', 552, 394);
     ctx.strokeStyle = fg; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(416, 414); ctx.lineTo(698, 414); ctx.stroke();
+    // its speed-limit sign at the window's left edge, above the fuel gauge (car photo, Nov 8 2026; a layout's "holeMask")
+    ctx.fillStyle = '#f2f2f0'; ctx.beginPath(); ctx.arc(450, 360, 24, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#e8372c'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(450, 360, 21, 0, 7); ctx.stroke();
+    ctx.fillStyle = '#111'; ctx.font = 'bold 20px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('50', 450, 367);
+    ctx.textAlign = 'left';
   }
   // BMW's gear as its cluster shows it, from the app's values: P parked (no gear or a standstill in gear 0), else D and the gear
   function bmwGear() {

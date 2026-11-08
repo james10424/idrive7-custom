@@ -848,7 +848,7 @@ void main() {
             hd = max(hd, (1.0 - lp.x / u_holeCut.x - lp.y / u_holeCut.y) * u_holeCut.x * u_holeCut.y / length(u_holeCut.xy));
         if (u_holeCut.z > 0.0)
             hd = max(hd, (1.0 - lp.x / u_holeCut.z - (u_hole.w - lp.y) / u_holeCut.w) * u_holeCut.z * u_holeCut.w / length(u_holeCut.zw));
-        // and BMW's line under its speed, whose break marks the speed limit (car photo, Nov 8 2026)
+        // and a rectangle ("holeMask"): BMW's speed-limit sign at the window's left edge (car photo, Nov 8 2026)
         if (u_holeMask.z > 0.0) {
             vec2 mq = abs(p - (u_holeMask.xy + u_holeMask.zw * 0.5)) - u_holeMask.zw * 0.5;
             hd = max(hd, -(length(max(mq, 0.0)) + min(max(mq.x, mq.y), 0.0)));

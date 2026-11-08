@@ -91,7 +91,7 @@
  *             window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with
  *             "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right
  *             (BMW draws bits of its own Sport view there), and "holeMask" [x, y, w, h] in target px: a rectangle in it
- *             kept black (BMW's line under its speed, with the speed-limit break)
+ *             kept black (BMW's speed-limit sign at the window's left edge)
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
  *             pedal is in kickdown and the bar is full
