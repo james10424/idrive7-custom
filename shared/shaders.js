@@ -742,6 +742,8 @@ uniform vec4 u_strip;     // bottom strip: left end x, top y, height, slant px
 uniform vec3 u_stripFill; // the strip as two bars from the middle out: blue left 0..1, red right 0..1, its last tenth red
                           // (kickdown) when z > 0.5; x < 0 = both halves lit (no signals)
 uniform float u_topEnd;   // the top lines run from the bracket to this x (left; mirrored on the right)
+uniform vec4 u_gapRail;   // the car-ahead gauge's box: x, y, w, h (w 0 = none)
+uniform vec2 u_gapG;      // its fill 0..1 up the box (< 0: no car), red when y > 0.5 (closing fast)
 
 const vec3 BLUE_LINE = vec3(0.36, 0.62, 1.0);
 const vec3 BLUE_BAND = vec3(0.13, 0.3, 0.78);
@@ -889,6 +891,19 @@ void main() {
     // the bottom line between the brackets
     if (abs(p.y - u_geo.z) < 3.0 && abs(p.x - u_size.x * 0.5) < u_size.x * 0.5 - outerX(u_geo.z))
         c = over(vec4(mix(BLUE_LINE, RED_LINE, step(u_size.x * 0.5, p.x)) * 0.8, cov(abs(p.y - u_geo.z) - 1.2)), c);
+
+    // the car-ahead gauge: an upright box filled from the bottom up to the gap, white (red while closing fast) over a
+    // grey track, with a lighter outline
+    if (u_gapRail.z > 0.0) {
+        vec2 bc = u_gapRail.xy + u_gapRail.zw * 0.5, bq = abs(p - bc) - u_gapRail.zw * 0.5;
+        float bd = length(max(bq, 0.0)) + min(max(bq.x, bq.y), 0.0);
+        float inside = cov(bd);
+        float f = (u_gapRail.y + u_gapRail.w - p.y) / u_gapRail.w;           // 0 bottom .. 1 top
+        bool on = u_gapG.x > 0.001 && f <= u_gapG.x;
+        vec3 fc = u_gapG.y > 0.5 ? vec3(1.0, 0.2, 0.22) : vec3(0.96, 0.97, 1.0);
+        c = over(vec4(on ? fc : vec3(0.30, 0.32, 0.37), (on ? 1.0 : 0.92) * inside), c);
+        c = over(vec4(0.55, 0.57, 0.62, 0.9 * cov(abs(bd) - 0.8) * (on ? 0.0 : 1.0)), c);
+    }
 
     // bottom strip: slanted ends, blue left of the middle, red right, thin dividers
     float sy = p.y - u_strip.y;

@@ -95,6 +95,8 @@
  *             (0.85)]: a rectangle darkened in it, fading out over feather px (behind the gear, so the map doesn't run through it); "stripSignals" [left, right] turns the strip
  *             into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r]
  *             ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown
+ *             "gapGauge" { box: [x, y, w, h], max (150 m) }: the car ahead as an upright box filled from the bottom up to
+ *             the gap, red while closing faster than config.acc.closingKmh (10 km/h)
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
  *             pedal is in kickdown and the bar is full; "range" [lo, hi] maps the signal from that span onto 0..max
@@ -136,6 +138,8 @@
  * "themes": [...] shows it only in those themes. Text "color2": a second role, the colour at the bottom
  * of the box (a top-to-bottom gradient, the chrome look). Text: "hotWhen": "now" turns it the shift red
  * at the shift point; "coldWhen": "cold" turns it blue while the cold guard lowers the shift point.
+ * Text "slide": { signal ("accGap" = the car ahead in m), max, yTop, yBottom }: the text's middle rides from yBottom (0)
+ * to yTop (max) inside its box, blank without a value; "hotWhen": "closing" turns it red while the car ahead closes fast.
  * scale: "over" as revbar; "redFrom": true draws the numbers from the redline on in red.
  * lights: "count" (12), "from" rpm (3000) where the first light comes on, "tail" (0): the last "tail" lights are blue
  *   (the GT3 look); "round": true for dots;
@@ -750,6 +754,12 @@ class HudApp {
         }
         if (key === 'set') return this.assistActive && isNum(this.accSetRaw) && this.accSetRaw !== 65535 ? this._accScale('set', this.accSetRaw) : null;
         return null;
+    }
+
+    /** The car ahead getting closer faster than config.acc.closingKmh (10 km/h). */
+    _closing() {
+        const r = this._acc('rel'), lim = this.config.acc && isNum(this.config.acc.closingKmh) ? this.config.acc.closingKmh : 10;
+        return isNum(r) && r < -lim;
     }
 
     /** The HUD mode now: normal, cruise, nav or cruiseNav (see the header). */
@@ -1537,6 +1547,9 @@ class HudApp {
             c.uniform(ref, 'u_holeFade', hf ? [hf[0] - w.x, hf[1] - w.y, hf[2], hf[3]] : [0, 0, 0, 0]);
             c.uniform(ref, 'u_holeFadeK', [hf && isNum(hf[4]) ? hf[4] : 30, hf && isNum(hf[5]) ? hf[5] : 0.85]);
             c.uniform(ref, 'u_strip', w.strip);
+            const gg = w.gapGauge && Array.isArray(w.gapGauge.box) ? w.gapGauge.box : null;
+            c.uniform(ref, 'u_gapRail', gg ? [gg[0] - w.x, gg[1] - w.y, gg[2], gg[3]] : [0, 0, 0, 0]);
+            c.uniform(ref, 'u_gapG', [-1, 0]);
             c.uniform(ref, 'u_stripFill', Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
             c.uniform(ref, 'u_topEnd', [w.topEnd]);
         } else if (w.type === 'mdash') {
@@ -1720,22 +1733,34 @@ class HudApp {
             let role = w.color || 'fg';
             if (w.colorBy === 'verdict' && this.score.last) role = VERDICT[this.score.last.verdict] || role;
             if (w.near && this._nearMark(w.near[0]) === w.near[1]) role = w.nearColor || 'fg';
-            if (w.hotWhen || w.coldWhen) {
+            if (w.hotWhen === 'closing') { if (this._closing()) role = 'hot'; }
+            else if (w.hotWhen || w.coldWhen) {
                 const sp = this._shift();
                 if (w.coldWhen && sp[w.coldWhen]) role = VERDICT.COLD;
                 if (w.hotWhen && sp[w.hotWhen]) role = 'hot';
             }
-            const key = s + '|' + role;
+            // "slide": the text rides up its box with a value (the car-ahead gauge's label), blank without one
+            let offY = 0, text = s;
+            if (w.slide) {
+                const v = w.slide.signal === 'accGap' ? this._acc('gap') : this._raw(w.slide.signal);
+                if (!isNum(v)) text = '';
+                else {
+                    const f = Math.min(1, Math.max(0, v / (w.slide.max || 150)));
+                    const y = w.slide.yBottom - f * (w.slide.yBottom - w.slide.yTop);
+                    offY = Math.round(y - w.y - textRaster.loadFont(w.font).metrics.cellHeight / 2);
+                }
+            }
+            const key = text + '|' + role + '|' + offY;
             if (!force && key === x.last) return;
             x.last = key; x.lastPaint = now;
             let buf;
             if (w.font === '@sys') {
                 // the car's own font, any script ("size" px, default 80 % of the box)
                 const f = this._sysFont();
-                const m = f && s ? f.mask(w.w, w.h, s, { size: w.size || Math.round(w.h * 0.8), align: w.align }) : Buffer.alloc(w.w * w.h);
+                const m = f && text ? f.mask(w.w, w.h, text, { size: w.size || Math.round(w.h * 0.8), align: w.align }) : Buffer.alloc(w.w * w.h);
                 buf = textRaster.tint(m, w.w, w.h, { color: color(this.theme, role) });
-            } else buf = textRaster.drawText(w.w, w.h, s, {
-                font: w.font, color: color(this.theme, role), align: w.align, spacing: w.spacing,
+            } else buf = textRaster.drawText(w.w, w.h, text, {
+                font: w.font, color: color(this.theme, role), align: w.align, spacing: w.spacing, offsetY: offY,
                 color2: w.color2 && role !== 'hot' ? color(this.theme, w.color2) : null,
                 glow: w.glow ? this.theme.glow : 0,
             });
@@ -1783,9 +1808,14 @@ class HudApp {
             const ss = Array.isArray(w.stripSignals) ? w.stripSignals : null, sm = Array.isArray(w.stripMax) ? w.stripMax : [100, 10];
             const strip = ss ? [0, 1].map((i) => { const v = ss[i] ? this._raw(ss[i]) : null; return isNum(v) ? Math.round(Math.min(1, Math.max(0, v / (sm[i] || 1))) * 50) / 50 : 0; }) : null;
             const hot = !!ss && w.stripHotWhen === 'kickdown' && this._kickdown();
-            const key = vals.join('|') + (strip ? '|' + strip.join('|') + (hot ? 'h' : '') : '');
+            // the car-ahead gauge: the gap over its "max" m, in 300 steps; red while closing fast
+            const gm = w.gapGauge ? this._acc('gap') : null;
+            const gv = isNum(gm) ? Math.round(Math.min(1, Math.max(0, gm / (w.gapGauge.max || 150))) * 300) / 300 : -1;
+            const gHot = gv >= 0 && this._closing();
+            const key = vals.join('|') + (strip ? '|' + strip.join('|') + (hot ? 'h' : '') : '') + (w.gapGauge ? '|' + gv + (gHot ? 'c' : '') : '');
             if (!force && key === x.last) return;
             x.last = key;
+            if (w.gapGauge) x.c.uniform(x.ref, 'u_gapG', [gv, gHot ? 1 : 0]);
             if (strip) x.c.uniform(x.ref, 'u_stripFill', [strip[0], strip[1], hot ? 1 : 0]);
             x.c.uniform(x.ref, 'u_speed', [vals[0]]);
             x.c.uniform(x.ref, 'u_rpm', [vals[1]]);
