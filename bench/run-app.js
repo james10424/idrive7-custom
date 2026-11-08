@@ -80,7 +80,7 @@ function press(key, value) {
 // manual signals as raw SOME/IP values (a copy of kit/runtime/car.js SCALE; FES boost from hud.js)
 const SCALE = { rpm: [0.25, 0], speed: [0.015625, 0], accel: [0.002, -65], temp: [1, -48], torque: [0.5, -1023.5], boost: [0.01, 0] };
 const raw = (k, v) => Math.round((v - SCALE[k][1]) / SCALE[k][0]);
-let mode = 'demo', manual = {}, drive = null, nav = null, assist = null;
+let mode = 'demo', manual = {}, drive = null, nav = null, assist = null, carSw = {};
 // the drive mode buttons, sent once a second as the car does on change (wire numbers: 1 Sport, 4 Comfort, 7 Eco Pro)
 setInterval(() => { if (drive !== null) hu.feed('de.bmw.infotainment.drivingexcitement.FES', 'statusFESVehicleDynamicSwitchHMI', { actualValueModeDrivingExperience: drive }); }, 1000);
 // route guidance (Guidance guidanceState, the enum names oap-sdk reads), sent once a second
@@ -147,13 +147,10 @@ setInterval(() => {
     hu.feed('de.bmw.infrastructure.EnvironmentalInformation', 'ExteriorTemperature', { temperatureExterior: Math.round((num('ambient', 22) + 40) / 0.5) });
     // the car's display units (bar, C), so the tyre values below read as 0.1 bar and C + 40; the shifter programme from `program` (S / M)
     hu.feed('de.bmw.infotainment.vehicle.Vehicle', 'statusNewCurrentUnitsStatusExt', { unitOfMeasurementAirPressure: 1, unitOfMeasurementTemperature: 1 });
-    hu.feed('de.bmw.infotainment.misc.MDrive', 'dataDisplayGearbox', { displayProgramGearbox: manual.program === 'S' ? 'S_MINUS_PROGRAMM' : manual.program === 'M' ? 'M_MINUS_PROGRAMM' : 'D_PROGRAMM' });
+    if (!carSw.program) hu.feed('de.bmw.infotainment.misc.MDrive', 'dataDisplayGearbox', { displayProgramGearbox: 'D_PROGRAMM' });
     // tyres (TPMS, the fields the car answers a read with): pressure in 0.1 bar, temperature raw - 40 C; the rear pair a notch higher
     const tp = Math.round(num('tyreP', 2.3) * 10), tt = Math.round(num('tyreT', 24) + 40);
     hu.feed('de.bmw.infotainment.vehicle.TPMS', 'statusTyrePressure', { actualValuePressureTyreFLH: tp, actualValuePressureTyreFRH: tp, actualValuePressureTyreRLH: tp + 2, actualValuePressureTyreRRH: tp + 2 });
-    // the parking brake (`parkBrake` 1 = set) and Auto Hold (`autoHold` 0 off, 1 on, 2 holding), as the car sends them
-    hu.feed('de.bmw.infotainment.vehicle.Vehicle2', 'statusStandstillFunctions', { statusParkingBrake: num('parkBrake', 0) ? 'PARKBREMSE_MECHANISCH_FESTGESTELLT' : 'PARKBREMSE_MECHANISCH_NICHT_FESTGESTELLT' });
-    hu.feed('de.bmw.chassis.VehicleStabilizationManagement', 'StandStillFunction', { statusAutoH: ['AUTOH_NICHT_AKTIVIERT', 'AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG_NICHT', 'AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG'][Math.max(0, Math.min(2, Math.round(num('autoHold', 0))))] });
     hu.feed('de.bmw.infotainment.vehicle.TPMS', 'statusTyreTemperature', { actualValueTemperatureTyreFLH: tt, actualValueTemperatureTyreFRH: tt, actualValueTemperatureTyreRLH: tt + 3, actualValueTemperatureTyreRRH: tt + 3 });
 }, 50);
 
@@ -167,6 +164,19 @@ setInterval(() => {
     send({ t: 'values', mode, values: out });
 }, 250);
 
+// the page's car switches, as the car sends each message (catalog enum names), in demo and manual alike; a switch left at
+// "not sent" sends nothing
+const CAR_SW = {
+    turn: (v) => hu.feed('de.bmw.body.Light', 'StatusFunctionsIndicators', { controlIndicateDirection: { off: 'BLINKEN_AUS', left: 'DAUER_BLINKEN_LINKS_EIN',
+        right: 'DAUER_BLINKEN_RECHTS_EIN', hazard: 'BEIDSEITIGES_BLINKEN_EIN' }[v], activeFunctionIndicateDirection: v === 'hazard' ? 'WARNBLINKEN_MANUELL' : v === 'off' ? 'BLINKEN_AUS' : v === 'left' ? 'DAUERBLINKEN_LINKS' : 'DAUERBLINKEN_RECHTS' }),
+    brakeLights: (v) => hu.feed('de.bmw.body.Light', 'LampExterior', { controlFunctionBrakeLight: v === 'on' ? 'ON_BL' : 'OFF_BL' }),
+    parkBrake: (v) => hu.feed('de.bmw.infotainment.vehicle.Vehicle2', 'statusStandstillFunctions', { statusParkingBrake: v === 'set' ? 'PARKBREMSE_MECHANISCH_FESTGESTELLT' : 'PARKBREMSE_MECHANISCH_NICHT_FESTGESTELLT' }),
+    autoHold: (v) => hu.feed('de.bmw.chassis.VehicleStabilizationManagement', 'StandStillFunction', { statusAutoH: { off: 'AUTOH_NICHT_AKTIVIERT',
+        armed: 'AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG_NICHT', hold: 'AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG' }[v] }),
+    program: (v) => hu.feed('de.bmw.infotainment.misc.MDrive', 'dataDisplayGearbox', { displayProgramGearbox: v === 'S' ? 'S_MINUS_PROGRAMM' : v === 'M' ? 'M_MINUS_PROGRAMM' : 'D_PROGRAMM' }),
+};
+setInterval(() => Object.keys(carSw).forEach((k) => { if (CAR_SW[k] && carSw[k]) CAR_SW[k](carSw[k]); }), 500);
+
 process.on('message', (m) => {
     if (!m) return;
     if (m.t === 'signals') {
@@ -179,6 +189,7 @@ process.on('message', (m) => {
     else if (m.t === 'drive') drive = m.value;
     else if (m.t === 'nav') nav = m.value;
     else if (m.t === 'assist') assist = m.value;
+    else if (m.t === 'car') { if (m.value) carSw[m.key] = m.value; else delete carSw[m.key]; }
 });
 process.on('disconnect', () => process.exit(0));
 process.on('SIGTERM', () => process.exit(0));

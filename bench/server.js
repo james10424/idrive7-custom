@@ -360,6 +360,7 @@ let child = null;
 let signals = { t: 'signals', mode: 'demo', values: {} };
 let drive = { t: 'drive', value: null };   // the drive mode buttons (FES actualValueModeDrivingExperience), null = car hasn't said
 let nav = { t: 'nav', value: null };       // route guidance (Guidance guidanceState: 'ACTIVE', 'INACTIVE'), null = car hasn't said
+let carSw = {};                             // the car switches (page "Car switches": turn signals, brake lights, parking brake, ...), key -> value
 let assist = { t: 'assist', value: null }; // BMW's HUD driver assistance block (DisplayDataServer): 'acc' or 'off', null = car hasn't said
 let restartTimer = null;
 let stopping = false;
@@ -393,6 +394,7 @@ function startApp() {
     if (drive.value !== null) c.send(drive);
     if (nav.value !== null) c.send(nav);
     if (assist.value !== null) c.send(assist);
+    Object.keys(carSw).forEach((k) => c.send({ t: 'car', key: k, value: carSw[k] }));
     const pipe = (stream, level) => {
         let rest = '';
         stream.on('data', (d) => {
@@ -476,6 +478,7 @@ const web = http.createServer(async (req, res) => {
         if (lastSettings) send(lastSettings, res);
         if (lastStatus) send(lastStatus, res);
         send(nav, res); send(assist, res);      // the page draws BMW's guidance and ACC stand-ins from these
+        send({ t: 'car', values: carSw }, res);
         send({ t: 'app', state: child ? 'running' : 'stopped' }, res);
         return;
     }
@@ -498,6 +501,16 @@ const web = http.createServer(async (req, res) => {
         if (child) child.send(nav);
         send(nav);
         log('info', 'bench: route guidance ' + JSON.stringify(nav.value));
+        res.writeHead(204); return res.end();
+    }
+    if (req.method === 'POST' && url === '/car') {
+        const b = await body(req);
+        if (typeof b.key === 'string' && /^[a-zA-Z]+$/.test(b.key)) {
+            if (typeof b.value === 'string' && b.value) carSw[b.key] = b.value; else delete carSw[b.key];
+            if (child) child.send({ t: 'car', key: b.key, value: carSw[b.key] || null });
+            send({ t: 'car', values: carSw });
+            log('info', 'bench: ' + b.key + ' ' + JSON.stringify(carSw[b.key] || null));
+        }
         res.writeHead(204); return res.end();
     }
     if (req.method === 'POST' && url === '/assist') {

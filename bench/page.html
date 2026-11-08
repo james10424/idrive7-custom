@@ -85,6 +85,7 @@
       <div class="seg" id="drive" title="The drive mode buttons: FES statusFESVehicleDynamicSwitchHMI"><button data-v="" class="on">Mode not sent</button><button data-v="4">COMFORT</button><button data-v="1">SPORT</button><button data-v="2">SPORT+</button><button data-v="7">ECO PRO</button></div>
       <div class="seg" id="nav" title="Route guidance: navigation.guiding.Guidance guidanceState"><button data-v="" class="on">Guidance not sent</button><button data-v="ACTIVE">GUIDING</button><button data-v="INACTIVE">NO ROUTE</button></div>
       <div class="seg" id="assist" title="BMW's HUD driver assistance block: DisplayDataServer functionalLibraryData"><button data-v="" class="on">Assist not sent</button><button data-v="acc">ACC ON</button><button data-v="off">ACC OFF</button></div>
+      <div id="carsw"></div>
       <div id="sliders"></div>
       <div class="note" id="sigNote">Demo drive is the kit's simulator (sim.js). It has no boost signal, so boost reads "--" here, as on a car that does not fill that field.</div>
     </section>
@@ -547,6 +548,9 @@
     } else if (m.t === 'nav' || m.t === 'assist') {
       bmwState[m.t] = m.value; dirty = true;
       document.querySelectorAll('#' + m.t + ' button').forEach((x) => x.classList.toggle('on', x.dataset.v === (m.value === null ? '' : m.value)));
+    } else if (m.t === 'car') {
+      carSw = m.values || {};
+      document.querySelectorAll('#carsw .seg').forEach((g) => g.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.v === (carSw[g.dataset.k] || ''))));
     } else if (m.t === 'settings') {
       if (m.values && m.values.units) { units = m.values.units; dirty = true; }
       renderSettings(m);
@@ -569,6 +573,24 @@
 
   /* ---------- controls ---------- */
   let mode = 'demo';
+  // car switches: each sends the car's own message every 500 ms while set (bench/run-app.js CAR_SW), in demo and manual alike
+  let carSw = {};
+  const CAR_SW = [
+    ['turn', 'Indicators: body.Light StatusFunctionsIndicators (Regal turn lamps)', [['', 'Indicators not sent'], ['off', 'OFF'], ['left', 'LEFT'], ['right', 'RIGHT'], ['hazard', 'HAZARD']]],
+    ['brakeLights', 'Brake lights: body.Light LampExterior (Sport brake bar)', [['', 'Brake lights not sent'], ['on', 'BRAKING'], ['off', 'OFF']]],
+    ['parkBrake', 'Parking brake: Vehicle2 statusStandstillFunctions (Regal PARK BRAKE lamp)', [['', 'Parking brake not sent'], ['set', 'SET'], ['released', 'RELEASED']]],
+    ['autoHold', 'Auto Hold: VehicleStabilizationManagement StandStillFunction (Regal AUTO HOLD lamp)', [['', 'Auto Hold not sent'], ['off', 'OFF'], ['armed', 'ON'], ['hold', 'HOLDING']]],
+    ['program', 'Shifter programme: MDrive dataDisplayGearbox (D / S / M next to the gear)', [['', 'Programme not sent'], ['D', 'D'], ['S', 'S'], ['M', 'M']]],
+  ];
+  const csw = document.getElementById('carsw');
+  CAR_SW.forEach(([k, title, opts]) => {
+    csw.insertAdjacentHTML('beforeend', '<div class="seg" data-k="' + k + '" title="' + title + '">' +
+      opts.map(([v, t]) => '<button data-v="' + v + '"' + (v === '' ? ' class="on"' : '') + '>' + t + '</button>').join('') + '</div>');
+  });
+  csw.querySelectorAll('.seg').forEach((g) => g.querySelectorAll('button').forEach((b) => b.onclick = () => {
+    g.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+    fetch('/car', { method: 'POST', body: JSON.stringify({ key: g.dataset.k, value: b.dataset.v }) });
+  }));
   const sl = document.getElementById('sliders');
   SIGNALS.forEach(([k, min, max, step, def]) => {
     sl.insertAdjacentHTML('beforeend', '<div class="row"><span>' + k + '</span><input type="range" id="s_' + k + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + def + '" disabled><output id="o_' + k + '">--</output></div>');
