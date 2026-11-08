@@ -1,0 +1,53 @@
+{
+  "params": {},
+  "heightPx": 200,
+  "tails": [],
+  "tailsRoot": 0.15,
+  "hide": [],
+  "frames": {
+    "idle": {},
+    "half": {
+      "params": {
+        "ParamEyeLOpen": 0.45,
+        "ParamEyeROpen": 0.45
+      }
+    },
+    "shut": {
+      "params": {
+        "ParamEyeLOpen": 0,
+        "ParamEyeROpen": 0
+      }
+    },
+    "talk": {
+      "params": {
+        "ParamMouthOpenY": 0.5,
+        "ParamMouthForm": 1
+      }
+    }
+  },
+  "lean": {
+    "steps": 11,
+    "params": {
+      "ParamBodyAngleZ": 10,
+      "ParamAngleZ": 30,
+      "ParamBodyAngleX": 10,
+      "ParamAngleX": 12,
+      "ParamEyeBallX": 0.4
+    },
+    "left": {
+      "ParamMouthOpenY": 0.6,
+      "ParamMouthForm": -1,
+      "ParamBrowLY": -0.6,
+      "ParamBrowRY": -0.6
+    },
+    "right": {
+      "ParamEyeLSmile": 1,
+      "ParamEyeRSmile": 1,
+      "ParamEyeLOpen": 0,
+      "ParamEyeROpen": 0,
+      "ParamMouthForm": 1,
+      "ParamMouthOpenY": 0.7
+    },
+    "face": 0.6
+  }
+}

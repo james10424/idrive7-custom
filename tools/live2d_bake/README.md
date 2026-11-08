@@ -10,7 +10,11 @@ Turns a Live2D model you own into the frames Custom HUD's **Perch** layout draws
 
 ## Bake
 
-1. Write a config next to your model (the fields are listed at the top of `page.js`): which parameters make the blink and the smile, which parts are the twin tails, and which body and head rotation makes her lean.
+1. Copy [`example.json`](example.json) next to your model and adjust it (every field is described at the top of `page.js`). As it is, it uses Live2D's standard parameter names, which most models have, so many models bake with it unchanged: a 200 px figure, blinking and smiling, leaning with its body and head, the braking and happy faces at the ends of the lean. A parameter your model doesn't have is skipped, with a note in the bake log. What you will most likely change:
+   - `tails`: the part ids of long hair or ribbons to swing in their own sprite (find them on the inspect page). Leave it empty and the hair simply leans with her.
+   - `lean.left` and `lean.right`: your model's own expressions for braking and pulling away hard (its `.exp3.json` files show which parameters they set).
+   - `params`: toggles to set on every frame, such as an outfit.
+   - `heightPx`, `anchor`, `headY`, `waist`: her size, the point between her feet, her face and waist (by default 15% and 40% down the figure).
 2. Start the bake page:
 
    ```bash

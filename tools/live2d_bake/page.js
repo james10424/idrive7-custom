@@ -14,15 +14,41 @@
  *               ones "right" (the happy face). Neighbouring angles are close enough to blend without a double image
  *   tails       ["part id", ...]: drawn in their own sprite (swung by the HUD), hidden in the body frames
  *   tailsRoot   0..1: where the tails hang from, as a fraction down the tails sprite (0.15)
- *   anchor      [x, y] the model point between her feet (model units, y up, as ?inspect's grid shows them): it goes on
+ *   anchor      [x, y] the model point between her feet (model units, y up, as ?inspect's grid shows them; the bottom
+ *               middle of the figure when left out): it goes on
  *               the Perch widget's "feet" point; anchorPx [x, y] px added to it on the HUD (right, down)
  *   hide        ["part id"]: left out entirely
- *   pxPerUnit   HUD px per model unit (her size on the HUD)
- *   waist       model y the upper body breathes and leans above
- *   headY       model y across her face (1.3): where the bake measures how far each lean moves her head
+ *   heightPx    her height on the HUD in px (200), or pxPerUnit: HUD px per model unit
+ *   waist       model y the upper body breathes above (40% down the figure)
+ *   headY       model y across her face (15% down the figure): where the bake measures how far each lean moves her
+ *               head, so the tails can follow it
  *   pad         px of transparent border round each sprite (2)
  */
 const C = window.Live2DCubismCore;
+
+/* What a config leaves out: Live2D's standard parameter ids (most models use them; a missing one is skipped with a
+ * note in the log). tools/live2d_bake/example.json is these written out, to start a config from. */
+const DEFAULTS = {
+    frames: {
+        idle: {},
+        half: { params: { ParamEyeLOpen: 0.45, ParamEyeROpen: 0.45 } },
+        shut: { params: { ParamEyeLOpen: 0, ParamEyeROpen: 0 } },
+        talk: { params: { ParamMouthOpenY: 0.5, ParamMouthForm: 1 } },
+    },
+    lean: {
+        steps: 11,
+        params: { ParamBodyAngleZ: 10, ParamAngleZ: 30, ParamBodyAngleX: 10, ParamAngleX: 12, ParamEyeBallX: 0.4 },
+        left: { ParamMouthOpenY: 0.6, ParamMouthForm: -1, ParamBrowLY: -0.6, ParamBrowRY: -0.6 },
+        right: { ParamEyeLSmile: 1, ParamEyeRSmile: 1, ParamEyeLOpen: 0, ParamEyeROpen: 0, ParamMouthForm: 1, ParamMouthOpenY: 0.7 },
+        face: 0.6,
+    },
+};
+function withDefaults(cfg) {
+    const c = Object.assign({}, cfg);
+    c.frames = Object.assign({}, DEFAULTS.frames, cfg.frames || {});
+    c.lean = Object.assign({}, DEFAULTS.lean, cfg.lean || {});
+    return c;
+}
 const logEl = document.getElementById('log'), view = document.getElementById('view');
 const log = (s) => { logEl.textContent += '\n' + s; };
 const SS = 4;   // render this many times bigger than the frame, then scale down
@@ -242,7 +268,7 @@ function alphaBox(cv) {
 }
 
 async function bake(L, cfg) {
-    const ppu = cfg.pxPerUnit || 60, pad = cfg.pad || 2;
+    const pad = cfg.pad || 2;
     const hidden = cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
     const tailsIn = cfg.tails && cfg.tails.length ? inParts(L, cfg.tails) : null;
     const tails = tailsIn ? (i) => tailsIn(i) && !hidden(i) : null;
@@ -252,7 +278,13 @@ async function bake(L, cfg) {
     setParams(L, Object.assign({}, cfg.params, idle));
     L.model.update();
     let box = bounds(L, (i) => !hidden(i));
-    const m = 0.08; box = [box[0] - m, box[1] - 0.02, box[2] + m, box[3] + 0.02];
+    // her size: pxPerUnit, else heightPx (200) over the figure's height; landmarks default to fractions of the figure,
+    // so a model in any units bakes without them
+    const figH = box[3] - box[1];
+    const ppu = cfg.pxPerUnit || (cfg.heightPx || 200) / figH;
+    const headY = isFinite(cfg.headY) ? cfg.headY : box[3] - 0.15 * figH;
+    const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - 0.4 * figH;
+    const m = 0.025 * figH; box = [box[0] - m, box[1] - 0.006 * figH, box[2] + m, box[3] + 0.006 * figH];
     const fw = Math.ceil((box[2] - box[0]) * ppu), fh = Math.ceil((box[3] - box[1]) * ppu);
     const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
     log('frame ' + fw + 'x' + fh + ' px');
@@ -306,7 +338,7 @@ async function bake(L, cfg) {
     const byN = {}; items.forEach((it) => { byN[it.n] = it; });
     // where her head is in each lean frame (the alpha centroid of a band across the head), so the HUD can slide the
     // two nearest lean angles onto each other while it blends them instead of fading one through the other
-    const headMid = Math.round(toFrame(0, cfg.headY || 1.3)[1]);
+    const headMid = Math.round(toFrame(0, headY)[1]);
     const bandY0 = Math.max(0, headMid - Math.round(fh * 0.04)), bandY1 = Math.min(fh, headMid + Math.round(fh * 0.04));
     const headX = (cv) => {
         const dd = cv.getContext('2d').getImageData(0, bandY0, fw, bandY1 - bandY0).data;
@@ -317,13 +349,13 @@ async function bake(L, cfg) {
     const x0 = headX(frames.idle);
     const shift = leanNames.map((n) => Math.round((headX(frames[n]) - x0) * 10) / 10);
     log('head shift per lean angle (px): ' + shift.join(', '));
-    const an = cfg.anchor || [0, box[1]], ap = cfg.anchorPx || [0, 0], anchor = toFrame(an[0], an[1]);
+    const an = cfg.anchor || [(box[0] + box[2]) / 2, box[1] + 0.006 * figH], ap = cfg.anchorPx || [0, 0], anchor = toFrame(an[0], an[1]);
     const info = {
         version: 1, atlas: [AW, AH], frame: [fw, fh],
         frames: Object.fromEntries(names.map((n) => [n, byN[n].at])),
         lean: leanNames.map((n) => byN[n].at),
         anchor: [Math.round(anchor[0] - ap[0]), Math.round(anchor[1] - ap[1])],
-        hipY: Math.round(toFrame(0, cfg.waist || 0.5)[1]), headY: Math.round((bandY0 + bandY1) / 2), leanShift: shift,
+        hipY: Math.round(toFrame(0, waist)[1]), headY: Math.round((bandY0 + bandY1) / 2), leanShift: shift,
     };
     if (tl) {
         const t = byN.tails, root = cfg.tailsRoot || 0.15;
@@ -341,7 +373,7 @@ async function bake(L, cfg) {
 (async () => {
     try {
         const L = await loadModel();
-        const cfg = await json('/config.json');
+        const cfg = withDefaults(await json('/config.json'));
         log('model: ' + L.model.parameters.count + ' parameters, ' + L.model.parts.count + ' parts, ' + L.model.drawables.count + ' drawables, ' + L.imgs.length + ' textures');
         if (/[?&]inspect/.test(location.search)) await inspect(L, cfg);
         else await bake(L, cfg);
