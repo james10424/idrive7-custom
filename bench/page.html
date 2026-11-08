@@ -415,6 +415,12 @@
   // ?only=1: just the target at 1:1 (800x480 HUD, 1920x720 cluster), nothing else
   // ?backdrop=1: start with the backdrop on
   // ?car=0: start with the car view (hood, gear box, belt light, HUD window) off
+  // the view checkboxes are remembered per browser (a reload kept losing the backdrop); URL flags below still win
+  ['outlines', 'road', 'bmwhud', 'carview'].forEach((id) => {
+    const el = document.getElementById(id), key = 'bench.' + id;
+    try { const v = localStorage.getItem(key); if (v !== null) el.checked = v === '1'; } catch (e) { /* storage blocked */ }
+    el.addEventListener('change', () => { try { localStorage.setItem(key, el.checked ? '1' : '0'); } catch (e) { /* storage blocked */ } });
+  });
   if (/[?&](clean|only)=1/.test(location.search)) document.getElementById('outlines').checked = false;
   if (/[?&]only=1/.test(location.search)) document.body.classList.add('only');
   if (/[?&]backdrop=1/.test(location.search)) document.getElementById('road').checked = true;
