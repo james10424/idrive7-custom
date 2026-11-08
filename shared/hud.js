@@ -96,7 +96,8 @@
  *             into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r]
  *             ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown
  *             "gapGauge" { box: [x, y, w, h], max (150 m) }: the car ahead as an upright box filled from the bottom up to
- *             the gap, red while closing faster than config.acc.closingKmh (10 km/h)
+ *             the gap, red while closing faster than config.acc.closingKmh (10 km/h); "vbars" [{ box: [x, y, w, h], signal,
+ *             range: [lo, hi], color }] (up to 2): more upright boxes like it (boost, battery)
  *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
  *             pedal is in kickdown and the bar is full; "range" [lo, hi] maps the signal from that span onto 0..max
@@ -1557,6 +1558,13 @@ class HudApp {
             const gg = w.gapGauge && Array.isArray(w.gapGauge.box) ? w.gapGauge.box : null;
             c.uniform(ref, 'u_gapRail', gg ? [gg[0] - w.x, gg[1] - w.y, gg[2], gg[3]] : [0, 0, 0, 0]);
             c.uniform(ref, 'u_gapG', [-1, 0]);
+            const vb = Array.isArray(w.vbars) ? w.vbars.slice(0, 2) : [];
+            [0, 1].forEach((i) => {
+                const b = vb[i] && Array.isArray(vb[i].box) ? vb[i] : null;
+                c.uniform(ref, 'u_vbar' + i, b ? [b.box[0] - w.x, b.box[1] - w.y, b.box[2], b.box[3]] : [0, 0, 0, 0]);
+                c.uniform(ref, 'u_vbarC' + i, rgb(color(t, (b && b.color) || 'fg')));
+            });
+            c.uniform(ref, 'u_vbarV', [-1, -1]);
             c.uniform(ref, 'u_stripFill', Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
             c.uniform(ref, 'u_topEnd', [w.topEnd]);
         } else if (w.type === 'mdash') {
@@ -1761,7 +1769,7 @@ class HudApp {
                 const v = w.slide.signal === 'accGap' ? this._acc('gap') : this._raw(w.slide.signal);
                 if (!isNum(v)) text = '';
                 else {
-                    const f = Math.min(1, Math.max(0, v / (w.slide.max || 150)));
+                    const lo = w.slide.min || 0, f = Math.min(1, Math.max(0, (v - lo) / ((w.slide.max || 150) - lo)));
                     const y = w.slide.yBottom - f * (w.slide.yBottom - w.slide.yTop);
                     offY = Math.round(y - w.y - textRaster.loadFont(w.font).metrics.cellHeight / 2);
                 }
@@ -1828,10 +1836,16 @@ class HudApp {
             const gm = w.gapGauge ? this._acc('gap') : null;
             const gv = isNum(gm) ? Math.round(Math.min(1, Math.max(0, gm / (w.gapGauge.max || 150))) * 300) / 300 : -1;
             const gHot = gv >= 0 && this._closing();
-            const key = vals.join('|') + (strip ? '|' + strip.join('|') + (hot ? 'h' : '') : '') + (w.gapGauge ? '|' + gv + (gHot ? 'c' : '') : '');
+            // boost and battery boxes: each signal over its "range" [lo, hi], in 100 steps
+            const vbv = Array.isArray(w.vbars) && w.vbars.length ? [0, 1].map((i) => {
+                const b = w.vbars[i], v = b && b.signal ? this._raw(b.signal) : null, r = (b && b.range) || [0, 1];
+                return isNum(v) ? Math.round(Math.min(1, Math.max(0, (v - r[0]) / (r[1] - r[0]))) * 100) / 100 : -1;
+            }) : null;
+            const key = vals.join('|') + (strip ? '|' + strip.join('|') + (hot ? 'h' : '') : '') + (w.gapGauge ? '|' + gv + (gHot ? 'c' : '') : '') + (vbv ? '|' + vbv.join('|') : '');
             if (!force && key === x.last) return;
             x.last = key;
             if (w.gapGauge) x.c.uniform(x.ref, 'u_gapG', [gv, gHot ? 1 : 0]);
+            if (vbv) x.c.uniform(x.ref, 'u_vbarV', vbv);
             if (strip) x.c.uniform(x.ref, 'u_stripFill', [strip[0], strip[1], hot ? 1 : 0]);
             x.c.uniform(x.ref, 'u_speed', [vals[0]]);
             x.c.uniform(x.ref, 'u_rpm', [vals[1]]);
