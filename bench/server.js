@@ -34,6 +34,7 @@ const net = require('net');
 const http = require('http');
 const path = require('path');
 const { fork, execFileSync } = require('child_process');
+const { takeBuildLock, BUILD_LOCK_WAIT_MS } = require('./build_lock');
 // What the driver sees of each target (hood curve, BMW's gear box and belt light, the HUD window):
 // one source of truth, shared with the app's layout check. The page gets it in the 'hello' event.
 const visible = require('../shared/visible');
@@ -378,6 +379,10 @@ function build(a) {
         fs.writeFileSync(path.join(sdk, 'index.js'), "'use strict';\n// BENCH_STUB: stands in for BMW's oap-sdk so kit/tools/build.py runs on the Mac. Never ship this.\nthrow new Error('BENCH_STUB oap-sdk');\n");
         fs.writeFileSync(path.join(sdk, 'package.json'), JSON.stringify({ name: 'oap-sdk', version: '0.0.0-bench-stub', main: 'index.js' }) + '\n');
     }
+    // Every bench running on this repo builds into the same dist/<id>/ (two benches, e.g. "bench" and "bench-hud",
+    // both rebuild an app when one of its files is saved), so a build holds a lock other benches wait for.
+    const lock = takeBuildLock(path.join(ROOT, 'dist'), a.id, (level, text) => log(level, text));
+    if (!lock) { log('error', 'build ' + a.id + ': another bench has been building it for over ' + BUILD_LOCK_WAIT_MS / 1000 + ' s; restart to try again'); return false; }
     try {
         const out = execFileSync('python3', [path.join(ROOT, 'kit', 'tools', 'build.py'), a.id], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
         String(out).split('\n').filter(Boolean).forEach((ln) => log('info', 'build ' + a.id + ': ' + ln.trim()));
@@ -385,6 +390,8 @@ function build(a) {
     } catch (e) {
         log('error', 'build ' + a.id + ' failed: ' + String(e.stderr || e.message).trim());
         return false;
+    } finally {
+        lock();
     }
 }
 
@@ -428,6 +435,8 @@ function startApp(a) {
 }
 
 function restartApp(a, why) {
+    // already stopping the old one, with a start queued on its exit: a second start now would run the app twice
+    if (a.stopping) { log('info', 'restarting ' + a.id + ': ' + why + ' (already restarting)'); return; }
     log('info', 'restarting ' + a.id + ': ' + why);
     if (a.child) {
         const old = a.child;
