@@ -27,11 +27,31 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
 
 ## Install
 
-1. Install **cluster-render** first. Both apps draw through it. It comes from the `robertnisipeanu/idrive-apps` Store source.
+1. Install **cluster-render** first. Both apps draw through it. It comes from the `robertnisipeanu/idrive-apps` Store source. To run both apps at once you need 0.4.5 or later, which for now is only in the `james10424/idrive-apps-lib` source (see [Both apps at once](#both-apps-at-once)).
 2. In the Store, go to **Settings, Add source**, enter **`james10424/idrive7-custom`**, and install the apps you want.
 3. Open the app from the apps menu on the center screen to pick a theme or layout.
 
 The Store builds each app on the car from this repo. No BMW code is in it. Both apps are tested on a 2020 X3 M40i; each app's page says what has been checked on the car and what is still open. Version history is in [CHANGELOG.md](CHANGELOG.md).
+
+## Both apps at once
+
+By default cluster-render gives the HUD and the cluster panel the same scene id (0x01000400), so only one can show at a time: whichever asks first keeps it, and the other waits ("waiting: the cluster layout has the scene the HUD shares" on Custom HUD's page). One setting gives the HUD its own scene id so Custom HUD and Custom Cluster show together (verified on a 2020 M340i, Nov 8 2026). It needs cluster-render 0.4.5 or later.
+
+1. Over SSH as root, add the line to cluster-render's local conf (updates keep this file) and restart it:
+
+   ```bash
+   ssh root@<car> 'echo "hud_scene_id = 0x010004f0" >> /var/opt/cluster-render/cluster-render.local.conf && systemctl restart cluster-render'
+   ```
+
+2. Check it took:
+
+   ```bash
+   ssh root@<car> 'grep "its own scene id" /var/opt/cluster-render/log/cluster-render.log | tail -1'
+   ```
+
+   It should print `target hud: its own scene id 0x10004f0, ...`.
+
+The HUD then shares its scene id with cluster-render's `map` target instead (the Waze map on the cluster), so those two take turns. To undo, delete the line and restart cluster-render.
 
 ## Credits
 

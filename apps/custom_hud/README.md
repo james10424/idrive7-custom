@@ -48,7 +48,7 @@ Classic, M and Night, plus Auto, which switches to Night at sunset. You choose w
 
 - **Off (BMW's own HUD):** pick it as the layout and the app draws nothing, so BMW's HUD comes back.
 - **Change with SPORT / COMFORT / ECO PRO** (on by default): the HUD follows the drive mode buttons, with a layout for each mode. Out of the box, Comfort shows Daily, and Sport and Eco Pro hand the HUD back to BMW. In Sport, BMW's own HUD puts its speed and rev line in the middle of the window, right where these layouts sit. Until the car reports a mode, the plain layout setting is used.
-- **With Custom Cluster:** the HUD and the cluster theme cannot show at the same time, because cluster-render has one screen slot for both. With the defaults, Comfort gets the HUD and Sport gets the cluster theme, so they take turns.
+- **With Custom Cluster:** by default the HUD and the cluster theme take turns, because cluster-render gives them one scene id: whichever shows first keeps it, and the page says "waiting: the cluster layout has the scene the HUD shares". Set `hud_scene_id = 0x010004f0` in cluster-render (0.4.5 or later) and both show together; see [Both apps at once](../../README.md#both-apps-at-once).
 
 ## Settings
 
@@ -68,7 +68,7 @@ BMW keeps drawing its own HUD content over ours. In Comfort mode that is the spe
 
 ## Requirements
 
-[cluster-render](https://github.com/robertnisipeanu/idrive-apps), installed from the `robertnisipeanu/idrive-apps` Store source. Without it, the status row reads "HUD off: cluster-render is not installed or not running".
+[cluster-render](https://github.com/robertnisipeanu/idrive-apps), installed from the `robertnisipeanu/idrive-apps` Store source (0.4.5 or later, from `james10424/idrive-apps-lib` for now, to show together with the other app). Without it, the status row reads "HUD off: cluster-render is not installed or not running".
 
 ## On the car
 
