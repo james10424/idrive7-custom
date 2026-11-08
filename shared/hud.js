@@ -1470,8 +1470,10 @@ class HudApp {
         return null;
     }
 
-    /** Which way the indicator points, held while it is on (not blinking): -1 left, 1 right, 0 none or hazards. */
+    /** Which way the indicator points, held while it is on (not blinking): -1 left, 1 right, 0 none or hazards. Always 0
+     *  unless config.indicators (the Perch character points that way only then). */
     _turnSide() {
+        if (this.config.indicators !== true) return 0;
         const now = Date.now();
         let t = this.turn !== null && now - (this.turnAt || 0) < 5000 ? this.turn : null;
         if (t === null && this.car.data().demo) t = Math.floor(now / 6000) % 4 === 1 ? 'L' : Math.floor(now / 6000) % 4 === 3 ? 'R' : '';
