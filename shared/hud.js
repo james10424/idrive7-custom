@@ -2061,7 +2061,8 @@ class HudApp {
                 c.uniform(ref, 'u_arm' + i + 'L', v3(a && a.left));
                 c.uniform(ref, 'u_arm' + i + 'R', v3(a && a.right));
             });
-            c.uniform(ref, 'u_armSide', [am[0] ? am[0].side : -1, am[1] ? am[1].side : 1, (isNum(w.point) ? w.point : 60) * Math.PI / 180, 0]);
+            c.uniform(ref, 'u_armSide', [am[0] ? am[0].side : -1, am[1] ? am[1].side : 1, (isNum(w.point) ? w.point : 60) * Math.PI / 180,
+                (isNum(w.balance) ? w.balance : 50) * Math.PI / 180]);
             c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.breathe === false ? 0 : 1, 0]);
             // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
             // moved only every third frame would step. A message goes up only when the lean or speed changes a step

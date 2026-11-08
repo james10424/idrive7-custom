@@ -1238,7 +1238,8 @@ uniform vec4 u_arm1;
 uniform vec4 u_arm1At;
 uniform vec4 u_arm1L;
 uniform vec4 u_arm1R;
-uniform vec4 u_armSide;     // x, y: arm 0's and arm 1's side (-1 left, 1 right); z: how far a pointing arm swings up (rad)
+uniform vec4 u_armSide;     // x, y: arm 0's and arm 1's side (-1 left, 1 right); z: how far a pointing arm swings up (rad);
+                            // w: how far the arm away from the lean swings up and out at a full lean to balance her (rad)
 uniform vec4 u_tails;       // atlas rect of the tails sprite (w = 0: none)
 uniform vec4 u_tailsAt;     // its top-left in frame px, root y in the sprite, length px
 
@@ -1250,13 +1251,17 @@ vec4 tap(vec4 r, vec2 p) {
 }
 vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
 vec2 rot(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
+float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
 
-// an arm: carried and turned with her lean (as the bake measured it), and swung up and out from the shoulder by
-// "raise" (0..1, the indicator on its side) to point that way. Frame px, y down
+// an arm: carried and turned with her lean (as the bake measured it), swung up and out from the shoulder to balance
+// her (the arm away from the lean the most, the other a third as far), and by "raise" (0..1, the indicator on its
+// side) to point that way. Frame px, y down
 vec4 arm(vec4 r, vec4 at, vec4 offL, vec4 offR, float side, float l, float raise, vec2 p) {
     if (r.z <= 0.0) return vec4(0.0);
     vec3 off = l >= 0.0 ? offR.xyz * l : offL.xyz * -l;
-    float phi = off.z - side * u_armSide.z * raise;
+    bool far = (l > 0.0 && side < 0.0) || (l < 0.0 && side > 0.0);
+    float balance = u_armSide.w * abs(l) * (far ? 1.0 : 0.33);
+    float phi = off.z - side * smin(u_armSide.z * raise + balance, 1.48, 0.35);   // together at most 85 deg, eased into
     vec2 sh = at.zw + off.xy;
     return tap(r, at.zw + rot(p - sh, -phi) - at.xy);
 }
