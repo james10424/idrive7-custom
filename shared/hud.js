@@ -145,7 +145,8 @@
  *   (the GT3 look); "round": true for dots;
  * "off" the alpha of an unlit light (0.14).
  * Text "colorBy": "verdict" colours it by the last shift's grade. Text "near": ["speed" | "rpm", i] turns it
- * "nearColor" (fg) while scale label i is the one nearest the value (BMW lights up the label by the needle).
+ * "nearColor" (fg) while scale label i is the one nearest the value (BMW lights up the label by the needle); with
+ * "nearFade": n it fades instead, from its own colour n label steps away to "nearColor" at the label (iDrive 8).
  *
  * rpm is smoothed (a 120 ms filter, and the readout moves in 50 rpm steps only when it changes by 40 or
  * more), so idle wobble doesn't show, as on BMW's own tach. Shift scoring uses the raw rpm.
@@ -1193,11 +1194,17 @@ class HudApp {
 
     /** The scale label nearest the value now: 'speed' (SPEED_SCALE index) or 'rpm' (thousands); null without data. */
     _nearMark(kind) {
-        if (kind === 'rpm') { const r = this._raw('rpm'); return isNum(r) ? Math.round(r / 1000) : null; }
+        const p = this._nearPos(kind);
+        return isNum(p) ? Math.round(p) : null;
+    }
+
+    /** Where the value sits on a scale, in label steps (2.5 = halfway between labels 2 and 3); null without one. */
+    _nearPos(kind) {
+        if (kind === 'rpm') { const r = this._raw('rpm'); return isNum(r) ? r / 1000 : null; }
         const v = this._raw('speed');
         if (!isNum(v)) return null;
         const us = this.setting('units') === 'us';
-        return Math.round(scaleFrac(us ? v * 0.621371 : v, SPEED_SCALE[us ? 'us' : 'metric']) * 8);
+        return scaleFrac(us ? v * 0.621371 : v, SPEED_SCALE[us ? 'us' : 'metric']) * 8;
     }
 
     /** The setup rows for the drive mode now, or null before the car has said. */
@@ -1732,7 +1739,16 @@ class HudApp {
             const s = w.needs && this._token(w.needs) === '--' ? '' : this._resolve(w.text);
             let role = w.color || 'fg';
             if (w.colorBy === 'verdict' && this.score.last) role = VERDICT[this.score.last.verdict] || role;
-            if (w.near && this._nearMark(w.near[0]) === w.near[1]) role = w.nearColor || 'fg';
+            if (w.near && isNum(w.nearFade)) {
+                // fade in as the value comes near (iDrive 8): full "nearColor" at the label, its own colour "nearFade"
+                // label steps away, in 8 steps so a label repaints only when its step changes
+                const pos = this._nearPos(w.near[0]);
+                const f = isNum(pos) ? Math.round(Math.max(0, 1 - Math.abs(pos - w.near[1]) / w.nearFade) * 8) / 8 : 0;
+                if (f > 0) {
+                    const a = color(this.theme, role), b = color(this.theme, w.nearColor || 'fg');
+                    role = [0, 1, 2, 3].map((i) => Math.round(a[i] + (b[i] - a[i]) * f));
+                }
+            } else if (w.near && this._nearMark(w.near[0]) === w.near[1]) role = w.nearColor || 'fg';
             if (w.hotWhen === 'closing') { if (this._closing()) role = 'hot'; }
             else if (w.hotWhen || w.coldWhen) {
                 const sp = this._shift();
