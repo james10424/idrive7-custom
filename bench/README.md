@@ -5,9 +5,10 @@ Run an app that draws through cluster-render on the Mac and watch its display in
 ```sh
 node bench/server.js                   # Custom HUD, then open http://localhost:8078
 node bench/server.js custom_cluster    # Custom Cluster
+node bench/server.js custom_cluster custom_hud   # both at once, as on the car
 ```
 
-The page draws whichever target the app's `app.json` `config.target` names. One app at a time; set `BENCH_PORT` to run a second bench next to the first.
+The page draws the target each app's `app.json` `config.target` names. With several app ids they all run at once, as on the car: each in its own process on its own connection to the one fake cluster-render, each target drawn on its own display (the cluster on top, the HUD under it), each app with its own center-screen block (status rows and settings, saved in `bench/.data/<app id>/`). The vehicle signals, guidance, assist and car switches go to every app; the sliders show the first app's values. Saving a file under `apps/<id>/` restarts that app, under `shared/` or `kit/` all of them; "Restart apps" restarts all. The bench draws both targets together; it does not model cluster-render's rule that `panel` and `hud` (one scene id) are never shown at once. `BENCH_PORT` still runs a second bench next to the first.
 
 - `server.js` builds the app with the kit (`kit/tools/build.py`, the same build the Store runs on the car) into `dist/`, then runs it.
 - It also stands in for `cluster-render`. It listens on a Unix socket, speaks protocol v1 (the same framing and ops as `cluster_render_client.js`), and streams every layer to the page. Protocol mistakes such as bad sizes, unknown refs, layers running off the target or `exclusive` layers show up in the log as warnings or errors.

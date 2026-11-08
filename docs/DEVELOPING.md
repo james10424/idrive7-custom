@@ -26,6 +26,7 @@ mgu-repo.json     tells the Store how to build the apps
 ```sh
 node bench/server.js                   # Custom HUD, then open http://localhost:8078
 node bench/server.js custom_cluster    # Custom Cluster
+node bench/server.js custom_cluster custom_hud   # both at once, as on the car
 ```
 
 The page has buttons for the drive mode (COMFORT, SPORT, SPORT+, ECO PRO), fed in as the car's FES signal. It builds the app with the kit and runs the build in the kit's stub head unit on Node 8.16.2 (the car's version), against a fake cluster-render. The page shows the HUD or the cluster with the app's real pixels and shaders, the center-screen status and settings, and signal sliders. Details in `bench/README.md`.

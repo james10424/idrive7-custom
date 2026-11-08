@@ -2,10 +2,11 @@
 /**
  * Bench: a stand-in for cluster-render on the Mac, for the apps that draw through it.
  *
- *   node bench/server.js [app_id]   then open http://localhost:8078
+ *   node bench/server.js [app_id ...]   then open http://localhost:8078
  *
- * app_id: custom_hud (the default, the 800x480 HUD) or custom_cluster (the 1920x720 cluster).
- * The page draws the target the app's app.json config.target names.
+ * app_id: custom_hud (the default, the 800x480 HUD) and / or custom_cluster (the 1920x720 cluster). Several apps run
+ * together, as on the car: each its own process and connection to the one fake cluster-render, and the page draws each
+ * app's target (its app.json config.target) with its own center-screen panel; the vehicle signals go to all of them.
  * The service's limits are modelled: 8 layers per connection (BENCH_LAYER_CAP=8; off by default), 32 across every
  * connection and 16 MiB of pixel memory with each image counted twice (both always on; see bench/README.md).
  *
@@ -53,20 +54,24 @@ const TOTAL_ASSETS = 32, ASSETS_PER_CLIENT = 16;   // CompositorLimits assets / 
 const mib = (b) => (b / 1048576).toFixed(1) + ' MiB';
 const SOCK = path.join(os.tmpdir(), 'hud-bench-' + process.pid + '.sock');
 const ROOT = path.join(__dirname, '..');
-const APP_ID = process.argv[2] || process.env.BENCH_APP || 'custom_hud';
-const APP_DIR = path.join(ROOT, 'apps', APP_ID);
-if (!fs.existsSync(path.join(APP_DIR, 'app.json'))) { console.error('no app ' + APP_ID + ' under apps/'); process.exit(2); }
-const DATA_DIR = path.join(__dirname, '.data', APP_ID);   // the app's data/ on the bench (settings.json, layouts/)
-const STAGE = path.join(ROOT, 'dist', APP_ID);
+const APP_IDS = process.argv.slice(2).length ? process.argv.slice(2) : [process.env.BENCH_APP || 'custom_hud'];
+// one entry per app: its folders (data/ on the bench: settings.json, layouts/), its process and what it last reported
+const apps = APP_IDS.map((id) => {
+    const dir = path.join(ROOT, 'apps', id);
+    if (!fs.existsSync(path.join(dir, 'app.json'))) { console.error('no app ' + id + ' under apps/'); process.exit(2); }
+    return { id, dir, data: path.join(__dirname, '.data', id), stage: path.join(ROOT, 'dist', id), child: null, stopping: false,
+        restartTimer: null, lastSettings: null, lastStatus: null };
+});
+const appOf = (id) => apps.find((a) => a.id === id) || null;
 const TARGETS = { hud: [800, 480], map: [1088, 480], panel: [1920, 720] };
 const CLASSES = ['ambient', 'content', 'overlay', 'alert'];
 const MAX_MSG = 5529664;
 // The car runs Node 8.16.2, so run the app on that by default when it's in the drive cache.
 const NODE8 = path.join(ROOT, '..', '..', '.cache', 'node8', 'node-v8.16.2-darwin-x64', 'bin', 'node');
 const APP_NODE = process.env.BENCH_NODE || (fs.existsSync(NODE8) ? NODE8 : null);
-/** The target the page draws: the app's config.target (read again on each restart). */
-function appView() {
-    try { const t = JSON.parse(fs.readFileSync(path.join(APP_DIR, 'app.json'), 'utf8')).config.target; return TARGETS[t] ? t : 'hud'; } catch (e) { return 'hud'; }
+/** The target the page draws for an app: its config.target (read again on each restart). */
+function appView(a) {
+    try { const t = JSON.parse(fs.readFileSync(path.join(a.dir, 'app.json'), 'utf8')).config.target; return TARGETS[t] ? t : 'hud'; } catch (e) { return 'hud'; }
 }
 
 /* ---------- browser side: Server-Sent Events out, small POSTs in ---------- */
@@ -105,7 +110,8 @@ function sceneMeta() {
     }));
 }
 function helloMsg() {
-    return { t: 'hello', targets: TARGETS, view: appView(), app: APP_ID, cap: layerCap, pixelCap: PIXEL_BYTES,
+    return { t: 'hello', targets: TARGETS, apps: apps.map((a) => ({ id: a.id, view: appView(a) })), view: appView(apps[0]),
+        app: APP_IDS.join(' + '), cap: layerCap, pixelCap: PIXEL_BYTES,
         geometry: { HOOD: visible.HOOD, BLACK_BOX: visible.BLACK_BOX, BELT: visible.BELT, GEAR: visible.GEAR, HUD_WINDOW: visible.HUD_WINDOW } };
 }
 let sceneTimer = null;
@@ -354,18 +360,17 @@ const renderServer = net.createServer((sock) => {
     }
 });
 
-/* ---------- the app child ---------- */
+/* ---------- the app children ---------- */
 
-let child = null;
 let signals = { t: 'signals', mode: 'demo', values: {} };
 let drive = { t: 'drive', value: null };   // the drive mode buttons (FES actualValueModeDrivingExperience), null = car hasn't said
 let nav = { t: 'nav', value: null };       // route guidance (Guidance guidanceState: 'ACTIVE', 'INACTIVE'), null = car hasn't said
 let carSw = {};                             // the car switches (page "Car switches": turn signals, brake lights, parking brake, ...), key -> value
 let assist = { t: 'assist', value: null }; // BMW's HUD driver assistance block (DisplayDataServer): 'acc' or 'off', null = car hasn't said
-let restartTimer = null;
-let stopping = false;
+/** A message to every running app (the vehicle signals are the car's, so every app gets them). */
+function toApps(m) { apps.forEach((a) => { if (a.child) a.child.send(m); }); }
 
-function build() {
+function build(a) {
     // The kit's build needs an oap-sdk folder; on the Mac that is a stub (see bench/README.md).
     const sdk = path.join(ROOT, 'oap-sdk');
     if (!fs.existsSync(path.join(sdk, 'index.js'))) {
@@ -374,23 +379,22 @@ function build() {
         fs.writeFileSync(path.join(sdk, 'package.json'), JSON.stringify({ name: 'oap-sdk', version: '0.0.0-bench-stub', main: 'index.js' }) + '\n');
     }
     try {
-        const out = execFileSync('python3', [path.join(ROOT, 'kit', 'tools', 'build.py'), APP_ID], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
-        String(out).split('\n').filter(Boolean).forEach((ln) => log('info', 'build: ' + ln.trim()));
+        const out = execFileSync('python3', [path.join(ROOT, 'kit', 'tools', 'build.py'), a.id], { cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] });
+        String(out).split('\n').filter(Boolean).forEach((ln) => log('info', 'build ' + a.id + ': ' + ln.trim()));
         return true;
     } catch (e) {
-        log('error', 'build failed: ' + String(e.stderr || e.message).trim());
+        log('error', 'build ' + a.id + ' failed: ' + String(e.stderr || e.message).trim());
         return false;
     }
 }
 
-function startApp() {
-    try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch (e) { /* there */ }
+function startApp(a) {
+    try { fs.mkdirSync(a.data, { recursive: true }); } catch (e) { /* there */ }
     send(helloMsg());
-    if (!build()) { send({ t: 'app', state: 'stopped' }); return; }
-    const opts = { cwd: DATA_DIR, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env: Object.assign({}, process.env, { HUD_CLUSTER_SOCKET: SOCK }) };
+    if (!build(a)) { send({ t: 'app', app: a.id, state: 'stopped' }); return; }
+    const opts = { cwd: a.data, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], env: Object.assign({}, process.env, { HUD_CLUSTER_SOCKET: SOCK }) };
     if (APP_NODE) opts.execPath = APP_NODE;
-    child = fork(path.join(__dirname, 'run-app.js'), [STAGE, DATA_DIR], opts);
-    const c = child;
+    const c = a.child = fork(path.join(__dirname, 'run-app.js'), [a.stage, a.data], opts);
     if (drive.value !== null) c.send(drive);
     if (nav.value !== null) c.send(nav);
     if (assist.value !== null) c.send(assist);
@@ -406,40 +410,46 @@ function startApp() {
     pipe(c.stdout, 'info');
     pipe(c.stderr, 'warn');
     c.on('message', (m) => {
-        if (m && m.t === 'settings') lastSettings = m;
-        if (m && m.t === 'status') { lastStatus = m; log('info', 'center screen status: ' + m.s); }
-        if (m && (m.t === 'values' || m.t === 'settings' || m.t === 'status')) send(m);
+        if (!m) return;
+        m.app = a.id;
+        if (m.t === 'settings') a.lastSettings = m;
+        if (m.t === 'status') { a.lastStatus = m; log('info', 'center screen status [' + a.id + ']: ' + m.s + (m.d ? ' / ' + m.d : '')); }
+        if (m.t === 'values' || m.t === 'settings' || m.t === 'status') send(m);
     });
     c.on('exit', (code, sig) => {
-        if (c !== child) return;
-        child = null;
-        send({ t: 'app', state: 'stopped' });
-        if (!stopping) log('error', 'app exited (code ' + code + (sig ? ', ' + sig : '') + '); fix and save to restart');
+        if (c !== a.child) return;
+        a.child = null;
+        send({ t: 'app', app: a.id, state: 'stopped' });
+        if (!a.stopping) log('error', a.id + ' exited (code ' + code + (sig ? ', ' + sig : '') + '); fix and save to restart');
     });
     c.send(signals);
-    send({ t: 'app', state: 'running' });
-    log('info', 'app started on ' + (APP_NODE ? APP_NODE.replace(/^.*\/(node-v[^/]+)\/.*$/, '$1') : 'node ' + process.version + ' (not the car\'s Node 8)'));
+    send({ t: 'app', app: a.id, state: 'running' });
+    log('info', a.id + ' started on ' + (APP_NODE ? APP_NODE.replace(/^.*\/(node-v[^/]+)\/.*$/, '$1') : 'node ' + process.version + ' (not the car\'s Node 8)'));
 }
 
-function restartApp(why) {
-    log('info', 'restarting app: ' + why);
-    if (child) {
-        const old = child;
-        child = null;
-        stopping = true;
-        old.once('exit', () => { stopping = false; startApp(); });
+function restartApp(a, why) {
+    log('info', 'restarting ' + a.id + ': ' + why);
+    if (a.child) {
+        const old = a.child;
+        a.child = null;
+        a.stopping = true;
+        old.once('exit', () => { a.stopping = false; startApp(a); });
         old.kill('SIGTERM');
         setTimeout(() => { try { old.kill('SIGKILL'); } catch (e) { /* gone */ } }, 1500);
-    } else startApp();
+    } else startApp(a);
 }
+const restartAll = (why) => apps.forEach((a) => restartApp(a, why));
 
-[APP_DIR, path.join(ROOT, 'shared'), path.join(ROOT, 'kit')].forEach((dir) => fs.watch(dir, { recursive: true }, (ev, file) => {
+// an app's own folder restarts that app; shared/ and kit/ restart them all
+const watchFor = (dir, targets) => fs.watch(dir, { recursive: true }, (ev, file) => {
     if (!file || /(^|\/)\./.test(file) || /__pycache__/.test(file)) return;
-    clearTimeout(restartTimer);
-    restartTimer = setTimeout(() => restartApp(path.basename(dir) + '/' + file + ' changed'), 300);
-}));
-let lastSettings = null;
-let lastStatus = null;
+    targets.forEach((a) => {
+        clearTimeout(a.restartTimer);
+        a.restartTimer = setTimeout(() => restartApp(a, path.basename(dir) + '/' + file + ' changed'), 300);
+    });
+});
+apps.forEach((a) => watchFor(a.dir, [a]));
+[path.join(ROOT, 'shared'), path.join(ROOT, 'kit')].forEach((dir) => watchFor(dir, apps));
 
 /* ---------- HTTP ---------- */
 
@@ -475,30 +485,29 @@ const web = http.createServer(async (req, res) => {
         logLines.forEach((e) => send(e, res));
         send({ t: 'scene', layers: sceneMeta(), pixels: pixelBytes() }, res);
         layers.forEach((l) => sendPixels(l, res));
-        if (lastSettings) send(lastSettings, res);
-        if (lastStatus) send(lastStatus, res);
+        apps.forEach((a) => { if (a.lastSettings) send(a.lastSettings, res); if (a.lastStatus) send(a.lastStatus, res); });
         send(nav, res); send(assist, res);      // the page draws BMW's guidance and ACC stand-ins from these
         send({ t: 'car', values: carSw }, res);
-        send({ t: 'app', state: child ? 'running' : 'stopped' }, res);
+        apps.forEach((a) => send({ t: 'app', app: a.id, state: a.child ? 'running' : 'stopped' }, res));
         return;
     }
     if (req.method === 'POST' && url === '/signals') {
         const b = await body(req);
         signals = { t: 'signals', mode: b.mode === 'manual' ? 'manual' : 'demo', values: b.values || {} };
-        if (child) child.send(signals);
+        toApps(signals);
         res.writeHead(204); return res.end();
     }
     if (req.method === 'POST' && url === '/drive') {
         const b = await body(req);
         drive = { t: 'drive', value: b.value === null || b.value === undefined ? null : b.value };
-        if (child) child.send(drive);
+        toApps(drive);
         log('info', 'bench: drive mode ' + JSON.stringify(drive.value));
         res.writeHead(204); return res.end();
     }
     if (req.method === 'POST' && url === '/nav') {
         const b = await body(req);
         nav = { t: 'nav', value: typeof b.value === 'string' ? b.value : null };
-        if (child) child.send(nav);
+        toApps(nav);
         send(nav);
         log('info', 'bench: route guidance ' + JSON.stringify(nav.value));
         res.writeHead(204); return res.end();
@@ -507,7 +516,7 @@ const web = http.createServer(async (req, res) => {
         const b = await body(req);
         if (typeof b.key === 'string' && /^[a-zA-Z]+$/.test(b.key)) {
             if (typeof b.value === 'string' && b.value) carSw[b.key] = b.value; else delete carSw[b.key];
-            if (child) child.send({ t: 'car', key: b.key, value: carSw[b.key] || null });
+            toApps({ t: 'car', key: b.key, value: carSw[b.key] || null });
             send({ t: 'car', values: carSw });
             log('info', 'bench: ' + b.key + ' ' + JSON.stringify(carSw[b.key] || null));
         }
@@ -516,13 +525,14 @@ const web = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url === '/assist') {
         const b = await body(req);
         assist = { t: 'assist', value: b.value === 'acc' || b.value === 'off' ? b.value : null };
-        if (child) child.send(assist);
+        toApps(assist);
         send(assist);
         log('info', 'bench: driver assistance ' + JSON.stringify(assist.value));
         res.writeHead(204); return res.end();
     }
     if (req.method === 'POST' && url === '/restart') {
-        restartApp('restart button');
+        const b = await body(req), a = appOf(b.app);
+        if (a) restartApp(a, 'restart button'); else restartAll('restart button');
         res.writeHead(204); return res.end();
     }
     if (req.method === 'POST' && url === '/cap') {
@@ -532,16 +542,16 @@ const web = http.createServer(async (req, res) => {
         if (n !== layerCap) {
             layerCap = n;
             send(helloMsg());
-            restartApp('layer cap set to ' + (n || 'unlimited') + ', the app registers its layers again');
+            restartAll('layer cap set to ' + (n || 'unlimited') + ', the apps register their layers again');
         }
         res.writeHead(204); return res.end();
     }
     if (req.method === 'POST' && url === '/setting') {
         // Pressed on the stub's RHMI components, as the car's settings page sends it (run-app.js).
-        const b = await body(req);
-        if (!child) { res.writeHead(409); return res.end('app not running'); }
-        child.send({ t: 'set', key: b.key, value: b.value });
-        log('info', 'bench: setting ' + b.key + ' = ' + JSON.stringify(b.value));
+        const b = await body(req), a = appOf(b.app) || apps[0];
+        if (!a.child) { res.writeHead(409); return res.end('app not running'); }
+        a.child.send({ t: 'set', key: b.key, value: b.value });
+        log('info', 'bench: ' + a.id + ' setting ' + b.key + ' = ' + JSON.stringify(b.value));
         res.writeHead(204); return res.end();
     }
     res.writeHead(404); res.end();
@@ -554,12 +564,11 @@ renderServer.listen(SOCK, () => {
         log('info', 'open http://localhost:' + PORT);
         if (layerCap) log('info', 'layer cap ' + layerCap + ' (BENCH_LAYER_CAP): layers past it get state waiting and are not drawn');
         log('info', 'the service\'s limits: ' + TOTAL_LAYERS + ' layers across every connection, pixel memory ' + (PIXEL_BYTES ? mib(PIXEL_BYTES) : 'unlimited') + ' (every image counted twice)');
-        startApp();
+        apps.forEach(startApp);
     });
 });
 function shutdown() {
-    stopping = true;
-    if (child) child.kill('SIGTERM');
+    apps.forEach((a) => { a.stopping = true; if (a.child) a.child.kill('SIGTERM'); });
     try { fs.unlinkSync(SOCK); } catch (e) { /* gone */ }
     process.exit(0);
 }
