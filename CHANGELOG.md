@@ -4,7 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 7 2026
 
-- **Custom Cluster 0.1.9:** the Sport theme's throttle and brake bars are stacked and run to the bottom bar, the 12 V voltage and battery moved onto the bottom bar's blue side left of boost, and BMW's line under its speed in the map window (whose break marks the speed limit) is kept black.
+- **Custom Cluster 0.1.9:** the Sport theme's throttle and brake bars are stacked and run to the bottom bar, the 12 V voltage and battery moved onto the bottom row after the remaining range, and BMW's line under its speed in the map window (whose break marks the speed limit) is kept black.
 - **Custom Cluster 0.1.8:** the throttle bar's last segment turns red in kickdown (the OBD pedal at 87 % or more; 82 flat out, 91 in kickdown on the car).
 - **Custom Cluster 0.1.7:** the throttle bar is empty at rest and full flat out: the OBD pedal reads 14.5 % at rest and 82 % flat out on the car (91 % in kickdown, which stays full).
 - **Custom HUD 0.1.4, Custom Cluster 0.1.6:** the car ahead's gap is in 0.1 m steps (it read 10 times BMW's own), and its relative speed with it. The Sport throttle bar reads the engine unit's OBD pedal position (PID 0x49, 4 times a second): the car's AcceleratorPedal message jumped about during a slow press (its high byte looks like the message's alive counter). The OBD value is logged on change; config.pedal.obdRange maps its rest and flat-out readings to 0..100.
