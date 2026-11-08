@@ -151,6 +151,9 @@ setInterval(() => {
     // tyres (TPMS, the fields the car answers a read with): pressure in 0.1 bar, temperature raw - 40 C; the rear pair a notch higher
     const tp = Math.round(num('tyreP', 2.3) * 10), tt = Math.round(num('tyreT', 24) + 40);
     hu.feed('de.bmw.infotainment.vehicle.TPMS', 'statusTyrePressure', { actualValuePressureTyreFLH: tp, actualValuePressureTyreFRH: tp, actualValuePressureTyreRLH: tp + 2, actualValuePressureTyreRRH: tp + 2 });
+    // the parking brake (`parkBrake` 1 = set) and Auto Hold (`autoHold` 0 off, 1 on, 2 holding), as the car sends them
+    hu.feed('de.bmw.infotainment.vehicle.Vehicle2', 'statusStandstillFunctions', { statusParkingBrake: num('parkBrake', 0) ? 'PARKBREMSE_MECHANISCH_FESTGESTELLT' : 'PARKBREMSE_MECHANISCH_NICHT_FESTGESTELLT' });
+    hu.feed('de.bmw.chassis.VehicleStabilizationManagement', 'StandStillFunction', { statusAutoH: ['AUTOH_NICHT_AKTIVIERT', 'AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG_NICHT', 'AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG'][Math.max(0, Math.min(2, Math.round(num('autoHold', 0))))] });
     hu.feed('de.bmw.infotainment.vehicle.TPMS', 'statusTyreTemperature', { actualValueTemperatureTyreFLH: tt, actualValueTemperatureTyreFRH: tt, actualValueTemperatureTyreRLH: tt + 3, actualValueTemperatureTyreRRH: tt + 3 });
 }, 50);
 

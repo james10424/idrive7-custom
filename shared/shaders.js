@@ -1024,11 +1024,13 @@ uniform vec4 u_podG;      // the left pod's needle: pivot x, y, tick inner r, ou
 uniform vec2 u_podV;      // left (battery), right (coolant) 0..1, bottom to top
 uniform vec4 u_led;       // LED rev bar x, y, w, h
 uniform vec3 u_ledV;      // segments, lit 0..1, yellow from 0..1 (the shift point)
+uniform vec4 u_led2;      // the boost LED bar x, y, w, h (w 0 = none), all yellow
+uniform vec2 u_led2V;     // its segments, lit 0..1
 uniform vec4 u_gearBox;   // the lit gear box: first letter's box x, y, w, h
 uniform vec2 u_gearV;     // letter pitch px, which letter (-1 none)
-uniform vec4 u_lampB;     // the BRAKE lamp box (left pod; the right pod's mirror is SERVICE ENGINE SOON, never lit)
+uniform vec4 u_lampB;     // the parking brake / Auto Hold lamp box (left pod; its mirror in the right pod is the green CRUISE lamp)
 uniform vec3 u_arrow;     // the left turn arrow: centre x, y, size (right: mirrored)
-uniform vec4 u_lamps;     // brake, left turn, right turn on (1) / off (0)
+uniform vec4 u_lamps;     // left lamp (0 off, 1 red: parking brake, 2 green: Auto Hold), left turn, right turn, cruise on (1) / off (0)
 uniform vec2 u_batIcon;   // the battery glyph's centre
 
 const vec3 CHROME = vec3(0.62, 0.64, 0.68);
@@ -1039,10 +1041,13 @@ const vec3 NEEDLE = vec3(1.0, 0.8, 0.78);
 const vec3 LED_ON = vec3(1.0, 0.24, 0.06);
 const vec3 LED_Y = vec3(1.0, 0.86, 0.16);
 const vec3 LED_OFF = vec3(0.16, 0.03, 0.02);
+const vec3 LED_YOFF = vec3(0.15, 0.12, 0.02);
 const vec3 GEAR_BOX = vec3(0.78, 0.13, 0.04);
 const vec3 LAMP_R = vec3(1.0, 0.27, 0.08);
 const vec3 LAMP_OFF = vec3(0.13, 0.04, 0.03);
 const vec3 GREEN = vec3(0.2, 0.92, 0.35);
+const vec3 LAMP_G = vec3(0.1, 0.62, 0.22);
+const vec3 LAMP_GOFF = vec3(0.03, 0.1, 0.05);
 
 float cov(float d) { return clamp(0.5 - d, 0.0, 1.0); }
 float rbox(vec2 p, vec4 r, float rad) {
@@ -1165,13 +1170,21 @@ void main() {
         c = mix(c, col, cov(d));
     }
 
+    // boost LED bar: the same segments, yellow
+    if (u_led2.z > 0.0 && p.x >= u_led2.x && p.x < u_led2.x + u_led2.z && p.y >= u_led2.y && p.y < u_led2.y + u_led2.w) {
+        float n = u_led2V.x, pitch = u_led2.z / n, i = floor((p.x - u_led2.x) / pitch);
+        float lx = p.x - u_led2.x - i * pitch;
+        float d = rbox(vec2(lx, p.y), vec4(1.5, u_led2.y, pitch - 4.5, u_led2.w), 1.5);
+        c = mix(c, (i + 0.5) / n <= u_led2V.y ? LED_Y : LED_YOFF, cov(d));
+    }
+
     // the lit gear letter's box
     if (u_gearV.y >= 0.0) c = mix(c, GEAR_BOX, cov(rbox(p, vec4(u_gearBox.x + u_gearV.x * u_gearV.y, u_gearBox.yzw), 3.0)));
 
-    // lamps: BRAKE (left), SERVICE ENGINE SOON (right, never lit), the turn arrows
+    // lamps: PARK BRAKE (left, red) or AUTO HOLD (left, green), CRUISE (right, green), the turn arrows
     vec4 lampR = vec4(W - u_lampB.x - u_lampB.z, u_lampB.yzw);
-    c = mix(c, mix(LAMP_OFF, LAMP_R, u_lamps.x), cov(rbox(p, u_lampB, 3.0)));
-    c = mix(c, LAMP_OFF, cov(rbox(p, lampR, 3.0)));
+    c = mix(c, u_lamps.x > 1.5 ? LAMP_G : u_lamps.x > 0.5 ? LAMP_R : LAMP_OFF, cov(rbox(p, u_lampB, 3.0)));
+    c = mix(c, mix(LAMP_GOFF, LAMP_G, u_lamps.w), cov(rbox(p, lampR, 3.0)));
     for (int s = 0; s < 2; s++) {
         float on = s == 0 ? u_lamps.y : u_lamps.z;
         vec2 ac = s == 0 ? u_arrow.xy : vec2(W - u_arrow.x, u_arrow.y);

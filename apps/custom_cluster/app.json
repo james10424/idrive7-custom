@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Regal dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -26,14 +26,16 @@
     "de.bmw.infotainment.vehicle.CDS": {
       "statusEngineSpeed2": "rs",
       "statusEngineTemperature": "rs",
-      "statusBattery2": "rs"
+      "statusBattery2": "rs",
+      "statusHandBrake": "rs"
     },
     "de.bmw.infotainment.vehicle.CDS2": {
       "statusLongitudinalAccelerationMassCenter": "rs",
       "statusLateralAccelerationMassCenter": "rs"
     },
     "de.bmw.infotainment.vehicle.Vehicle2": {
-      "statusCarSpeed2": "rs"
+      "statusCarSpeed2": "rs",
+      "statusStandstillFunctions": "rs"
     },
     "de.bmw.infotainment.drivingexcitement.FES": {
       "statusSwitchDriveDynamicSport2": "rs",
@@ -107,6 +109,10 @@
     "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
       "functionalLibraryData": "rs",
       "_optional": "the Regal theme's CRUISE lamp"
+    },
+    "de.bmw.chassis.VehicleStabilizationManagement": {
+      "StandStillFunction": "s",
+      "_optional": "Auto Hold for the Regal theme's left lamp"
     }
   },
   "screens": [

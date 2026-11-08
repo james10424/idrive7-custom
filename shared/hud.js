@@ -86,8 +86,9 @@
  *             the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows),
  *             "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the
  *             numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMid" (55, the middle), "spdStep" (5, between marks; the first mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" / "podG" [pivot x, y,
- *             tick r0, r1], "podSignals" [{ signal, range }] x 2, "led" with "ledN" and "rpmMax", "gearBox" + "gearPitch" (the lit
- *             box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the BRAKE lamp; mirrored: SERVICE ENGINE SOON, unlit), "arrow" [x, y, size], "batIcon" [x, y]
+ *             tick r0, r1], "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "led" with "ledN" and "rpmMax", "led2" (a yellow
+ *             bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]) in "led2N" (15) segments), "gearBox" + "gearPitch" (the lit
+ *             box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "arrow" [x, y, size], "batIcon" [x, y]
  *   mtach     effect layer; the M rev bar: "side" left|right, "max" rpm, and in target px for the LEFT bar
  *             "y0" (0 rpm), "y8" (max), "ym" (the bend), "xm" (outer edge x at the bend; the right bar gives
  *             its own, mirrored), "kTop" / "kBot" (x per y px above / below the bend), "round", "wBot" / "wTop" / "wBend"
@@ -168,8 +169,8 @@
  * {{spd:<i>}} (speed scale label i of SPEED_SCALE: 0..200 mph, 0..320 km/h) {{range}} {{u:distLc}} (mi, km) {{ambient}} (outside, signed: +75) {{u:speedLc}} (mph, km/h) {{ampmLc}} (am, pm) {{torque}} {{u:torque}} (lb-ft, Nm) {{torquePct}} {{powerPct}} (% of config.engine's peak) {{boostHi}} {{boostMid}}
  * (gauge labels for 1.4 / 0.7 bar in the display unit) {{stage}} (P R N, D / S / M by the shifter programme) {{gearInD}} (gear number while in D) {{mode}} (COMFORT, SPORT, SPORT PLUS, SPORT INDIVIDUAL, ECO PRO, ...)
  * {{temp:<deg C>}} (that temperature in the display unit, °F rounded to 10, for gauge labels) {{setup:engine|chassis|steering|gearbox}} (what that part is set to in the drive mode now)
- * {{consumption}} {{u:cons}}: average consumption for the period picked on the center screen, in the car's unit (l/100km, mpg,
- * km/l; ResetLogic averageConsumption, scale / 10^digit, else bcDataAll's raw * config.consumption.factor 0.1).
+ * {{consumption}} {{u:cons}}: average consumption for the period picked on the center screen, in the units setting's unit (mpg or
+ * l/100km, converted from the car's own; ResetLogic averageConsumption, scale / 10^digit, else bcDataAll's raw * config.consumption.factor 0.1).
  * {{fuelFull}} {{fuelHalf}} (the tank's full and half marks, config.tankLitres, in L or US gal) {{u:fuel}} (L / gal)
  * {{time}} {{ampm}} {{u:temp}} (°F / °C) {{gLat}} {{gLong}} (g, 2 decimals) {{signal:<car.data() key>}} (raw, 1 decimal).
  * The car ahead (de.bmw.dass.GapVehicleAhead; "--" without a car measured or data older than 3 s): {{accGap}} the gap in m / ft
@@ -177,8 +178,8 @@
  * this one, once a second, 253 with nothing measured; DataFrontVehicle frontVehicleGapX when the car sends that), {{accRel}}
  * its speed against ours in km/h / mph ({{u:rel}}, minus = closing; "--" while we stand still): DataFrontVehicle frontVehicleSpeedX when sent,
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
- * Regal: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{u:distUc}} (MI, KM),
- * {{lampBrake}} {{lampTurnL}} {{lampTurnR}} {{lampCruise}} (the lamp's text while lit, else empty; config.lamps).
+ * Regal: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{u:distUc}} (MI, KM), {{u:consUc}} (L/100KM, MPG), {{ambientN}} (outside, no + sign),
+ * {{lampBrake}} (PARK BRAKE / AUTO HOLD) {{lampTurnL}} {{lampTurnR}} {{lampCruise}} (the lamp's text while lit, else empty; config.lamps).
  * The route while guiding (Guidance finalDestinationInfo / travelledDistance, apps with "navLayout"; "--" else): {{navLeft}} the
  * distance left as BMW formats it, {{u:navLeft}} its unit (km, mi, m, ft), {{navTime}} the time left h:mm.
  * {{musicTitle}}: the song title BMW's player shows (app.json config.music; HmiMediaState playerMetadata, the line typed TITLE),
@@ -270,6 +271,12 @@ const INDICATE = { BLINKEN_AUS: 0, TIPP_BLINKEN_LINKS_EIN: 1, TIPP_BLINKEN_RECHT
 // Guidance formattedDistance units (CommonTypes.DistanceUnit), by name or number
 const ROUTE_UNIT = { KM: 'km', METER: 'm', MILE_US: 'mi', MILE_UK: 'mi', FEET: 'ft', YARD: 'yd', 0: 'ft', 1: 'km', 2: 'm', 3: 'mi', 4: 'mi', 6: 'yd' };
 // the Regal theme's gear row: P R N D, a gap, the gear number; the lit box for each selector state (S lights D, M the number)
+// the parking brake and Auto Hold (Vehicle2 statusStandstillFunctions, VehicleStabilizationManagement StandStillFunction, CDS
+// statusHandBrake; someip-interfaces.json)
+const PARK_BRAKE = { PARKBREMSE_MECHANISCH_NICHT_FESTGESTELLT: 0, PARKBREMSE_MECHANISCH_FESTGESTELLT: 1, PARKBREMSE_IM_STELLVORGANG_LOESEN: 2,
+    PARKBREMSE_IM_STELLVORGANG_FESTSTELLEN: 4, FUNKTIONSSCHNITTSTELLE_IST_NICHT_VERFUEGBAR: 13, FUNKTION_MELDET_FEHLER: 14, SIGNAL_UNBEFUELLT: 15 };
+const AUTO_H = { AUTOH_NICHT_AKTIVIERT: 0, AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG_NICHT: 1, AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG: 2, SIGNAL_UNBEFUELLT: 3 };
+const HAND_BRAKE = { NICHT_CODIERT: 0, HANDBREMSE_GELOEST: 1, HANDBREMSE_ANGEZOGEN: 2, SIGNAL_UNGUELTIG: 3 };
 const REGAL_GEARS = { P: 0, R: 1, N: 2, D: 3, S: 3, M: 5 };
 const PEDAL_OK = { SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1 };   // AngleAcceleratorPedal's qualifier: valid
 const VOLT_MS = 2000;             // the 12 V reading's interval
@@ -404,6 +411,9 @@ class HudApp {
         this.turn = null;                // the indicators: 'L', 'R', 'LR' (hazards) or '' (body.Light StatusFunctionsIndicators)
         this.accOn = false;              // BMW's HUD has the ACC car or distance bars up (the Regal CRUISE lamp)
         this.mileage = null;             // the odometer as sent (MileageSupreme, taken as km)
+        this.parkBrake = null;           // the parking brake set (true / false), null until the car says
+        this.parkBrakeCds = null;        // the same from CDS statusHandBrake (a fallback)
+        this.autoHold = null;            // Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
         this.volt12 = null; this.volt12At = 0;   // V, the 12 V system from the engine unit
         this.needsVolt = false;          // a shown widget uses volt12 (the engine unit is only asked then)
         this.pedalLogged = 0;
@@ -553,6 +563,11 @@ class HudApp {
             },
             // the 12 V battery's charge condition (config.pedals, with the 12 V voltage)
             'de.bmw.infotainment.vehicle.CDS': {
+                // the hand brake contact (a fallback for the parking brake lamp): 2 set, 1 released
+                statusHandBrake: (v) => {
+                    const n = enumNum(v && v.statusContactHandBrake, HAND_BRAKE);
+                    this.parkBrakeCds = n === 2 ? true : n === 1 ? false : null;
+                },
                 statusBattery2: (v) => {
                     const c = v && v.conditionBatteryChargingCondition;
                     const raw = isNum(c) && c !== 255 ? c : null;
@@ -571,6 +586,27 @@ class HudApp {
                     const t = d === 1 || d === 3 ? 'L' : d === 2 || d === 4 ? 'R' : d === 8 ? 'LR' : d === 0 ? '' : null;
                     if (t !== this.turn) this.log.info('indicators raw ' + raw + (v && v.activeFunctionIndicateDirection !== undefined ? ' / ' + v.activeFunctionIndicateDirection : ''));
                     this.turn = t; this.turnAt = Date.now();
+                },
+            },
+            // the parking brake (the Regal theme's left lamp): statusParkingBrake 1 / 4 = set or setting, 0 / 2 = released
+            'de.bmw.infotainment.vehicle.Vehicle2': {
+                statusStandstillFunctions: (v) => {
+                    const raw = v && v.statusParkingBrake, n = enumNum(raw, PARK_BRAKE);
+                    const on = n === 1 || n === 4 ? true : n === 0 || n === 2 ? false : null;
+                    if (on !== this.parkBrake) this.log.info('parking brake raw ' + JSON.stringify(v));
+                    this.parkBrake = on;
+                },
+            },
+            // Auto Hold (the same lamp, green): statusAutoH 2 = on and holding the car, 1 = on, 0 = off
+            'de.bmw.chassis.VehicleStabilizationManagement': {
+                StandStillFunction: (v) => {
+                    const raw = v && v.statusAutoH, n = enumNum(raw, AUTO_H);
+                    const h = n === 2 ? 'hold' : n === 1 ? 'armed' : n === 0 ? 'off' : null;
+                    if (h !== this.autoHold) this.log.info('auto hold raw ' + raw + ', parking brake ' + (v && v.statusParkingBrake));
+                    this.autoHold = h;
+                    // this message carries the parking brake too, when Vehicle2 has not said
+                    const pb = enumNum(v && v.statusParkingBrake, PARK_BRAKE);
+                    if (this.parkBrake === null && (pb === 0 || pb === 1 || pb === 2 || pb === 4)) this.parkBrakeVsm = pb === 1 || pb === 4;
                 },
             },
             // the odometer (the Regal theme's VFD): MileageSupreme, unit unconfirmed (taken as km; logged raw on change)
@@ -609,10 +645,17 @@ class HudApp {
         // the HUD modes' signal only with them; the car ahead with them or app.json config.carAhead (the cluster's Sport)
         // (the runtime spec has no "signals": the interface must also be in app.json "signals")
         if (!this._modesOn() && this.config.lamps !== true) delete extra['de.bmw.infotainment.displaydataserver.DisplayDataServer'];
-        if (this.config.lamps !== true) delete extra['de.bmw.infrastructure.MileageSupreme'];
+        if (this.config.lamps !== true) {
+            delete extra['de.bmw.infrastructure.MileageSupreme']; delete extra['de.bmw.infotainment.vehicle.Vehicle2'];
+            delete extra['de.bmw.chassis.VehicleStabilizationManagement'];
+            if (extra['de.bmw.infotainment.vehicle.CDS']) delete extra['de.bmw.infotainment.vehicle.CDS'].statusHandBrake;
+        }
         if (!this._modesOn() && this.config.carAhead !== true) delete extra['de.bmw.dass.GapVehicleAhead'];
         if (!this.config.consumption) delete extra['de.bmw.infotainment.resetlogic.ResetLogic'];
-        if (this.config.pedals !== true) { delete extra['de.bmw.powertrain.AcceleratorPedal']; delete extra['de.bmw.infotainment.vehicle.CDS']; }
+        if (this.config.pedals !== true) {
+            delete extra['de.bmw.powertrain.AcceleratorPedal'];
+            if (this.config.lamps === true) delete extra['de.bmw.infotainment.vehicle.CDS'].statusBattery2; else delete extra['de.bmw.infotainment.vehicle.CDS'];
+        }
         if (this.config.pedals !== true && this.config.lamps !== true) delete extra['de.bmw.body.Light'];
         this.car = new Car(this.ctx, ['rpm', 'speed', 'temps', 'accel', 'gear', 'torque'], extra);
         this.car.setRedline(this.setting('redline'));
@@ -882,22 +925,22 @@ class HudApp {
     /** Average consumption for the period picked on the center screen, in the car's unit; null when not sent lately. */
     _consumption() {
         const now = Date.now();
-        if (isNum(this.consAvg) && now - this.consAt < 120000) return this.consAvg;
-        if (isNum(this.consBc) && now - this.consBcAt < 120000) {
+        let v = null;
+        if (isNum(this.consAvg) && now - this.consAt < 120000) v = this.consAvg;
+        else if (isNum(this.consBc) && now - this.consBcAt < 120000) {
             const c = this.config.consumption || {};
-            return this.consBc * (isNum(c.factor) ? c.factor : 0.1) + (isNum(c.offset) ? c.offset : 0);
-        }
-        return this.car.data().demo ? 9.8 : null;
+            v = this.consBc * (isNum(c.factor) ? c.factor : 0.1) + (isNum(c.offset) ? c.offset : 0);
+        } else return this.car.data().demo ? (this.setting('units') === 'us' ? 235.215 / 9.8 : 9.8) : null;
+        // the car sends it in its own unit: to l/100km, then to the units setting's (mpg US or l/100km)
+        const u = isNum(this.consUnit) && this.consUnit > 0 ? this.consUnit : this.consUnitBc;
+        const l100 = !(v > 0) ? null : u === CONS_UNIT.CONSUMPTION_US ? 235.215 / v : u === CONS_UNIT.CONSUMPTION_UK ? 282.481 / v
+            : u === CONS_UNIT.CONSUMPTION_KML ? 100 / v : v;
+        if (!isNum(l100)) return null;
+        return this.setting('units') === 'us' ? 235.215 / l100 : l100;
     }
 
-    /** The consumption's unit label: the car's own (l/100km, mpg, km/l), else by the units setting. */
-    _consUnit() {
-        const u = isNum(this.consUnit) && this.consUnit > 0 ? this.consUnit : this.consUnitBc;
-        if (u === CONS_UNIT.CONSUMPTION_US || u === CONS_UNIT.CONSUMPTION_UK) return 'mpg';
-        if (u === CONS_UNIT.CONSUMPTION_KML) return 'km/l';
-        if (u === CONS_UNIT.CONSUMPTION_KM) return 'l/100km';
-        return this.setting('units') === 'us' ? 'mpg' : 'l/100km';
-    }
+    /** The consumption's unit label, by the units setting: mpg (US) or l/100km. */
+    _consUnit() { return this.setting('units') === 'us' ? 'mpg' : 'l/100km'; }
 
     _logCons(kind, v) {
         const line = JSON.stringify(v);
@@ -1207,6 +1250,9 @@ class HudApp {
         const now = Date.now();
         if (isNum(this.boostFes) && now - this.boostFesAt < FRESH_MS) return this.boostFes;
         if (isNum(this.boostDme) && now - this.boostDmeAt < FRESH_MS) return this.boostDme;
+        // the demo drive: made up from the throttle, building from 1500 to 3500 rpm (up to 1.3 bar)
+        const d = this.car.data();
+        if (d.demo && isNum(d.throttle) && isNum(d.rpm)) return Math.max(0, d.throttle) * 1.3 * Math.min(1, Math.max(0, (d.rpm - 1500) / 2000));
         return null;
     }
 
@@ -1345,7 +1391,17 @@ class HudApp {
 
     /** The Regal lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
      *  that side (hazards: both); the demo drive blinks left now and then. Cruise: BMW's ACC car or bars up. */
-    _brakeLit() { return this._brake(); }
+    /** The Regal left lamp: 'park' (the parking brake set: red PARK BRAKE), 'hold' (Auto Hold holding the car: green AUTO
+     *  HOLD) or null. The demo drive: parked in P, holding at a standstill otherwise. */
+    _brakeLamp() {
+        const known = (x) => x === true || x === false;
+        const pb = known(this.parkBrake) ? this.parkBrake : known(this.parkBrakeVsm) ? this.parkBrakeVsm : known(this.parkBrakeCds) ? this.parkBrakeCds : null;
+        if (pb === true) return 'park';
+        if (this.autoHold === 'hold') return 'hold';
+        const d = this.car.data();
+        if (pb === null && this.autoHold === null && d.demo && isNum(d.speed) && d.speed < 1) return d.stage === 'P' ? 'park' : 'hold';
+        return null;
+    }
 
     _turnLit(side) {
         const now = Date.now();
@@ -1400,7 +1456,7 @@ class HudApp {
             case 'throttle': { const v = this._throttle(); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'musicTitle': return this.musicTitle || '';
             // the Regal theme's lamps: their text while lit, else nothing
-            case 'lampBrake': return this._brakeLit() ? 'BRAKE' : '';
+            case 'lampBrake': { const l = this._brakeLamp(); return l === 'park' ? 'PARK BRAKE' : l === 'hold' ? 'AUTO HOLD' : ''; }
             case 'lampTurnL': return this._turnLit('L') ? 'LT. TURN' : '';
             case 'lampTurnR': return this._turnLit('R') ? 'RT. TURN' : '';
             case 'lampCruise': return this._cruiseLit() ? 'CRUISE' : '';
@@ -1421,6 +1477,8 @@ class HudApp {
             }
             case 'consumption': { const v = this._consumption(); return isNum(v) ? v.toFixed(1) : '--'; }
             case 'u:cons': return this._consUnit();
+            case 'u:consUc': return this._consUnit().toUpperCase();
+            case 'ambientN': { const v = this._raw('ambient'); return isNum(v) ? String(Math.round(us ? v * 9 / 5 + 32 : v)) : '--'; }   // no + sign (the seven-segment font has none)
             case 'volt12': { const v = this._volt12(); return isNum(v) ? v.toFixed(1) : '--'; }
             case 'batt12': { const v = this._batt12(); return isNum(v) ? String(Math.round(v)) : '--'; }
             case 'accGap': { const v = this._acc('gap'); return isNum(v) ? String(Math.round(us ? v * 3.28084 : v)) : '--'; }
@@ -1775,7 +1833,7 @@ class HudApp {
             const o4 = (r) => (Array.isArray(r) && r.length === 4 ? [r[0] - w.x, r[1] - w.y, r[2], r[3]] : [0, 0, 0, 0]);
             const sp = w.spd || [0, 0, 0, 0], sv = w.spdVirt || [300, 45];
             c.uniform(ref, 'u_size', [w.w, w.h]);
-            ['podL', 'podWin', 'ctr', 'win1', 'win2', 'vfdL', 'vfdR', 'led', 'gearBox', 'lampB'].forEach((k) => {
+            ['podL', 'podWin', 'ctr', 'win1', 'win2', 'vfdL', 'vfdR', 'led', 'led2', 'gearBox', 'lampB'].forEach((k) => {
                 c.uniform(ref, 'u_' + k, o4(w[k]));
             });
             c.uniform(ref, 'u_spd', [sp[0] - w.x, sp[1] - w.y, sp[2] - w.y, sp[3] - w.y]);
@@ -2082,13 +2140,20 @@ class HudApp {
             // the pods' gauges: each "podSignals" entry's signal over its range, bottom to top
             const pods = [0, 1].map((i) => {
                 const g = (w.podSignals || [])[i], v = g && g.signal ? this._raw(g.signal) : null, r = (g && g.range) || [0, 1];
-                return isNum(v) ? q((v - r[0]) / (r[1] - r[0])) : 0;
+                if (!isNum(v)) return 0;
+                // "mid": the value at the scale's middle mark (each half linear), e.g. the coolant's 110 C
+                const m = g && isNum(g.mid) ? g.mid : null;
+                if (m !== null) return q(v <= m ? 0.5 * (v - r[0]) / (m - r[0]) : 0.5 + 0.5 * (v - m) / (r[1] - m));
+                return q((v - r[0]) / (r[1] - r[0]));
             });
             const n = w.ledN || 16;
             const led = isNum(rpm) ? Math.floor(Math.max(0, rpm) / max * n + 0.5) / n : 0;
             const shiftAt = Math.floor(this._shift().rpm / max * n) / n;
+            // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
+            const n2 = w.led2N || 15, r2 = w.led2Range || [0, 1.5], b2 = this._raw(w.led2Signal || 'boost');
+            const led2 = isNum(b2) ? Math.floor(Math.min(1, Math.max(0, (b2 - r2[0]) / (r2[1] - r2[0]))) * n2 + 0.5) / n2 : 0;
             const stage = this._token('stage'), gi = Object.prototype.hasOwnProperty.call(REGAL_GEARS, stage) ? REGAL_GEARS[stage] : -1;
-            const lamps = [this._brakeLit() ? 1 : 0, this._turnLit('L') ? 1 : 0, this._turnLit('R') ? 1 : 0, 0];
+            const bl = this._brakeLamp(), lamps = [bl === 'park' ? 1 : bl === 'hold' ? 2 : 0, this._turnLit('L') ? 1 : 0, this._turnLit('R') ? 1 : 0, this._cruiseLit() ? 1 : 0];
             // speed on the 0..spdMax mph scale with spdMid at its middle, each half linear
             const mid = w.spdMid || 55, top = w.spdMax || 85, mph = isNum(sp) ? Math.max(0, sp * 0.621371) : 0;
             // below the first mark ("spdStep", 5 mph) the needle drops to its rest under the row ("spdRest" deg past the 0, 12)
@@ -2097,13 +2162,14 @@ class HudApp {
             let f = mph <= mid ? 0.5 * mph / mid : 0.5 + 0.5 * (mph - mid) / (top - mid);
             if (mph < st) f = rest + (f5 - rest) * mph / st;
             const vals = [Math.round(Math.min(1, Math.max(-0.5, f)) * 500) / 500, q(isNum(fuel) ? fuel : 0)];
-            const key = vals.join('|') + '|' + pods.join('|') + '|' + led + '|' + shiftAt + '|' + gi + '|' + lamps.join('');
+            const key = vals.join('|') + '|' + pods.join('|') + '|' + led + '|' + shiftAt + '|' + led2 + '|' + gi + '|' + lamps.join('');
             if (!force && key === x.last) return;
             x.last = key;
             x.c.uniform(x.ref, 'u_speedV', [vals[0]]);
             x.c.uniform(x.ref, 'u_fuelV', [vals[1]]);
             x.c.uniform(x.ref, 'u_podV', pods);
             x.c.uniform(x.ref, 'u_ledV', [n, led, shiftAt]);
+            x.c.uniform(x.ref, 'u_led2V', [n2, led2]);
             x.c.uniform(x.ref, 'u_gearV', [w.gearPitch || 0, gi]);
             x.c.uniform(x.ref, 'u_lamps', lamps);
         } else if (w.type === 'mdash') {

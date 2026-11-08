@@ -20,10 +20,10 @@ The look of BMW's newer Live Cockpit Sport view.
 
 The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needles and an orange VFD.
 
-- **Left pod:** a 12 V voltmeter (8 to 16 V), with the BRAKE lamp and the left turn arrow under it.
-- **Right pod:** coolant temperature, with the right turn arrow and CRUISE (lit while ACC is on).
+- **Left pod:** a 12 V voltmeter (8 to 16 V), with the parking brake lamp (red PARK BRAKE, or green AUTO HOLD while Auto Hold holds the car), the left turn arrow and the average fuel consumption under it.
+- **Right pod:** oil temperature (50 / 110 / 150 °C), with the CRUISE lamp (lit green while ACC is on), the right turn arrow and the outside temperature under it.
 - **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. The orange windows show the speed (mph or km/h by the units setting), the odometer and P R N D with the gear number on the left, and the clock and range on the right.
-- **Middle, bottom:** the fuel needle and an LED rev bar that turns yellow from your shift point.
+- **Middle, bottom:** the fuel needle in the middle, a yellow LED boost bar (0 to 1.5 bar) on its left and an LED rev bar that turns yellow from your shift point on its right.
 - **Bottom:** the song title. There is no map window.
 
 More themes are on the way.

@@ -83,7 +83,7 @@ const THEMES = {
         rev: { from: [255, 96, 24], to: [255, 96, 24] },
         bg: [0, 0, 0, 255], panel: [0, 0, 0, 255], line: [160, 164, 172, 255], head: [226, 228, 232, 255],
         ink: [12, 12, 14, 255], accent: [255, 96, 24, 255], well: [0, 0, 0, 255],
-        vfd: [255, 92, 22, 255], kmh: [222, 112, 52, 255], lampText: [255, 222, 200, 255], green: [60, 235, 100, 255], amber: [255, 160, 40, 255],
+        vfd: [255, 92, 22, 255], kmh: [222, 112, 52, 255], lampText: [255, 222, 200, 255], lampTextG: [225, 255, 230, 255], green: [60, 235, 100, 255], amber: [255, 160, 40, 255],
     },
 };
 // every theme: the shift-point red, used by "hot" (the gear and SHIFT at the shift point, the rev bar past it)
