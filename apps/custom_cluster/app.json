@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -446,11 +446,11 @@
     "carAhead": true,
     "pedals": true,
     "pedal": {
-      "comment": "The throttle bar. source obd: OBD PID 0x49 (accelerator pedal position D) from the engine unit, every 250 ms while shown; obdRange [at rest, flat out] in its own % maps to 0..100 (many engines read about 15 at rest and 80 flat out: the app logs 'accelerator pedal (OBD) ... %' on change, set the two from a release and a full press). Without source obd: the AcceleratorPedal message's actualValueAngleAcceleratorPedal * factor + offset, which on an X3 jumped about (misdecoded).",
+      "comment": "The throttle bar. source obd: OBD PID 0x49 (accelerator pedal position D) from the engine unit, every 250 ms while shown; obdRange [at rest, flat out] in its own % maps to 0..100 (an X3 M40i reads 14.5 at rest, 82 flat out and 91 in kickdown, Nov 7 2026: the app logs 'accelerator pedal (OBD) ... %' on change, set the two from a release and a full press). Without source obd: the AcceleratorPedal message's actualValueAngleAcceleratorPedal * factor + offset, which on an X3 jumped about (misdecoded).",
       "source": "obd",
       "obdRange": [
-        0,
-        100
+        14.5,
+        82
       ],
       "factor": 0.025,
       "offset": 0
