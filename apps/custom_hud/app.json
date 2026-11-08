@@ -21,6 +21,10 @@
     "visible.js"
   ],
   "signals": {
+    "de.bmw.body.Light": {
+      "StatusFunctionsIndicators": "s",
+      "_optional": "the indicators: the Perch character points that way"
+    },
     "de.bmw.infotainment.vehicle.CDS": {
       "statusEngineSpeed2": "rs",
       "statusEngineTemperature": "rs"
@@ -436,6 +440,7 @@
     "choiceAliases": {
       "redline": "perch"
     },
+    "indicators": true,
     "tankLitres": 65,
     "acc": {
       "comment": "The car ahead and the ACC set speed: raw * factor + offset. gap: the gap's raw value to metres, 0.1 m steps (the 1:1 reading was 10 times BMW's own on the car) (GapVehicleDrivingAhead, or DataFrontVehicle when the car sends it); rel: DataFrontVehicle's speed to km/h (without it the relative speed comes from the gap's rate); set: cruiseCtrlSpeedHUD. The car's catalog gives no units; the app logs 'car ahead raw: ...' when the values change, to calibrate these against BMW's own HUD.",

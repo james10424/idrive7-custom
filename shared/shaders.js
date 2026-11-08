@@ -1208,7 +1208,8 @@ const PERCH = `// The Perch layout's character (GLSL ES 1.00), from frames baked
 // settles). Upright she blinks
 // (idle -> half -> shut, eased) and now and then smiles as if talking. The twin tails are their own sprite: a wave runs
 // down them and speed blows them out. The upper body breathes (a slight stretch above the waist). Nothing is uploaded
-// after the atlas; she is animated on the renderer's clock (u_time). u_drive = (lean, speed, unused, brightness).
+// after the atlas; she is animated on the renderer's clock (u_time). u_drive = (lean, speed, point, brightness): point
+// -1 .. 1 raises the arm on that side to point toward the indicator (the arms are their own sprites).
 // Positions are in frame px; u_origin is where the frame's top-left sits in the layer. v_uv (0,0) is the top-left.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -1229,6 +1230,15 @@ uniform vec4 u_lean[8];     // the lean angles' frames, left to right, two per v
 uniform vec4 u_head[4];     // how far her head sits from upright at each angle (px), four per vec4
 uniform float u_leanN;      // how many angles (odd, up to 16; the middle one is upright)
 uniform vec4 u_hip;         // waist y, head y (frame px), breathing 0..1, 0
+uniform vec4 u_arm0;        // atlas rect of an arm sprite (w = 0: none)
+uniform vec4 u_arm0At;      // its top-left and its shoulder (the pivot), frame px, at rest
+uniform vec4 u_arm0L;       // at a full lean left: the shoulder's move (px) and the arm's turn (rad, the lean's own sway)
+uniform vec4 u_arm0R;       // the same at a full lean right
+uniform vec4 u_arm1;
+uniform vec4 u_arm1At;
+uniform vec4 u_arm1L;
+uniform vec4 u_arm1R;
+uniform vec4 u_armSide;     // x, y: arm 0's and arm 1's side (-1 left, 1 right); z: how far a pointing arm swings up (rad)
 uniform vec4 u_tails;       // atlas rect of the tails sprite (w = 0: none)
 uniform vec4 u_tailsAt;     // its top-left in frame px, root y in the sprite, length px
 
@@ -1239,6 +1249,17 @@ vec4 tap(vec4 r, vec2 p) {
     return vec4(t.rgb * t.a, t.a);
 }
 vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
+vec2 rot(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
+
+// an arm: carried and turned with her lean (as the bake measured it), and swung up and out from the shoulder by
+// "raise" (0..1, the indicator on its side) to point that way. Frame px, y down
+vec4 arm(vec4 r, vec4 at, vec4 offL, vec4 offR, float side, float l, float raise, vec2 p) {
+    if (r.z <= 0.0) return vec4(0.0);
+    vec3 off = l >= 0.0 ? offR.xyz * l : offL.xyz * -l;
+    float phi = off.z - side * u_armSide.z * raise;
+    vec2 sh = at.zw + off.xy;
+    return tap(r, at.zw + rot(p - sh, -phi) - at.xy);
+}
 
 // the body at lean angle i (0 .. u_leanN - 1); the middle one is upright, with the blink and the talking smile.
 // GLSL ES 1.00 only promises constant indexes into uniform arrays in a fragment shader, hence the loops
@@ -1291,6 +1312,11 @@ void main() {
     float i0 = min(floor(k), last - 1.0), fr = k - i0;   // linear: an eased blend would pause at every baked angle
     float i1 = i0 + 1.0;
     vec4 c = u_leanN < 2.5 ? upright : mix(leanAt(i0, fb, upright), leanAt(i1, fb, upright), fr);
+    // the arms, in front: u_drive.z points (-1 the left arm out to the left .. 1 the right arm out to the right)
+    float le = clamp(lean + 0.05 * sin(t * 0.8), -1.0, 1.0), pt = clamp(u_drive.z, -1.0, 1.0);
+    float r0 = u_armSide.x < 0.0 ? max(0.0, -pt) : max(0.0, pt), r1 = u_armSide.y < 0.0 ? max(0.0, -pt) : max(0.0, pt);
+    c = over(arm(u_arm0, u_arm0At, u_arm0L, u_arm0R, u_armSide.x, le, r0, fb), c);
+    c = over(arm(u_arm1, u_arm1At, u_arm1L, u_arm1R, u_armSide.y, le, r1, fb), c);
 
     // twin tails, behind. They hang from her head, so they move with it as she leans (the ends trailing a little);
     // a wave runs down them, faster and wider with speed, and the wind spreads them out and lifts them

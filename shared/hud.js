@@ -239,7 +239,9 @@ const SHEET_AREA_FRAC = 4;       // the first sheet size limit: 1/4 of the targe
 const PERCH_MS = 16;              // the Perch character's own update rate (60 Hz)
 const PERCH_TAU_MS = 450;        // the Perch character's speed follows the car this smoothly
 const PERCH_SPRING_K = 25;        // her lean's spring (1/s^2): about 0.8 Hz
-const PERCH_SPRING_C = 3.5;       // its damping (1/s): a sway or two past upright, then still
+const PERCH_SPRING_C = 3.5;
+const PERCH_POINT_K = 70;         // the pointing arm's spring (1/s^2): about 1.3 Hz
+const PERCH_POINT_C = 16.7;       // critically damped: it rises and settles without bouncing       // its damping (1/s): a sway or two past upright, then still
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
@@ -669,7 +671,11 @@ class HudApp {
             delete extra['de.bmw.powertrain.AcceleratorPedal'];
             if (this.config.lamps === true) delete extra['de.bmw.infotainment.vehicle.CDS'].statusBattery2; else delete extra['de.bmw.infotainment.vehicle.CDS'];
         }
-        if (this.config.pedals !== true && this.config.lamps !== true) delete extra['de.bmw.body.Light'];
+        if (this.config.pedals !== true && this.config.lamps !== true) {
+            // the indicators alone (config.indicators: the Perch character points that way)
+            if (this.config.indicators === true) delete extra['de.bmw.body.Light'].LampExterior;
+            else delete extra['de.bmw.body.Light'];
+        }
         this.car = new Car(this.ctx, ['rpm', 'speed', 'temps', 'accel', 'gear', 'torque'], extra);
         this.car.setRedline(this.setting('redline'));
         this.score = new ShiftScore(this.car, () => ({
@@ -1464,6 +1470,14 @@ class HudApp {
         return null;
     }
 
+    /** Which way the indicator points, held while it is on (not blinking): -1 left, 1 right, 0 none or hazards. */
+    _turnSide() {
+        const now = Date.now();
+        let t = this.turn !== null && now - (this.turnAt || 0) < 5000 ? this.turn : null;
+        if (t === null && this.car.data().demo) t = Math.floor(now / 6000) % 4 === 1 ? 'L' : Math.floor(now / 6000) % 4 === 3 ? 'R' : '';
+        return t === 'L' ? -1 : t === 'R' ? 1 : 0;
+    }
+
     _turnLit(side) {
         const now = Date.now();
         let t = this.turn !== null && now - (this.turnAt || 0) < 5000 ? this.turn : null;
@@ -2038,6 +2052,16 @@ class HudApp {
             c.uniform(ref, 'u_lean', lflat, { type: 'vec4' });
             c.uniform(ref, 'u_head', hflat, { type: 'vec4' });
             c.uniform(ref, 'u_leanN', [ln.length]);
+            // the arms (up to 2): sprites the shader turns from the shoulders to point toward the indicator
+            const am = Array.isArray(j.arms) ? j.arms.slice(0, 2) : [], v3 = (o) => (Array.isArray(o) ? [o[0] || 0, o[1] || 0, o[2] || 0, 0] : [0, 0, 0, 0]);
+            [0, 1].forEach((i) => {
+                const a = am[i];
+                c.uniform(ref, 'u_arm' + i, a ? a.rect : [0, 0, 0, 0]);
+                c.uniform(ref, 'u_arm' + i + 'At', a ? [a.at[0], a.at[1], a.shoulder[0], a.shoulder[1]] : [0, 0, 0, 0]);
+                c.uniform(ref, 'u_arm' + i + 'L', v3(a && a.left));
+                c.uniform(ref, 'u_arm' + i + 'R', v3(a && a.right));
+            });
+            c.uniform(ref, 'u_armSide', [am[0] ? am[0].side : -1, am[1] ? am[1].side : 1, (isNum(w.point) ? w.point : 72) * Math.PI / 180, 0]);
             c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.breathe === false ? 0 : 1, 0]);
             // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
             // moved only every third frame would step. A message goes up only when the lean or speed changes a step
@@ -2322,10 +2346,19 @@ class HudApp {
                 x.leanV += (PERCH_SPRING_K * (g - x.lean) - PERCH_SPRING_C * x.leanV) * h;
                 x.lean = Math.max(-1.2, Math.min(1.2, x.lean + x.leanV * h));
             }
+            // pointing: toward the indicator ('L' -1, 'R' 1, hazards or none 0), on a quicker spring (about 1.3 Hz, no
+            // overshoot) so the arm rises and falls smoothly
+            const tp = this._turnSide(), dtp = dt / 1000;
+            if (!isNum(x.point)) { x.point = tp; x.pointV = 0; }
+            for (let left = dtp; left > 0; left -= 0.01) {
+                const h = Math.min(0.01, left);
+                x.pointV += (PERCH_POINT_K * (tp - x.point) - PERCH_POINT_C * x.pointV) * h;
+                x.point = Math.max(-1, Math.min(1, x.point + x.pointV * h));
+            }
             const v = this._raw('speed'), sv = isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0, step = (f) => Math.round(f * 500) / 500;
             x.spd = isNum(x.spd) ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / PERCH_TAU_MS)) : sv;
             // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
-            const u = [step(Math.tanh(x.lean * 1.15)), step(x.spd), 0, this.themeName === 'night' ? 0.8 : 1];
+            const u = [step(Math.tanh(x.lean * 1.15)), step(x.spd), step(x.point), this.themeName === 'night' ? 0.8 : 1];
             const key = u.join('|');
             if (!force && key === x.last) return;
             x.last = key;

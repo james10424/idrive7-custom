@@ -17,6 +17,8 @@
  *   anchor      [x, y] the model point between her feet (model units, y up, as ?inspect's grid shows them; the bottom
  *               middle of the figure when left out): it goes on
  *               the Perch widget's "feet" point; anchorPx [x, y] px added to it on the HUD (right, down)
+ *   arms        [{ parts: ["part id"] }, ...] (up to 2): her arms, each its own sprite that the HUD turns from the
+ *               shoulder (to point toward the indicator); left out of the body frames
  *   hide        ["part id"]: left out entirely
  *   cut         { "drawable id": model y }: that drawable's triangles wholly below the y left out (in the idle pose)
  *   heightPx    her height on the HUD in px (200), or pxPerUnit: HUD px per model unit
@@ -298,6 +300,10 @@ async function bake(L, cfg) {
     const hidden = cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
     const tailsIn = cfg.tails && cfg.tails.length ? inParts(L, cfg.tails) : null;
     const tails = tailsIn ? (i) => tailsIn(i) && !hidden(i) : null;
+    // arms: each its own sprite, which the HUD turns from the shoulder (to point at the indicator); left out of every
+    // body frame. The bake measures where each shoulder sits and how the arm turns at a full lean each way
+    const armsIn = (cfg.arms || []).map((a) => inParts(L, a.parts || []));
+    const isArm = (i) => armsIn.some((f) => f(i));
     const R = new Renderer(L);
     const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
     makeCuts(L, cfg.cut, Object.assign({}, cfg.params, idle));
@@ -308,6 +314,7 @@ async function bake(L, cfg) {
     // her size: pxPerUnit, else heightPx (200) over the figure's height; landmarks default to fractions of the figure,
     // so a model in any units bakes without them
     const figH = box[3] - box[1];
+    const centreX = (box[0] + box[2]) / 2;
     const ppu = cfg.pxPerUnit || (cfg.heightPx || 200) / figH;
     const headY = isFinite(cfg.headY) ? cfg.headY : box[3] - 0.15 * figH;
     const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - 0.4 * figH;
@@ -316,7 +323,7 @@ async function bake(L, cfg) {
     const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
     log('frame ' + fw + 'x' + fh + ' px');
     const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
-    const body = { skip: (i) => hidden(i) || (tails ? tails(i) : false) };
+    const body = { skip: (i) => hidden(i) || (tails ? tails(i) : false) || isArm(i) };
     const names = ['idle', 'half', 'shut', 'talk'], frames = {};
     for (const n of names) {
         const f = (cfg.frames && cfg.frames[n]) || {};
@@ -341,8 +348,38 @@ async function bake(L, cfg) {
         frames[n] = render(body);
         names.push(n); leanNames.push(n);
     }
+    // each arm: its shoulder (the middle of its topmost vertices) and its middle, in frame px, at rest and at a full lean
+    // each way (the lean's own arm sway included), so the HUD can carry the sprite with her and turn it as she turns it
+    const armAt = (f) => {
+        const d = L.model.drawables;
+        let top = -Infinity, bot = Infinity, cx = 0, cy = 0, n = 0;
+        const each = (fn) => { for (let i = 0; i < d.count; i++) { if (!f(i) || hidden(i) || !C.Utils.hasIsVisibleBit(d.dynamicFlags[i])) continue; fn(d.vertexPositions[i]); } };
+        each((v) => { for (let k = 0; k < v.length; k += 2) { top = Math.max(top, v[k + 1]); bot = Math.min(bot, v[k + 1]); cx += v[k]; cy += v[k + 1]; n++; } });
+        if (!n) return null;
+        const band = top - (top - bot) * 0.06;
+        let px = 0, m2 = 0;
+        each((v) => { for (let k = 0; k < v.length; k += 2) if (v[k + 1] >= band) { px += v[k]; m2++; } });
+        const P = toFrame(px / m2, top), M = toFrame(cx / n, cy / n);
+        return { P, ang: Math.atan2(M[1] - P[1], M[0] - P[0]) };
+    };
+    const armPose = armsIn.map(() => ({}));
+    if (armsIn.length) {
+        [[0, 'left'], [LN - 1, 'right']].forEach(([k, side]) => {
+            const a = -1 + 2 * k / (LN - 1), q = {};
+            Object.keys(lp).forEach((id) => { q[id] = lp[id] * a; });
+            setParams(L, Object.assign({}, cfg.params, idle, q));
+            L.model.update();
+            armsIn.forEach((f, j) => { armPose[j][side] = armAt(f); });
+        });
+    }
     setParams(L, Object.assign({}, cfg.params, idle));
     L.model.update();
+    const arms = [];
+    armsIn.forEach((f, j) => {
+        armPose[j].rest = armAt(f);
+        const cv = render({ only: (i) => f(i) && !hidden(i) }), bb = alphaBox(cv);
+        if (bb && armPose[j].rest) arms.push({ j, cv, bb, pose: armPose[j] });
+    });
     let tl = null;
     if (tails) {
         const cv = render({ only: tails }), bb = alphaBox(cv);
@@ -351,6 +388,7 @@ async function bake(L, cfg) {
     // pack the frames in rows no wider than 1024, then the tails
     const items = names.map((n) => ({ n, cv: frames[n], bb: [0, 0, fw, fh] }));
     if (tl) items.push({ n: 'tails', cv: tl.cv, bb: tl.bb });
+    arms.forEach((a) => items.push({ n: 'arm' + a.j, cv: a.cv, bb: a.bb }));
     let x = 0, y = 0, rowH = 0;
     items.forEach((it) => {
         const w = it.bb[2] + 2 * pad, h = it.bb[3] + 2 * pad;
@@ -387,6 +425,15 @@ async function bake(L, cfg) {
     if (tl) {
         const t = byN.tails, root = cfg.tailsRoot || 0.15;
         info.tails = { rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]], at: [t.bb[0], t.bb[1]], rootY: Math.round(t.bb[3] * root), length: Math.round(t.bb[3] * (1 - root)) };
+    }
+    if (arms.length) {
+        const cx = toFrame(centreX, 0)[0], r1 = (x) => Math.round(x * 10) / 10;
+        info.arms = arms.map((a) => {
+            const t = byN['arm' + a.j], r = a.pose.rest;
+            const off = (q) => q ? [r1(q.P[0] - r.P[0]), r1(q.P[1] - r.P[1]), Math.round((q.ang - r.ang) * 1000) / 1000] : [0, 0, 0];
+            return { rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]], at: [t.bb[0], t.bb[1]], shoulder: [r1(r.P[0]), r1(r.P[1])],
+                side: Math.sign(r.P[0] - cx) || 1, left: off(a.pose.left), right: off(a.pose.right) };
+        });
     }
     // write: raw straight-alpha RGBA (what the HUD uploads), the description, a preview
     const px = ag.getImageData(0, 0, AW, AH).data;
