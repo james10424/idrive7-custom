@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -51,7 +51,8 @@
       ]
     },
     "de.bmw.infotainment.KombiIF": {
-      "statusRangeTankStatus": "rs"
+      "statusRangeTankStatus": "rs",
+      "statusShowTimeDate": "rs"
     },
     "de.bmw.infrastructure.EnvironmentalInformation": {
       "ExteriorTemperature": "s"
@@ -358,7 +359,7 @@
       "lon": -80.8431
     },
     "utcOffsetMinutes": null,
-    "_comment": "socketPath: cluster-render's documented default. location: where the Auto theme works out sunrise and sunset (Charlotte, NC). utcOffsetMinutes: leave null to use the head unit's own time zone; set it (e.g. -300 for EST) only if the HUD clock shows the wrong hour on the car. tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a G01 X3 holds 65).",
+    "_comment": "socketPath: cluster-render's documented default. location: where the Auto theme works out sunrise and sunset (Charlotte, NC). utcOffsetMinutes: leave null to follow the car's own clock (the time zone the cluster shows, summer time included); set it (e.g. -300 for EST) only to override that. tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a G01 X3 holds 65).",
     "dme": {
       "comment": "Boost from the engine unit (DME, ecu 18) over read-only UDS 0x22, only while the sport display sends no boost and a boost readout is shown. Absolute kPa, the outside air pressure (baro) is subtracted. Candidates tried in order, the first plausible one wins. From cauliflowermossgrape's car_vitals (MIT).",
       "ecu": 18,

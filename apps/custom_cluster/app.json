@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: GT3 race dash, M-style or Sport, with shift lights, boost, temps and shift scoring",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -52,7 +52,8 @@
       ]
     },
     "de.bmw.infotainment.KombiIF": {
-      "statusRangeTankStatus": "rs"
+      "statusRangeTankStatus": "rs",
+      "statusShowTimeDate": "rs"
     },
     "de.bmw.infotainment.vehicle.Vehicle": {
       "statusNewCurrentUnitsStatusExt": "rs",

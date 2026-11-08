@@ -387,11 +387,12 @@ uniform float u_lit;
 uniform vec4 u_on;
 uniform vec4 u_offC;
 uniform float u_slant;
+uniform float u_gap;      // px between segments (8 when not given)
 
 void main() {
     vec2 p = v_uv * u_size;
     float x = p.x - u_slant * (1.0 - v_uv.y);
-    float gap = 8.0;
+    float gap = u_gap > 0.0 ? u_gap : 8.0;
     float slot = (u_size.x - u_slant + gap) / u_segs;
     float i = floor(x / slot);
     float fx = x - i * slot;

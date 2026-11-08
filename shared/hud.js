@@ -91,7 +91,8 @@
  *             window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with
  *             "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right
  *             (BMW draws bits of its own Sport view there)
- *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px
+ *   segbar    effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px,
+ *             "gap" px between segments (8)
  *   icon      image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)
  *   arc also takes "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise)
  *   grid      calibration: effect layer of lines every "step" px (brighter every "major" steps)
@@ -157,8 +158,9 @@
  * Pedals and 12 V (app.json config.pedals, the interfaces also in its "signals"): {{throttle}} % (powertrain.AcceleratorPedal
  * actualValueAngleAcceleratorPedal * config.pedal.factor, 0.025 by default, while its qualifier says valid), {{volt12}} the
  * 12 V system in V (OBD PID 0x42 from the engine unit, config.dme.volt, asked every 2 s while a shown widget uses it);
- * segbar signals "throttle10" (0..10) and "brake10" (10 while the brake lights are on: body.Light controlFunctionBrakeLight,
- * all the car gives of the brake).
+ * segbar signals "throttle10" (0..10) and "brake10": while the brake lights are on (body.Light controlFunctionBrakeLight, all
+ * the car gives of the brake), how hard the car slows on a log scale, 10 * ln(1 + a / 0.05 g) / ln(1 + 1 g / 0.05 g) (0.1 g
+ * about 4, 0.3 g 6, 0.6 g 8, 1 g 10), at least 1; 10 without a deceleration reading.
  * Redline (shift_score.js): {{rpm10}} (rpm to 10) {{shiftAt}} {{lastShift}} {{lastGears}} (4 > 5)
  * {{verdict}} {{shiftPrompt}} (SHIFT at the shift point) {{coldNote}} (only while the oil is cold).
  * Units follow the "units" setting: us = mph, °F, psi; metric = km/h, °C, bar.
@@ -224,6 +226,8 @@ const REL_TAU_MS = 1500;          // the smoothing of a relative speed worked ou
 const BRAKE_LIGHT = { INIT: 0, OFF_BL: 1, ON_BL: 2, SIGNAL_UNGUELTIG: 3 };
 const PEDAL_OK = { SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1 };   // AngleAcceleratorPedal's qualifier: valid
 const VOLT_MS = 2000;             // the 12 V reading's interval
+const BRAKE_G0 = 0.05, BRAKE_GMAX = 1.0;   // the brake bar's log scale: deceleration in g where it bends, and where it is full
+const BRAKE_TAU_MS = 150;         // the deceleration's smoothing for the brake bar
 const MODE_TEXT = { cruise: "BMW's driver assistance", nav: "BMW's guidance", cruiseNav: "BMW's guidance and driver assistance" };
 /** An enum field as a number: its wire number, or its name looked up in items (unknown names: null). */
 function enumNum(v, items) {
@@ -352,6 +356,8 @@ class HudApp {
         this.volt12 = null; this.volt12At = 0;   // V, the 12 V system from the engine unit
         this.needsVolt = false;          // a shown widget uses volt12 (the engine unit is only asked then)
         this.pedalLogged = 0;
+        this.decelF = null; this.decelAt = 0;   // g, the smoothed deceleration for the brake bar
+        this.carOffsetMin = null;        // the car's time zone, minutes from UTC, from the time the cluster shows
         this.aheadLogged = '';
         this.accSetRaw = null;           // cruiseCtrlSpeedHUD as sent
         this.aheadLogAt = 0;
@@ -390,6 +396,9 @@ class HudApp {
         const extra = {
             // fuel and range (cauliflowermossgrape's live_data, MIT): litres (255 = none) and km (4095 = none)
             'de.bmw.infotainment.KombiIF': {
+                // the local time the cluster shows: its offset from UTC is the car's time zone (the app's own clock is UTC
+                // on the car, so new Date() read 5 h ahead in Toronto, Nov 2026); follows summer time and the car's setting
+                statusShowTimeDate: (v) => this._onCarClock(v),
                 statusRangeTankStatus: (v) => {
                     const f = v && v.fluidLevelFuelTank, r = v && v.range;
                     this.fuelL = isNum(f) && f >= 0 && f < 255 ? f : null;
@@ -988,7 +997,7 @@ class HudApp {
         }
         if (name.indexOf('setupLevel:') === 0) { const s = this._setup(); return s ? SETUP_LEVEL[s[name.slice(11)]] || 0 : 0; }
         if (name === 'throttle' || name === 'throttle10') { const t = this._throttle(); return isNum(t) ? (name === 'throttle' ? t : t / 10) : null; }
-        if (name === 'brake10') return this._brake() ? 10 : 0;
+        if (name === 'brake10') return this._brakeLevel();
         if (name === 'volt12') return this._volt12();
         const d = this.car.data();
         return Object.prototype.hasOwnProperty.call(d, name) ? d[name] : null;
@@ -1010,6 +1019,22 @@ class HudApp {
         if (this.brakeOn !== null) return this.brakeOn;
         const d = this.car.data();
         return !!d.demo && isNum(d.gLong) && d.gLong < -0.12;
+    }
+
+    /** The brake bar 0..10: 0 off; while braking the deceleration on a log scale (BRAKE_G0, BRAKE_GMAX), at least 1; 10
+     *  without a deceleration reading. The deceleration is smoothed over BRAKE_TAU_MS so the bar does not flicker. */
+    _brakeLevel() {
+        const now = Date.now(), gl = this.car.data().gLong;
+        const a = isNum(gl) ? Math.max(0, -gl) : null;
+        if (isNum(a)) {
+            const dt = this.decelAt ? Math.min(500, now - this.decelAt) : 0;
+            this.decelF = isNum(this.decelF) ? this.decelF + (a - this.decelF) * (1 - Math.exp(-dt / BRAKE_TAU_MS)) : a;
+            this.decelAt = now;
+        } else this.decelF = null;
+        if (!this._brake()) return 0;
+        if (!isNum(this.decelF)) return 10;
+        const v = 10 * Math.log(1 + Math.min(this.decelF, BRAKE_GMAX) / BRAKE_G0) / Math.log(1 + BRAKE_GMAX / BRAKE_G0);
+        return Math.max(1, Math.min(10, v));
     }
 
     /** The 12 V system in V, null when the engine unit has not answered lately; the demo drive's made up. */
@@ -1131,9 +1156,26 @@ class HudApp {
         }
     }
 
-    /** Local time. config.utcOffsetMinutes overrides the unit's own time zone if that turns out wrong on the car. */
+    /** KombiIF statusShowTimeDate: the cluster's displayed local time against UTC now, to the nearest 15 min within
+     *  -12..+14 h, is the car's time zone. 255 = not sent. */
+    _onCarClock(v) {
+        const h = v && v.displayHour, m = v && v.displayMinute;
+        if (!isNum(h) || !isNum(m) || h > 23 || m > 59) return;
+        const now = new Date();
+        let off = h * 60 + m - (now.getUTCHours() * 60 + now.getUTCMinutes());
+        off = Math.round(off / 15) * 15;
+        while (off < -12 * 60) off += 1440;
+        while (off > 14 * 60) off -= 1440;
+        if (off === this.carOffsetMin) return;
+        this.carOffsetMin = off;
+        this.log.info('car clock ' + h + ':' + pad2(m) + ': time zone UTC' + (off < 0 ? '-' : '+') + pad2(Math.floor(Math.abs(off) / 60)) + ':' + pad2(Math.abs(off) % 60));
+    }
+
+    /** Local time: config.utcOffsetMinutes when set, else the car's time zone once the cluster's clock has been seen, else
+     *  the unit's own (UTC on the car). */
     _now() {
-        const off = this.config.utcOffsetMinutes;
+        const cfg = this.config.utcOffsetMinutes;
+        const off = isNum(cfg) ? cfg : this.carOffsetMin;
         if (!isNum(off)) return new Date();
         const d = new Date(Date.now() + off * 60000);
         return { getHours: () => d.getUTCHours(), getMinutes: () => d.getUTCMinutes() };
@@ -1428,6 +1470,7 @@ class HudApp {
             c.uniform(ref, 'u_on', rgba(color(t, w.color || 'hot')));
             c.uniform(ref, 'u_offC', rgba(color(t, 'track')));
             c.uniform(ref, 'u_slant', [w.slant || 0]);
+            c.uniform(ref, 'u_gap', [isNum(w.gap) ? w.gap : 8]);
         } else if (w.type === 'revbar') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_top', [w.top || 8]);
