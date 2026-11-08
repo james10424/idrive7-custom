@@ -1,5 +1,5 @@
 'use strict';
-/* Perch bake page (served by serve.js): the standing frames. A small WebGL renderer on Live2D's Cubism Core: drawables in render order,
+/* Miku bake page (served by serve.js): the standing frames. A small WebGL renderer on Live2D's Cubism Core: drawables in render order,
  * clipping masks through the stencil buffer, normal / additive / multiplicative blending, multiply and screen colours.
  * No physics: the model is posed by parameters only, and the HUD's shader adds the motion.
  *
@@ -16,7 +16,7 @@
  *   tailsRoot   0..1: where the tails hang from, as a fraction down the tails sprite (0.15)
  *   anchor      [x, y] the model point between her feet (model units, y up, as ?inspect's grid shows them; the bottom
  *               middle of the figure when left out): it goes on
- *               the Perch widget's "feet" point; anchorPx [x, y] px added to it on the HUD (right, down)
+ *               the Miku widget's "feet" point; anchorPx [x, y] px added to it on the HUD (right, down)
  *   arms        [{ parts: ["part id"] }, ...] (up to 2): her arms, each its own sprite that the HUD turns from the
  *               shoulder (to point toward the indicator); left out of the body frames
  *   hide        ["part id"]: left out entirely
@@ -452,9 +452,9 @@ async function bake(L, cfg) {
         if (/[?&]inspect/.test(location.search)) await inspect(L, cfg);
         else await bake(L, cfg);
         log('done');
-        document.title = 'Perch bake: done';
+        document.title = 'Miku bake: done';
     } catch (e) {
         log('ERROR: ' + (e && e.stack || e));
-        document.title = 'Perch bake: error';
+        document.title = 'Miku bake: error';
     }
 })();

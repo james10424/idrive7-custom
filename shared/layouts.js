@@ -35,7 +35,7 @@ const TYPES = {
     swatchimg: [],
     boxes: ['boxes'],
     atext: ['text', 'font'],
-    perch: [],
+    miku: [],
 };
 const CLASSES = ['ambient', 'content', 'overlay', 'alert'];
 // the HUD modes a layout can have a variant for (hud.js header); "normal" is every layout's own

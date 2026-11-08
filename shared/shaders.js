@@ -1200,7 +1200,7 @@ void main() {
 }
 `;
 
-const PERCH = `// The Perch layout's character (GLSL ES 1.00), from frames baked offline (tools/live2d_bake) into one RGBA atlas
+const MIKU = `// The Miku layout's character (GLSL ES 1.00), from frames baked offline (tools/live2d_bake) into one RGBA atlas
 // asset (u_atlas, straight alpha, u_atlasSize px). She stands, as on a bus: the bake posed her at u_leanN lean angles
 // (11) with the model's own body and head rotation, from a full lean left with the braking face to a full lean right
 // with the happy face, close enough together that the shader can blend the two nearest to u_drive.x without a double
@@ -1344,4 +1344,4 @@ void main() {
 }
 `;
 
-module.exports = { perch: PERCH, rdash: RDASH, shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH, boxes: BOXES, atext: ATEXT };
+module.exports = { miku: MIKU, rdash: RDASH, shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH, boxes: BOXES, atext: ATEXT };

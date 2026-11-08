@@ -1,6 +1,6 @@
-# Perch bake
+# Miku bake
 
-Turns a Live2D model you own into the frames Custom HUD's **Perch** layout draws on the windshield, standing in the bottom right corner. It runs on your own computer. Nothing of your model goes in this repo or the app: the frames stay with you and go to your car only.
+Turns a Live2D model you own into the frames Custom HUD's **Miku** layout draws on the windshield, standing in the bottom right corner. It runs on your own computer. Nothing of your model goes in this repo or the app: the frames stay with you and go to your car only.
 
 ## What you need
 
@@ -29,11 +29,11 @@ Turns a Live2D model you own into the frames Custom HUD's **Perch** layout draws
 
 ### Where the HUD looks
 
-Custom HUD reads the frames from one fixed folder, `perch/`, inside its own data folder, and nowhere else:
+Custom HUD reads the frames from one fixed folder, `miku/`, inside its own data folder, and nowhere else:
 
 ```
-<Custom HUD's app folder>/data/perch/atlas.json
-<Custom HUD's app folder>/data/perch/atlas.rgba
+<Custom HUD's app folder>/data/miku/atlas.json
+<Custom HUD's app folder>/data/miku/atlas.rgba
 ```
 
 Both files must be there, under exactly those names, straight from the bake (`atlas.rgba` must be exactly width x height x 4 bytes, as `atlas.json` says). `preview.png` is only for you and is not needed on the car. The app folder is `/var/opt/public/oap/oap_<id>/` on the car (OAP picks the id at install), so its data folder is `/var/opt/public/oap/oap_<id>/data/`.
@@ -48,14 +48,14 @@ Both files must be there, under exactly those names, straight from the bake (`at
 1. From the repo folder, run:
 
    ```bash
-   ./scripts/deploy.sh root@<car> --perch <folder>
+   ./scripts/deploy.sh root@<car> --miku <folder>
    ```
 
-   `<folder>` is the bake's `--out` folder, the one with `atlas.json` and `atlas.rgba` in it. The script checks both files are there and the JSON is valid, finds Custom HUD's folder on the car (it looks for the `package.json` that names `custom_hud`), creates `data/perch/`, copies the two files in and gives them to the app's own user.
+   `<folder>` is the bake's `--out` folder, the one with `atlas.json` and `atlas.rgba` in it. The script checks both files are there and the JSON is valid, finds Custom HUD's folder on the car (it looks for the `package.json` that names `custom_hud`), creates `data/miku/`, copies the two files in and gives them to the app's own user.
 
-2. Make the app load them. It reads the frames only when it builds the layout, and does not watch the folder, so on the center screen open **Custom HUD**, pick another layout, then **Perch** again (or restart the app).
+2. Make the app load them. It reads the frames only when it builds the layout, and does not watch the folder, so on the center screen open **Custom HUD**, pick another layout, then **Miku** again (or restart the app).
 
-3. Check the app page's status row. With the frames loaded it says "HUD on", "Perch layout", "1 layer" and about "4.0 MiB of 16 MiB pixels". The app's log has a line like `perch frames: 14 of 106x250, tails, 1024x508 RGBA asset, 4.0 MiB of pixel memory`.
+3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "1 layer" and about "6.6 MiB of 16 MiB pixels" (it depends on the bake). The app's log has a line like `miku frames: 14 of 144x278, tails, 1024x846 RGBA asset, 6.6 MiB of pixel memory`.
 
 ### By hand
 
@@ -68,30 +68,30 @@ ssh root@<car> 'grep -l "\"name\": \"custom_hud\"" /var/opt/public/oap/oap_*/sou
 That prints `.../oap_<id>/source/package.json`; the app folder is `/var/opt/public/oap/oap_<id>`. Then:
 
 ```bash
-ssh root@<car> 'mkdir -p /var/opt/public/oap/oap_<id>/data/perch'
+ssh root@<car> 'mkdir -p /var/opt/public/oap/oap_<id>/data/miku'
 ```
 
 ```bash
-scp <folder>/atlas.json <folder>/atlas.rgba root@<car>:/var/opt/public/oap/oap_<id>/data/perch/
+scp <folder>/atlas.json <folder>/atlas.rgba root@<car>:/var/opt/public/oap/oap_<id>/data/miku/
 ```
 
 ```bash
-ssh root@<car> 'chown -R "$(stat -c %u:%g /var/opt/public/oap/oap_<id>/data)" /var/opt/public/oap/oap_<id>/data/perch'
+ssh root@<car> 'chown -R "$(stat -c %u:%g /var/opt/public/oap/oap_<id>/data)" /var/opt/public/oap/oap_<id>/data/miku'
 ```
 
 ### Updating or removing
 
 - **New bake:** run the deploy again (it overwrites both files), then switch layouts again. The app sees the new files and replaces the old image.
-- **Remove her:** delete `data/perch/` on the car. Perch then draws nothing.
-- **Reinstalling or updating Custom HUD** from the Store keeps its data folder, as far as we know; if Perch says the frames are missing after an update, deploy again.
+- **Remove her:** delete `data/miku/` on the car. Miku then draws nothing.
+- **Reinstalling or updating Custom HUD** from the Store keeps its data folder, as far as we know; if Miku says the frames are missing after an update, deploy again.
 
 ### When it doesn't show
 
-The status row says why, after "Perch:":
+The status row says why, after "Miku:":
 
 | Status row | Meaning |
 | --- | --- |
-| `no baked frames in .../data/perch` | The folder or `atlas.rgba` is missing: deploy again. |
+| `no baked frames in .../data/miku` | The folder or `atlas.rgba` is missing: deploy again. |
 | `atlas.json: ...` or `Unexpected ...` | The JSON is not from this bake tool, or was cut short: deploy again. |
 | `atlas.rgba is N bytes, ... needs M` | The two files don't belong together (one from an older bake): deploy both again. |
 | `atlas asset refused` | cluster-render had no room: another app is using most of its 16 MiB of pixel memory. |
@@ -100,7 +100,7 @@ Nothing shows during route guidance either: that's on purpose, BMW's turn map us
 
 ### On the bench
 
-The bench's app data folder is `bench/.data/custom_hud/`, so copy the two files to `bench/.data/custom_hud/perch/` and press **Restart apps**. The bench data folder is ignored by git.
+The bench's app data folder is `bench/.data/custom_hud/`, so copy the two files to `bench/.data/custom_hud/miku/` and press **Restart apps**. The bench data folder is ignored by git.
 
 Not yet checked on a car: the app folder path (from the Store's docs) and SSH as root. `scripts/deploy.sh` says so too.
 

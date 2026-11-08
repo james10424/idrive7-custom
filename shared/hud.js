@@ -112,8 +112,8 @@
  *             "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the
  *             pedal is in kickdown and the bar is full; "range" [lo, hi] maps the signal from that span onto 0..max
  *             (e.g. "boost" over [0, 1.5] bar, "batt12" over [0, 100] %)
- *   perch     effect layer; shaders.js perch, the Perch layout's standing character, from frames baked offline
- *             (tools/live2d_bake) and kept in the app's data folder (perch/, see _sprite); animated by the renderer's
+ *   miku     effect layer; shaders.js miku, the Miku layout's standing character, from frames baked offline
+ *             (tools/live2d_bake) and kept in the app's data folder (miku/, see _sprite); animated by the renderer's
  *             clock (time: true), so only a small u_drive uniform goes up when the smoothed g or the speed moves a step.
  *             "feet" [x, y] target px where the bake's "anchor" (between her feet) goes ([480, 377]). Nothing is drawn
  *             without frames (the status row says so)
@@ -236,12 +236,12 @@ const LAYER_BUDGET = 8;          // cluster-render's limit per client connection
 const MAX_CONN = 4;              // connections a layout may ask for ("conn"): 32 layers service-wide / 8 per connection
 const PIXEL_BYTES = 16 * 1024 * 1024;   // cluster-render's pixel memory for every app's images together (CompositorLimits.pixel_bytes)
 const SHEET_AREA_FRAC = 4;       // the first sheet size limit: 1/4 of the target area (see the header)
-const PERCH_MS = 16;              // the Perch character's own update rate (60 Hz)
-const PERCH_TAU_MS = 450;        // the Perch character's speed follows the car this smoothly
-const PERCH_SPRING_K = 25;        // her lean's spring (1/s^2): about 0.8 Hz
-const PERCH_SPRING_C = 3.5;
-const PERCH_POINT_K = 70;         // the pointing arm's spring (1/s^2): about 1.3 Hz
-const PERCH_POINT_C = 16.7;       // critically damped: it rises and settles without bouncing       // its damping (1/s): a sway or two past upright, then still
+const MIKU_MS = 16;              // the Miku character's own update rate (60 Hz)
+const MIKU_TAU_MS = 450;        // the Miku character's speed follows the car this smoothly
+const MIKU_SPRING_K = 25;        // her lean's spring (1/s^2): about 0.8 Hz
+const MIKU_SPRING_C = 3.5;
+const MIKU_POINT_K = 70;         // the pointing arm's spring (1/s^2): about 1.3 Hz
+const MIKU_POINT_C = 16.7;       // critically damped: it rises and settles without bouncing       // its damping (1/s): a sway or two past upright, then still
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
@@ -443,7 +443,7 @@ class HudApp {
         this.tyres = { p: {}, t: {} };                                  // TPMS pressure (bar) and temperature (C) per corner FL FR RL RR
         this.activeName = null;          // the layout shown now ('off' = nothing)
         this.pixelBytes = 0;             // what the layout's image layers and glyph atlases cost of cluster-render's pixel memory
-        this.atlases = new Map();        // "<conn>:<font>" -> glyph atlas { ref, c, ci, cols, rows, cellW, cellH, chars, bytes } (R8), "sprite:..." -> the Perch frames (_sprite); assets kept across rebuilds
+        this.atlases = new Map();        // "<conn>:<font>" -> glyph atlas { ref, c, ci, cols, rows, cellW, cellH, chars, bytes } (R8), "sprite:..." -> the Miku frames (_sprite); assets kept across rebuilds
         this.targetState = null;         // { state, holder, reason } of our target
         this.rpmF = null; this.rpmShown = null; this.lastTickT = 0;
         this.themeName = null;
@@ -464,7 +464,7 @@ class HudApp {
         const s = this.ctx.settings.item(key);
         const v = this.ctx.settings.get(key);
         if (!s) return v;
-        // a choice that was renamed or replaced (app.json config.choiceAliases, e.g. the HUD's Redline layout is now Perch)
+        // a choice that was renamed or replaced (app.json config.choiceAliases, e.g. the HUD's Redline layout is now Miku)
         const alias = s.type === 'choice' && this.config.choiceAliases && this.config.choiceAliases[v];
         if (alias && (s.options || []).some((o) => o[0] === alias)) return alias;
         const ok = s.type === 'bool' ? typeof v === 'boolean'
@@ -672,7 +672,7 @@ class HudApp {
             if (this.config.lamps === true) delete extra['de.bmw.infotainment.vehicle.CDS'].statusBattery2; else delete extra['de.bmw.infotainment.vehicle.CDS'];
         }
         if (this.config.pedals !== true && this.config.lamps !== true) {
-            // the indicators alone (config.indicators: the Perch character points that way)
+            // the indicators alone (config.indicators: the Miku character points that way)
             if (this.config.indicators === true) delete extra['de.bmw.body.Light'].LampExterior;
             else delete extra['de.bmw.body.Light'];
         }
@@ -1094,14 +1094,14 @@ class HudApp {
     }
 
     /**
-     * The Perch layout's baked frames: <data>/perch/atlas.json and
+     * The Miku layout's baked frames: <data>/miku/atlas.json and
      * atlas.rgba (straight-alpha RGBA, atlas[0] x atlas[1] px), made by tools/live2d_bake and pushed by
-     * scripts/deploy.sh --perch. They are not in the app: the character's art stays with its owner. Uploaded once as an
+     * scripts/deploy.sh --miku. They are not in the app: the character's art stays with its owner. Uploaded once as an
      * RGBA asset per connection and kept in this.atlases (so the pixel memory counts it); new files (a later bake)
      * drop the old asset. Null, with this.problem set, when the files are missing or bad.
      */
     _sprite(w, ci) {
-        const dir = path.join(this.ctx.dataDir || '.', 'perch');
+        const dir = path.join(this.ctx.dataDir || '.', 'miku');
         let st;
         try { st = fs.statSync(path.join(dir, 'atlas.rgba')); } catch (e) { st = null; }
         const key = 'sprite:' + ci + ':' + dir + ':' + (st ? st.mtimeMs : 0);
@@ -1110,7 +1110,7 @@ class HudApp {
             if (k.indexOf('sprite:' + ci + ':') === 0) { a.c.drop(a.ref); this.atlases.delete(k); }
         });
         try {
-            if (!st) throw new Error('no baked frames in ' + dir + ' (tools/live2d_bake, then scripts/deploy.sh --perch)');
+            if (!st) throw new Error('no baked frames in ' + dir + ' (tools/live2d_bake, then scripts/deploy.sh --miku)');
             const info = JSON.parse(fs.readFileSync(path.join(dir, 'atlas.json'), 'utf8'));
             const [aw, ah] = info.atlas || [];
             if (!(aw > 0 && ah > 0 && aw <= 2048 && ah <= 2048)) throw new Error('atlas.json: bad "atlas" size');
@@ -1123,11 +1123,11 @@ class HudApp {
             c.pixels(ref, null, px);
             const a = { ref, c, ci, info, bytes: aw * ah * 8 };
             this.atlases.set(key, a);
-            this.log.info('perch frames: ' + Object.keys(info.frames).length + ' of ' + info.frame.join('x') + ', ' +
+            this.log.info('miku frames: ' + Object.keys(info.frames).length + ' of ' + info.frame.join('x') + ', ' +
                 (info.tails ? 'tails, ' : '') + aw + 'x' + ah + ' RGBA asset, ' + mib(a.bytes) + ' of pixel memory');
             return a;
         } catch (e) {
-            this.problem = 'Perch: ' + e.message;
+            this.problem = 'Miku: ' + e.message;
             this.log.warn('widget "' + w.id + '": ' + e.message);
             return null;
         }
@@ -1471,7 +1471,7 @@ class HudApp {
     }
 
     /** Which way the indicator points, held while it is on (not blinking): -1 left, 1 right, 0 none or hazards. Always 0
-     *  unless config.indicators (the Perch character points that way only then). */
+     *  unless config.indicators (the Miku character points that way only then). */
     _turnSide() {
         if (this.config.indicators !== true) return 0;
         const now = Date.now();
@@ -1853,8 +1853,8 @@ class HudApp {
             const base = { target: this.target, klass: w.class || 'content', z: w.z || 0, x: w.x, y: w.y, w: w.w, h: w.h };
             if (IMAGE_TYPES[w.type]) ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
             else {
-                if (w.type === 'perch' && !this._sprite(w, this._connOf(w))) return;
-                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : shaders[w.type], time: w.type === 'perch' || undefined }, base));
+                if (w.type === 'miku' && !this._sprite(w, this._connOf(w))) return;
+                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : shaders[w.type], time: w.type === 'miku' || undefined }, base));
             }
             if (!ref) { this.log.warn('widget "' + w.id + '": layer refused'); return; }
         }
@@ -2034,7 +2034,7 @@ class HudApp {
             c.uniform(ref, 'u_headH', [w.head || 0]);
             c.uniform(ref, 'u_border', [w.border === undefined ? 2 : w.border]);
             c.uniform(ref, 'u_radius', [w.radius || 0]);
-        } else if (w.type === 'perch') {
+        } else if (w.type === 'miku') {
             // the bake's "anchor" (frame px, between her feet) goes on the widget's "feet" point
             const sp = this._sprite(w, x.ci), j = sp.info, ft = Array.isArray(w.feet) && w.feet.length === 2 ? w.feet : [480, 377];
             const fr = (k) => (j.frames && j.frames[k]) || j.frames.idle;
@@ -2068,7 +2068,7 @@ class HudApp {
             c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.breathe === false ? 0 : 1, 0]);
             // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
             // moved only every third frame would step. A message goes up only when the lean or speed changes a step
-            x.timer = setInterval(() => this._guard('widget ' + w.id, () => this._update(x, Date.now(), false)), PERCH_MS);
+            x.timer = setInterval(() => this._guard('widget ' + w.id, () => this._update(x, Date.now(), false)), MIKU_MS);
             const tl = j.tails || null;
             c.uniform(ref, 'u_tails', rect(tl));
             c.uniform(ref, 'u_tailsAt', tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1]);
@@ -2335,9 +2335,9 @@ class HudApp {
             x.c.uniform(x.ref, 'u_shift', [sp.rpm]);
             x.c.uniform(x.ref, 'u_peak', [peak]);
             x.c.uniform(x.ref, 'u_shiftNow', [sp.now ? 1 : 0]);
-        } else if (w.type === 'perch') {
+        } else if (w.type === 'miku') {
             // lean: the longitudinal g, -0.4 g .. +0.4 g to -1 .. 1, through a spring; speed 0..130 km/h to 0..1, eased
-            // over PERCH_TAU_MS; both sent in steps of 0.002 (a small uniform message, at most one per PERCH_MS, and only while she moves)
+            // over MIKU_TAU_MS; both sent in steps of 0.002 (a small uniform message, at most one per MIKU_MS, and only while she moves)
             const d = this.car.data(), dt = x.at ? Math.min(500, now - x.at) : 0;
             x.at = now;
             // standing on a bus: the lean is a spring pulled towards the g (about 0.8 Hz, lightly damped), so she leans
@@ -2346,7 +2346,7 @@ class HudApp {
             if (!isNum(x.lean)) { x.lean = g; x.leanV = 0; }
             for (let left = dt / 1000; left > 0; left -= 0.01) {
                 const h = Math.min(0.01, left);
-                x.leanV += (PERCH_SPRING_K * (g - x.lean) - PERCH_SPRING_C * x.leanV) * h;
+                x.leanV += (MIKU_SPRING_K * (g - x.lean) - MIKU_SPRING_C * x.leanV) * h;
                 x.lean = Math.max(-1.2, Math.min(1.2, x.lean + x.leanV * h));
             }
             // pointing: toward the indicator ('L' -1, 'R' 1, hazards or none 0), on a quicker spring (about 1.3 Hz, no
@@ -2355,11 +2355,11 @@ class HudApp {
             if (!isNum(x.point)) { x.point = tp; x.pointV = 0; }
             for (let left = dtp; left > 0; left -= 0.01) {
                 const h = Math.min(0.01, left);
-                x.pointV += (PERCH_POINT_K * (tp - x.point) - PERCH_POINT_C * x.pointV) * h;
+                x.pointV += (MIKU_POINT_K * (tp - x.point) - MIKU_POINT_C * x.pointV) * h;
                 x.point = Math.max(-1, Math.min(1, x.point + x.pointV * h));
             }
             const v = this._raw('speed'), sv = isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0, step = (f) => Math.round(f * 500) / 500;
-            x.spd = isNum(x.spd) ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / PERCH_TAU_MS)) : sv;
+            x.spd = isNum(x.spd) ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / MIKU_TAU_MS)) : sv;
             // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
             const u = [step(Math.tanh(x.lean * 1.15)), step(x.spd), step(x.point), this.themeName === 'night' ? 0.8 : 1];
             const key = u.join('|');

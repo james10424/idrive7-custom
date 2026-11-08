@@ -3,10 +3,10 @@
 #
 #   ./scripts/deploy.sh root@<car-ip-or-hostname> [layout.json ...]
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
-#   ./scripts/deploy.sh root@<car> --perch <bake output folder>      (the Perch layout's baked frames)
+#   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
 #
-# --perch copies the folder's atlas.json and atlas.rgba (from tools/live2d_bake) to the app's data folder,
-# <app>/data/perch/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
+# --miku copies the folder's atlas.json and atlas.rgba (from tools/live2d_bake) to the app's data folder,
+# <app>/data/miku/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
 # next time it builds the layout (switch to another layout and back, or restart the app).
 #
 # With no files it pushes the app's built-in layouts from apps/<app>/hud/layouts/.
@@ -33,15 +33,15 @@ usage() {
 CAR_HOST="$1"; shift
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PERCH_SRC=""
-if [ "${1:-}" = "--perch" ]; then
-    [ $# -eq 2 ] && [ -d "$2" ] || { echo "Usage: $(basename "$0") <car-ssh-host> --perch <bake output folder>" >&2; exit 1; }
-    PERCH_SRC="$2"; shift 2
-    [ -f "$PERCH_SRC/atlas.json" ] && [ -f "$PERCH_SRC/atlas.rgba" ] || { echo "No atlas.json and atlas.rgba in $PERCH_SRC" >&2; exit 1; }
-    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$PERCH_SRC/atlas.json" || { echo "Not valid JSON: $PERCH_SRC/atlas.json" >&2; exit 1; }
+MIKU_SRC=""
+if [ "${1:-}" = "--miku" ]; then
+    [ $# -eq 2 ] && [ -d "$2" ] || { echo "Usage: $(basename "$0") <car-ssh-host> --miku <bake output folder>" >&2; exit 1; }
+    MIKU_SRC="$2"; shift 2
+    [ -f "$MIKU_SRC/atlas.json" ] && [ -f "$MIKU_SRC/atlas.rgba" ] || { echo "No atlas.json and atlas.rgba in $MIKU_SRC" >&2; exit 1; }
+    python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$MIKU_SRC/atlas.json" || { echo "Not valid JSON: $MIKU_SRC/atlas.json" >&2; exit 1; }
 fi
 LAYOUT_DIR="$(dirname "$SCRIPT_DIR")/apps/${APP_ID}/hud/layouts"
-if [ $# -eq 0 ] && [ -z "$PERCH_SRC" ]; then set -- "$LAYOUT_DIR"/*.json; fi
+if [ $# -eq 0 ] && [ -z "$MIKU_SRC" ]; then set -- "$LAYOUT_DIR"/*.json; fi
 
 # Check each file locally first: valid JSON, so the car never gets a file it would refuse.
 for f in "$@"; do
@@ -56,12 +56,12 @@ fi
 DEST="${APP_DIR}/data/layouts"
 echo "App folder on the car: ${APP_DIR}"
 
-if [ -n "$PERCH_SRC" ]; then
+if [ -n "$MIKU_SRC" ]; then
     OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
-    ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/perch'"
-    scp "$PERCH_SRC/atlas.json" "$PERCH_SRC/atlas.rgba" "${CAR_HOST}:${APP_DIR}/data/perch/"
-    ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/perch'"
-    echo "Pushed the Perch frames to ${APP_DIR}/data/perch. Switch to another layout and back (or restart the app) to load them."
+    ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/miku'"
+    scp "$MIKU_SRC/atlas.json" "$MIKU_SRC/atlas.rgba" "${CAR_HOST}:${APP_DIR}/data/miku/"
+    ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/miku'"
+    echo "Pushed the Miku frames to ${APP_DIR}/data/miku. Switch to another layout and back (or restart the app) to load them."
     exit 0
 fi
 

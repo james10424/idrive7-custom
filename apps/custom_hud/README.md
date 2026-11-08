@@ -19,13 +19,13 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
 
 - **Daily:** speed is the hero, with the gear, clock and oil.
 - **Sport:** a segmented shift bar, a big gear, speed, a boost gauge, oil and coolant.
-- **Perch:** a Live2D character you own stands at the bottom right of the HUD, clear of BMW's speed and speed-limit sign. No readouts of our own, just her and BMW's HUD.
-  - **Bring your own model:** no character ships with the app. You bake frames from a Live2D model on your own computer with [tools/live2d_bake](../../tools/live2d_bake/README.md) and copy them to the car with `scripts/deploy.sh <car> --perch <folder>` ([deployment steps](../../tools/live2d_bake/README.md#deploy-to-the-car)). The app reads them from `perch/` in its data folder. Until they're there the layout draws nothing and the status row says why.
+- **Miku:** a Live2D character you own stands at the bottom right of the HUD, clear of BMW's speed and speed-limit sign. No readouts of our own, just her and BMW's HUD.
+  - **Bring your own model:** no character ships with the app. You bake frames from a Live2D model on your own computer with [tools/live2d_bake](../../tools/live2d_bake/README.md) and copy them to the car with `scripts/deploy.sh <car> --miku <folder>` ([deployment steps](../../tools/live2d_bake/README.md#deploy-to-the-car)). The app reads them from `miku/` in its data folder. Until they're there the layout draws nothing and the status row says why.
   - **Like standing on a bus:** pull away and she leans right, brake and she leans left, with the model's own body and head moving (her happy face when you pull away hard, her braking face when you brake hard). When the car settles she sways back past upright once or twice before standing still. Her arm on the side away from the lean swings up and out to catch her balance (the other a little), and her twin tails move with her head.
   - **Idle:** she blinks, breathes, sways a little and smiles as if talking now and then. The faster you go, the more her twin tails spread, lift and flutter.
   - **During route guidance** she steps aside, because BMW's turn map and street name fill her corner; she comes back when the route ends.
   - The frames go up once as one image (about 4 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up while she moves.
-  - Redline is gone: if you had it picked anywhere, it switches to Perch.
+  - Redline is gone: if you had it picked anywhere, it switches to Miku (so does Perch, its working name).
 
 ## Themes
 

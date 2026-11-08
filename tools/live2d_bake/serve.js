@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 'use strict';
 /**
- * Bakes the Perch layout's frames from a Live2D (Cubism 3+) model you own, on your own machine.
+ * Bakes the Miku layout's frames from a Live2D (Cubism 3+) model you own, on your own machine.
  *
  *   node tools/live2d_bake/serve.js --model <...>/Model.model3.json --core <...>/live2dcubismcore.min.js \
  *       --config <bake config .json> --out <folder> [--port 8095]
  *
  * then open http://localhost:8095/ in a browser: the page renders the model, standing, with Live2D's Cubism Core (which
  * you get from Live2D's Cubism SDK for Web under their license; it is not in this repo) and writes <out>/atlas.json,
- * atlas.rgba and preview.png. Push them with scripts/deploy.sh <car> --perch <out>.
+ * atlas.rgba and preview.png. Push them with scripts/deploy.sh <car> --miku <out>.
  * http://localhost:8095/?inspect shows the model with its parts, parameters and drawables, to write the config.
  *
  * Nothing of the model ever goes in this repo: keep the config and the output next to the model.

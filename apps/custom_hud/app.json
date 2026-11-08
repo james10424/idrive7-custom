@@ -23,7 +23,7 @@
   "signals": {
     "de.bmw.body.Light": {
       "StatusFunctionsIndicators": "s",
-      "_optional": "the indicators: the Perch character points that way"
+      "_optional": "the indicators: the Miku character points that way"
     },
     "de.bmw.infotainment.vehicle.CDS": {
       "statusEngineSpeed2": "rs",
@@ -113,8 +113,8 @@
           "Sport"
         ],
         [
-          "perch",
-          "Perch"
+          "miku",
+          "Miku"
         ],
         [
           "grid",
@@ -147,8 +147,8 @@
           "Sport"
         ],
         [
-          "perch",
-          "Perch"
+          "miku",
+          "Miku"
         ]
       ]
     },
@@ -171,8 +171,8 @@
           "Sport"
         ],
         [
-          "perch",
-          "Perch"
+          "miku",
+          "Miku"
         ]
       ]
     },
@@ -195,8 +195,8 @@
           "Sport"
         ],
         [
-          "perch",
-          "Perch"
+          "miku",
+          "Miku"
         ]
       ]
     },
@@ -438,7 +438,8 @@
       ]
     },
     "choiceAliases": {
-      "redline": "perch"
+      "redline": "miku",
+      "perch": "miku"
     },
     "indicators": false,
     "tankLitres": 65,

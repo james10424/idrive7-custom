@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# HUD slot table log (run on the Mac, car on, Perch showing on the HUD): which slots BMW's own HUD content lands in
-# on this car, so we know what Perch can park behind (same slot, 0x323) and what still needs the give-way timers.
+# HUD slot table log (run on the Mac, car on, Miku showing on the HUD): which slots BMW's own HUD content lands in
+# on this car, so we know what Miku can park behind (same slot, 0x323) and what still needs the give-way timers.
 #
 #   tools/hud_slot_log.sh <car-ssh-host> [out.txt]
 #
@@ -29,10 +29,10 @@ STARTS=(); ENDS=()
 for e in "${EVENTS[@]}"; do
     echo
     echo "== $e"
-    read -r -p "Press Enter when Perch is showing and you are about to start (s to skip): " k
+    read -r -p "Press Enter when Miku is showing and you are about to start (s to skip): " k
     if [ "$k" = s ]; then STARTS+=(""); ENDS+=(""); continue; fi
     STARTS+=("$(carnow)")
-    read -r -p "Make BMW show it now. Press Enter once it has gone again and Perch is back (or after 30 s): " _
+    read -r -p "Make BMW show it now. Press Enter once it has gone again and Miku is back (or after 30 s): " _
     ENDS+=("$(carnow)")
 done
 
