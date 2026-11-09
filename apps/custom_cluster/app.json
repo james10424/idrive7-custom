@@ -257,12 +257,6 @@
       "default": true
     },
     {
-      "key": "mikuSit",
-      "label": "Miku sitting on the dash (Regal)",
-      "type": "bool",
-      "default": true
-    },
-    {
       "key": "demo",
       "label": "Demo data",
       "type": "choice",

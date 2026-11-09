@@ -91,7 +91,7 @@ The bake draws these frames in perspective too, so the lean reads in depth: abov
 
 ### Sitting (Custom Cluster)
 
-Custom Cluster's Regal theme can show her sitting on the ledge between the speed window and the lower window, at its left end, facing you, her legs hanging over the boost bar and swinging. That's a bake of its own, from a copy of your config with:
+For now no theme places her (Regal had her in 0.1.36; tools/gen_regal.py says how to put her back). The engine still draws her as a `mikuSit` widget: sitting on the ledge between the speed window and the lower window, at its left end, facing you, her legs hanging over the boost bar and swinging. That's a bake of its own, from a copy of your config with:
 
 - `"pose": "sit"`, and `"heightPx"` (290 with RetrynowMiku: her feet reach the boost bar).
 - `"sit"`: the bake's own rig on the model's meshes (the model's compiled rig can't be changed):
