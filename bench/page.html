@@ -94,8 +94,8 @@
     </section>
     <section>
       <h2>Layers</h2>
-      <table><thead><tr><th>conn:ref</th><th>kind</th><th>class/z</th><th>rect</th><th>car</th></tr></thead><tbody id="layers"></tbody></table>
-      <div class="note">conn: the app's connection to cluster-render (1 is its own; a layout's "conn" widgets open more, each with its own 64 layers). Red: over the layer cap, state waiting, not drawn. The car column flags a layer the driver can't fully see (hood, BMW's gear box or belt light, outside the HUD window); hover for the reason.</div>
+      <table><thead><tr><th>app</th><th>target</th><th>conn:ref</th><th>kind</th><th>class/z</th><th>rect</th><th>car</th></tr></thead><tbody id="layers"></tbody></table>
+      <div class="note">app and target: whose layer it is and where it draws (panel: the cluster, hud: the windshield). conn: that app's connection to cluster-render (1 is its own; a layout's "conn" widgets open more, each with its own 64 layers). Red: over the layer cap, state waiting, not drawn. The car column flags a layer the driver can't fully see (hood, BMW's gear box or belt light, outside the HUD window); hover for the reason.</div>
     </section>
   </aside>
   <div id="log"></div>
@@ -516,13 +516,15 @@
 
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   function renderLayerTable() {
-    const firstConn = scene.length ? Math.min.apply(null, scene.map((l) => l.conn)) : 1;   // the app's own connection reads as 1
+    // each app's own connection reads as 1, its layouts' extra connections ("conn") 2, 3 ...
+    const firstConn = {};
+    scene.forEach((l) => { firstConn[l.app] = Math.min(firstConn[l.app] === undefined ? Infinity : firstConn[l.app], l.conn); });
     document.getElementById('layers').innerHTML = scene.map((l) => {
       const warns = l.warnings || [];
       const flag = warns.length ? '<td class="flag" title="' + esc(warns.join('\n')) + '">' + (warns.some((w) => /hood/.test(w)) ? 'hood ' : '') + (warns.some((w) => /gear box/.test(w)) ? 'box ' : '') + (warns.some((w) => /belt/.test(w)) ? 'belt ' : '') + (warns.some((w) => /camera/.test(w)) ? 'camera ' : '') + (warns.some((w) => /HUD window/.test(w)) ? 'window' : '') + '</td>' : '<td></td>';
       const cls = l.state === 'waiting' ? ' class="waiting" title="' + esc(l.reason || 'waiting') + '"' : '';
       const what = l.kind === 'asset' ? 'asset ' + l.format : l.kind, where = l.kind === 'asset' ? l.w + 'x' + l.h + ' (not drawn)' : l.x + ',' + l.y + ' ' + l.w + 'x' + l.h;
-      return '<tr' + cls + '><td>' + (l.conn - firstConn + 1) + ':' + l.ref + (l.state === 'waiting' ? ' (waiting)' : '') + '</td><td>' + what + '</td><td>' + (l.kind === 'asset' ? '' : l.class + ' / ' + l.z) + '</td><td>' + where + '</td>' + flag + '</tr>';
+      return '<tr' + cls + '><td>' + esc(l.app || '?') + '</td><td>' + esc(l.target || '') + '</td><td>' + (l.conn - firstConn[l.app] + 1) + ':' + l.ref + (l.state === 'waiting' ? ' (waiting)' : '') + '</td><td>' + what + '</td><td>' + (l.kind === 'asset' ? '' : l.class + ' / ' + l.z) + '</td><td>' + where + '</td>' + flag + '</tr>';
     }).join('');
   }
 
