@@ -100,8 +100,9 @@ wd.append({'id': 'oilcan', 'type': 'icon', 'icon': 'oilcan', 'z': 5, 'x': W - 13
 wd.append(centred('lamp_brake', 180, 496, 112, 17, '{{lampBrake}}', 'r_tiny', 'lampText'))
 # the range where the left turn signal was: its label, then four VFD digits and the unit, bottoms aligned
 wd.append(centred('pod_rlabel', 180, 530, 80, 17, 'RANGE', 'r_tiny', 'vfd'))
-wd.append(text('pod_range', 180 - 71, 545, 112, 36, '{{range4}}', 'r_seg_m', 'vfd', 'right'))
-wd.append(text('pod_runit', 180 + 45, 559, 30, 21, '{{u:distUc}}', 'r_lbl', 'vfd', 'left'))
+# up to three digits (999 past it, no leading zeros), right-aligned: the group (3 digits, the unit) centred in the pod
+wd.append(text('pod_range', 180 - 58, 545, 86, 36, '{{range3}}', 'r_seg_m', 'vfd', 'right'))
+wd.append(text('pod_runit', 180 + 32, 559, 30, 21, '{{u:distUc}}', 'r_lbl', 'vfd', 'left'))
 # under the turn lamps, in the VFD's seven segments: average consumption (left), outside temperature (right)
 wd.append(centred('pod_clabel', 180, 600, 80, 17, 'AVG FUEL', 'r_tiny', 'vfd'))
 # centred under AVG FUEL: metric for "9.8" (44 px) + 3 + L/100KM (85), US for "24.0" (63) + 3 + MPG (40)

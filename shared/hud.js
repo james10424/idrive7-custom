@@ -184,7 +184,7 @@
  * this one, once a second, 253 with nothing measured; DataFrontVehicle frontVehicleGapX when the car sends that), {{accRel}}
  * its speed against ours in km/h / mph ({{u:rel}}, minus = closing; "--" while we stand still): DataFrontVehicle frontVehicleSpeedX when sent,
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
- * Regal: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{u:distUc}} (MI, KM), {{u:consUc}} (L/100KM, MPG), {{ambientN}} (outside, no + sign),
+ * Regal: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{range3}} (up to 999, no leading zeros), {{u:distUc}} (MI, KM), {{u:consUc}} (L/100KM, MPG), {{ambientN}} (outside, no + sign),
  * {{lampBrake}} (PARK BRAKE / AUTO HOLD) {{lampTurnL}} {{lampTurnR}} {{lampCruise}} (the lamp's text while lit, else empty; config.lamps).
  * The route while guiding (Guidance finalDestinationInfo / travelledDistance, apps with "navLayout"; "--" else): {{navLeft}} the
  * distance left as BMW formats it, {{u:navLeft}} its unit (km, mi, m, ft), {{navTime}} the time left h:mm.
@@ -1664,6 +1664,7 @@ class HudApp {
                 const v = this._odometer();
                 return isNum(v) ? ('000000' + Math.floor(us ? v * 0.621371 : v)).slice(-6) : '------';
             }
+            case 'range3': { const v = this._raw('range'); return isNum(v) ? String(Math.min(999, Math.max(0, Math.round(us ? v * 0.621371 : v)))) : '---'; }   // up to 3 digits, no leading zeros, 999 past it (Regal's pod)
             case 'range4': { const v = this._raw('range'); return isNum(v) ? ('0000' + Math.round(us ? v * 0.621371 : v)).slice(-4) : '----'; }
             case 'u:distUc': return us ? 'MI' : 'KM';
             // the route (while guiding; "--" else): distance left as BMW formats it, its unit, time left h:mm
