@@ -549,6 +549,24 @@ const web = http.createServer(async (req, res) => {
         if (a) restartApp(a, 'restart button'); else restartAll('restart button');
         res.writeHead(204); return res.end();
     }
+    if (req.method === 'POST' && url === '/shot') {
+        // a README screenshot: the page posts a canvas as a PNG data URL; written to docs/images/<name>.png (name: letters,
+        // digits, - and _ only)
+        let s = '';
+        req.on('data', (d) => { s += d; if (s.length > 2e7) req.destroy(); });
+        req.on('end', () => {
+            try {
+                const b = JSON.parse(s), name = String(b.name || '');
+                const m = /^data:image\/png;base64,(.+)$/.exec(String(b.data || ''));
+                if (!/^[a-z0-9_-]{1,40}$/i.test(name) || !m) { res.writeHead(400); return res.end('bad name or data'); }
+                const out = path.join(ROOT, 'docs', 'images', name + '.png');
+                fs.writeFileSync(out, Buffer.from(m[1], 'base64'));
+                log('info', 'screenshot written: ' + path.relative(ROOT, out));
+                res.writeHead(204); res.end();
+            } catch (e) { res.writeHead(400); res.end(String(e.message || e)); }
+        });
+        return;
+    }
     if (req.method === 'POST' && url === '/cap') {
         // The layer cap, set live from the page. The app restarts so it registers its layers again under the new cap.
         const b = await body(req);

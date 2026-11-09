@@ -6,32 +6,26 @@
 
 Redraws the whole instrument cluster as a 1987 Buick Regal dash, and switches to a Sport view round BMW's map while route guidance is on. [Read more](apps/custom_cluster/README.md)
 
-<p align="center"><img src="docs/images/cluster-sport.png" width="900" alt="Sport theme"></p>
+<p align="center"><img src="docs/images/cluster-regal.png" width="900" alt="Regal theme"><br><sub>Regal: the speed over the 55, P R N D under the needle, the voltmeter and oil temperature pods with the range and clock</sub></p>
+
+<p align="center"><img src="docs/images/cluster-sport.png" width="900" alt="Sport theme while navigating"><br><sub>Sport while navigating: BMW's map shows in the middle (black here), the route's progress along the bottom</sub></p>
 
 ## Custom HUD
 
-Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant, or your own Live2D character standing in the corner of the HUD. Three layouts, each in Classic, M and Night colours. It makes room for BMW's own HUD content: the layout moves aside while route guidance or the ACC display is up, and shows the gap to the car ahead in cruise. [Read more](apps/custom_hud/README.md)
+Puts your own Live2D character on the windshield HUD, standing beside BMW's speed and speed-limit sign: she leans as the car pulls away and brakes, glances around while you cruise and dozes at a stop. Daily and Sport layouts with your own readouts (speed, gear, a shift bar, boost, oil and coolant) are there too, in Classic, M and Night colours. It makes room for BMW's own HUD content: the layout steps aside while route guidance is up. [Read more](apps/custom_hud/README.md)
 
-<p align="center"><img src="docs/images/hud-daily.png" width="520" alt="Daily layout on the HUD"></p>
+<p align="center"><img src="docs/images/hud-miku.png" width="520" alt="Miku layout on the HUD"><br><sub>The Miku layout, with BMW's own speed and speed-limit sign (bottom left)</sub></p>
 
-<table align="center">
-  <tr>
-    <th align="center">Daily</th>
-    <th align="center">Sport</th>
-  </tr>
-  <tr>
-    <td><img src="docs/images/hud-daily.png" width="300" alt="Daily layout"></td>
-    <td><img src="docs/images/hud-sport.png" width="300" alt="Sport layout"></td>
-  </tr>
-</table>
+<p align="center"><sub>Miku in the screenshot: the free Hatsune Miku "いますぐ輪廻" fan model by [Ruby_鸣哔うび](https://ko-fi.com/rubybee) (art) and 慈善小霓 (Live2D rigging), used under its personal, non-commercial terms. No model files are in this repo; you bake and copy your own model to your car.</sub></p>
 
 ## Install
 
 1. Install **cluster-render** first. Both apps draw through it. It comes from the `robertnisipeanu/idrive-apps` Store source. To run both apps at once you need 0.4.5 or later, which for now is only in the `james10424/idrive-apps-lib` source (see [Both apps at once](#both-apps-at-once)).
 2. In the Store, go to **Settings, Add source**, enter **`james10424/idrive7-custom`**, and install the apps you want.
 3. Open the app from the apps menu on the center screen to pick a theme or layout.
+4. For the Miku layout, bake your own Live2D model and copy it to the car: see [Your own Live2D character](#your-own-live2d-character).
 
-The Store builds each app on the car from this repo. No BMW code is in it. Both apps are tested on a 2020 X3 M40i; each app's page says what has been checked on the car and what is still open. Version history is in [CHANGELOG.md](CHANGELOG.md).
+The Store builds each app on the car from this repo. No BMW code is in it. Both apps are tested on a 2020 BMW M340i (G20); each app's page says what has been checked on the car and what is still open. Version history is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Both apps at once
 
@@ -53,12 +47,38 @@ By default cluster-render gives the HUD and the cluster panel the same scene id 
 
 The HUD then shares its scene id with cluster-render's `map` target instead (the Waze map on the cluster), so those two take turns. To undo, delete the line and restart cluster-render.
 
+## Your own Live2D character
+
+The Miku layout draws a Live2D model you own. Nothing of it ships with the app: you render it into frames on your computer and copy them to your car. Full details, including every bake setting, are in [tools/live2d_bake/README.md](tools/live2d_bake/README.md).
+
+1. **What you need:** a Live2D model (Cubism 3 or newer: a `.model3.json` with its `.moc3` and textures) that you are allowed to use this way; Live2D's **Cubism Core** for the web (`Core/live2dcubismcore.min.js` from the [Cubism SDK for Web](https://www.live2d.com/en/sdk/download/web/), under Live2D's license); Node.js and a browser.
+2. **Configure:** copy [tools/live2d_bake/example.json](tools/live2d_bake/example.json) next to your model. It uses Live2D's standard parameter names, so many models bake as it is. Set `lean.left` / `lean.right` to your model's braking and happy expressions, and `tails` to the part ids of long hair or ribbons to swing on their own.
+3. **Bake:**
+
+   ```bash
+   node tools/live2d_bake/serve.js --model <model>.model3.json --core <sdk>/Core/live2dcubismcore.min.js --config <bake>.json --out <folder>
+   ```
+
+   Open `http://localhost:8095/?inspect` to see every part with its id (to fill in the config), then `http://localhost:8095/` to bake. It writes `atlas.json` and `atlas.rgba` (what the car loads) and `preview.png` (for you) to `<folder>`. The bake refuses an atlas over 1024 px a side.
+4. **Copy to the car** (Custom HUD installed, SSH as root):
+
+   ```bash
+   ./scripts/deploy.sh root@<car> --miku <folder>
+   ```
+
+   It finds Custom HUD's folder on the car and puts the two files in its `data/miku/`.
+5. **Load:** on the center screen open **Custom HUD**, pick another layout, then **Miku** again. The status row should say "HUD on: Miku layout, 1 layer". Until the frames are there, the layout draws nothing and the status row says why.
+
+To change her, bake again and run the deploy again; to remove her, delete `data/miku/` on the car.
+
 ## Credits
 
 - [bimmer-lab/apps](https://github.com/bimmer-lab/apps) (MIT): the original HUD Widgets and Cluster Themes this repo starts from.
 - [cauliflowermossgrape/idrive7-apps](https://github.com/cauliflowermossgrape/idrive7-apps): the MGU App Kit (MIT) these apps are built on, and the Redline app the shift scoring comes from.
 - [robertnisipeanu/idrive-apps](https://github.com/robertnisipeanu/idrive-apps): cluster-render, which draws on the HUD and the cluster.
 - Barlow and Michroma typefaces (SIL Open Font License).
+- The free Hatsune Miku "いますぐ輪廻" fan model by [Ruby_鸣哔うび](https://ko-fi.com/rubybee) (art) and 慈善小霓 (Live2D rigging), used under its personal, non-commercial terms. No model files are in this repo; you bake and copy your own model to your car.
+- [Live2D Cubism](https://www.live2d.com/): the bake runs on Cubism Core, which you download from Live2D yourself (not in this repo).
 
 ## Licence
 

@@ -1,8 +1,10 @@
 # Custom HUD
 
-Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, oil and coolant temperatures, and a clock, or your own Live2D character standing in the corner of the HUD. Open **Custom HUD** from the apps menu on the center screen and pick the layout, theme, units and widgets there.
+Puts your own Live2D character on the windshield HUD, or your own readouts: speed, gear, a shift bar, boost, oil and coolant temperatures, and a clock. Open **Custom HUD** from the apps menu on the center screen and pick the layout, theme, units and widgets there.
 
-<p align="center"><img src="../../docs/images/hud-daily.png" width="520" alt="Daily layout"></p>
+<p align="center"><img src="../../docs/images/hud-miku.png" width="520" alt="Miku layout"><br><sub>The Miku layout, with BMW's own speed and speed-limit sign (bottom left)</sub></p>
+
+<p align="center"><sub>Miku in the screenshot: the free Hatsune Miku "いますぐ輪廻" fan model by [Ruby_鸣哔うび](https://ko-fi.com/rubybee) (art) and 慈善小霓 (Live2D rigging), used under its personal, non-commercial terms. No model files are in this repo; you bake and copy your own model to your car.</sub></p>
 
 ## Layouts
 
@@ -20,7 +22,7 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
 - **Daily:** speed is the hero, with the gear, clock and oil.
 - **Sport:** a segmented shift bar, a big gear, speed, a boost gauge, oil and coolant.
 - **Miku:** a Live2D character you own stands at the bottom right of the HUD, clear of BMW's speed and speed-limit sign. No readouts of our own, just her and BMW's HUD.
-  - **Bring your own model:** no character ships with the app. You bake frames from a Live2D model on your own computer with [tools/live2d_bake](../../tools/live2d_bake/README.md) and copy them to the car with `scripts/deploy.sh <car> --miku <folder>` ([deployment steps](../../tools/live2d_bake/README.md#deploy-to-the-car)). The app reads them from `miku/` in its data folder. Until they're there the layout draws nothing and the status row says why.
+  - **Bring your own model:** no character ships with the app. You bake frames from a Live2D model on your own computer with [tools/live2d_bake](../../tools/live2d_bake/README.md) and copy them to the car with `scripts/deploy.sh <car> --miku <folder>` (the short version is in the main README, [Your own Live2D character](../../README.md#your-own-live2d-character); the full one in [deployment steps](../../tools/live2d_bake/README.md#deploy-to-the-car)). The app reads them from `miku/` in its data folder. Until they're there the layout draws nothing and the status row says why.
   - **Like standing on a bus:** pull away and she leans right, brake and she leans left, with the model's own body and head moving (her happy face when you pull away hard, her braking face when you brake hard). When the car settles she straightens smoothly, without swaying past upright. Her arm on the side away from the lean swings up and out to catch her balance (the other a little), and her twin tails move with her head.
   - **Idle:** she blinks, breathes, sways a little and smiles as if talking now and then. The faster you go, the more her twin tails spread, lift and flutter.
   - **Glancing and dozing:** a second after the car stops pulling or braking (under 0.03 g) she starts glancing left and right now and then, eyes first, then her head, holding a second or three. Stopped for 15 s, she starts dozing in a loop: 5 s asleep (eyes shut, head drooping), 5 s awake and glancing, then asleep again, easing in and out of each. Pulling away or braking wakes her and the lean takes over.
@@ -74,7 +76,7 @@ BMW keeps drawing its own HUD content over ours. In Comfort mode that is the spe
 
 ## On the car
 
-Tested on a 2020 X3 M40i. It runs, the rpm is smooth at idle, and the layouts were fitted to the visible window from the grid photo. Still to be checked:
+Tested on a 2020 BMW M340i (G20). It runs, the rpm is smooth at idle, and the layouts were fitted to the visible window from the grid photo. Still to be checked:
 
 - the fitted layouts on the glass: nothing cut off, nothing under BMW's speed and sign;
 - the drive mode switching and the engine computer boost;

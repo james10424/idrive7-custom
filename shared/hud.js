@@ -2355,7 +2355,8 @@ class HudApp {
                 q(isNum(sp) ? scaleFrac(us ? sp * 0.621371 : sp, SPEED_SCALE[us ? 'us' : 'metric']) : 0),
                 q(isNum(rpm) ? rpm / (w.rpmMax || 8000) : 0),
                 q(isNum(fuel) ? fuel : 0),
-                q(isNum(oil) ? (oil - 50) / 100 : 0),
+                // oil: 50..150 C with 110 (the B58's running temperature) at the bar's middle, each half linear
+                q(isNum(oil) ? (oil <= 110 ? 0.5 * (oil - 50) / 60 : 0.5 + 0.5 * (oil - 110) / 40) : 0),
             ];
             // the strip's two bars: each signal over its "stripMax", in 50 steps
             const ss = Array.isArray(w.stripSignals) ? w.stripSignals : null, sm = Array.isArray(w.stripMax) ? w.stripMax : [100, 10];

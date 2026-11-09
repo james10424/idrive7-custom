@@ -597,7 +597,7 @@
       "y": 516,
       "w": 70,
       "h": 22,
-      "text": "{{temp:100}}",
+      "text": "{{temp:110}}",
       "font": "s_gl",
       "color": "fg",
       "align": "center"
