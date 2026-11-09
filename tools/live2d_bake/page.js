@@ -15,7 +15,10 @@
  *               axis "fb" bakes the forward/back lean instead (a bake of its own, for the HUD's "Miku lean" setting,
  *               deployed with --miku-fb): "params" then bend her toward you at a full lean right (pulling away) and
  *               away from you, toward the windshield, at a full lean left (braking), e.g. ParamBodyAngleY and
- *               ParamAngleY; the bake also measures how far each angle moves her head up or down, for the tails
+ *               ParamAngleY; the bake also measures how far each angle moves her head up or down, for the tails.
+ *               perspective { widen: 0.14, shorten: 0.1 } (fb only): above the waist she tips out of the screen, so
+ *               at a full lean her upper body is "shorten" shorter and its top "widen" wider toward you (narrower
+ *               away), for depth
  *   look        { steps: 3, params: { id: value at a full glance right }, lead: ["id", ...] }: her glancing around
  *               while the car idles, head turned with the eyes leading: baked at "steps" angles each way ("params"
  *               times -1 .. 1); the "lead" ones (the eyes) get there twice as fast. steps 0: no glances
@@ -337,6 +340,34 @@ async function bake(L, cfg) {
     const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
     log('frame ' + fw + 'x' + fh + ' px');
     const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
+    // the forward/back lean in perspective: above the waist she tips out of the screen, so her upper body gets shorter
+    // (by "shorten" at a full lean) and its top wider toward you, narrower away (by "widen"); her legs stay as they are.
+    // Baked into the frames, so the HUD's shader does nothing more. persp(a, x, y) moves a frame px point the same way
+    const fbLean = cfg.lean && cfg.lean.axis === 'fb';
+    const pv = fbLean ? Object.assign({ widen: 0.14, shorten: 0.1 }, cfg.lean.perspective || {}) : null;
+    const waistPx = toFrame(0, waist)[1], cxPx = toFrame(centreX, 0)[0];
+    const persp = (a, x, y) => {
+        if (!pv || y >= waistPx) return [x, y];
+        const up = (waistPx - y) * (1 - pv.shorten * Math.abs(a)), u = up / waistPx;
+        return [cxPx + (x - cxPx) * (1 + pv.widen * a * u), waistPx - up];
+    };
+    // the same on a render at SS times the size, row by row: each row above the waist comes from the row it was before
+    // the shortening, scaled about her middle
+    const renderLean = (opts, a) => {
+        const big = R.draw(fw * SS, fh * SS, box, opts);
+        if (!pv) return shrink(big, fw, fh);
+        const W = fw * SS, H = fh * SS, wy = waistPx * SS, cx = cxPx * SS, k = 1 - pv.shorten * Math.abs(a);
+        const out = document.createElement('canvas'); out.width = W; out.height = H;
+        const g = out.getContext('2d'); g.imageSmoothingQuality = 'high';
+        g.drawImage(big, 0, Math.floor(wy), W, H - Math.floor(wy), 0, Math.floor(wy), W, H - Math.floor(wy));
+        for (let y = 0; y < Math.floor(wy); y++) {
+            const up = wy - y - 0.5, src = wy - up / k;
+            if (src < 0) continue;
+            const sx = 1 + pv.widen * a * (up / wy);
+            g.drawImage(big, 0, src, W, 1, cx - cx * sx, y, W * sx, 1);
+        }
+        return shrink(out, fw, fh);
+    };
     const body = { skip: (i) => hidden(i) || (tails ? tails(i) : false) || isArm(i) };
     const names = ['idle', 'half', 'shut', 'talk'], frames = {};
     for (const n of names) {
@@ -359,7 +390,7 @@ async function bake(L, cfg) {
         setParams(L, Object.assign({}, cfg.params, idle, q));
         L.model.update();
         const n = 'lean' + k;
-        frames[n] = render(body);
+        frames[n] = renderLean(body, a);
         names.push(n); leanNames.push(n);
     }
     // the glances, left to right (the middle one is idle): head and eyes only, so the arms and tails still fit her
@@ -409,7 +440,11 @@ async function bake(L, cfg) {
             Object.keys(lp).forEach((id) => { q[id] = lp[id] * a; });
             setParams(L, Object.assign({}, cfg.params, idle, q));
             L.model.update();
-            armsIn.forEach((f, j) => { armPose[j][side] = armAt(f); });
+            armsIn.forEach((f, j) => {
+                const q = armAt(f);
+                if (q) q.P = persp(a, q.P[0], q.P[1]);   // the shoulder where the perspective puts it
+                armPose[j][side] = q;
+            });
         });
     }
     setParams(L, Object.assign({}, cfg.params, idle));
@@ -498,7 +533,6 @@ async function bake(L, cfg) {
     const dozeShift = dozeNames.map((n) => [Math.round((headX(frames[n]) - x0) * 10) / 10, headTop(frames[n]) - top0]);
     if (DN) log('head shift per doze frame (px): ' + dozeShift.map((v) => v.join('/')).join(', '));
     // the forward/back lean moves her head up and down more than sideways: the tails follow that too
-    const fbLean = cfg.lean && cfg.lean.axis === 'fb';
     const shiftY = fbLean ? leanNames.map((n) => headTop(frames[n]) - top0) : null;
     if (fbLean) log('head drop per lean angle (px): ' + shiftY.join(', '));
     const an = cfg.anchor || [(box[0] + box[2]) / 2, box[1] + 0.006 * figH], ap = cfg.anchorPx || [0, 0], anchor = toFrame(an[0], an[1]);

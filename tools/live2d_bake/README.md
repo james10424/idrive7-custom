@@ -87,7 +87,7 @@ The **Miku lean** setting on the app page picks Sideways (the bake in `data/miku
 ./scripts/deploy.sh root@<car> --miku-fb <folder>
 ```
 
-The bake log has "head drop per lean angle": it should grow toward the right end (her head going down as she leans toward you). If it shrinks, flip the signs. Switching the setting rebuilds the layout and swaps the uploaded image: the old one is dropped first, so only one is in the cluster's memory.
+The bake draws these frames in perspective too, so the lean reads in depth: above the waist her upper body gets shorter as she tips out of the screen, its top wider leaning toward you and narrower leaning away. `"perspective": { "widen": 0.14, "shorten": 0.1 }` in `lean` sets how much (0 for none). The bake log has "head drop per lean angle": it should be largest at the right end (her head going down as she leans toward you). If the left end is larger, flip the signs. Switching the setting rebuilds the layout and swaps the uploaded image: the old one is dropped first, so only one is in the cluster's memory.
 
 ### Updating or removing
 
