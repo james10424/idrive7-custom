@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 9 2026
+
+- **Sitting Miku bake:** her legs closer together. tools/live2d_bake's sitting pose takes `sit.together` (0 to 1), pulling the legs in toward `split` below the hips, fully from the knees down; the skirt's sag over the knees moves in with them. With RetrynowMiku 0.35. No app change: rebake and deploy with `--miku-sit`. Checked on the bench, not on the car.
+
 ## Nov 8 2026
 
 - **Layer limits:** cluster-render has drawn 64 layers a connection and 96 in all since 0.4.2 (8 and 32 before). The bench now models those (refusing the 65th layer on a connection or the 97th in all, "too many layers"), the engine's layer budget is 64 a connection, and the docs say so. No layout packs differently: every one fits 8 a connection at the smallest sheet size. Many small effect layers are now fine, and safer than one big shader.

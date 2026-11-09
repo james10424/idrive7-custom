@@ -580,7 +580,8 @@ async function bake(L, cfg) {
  * them, over her: her long hair hangs behind them); the body frames (idle, and the blink's half and shut as crops
  * round her face) keep the thighs.
  * config "sit" { leg: "part id" (both legs' part), hip: model y of the hips, knee: model y of the knees, thigh: how much
- * of the thigh shows (0.25), split: model x between the legs (0), skirt: ["part id"] (her skirt, resting on her lap: below the
+ * of the thigh shows (0.25), split: model x between the legs (0), together: how far the legs are pulled in toward split below the
+ * hips (0 = as drawn, 0.3 = knees and feet 30% closer; the skirt's knee sag follows), skirt: ["part id"] (her skirt, resting on her lap: below the
  * hips its flare pulled in by "narrow" (0.2), its hem "drape" (0.06) model units past the knees and sagging "sag" (0.06)
  * over each knee, at kneeX (0.12) either side of split), behind: ["part id"] (what hangs behind her, a bow's ribbons: it
  * lies on the seat, tucked under the skirt to "tuck" (0.1) of its length below the hips) }. Hip is where the thighs turn: under the skirt. Anything wholly below the knees (a shoe's sparkle in
@@ -620,7 +621,10 @@ async function bakeSit(L, cfg) {
         if (lo >= sit.knee) { skirt.add(i); hem = Math.min(hem, lo); }
     }
     const hemTo = kneeAt - (isFinite(sit.drape) ? sit.drape : 0.06), ks = isFinite(hem) && hem < sit.hip ? (sit.hip - hemTo) / (sit.hip - hem) : 1;
-    const narrow = isFinite(sit.narrow) ? sit.narrow : 0.2, sag = isFinite(sit.sag) ? sit.sag : 0.06, kx = isFinite(sit.kneeX) ? sit.kneeX : 0.12;
+    // the legs closer together: below the hips pulled in toward split, all the way from the knees down ("together", 0 .. 1)
+    const tog = isFinite(sit.together) ? sit.together : 0;
+    const inward = (x, y) => y >= sit.hip ? x : sit.split + (x - sit.split) * (1 - tog * Math.min(1, (sit.hip - y) / Math.max(1e-6, sit.hip - sit.knee)));
+    const narrow = isFinite(sit.narrow) ? sit.narrow : 0.2, sag = isFinite(sit.sag) ? sit.sag : 0.06, kx = (isFinite(sit.kneeX) ? sit.kneeX : 0.12) * (1 - tog);
     if (skirt.size) log('sitting: the skirt (' + skirt.size + ' meshes) hem at model y ' + hem.toFixed(2) + ' rests just past the knees at ' + hemTo.toFixed(2));
     R.warp = (i, v) => {
         if (behindIn(i) && !isLeg(i) && !skirt.has(i)) {
@@ -644,7 +648,7 @@ async function bakeSit(L, cfg) {
         const o = new Float32Array(v);
         for (let k = 1; k < o.length; k += 2) {
             const y = v[k];
-            if (y < sit.hip) o[k] = y >= sit.knee ? sit.hip - (sit.hip - y) * sit.thigh : y + lift;
+            if (y < sit.hip) { o[k - 1] = inward(v[k - 1], y); o[k] = y >= sit.knee ? sit.hip - (sit.hip - y) * sit.thigh : y + lift; }
         }
         return o;
     };

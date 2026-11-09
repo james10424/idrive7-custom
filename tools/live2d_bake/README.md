@@ -96,10 +96,11 @@ Custom Cluster's Regal theme can show her sitting on the ledge between the speed
 - `"pose": "sit"`, and `"heightPx"` (290 with RetrynowMiku: her feet reach the boost bar).
 - `"sit"`: the bake's own rig on the model's meshes (the model's compiled rig can't be changed):
   - `leg`: the part holding both legs; `hip`, `knee`: the model y where her thighs turn (under the skirt) and of her knees; `split`: the model x between her legs. The thighs point at you, so they're drawn short (`thigh`, 0.25 of their length); everything below the knees moves up by as much, and each shin becomes its own sprite, which the cluster swings.
+  - `together`: pulls her legs in toward `split` below the hips, fully from the knees down (0 as drawn, 0.35 with RetrynowMiku: knees and feet a third closer). The skirt's sag over the knees follows.
   - `skirt`: the skirt's parts. It rests on her lap: below the hips its flare is pulled in (`narrow`, 0.2), its hem reaches just past the knees (`drape`, 0.06 model units) and sags over each knee (`sag`, 0.06, at `kneeX` either side of `split`). Meshes in those parts that hang below the knees (ribbons) aren't skirt.
   - `behind`: what hangs behind her (a back bow's ribbons): tucked under the skirt, onto the seat (`tuck`, 0.1 of its length shows).
 
-With RetrynowMiku: `{ "leg": "Part15", "hip": 0.45, "knee": -0.68, "thigh": 0.25, "split": 0, "skirt": ["Part64", "Part11", "Part18"], "behind": ["ArtMesh117_Skinning", "ArtMesh118_Skinning"] }`. The bake page shows her as the cluster draws her, under the atlas. The atlas is 512x233 (0.9 MiB of the cluster's pixel memory): her body, her face with eyes half shut and shut, and the two shins. Deploy to Custom Cluster (the script finds that app by itself):
+With RetrynowMiku: `{ "leg": "Part15", "hip": 0.45, "knee": -0.68, "thigh": 0.25, "split": 0, "together": 0.35, "skirt": ["Part64", "Part11", "Part18"], "behind": ["ArtMesh117_Skinning", "ArtMesh118_Skinning"] }`. The bake page shows her as the cluster draws her, under the atlas. The atlas is 512x233 (0.9 MiB of the cluster's pixel memory): her body, her face with eyes half shut and shut, and the two shins. Deploy to Custom Cluster (the script finds that app by itself):
 
 ```bash
 ./scripts/deploy.sh root@<car> --miku-sit <folder>
