@@ -14,7 +14,9 @@ FUEL = (933, 540, 72, 98)          # fuel needle pivot (centred in the lower win
 POD = (300, 292, 112, 146)         # left pod needle pivot, tick radii (right pod mirrored)
 LED = (1104, 466, 312, 22)
 LED2 = (2 * 933 - 1104 - 312, 466, 312, 22)   # the boost bar, the rev bar mirrored about the lower window's middle
-GEAR_X0, GEAR_P = 449, 22
+GEAR_P = 22
+GEAR_X0 = PIVOT[0] - 2.5 * GEAR_P    # the gear row (P R N D, a gap, the number) centred under the 55, below MPH
+GEAR_Y = 347
 
 
 def ray_x(deg, y=None):
@@ -42,13 +44,13 @@ wd = [{
     'id': 'regal', 'type': 'rdash', 'class': 'ambient', 'z': -10, 'x': 0, 'y': 0, 'w': W, 'h': 720,
     'podL': [90, 110, 180, 553], 'podWin': [104, 124, 152, 336],
     'ctr': [397, 110, 1072, 429], 'win1': [413, 122, 1040, 270], 'win2': [413, 400, 1040, 128],
-    'vfdL': [432, 167, 144, 181], 'vfdR': [1264, 167, 136, 181],
+    'vfdL': [0, 0, 0, 0], 'vfdR': [0, 0, 0, 0],   # no VFD boxes: the speed sits over the 55, the clock and range in the pods
     'spd': [PIVOT[0], PIVOT[1], NUM_Y, TICK_Y], 'spdVirt': list(VIRT), 'spdMax': SPD_MAX, 'spdMid': SPD_MID, 'spdStep': 5, 'spdRest': 12, 'fuelG': list(FUEL), 'podG': list(POD),
     'podSignals': [{'signal': 'volt12', 'range': [8, 16]}, {'signal': 'oil', 'range': [50, 150], 'mid': 110}],
     'led': list(LED), 'ledN': 16, 'rpmMax': 8000,
     'led2': list(LED2), 'led2N': 15, 'led2Signal': 'boost', 'led2Range': [0, 1.5],
-    'gearBox': [GEAR_X0 - 10, 309, 20, 28], 'gearPitch': GEAR_P,
-    'lampB': [120, 478, 120, 36], 'arrow': [180, 545, 26], 'batIcon': [132, 328],
+    'gearBox': [GEAR_X0 - 10, GEAR_Y - 14, 20, 28], 'gearPitch': GEAR_P,
+    'lampB': [120, 478, 120, 36], 'arrow': [0, 0, 0], 'batIcon': [132, 328],   # arrow size 0: no turn arrows
 }]
 
 # speed numbers (mph) on their marks: 5, 15 ... 85, the 55 in amber; no km/h row (as the Turbo 3.8's)
@@ -56,21 +58,16 @@ for mph in range(5, SPD_MAX + 1, 10):
     wd.append(centred('mph%d' % mph, ray_x(mph_deg(mph), NUM_Y), NUM_Y, 44, 39, str(mph), 'r_num', 'amber' if mph == SPD_MID else 'fg'))
 wd.append(centred('mph_unit', PIVOT[0], 318, 46, 21, 'MPH', 'r_lbl'))
 
-# left VFD: speed in the units setting's unit, the odometer, the gear row
-wd.append(text('vfd_speed', 446, 182, 123, 48, '{{speed}}', 'r_seg', 'vfd', 'right'))
-wd.append(centred('vfd_mph', 528, 243, 60, 21, '{{u:speed}}', 'r_lbl', 'vfd'))
-wd.append(centred('vfd_odo', 504, 280, 116, 25, '{{odometer}}', 'r_seg_s', 'vfd'))
-# the gear row: P R N D, a gap, then the gear number while driving (lit in manual, M)
+# the speed in the units setting's unit, big in the VFD orange over the 55 (the digits centred on it), its unit beside; the
+# needle's tip stops at y 212, under it
+wd.append(centred('spd_val', PIVOT[0], 174, 124, 48, '{{speed}}', 'r_seg', 'vfd'))       # the digits centred on the 55
+wd.append(text('spd_unit', PIVOT[0] + 66, 176, 62, 21, '{{u:speed}}', 'r_lbl', 'vfd', 'left'))
+# the gear row under the 55, below MPH: P R N D, a gap, then the gear number while driving (lit in manual, M); the speed
+# needle is its own layer over the text (regal_needle below), so it sweeps over the row
 for i, g in enumerate('PRND'):
-    wd.append(centred('gear_' + g, GEAR_X0 + GEAR_P * i, 323, 20, 24, g, 'r_vfd', 'vfd', litGear=i))
-wd.append(centred('gear_num', GEAR_X0 + GEAR_P * 5, 323, 20, 24, '{{gearInD}}', 'r_vfd', 'vfd', litGear=5))
+    wd.append(centred('gear_' + g, GEAR_X0 + GEAR_P * i, GEAR_Y, 20, 24, g, 'r_vfd', 'vfd', litGear=i))
+wd.append(centred('gear_num', GEAR_X0 + GEAR_P * 5, GEAR_Y, 20, 24, '{{gearInD}}', 'r_vfd', 'vfd', litGear=5))
 # the lit letter (on the gear box) turns the white text colour: 5.0:1 on the box (WCAG AA), the VFD orange was 1.9:1
-# right VFD: the clock, the range
-wd.append(centred('vfd_clock', 1332, 228, 132, 36, '{{time}}', 'r_seg_m', 'vfd'))
-wd.append(centred('vfd_rlabel', 1332, 274, 60, 17, 'RANGE', 'r_tiny', 'vfd'))
-wd.append(text('vfd_range', 1281, 293, 78, 25,   # bottom on the unit's (car photo, Nov 9 2026)
-     '{{range4}}', 'r_seg_s', 'vfd', 'right'))
-wd.append(text('vfd_runit', 1362, 296, 26, 21, '{{u:distUc}}', 'r_lbl', 'vfd', 'left'))
 
 # lower window: fuel and the LED revs
 for lbl, a in (('E', -63), ('F', 63)):
@@ -101,7 +98,10 @@ wd.append({'id': 'oilcan', 'type': 'icon', 'icon': 'oilcan', 'z': 5, 'x': W - 13
 
 # lamps: their text shows only while lit
 wd.append(centred('lamp_brake', 180, 496, 112, 17, '{{lampBrake}}', 'r_tiny', 'lampText'))
-wd.append(centred('lamp_turn_l', 180, 575, 100, 17, '{{lampTurnL}}', 'r_tiny', 'green'))
+# the range where the left turn signal was: its label, then four VFD digits and the unit, bottoms aligned
+wd.append(centred('pod_rlabel', 180, 530, 80, 17, 'RANGE', 'r_tiny', 'vfd'))
+wd.append(text('pod_range', 180 - 71, 545, 112, 36, '{{range4}}', 'r_seg_m', 'vfd', 'right'))
+wd.append(text('pod_runit', 180 + 45, 559, 30, 21, '{{u:distUc}}', 'r_lbl', 'vfd', 'left'))
 # under the turn lamps, in the VFD's seven segments: average consumption (left), outside temperature (right)
 wd.append(centred('pod_clabel', 180, 600, 80, 17, 'AVG FUEL', 'r_tiny', 'vfd'))
 # centred under AVG FUEL: metric for "9.8" (44 px) + 3 + L/100KM (85), US for "24.0" (63) + 3 + MPG (40)
@@ -113,7 +113,8 @@ wd.append(centred('pod_tlabel', W - 180, 600, 80, 17, 'OUTSIDE', 'r_tiny', 'vfd'
 # centred under OUTSIDE for two digits (38 px) + 3 px + the unit (21 px)
 wd.append(text('pod_temp', W - 180 + 7 - 62, 612, 62, 25, '{{ambientN}}', 'r_seg_s', 'vfd', 'right'))
 wd.append(text('pod_tunit', W - 180 + 10, 618, 34, 21, '{{u:temp}}', 'r_lbl', 'vfd', 'left'))
-wd.append(centred('lamp_turn_r', W - 180, 575, 100, 17, '{{lampTurnR}}', 'r_tiny', 'green'))
+# the clock where the right turn signal was, level with the range
+wd.append(centred('pod_clock', W - 180, 563, 132, 36, '{{time}}', 'r_seg_m', 'vfd'))
 wd.append(centred('lamp_cruise', W - 180, 496, 112, 17, '{{lampCruise}}', 'r_tiny', 'lampTextG'))
 
 # the dash sits DY px lower than drawn above: the pods' outer top corners clear the hood (x 90 / 1830 hidden above
@@ -129,9 +130,17 @@ for w in wd[1:]:
     w['y'] += DY
 
 
+# the speed needle as its own layer over the text (so it sweeps over the gear row): the same widget, needle only, its box
+# the speed window
+import copy
+ndl = copy.deepcopy(wd[0])
+ndl.update({'id': 'regal_needle', 'needleOnly': True, 'class': 'content', 'z': 8,
+            'x': ndl['win1'][0], 'y': ndl['win1'][1], 'w': ndl['win1'][2], 'h': ndl['win1'][3]})
+wd.append(ndl)
+
 out = {
     'schemaVersion': 2, 'name': 'Regal', 'theme': 'regal',
-    '_about': "After a 1987 Buick Regal's dash (generated by tools/gen_regal.py, edit that): chrome-framed side pods, the left a 12 V voltmeter (8..16 V) and the right oil temperature (50 / 110 / 150 C), each needle pivoting from the pod's inner edge, with the BRAKE lamp, the turn arrows and CRUISE under them; the centre panel holds a swinging speed needle over a straight row of mph numbers, 5 to 85 with 55 amber at the middle (as the Turbo 3.8's), the orange VFD windows (speed, odometer, P R N D and the gear number; the clock and range), the fuel needle centred between a yellow LED boost bar (0..1.5 bar) and the LED rev bar (yellow from the shift point). No map window. Shader rdash plus text sheets.",
+    '_about': "After a 1987 Buick Regal's dash (generated by tools/gen_regal.py, edit that): chrome-framed side pods, the left a 12 V voltmeter (8..16 V) and the right oil temperature (50 / 110 / 150 C), each needle pivoting from the pod's inner edge, with the BRAKE lamp and CRUISE under them; the centre panel holds a swinging speed needle over a straight row of mph numbers, 5 to 85 with 55 amber at the middle (as the Turbo 3.8's), the the speed big in the VFD orange over the 55, P R N D and the gear number under it (the needle, a layer of its own, sweeps over them), the range and the clock in the pods where the turn signals were, the fuel needle centred between a yellow LED boost bar (0..1.5 bar) and the LED rev bar (yellow from the shift point). No map window. Shader rdash plus text sheets.",
     'widgets': wd,
 }
 p = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'apps', 'custom_cluster', 'hud', 'layouts', 'regal.json')

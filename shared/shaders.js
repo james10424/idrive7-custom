@@ -1099,6 +1099,28 @@ vec3 podGauge(vec2 p, vec2 pv, float r0, float r1, float sgn, float v, vec4 win,
 
 void main() {
     vec2 p = v_uv * u_size;
+#ifdef NEEDLE_LAYER
+    // the speed needle alone, transparent round it (straight alpha): a layer of its own over the text sheets, so it
+    // sweeps over the PRND row under the 55 (shaders.js rdashNeedle; the widget's box is the speed window)
+    {
+        vec2 sp = u_spd.xy;
+        float numY = u_spd.z, Hv = u_spdVirt.x, S = u_spdVirt.y;
+        // it points at the speed's place on the number row; one length at every angle: straight up it reaches a little
+        // above the numbers (the 55). u_speedV < 0: below the first mark, down to the rest position under the row at 0
+        float xs = sp.x + Hv * tan(-S + 2.0 * S * clamp(u_speedV, -0.5, 1.0));
+        float a = atan(xs - sp.x, sp.y - numY), r0 = 0.0, r1 = sp.y - numY + 40.0, w0 = 5.5, w1 = 3.0;
+        vec2 dir = vec2(sin(a), -cos(a)), q = p - sp, n = vec2(-dir.y, dir.x);
+        float al = dot(q, dir), pe = abs(dot(q, n));
+        float hw = mix(w0, w1, clamp((al - r0) / (r1 - r0), 0.0, 1.0));
+        float d = max(pe - hw, max(r0 - al, al - r1));
+        float sh = 0.5 * cov(max(abs(dot(q - vec2(2.0, 3.0), n)) - hw - 2.0, max(r0 - al, al - r1)) / 3.0);
+        float na = cov(d), inWin = rbox(p, u_win1, 8.0) < 0.0 ? 1.0 : 0.0;
+        vec3 col = mix(NEEDLE, NEEDLE * 0.72, smoothstep(0.0, hw, pe));
+        float aa = (na + sh * (1.0 - na)) * inWin;
+        gl_FragColor = aa > 0.0 ? vec4(col * na / max(na + sh * (1.0 - na), 1e-4), aa) : vec4(0.0);
+        return;
+    }
+#endif
     vec3 c = vec3(0.0);
     float W = u_size.x;
     vec4 podR = vec4(W - u_podL.x - u_podL.z, u_podL.y, u_podL.z, u_podL.w);
@@ -1112,8 +1134,8 @@ void main() {
     c = mix(c, CHROME2, cov(abs(rbox(p, winR, 8.0)) - 1.0));
     c = mix(c, CHROME2, cov(abs(rbox(p, u_win1, 8.0)) - 1.0));
     c = mix(c, CHROME2, cov(abs(rbox(p, u_win2, 8.0)) - 1.0));
-    c = mix(c, CHROME2 * 0.9, cov(abs(rbox(p, u_vfdL, 7.0)) - 1.0));
-    c = mix(c, CHROME2 * 0.9, cov(abs(rbox(p, u_vfdR, 7.0)) - 1.0));
+    if (u_vfdL.z > 0.0) c = mix(c, CHROME2 * 0.9, cov(abs(rbox(p, u_vfdL, 7.0)) - 1.0));
+    if (u_vfdR.z > 0.0) c = mix(c, CHROME2 * 0.9, cov(abs(rbox(p, u_vfdR, 7.0)) - 1.0));
 
     // speed: the numbers sit along a straight row where a far "virtual" pivot (u_spdVirt: its height below the number row,
     // half sweep) would put them, so they stay readable; the real needle pivots at u_spd.xy (on the frame under the window) and
@@ -1137,11 +1159,7 @@ void main() {
             float d = max(pe - mix(2.0, 4.5, major), max(y0 - p.y, p.y - y1));
             c = mix(c, m == u_spdK.x ? AMBER : TICK, cov(d));
         }
-        // the needle points at the speed's place on the number row; one length at every angle: straight up it reaches a little
-        // above the numbers (the 55). u_speedV < 0: below the first mark, down to the rest position under the row at 0
-        float xs = sp.x + Hv * tan(-S + 2.0 * S * clamp(u_speedV, -0.5, 1.0));
-        float na = atan(xs - sp.x, sp.y - numY);
-        if (rbox(p, u_vfdL, 7.0) > 0.0 && rbox(p, u_vfdR, 7.0) > 0.0) c = needle(p, sp, na, 0.0, sp.y - numY + 40.0, 5.5, 3.0, c);
+        // the speed needle is its own layer over the text (NEEDLE_LAYER below), so it sweeps over the PRND row
     }
 
     // fuel: 5 marks over +-55 deg round a pivot under the lower window, and its needle
@@ -1193,6 +1211,7 @@ void main() {
     c = mix(c, u_lamps.x > 1.5 ? LAMP_G : u_lamps.x > 0.5 ? LAMP_R : LAMP_OFF, cov(rbox(p, u_lampB, 3.0)));
     c = mix(c, mix(LAMP_GOFF, LAMP_G, u_lamps.w), cov(rbox(p, lampR, 3.0)));
     for (int s = 0; s < 2; s++) {
+        if (u_arrow.z <= 0.0) break;   // no turn arrows (size 0)
         float on = s == 0 ? u_lamps.y : u_lamps.z;
         vec2 ac = s == 0 ? u_arrow.xy : vec2(W - u_arrow.x, u_arrow.y);
         vec2 q = (p - ac) / u_arrow.z;
@@ -1424,6 +1443,8 @@ function packCfg(src, names) {
 }
 const SDASH_PACKED = packCfg(SDASH, CFG.sdash);
 const RDASH_PACKED = packCfg(RDASH, CFG.rdash);
+const RDASH_NEEDLE = packCfg(RDASH.replace('#endif\nvarying', '#endif\n#define NEEDLE_LAYER\nvarying'), CFG.rdash);
 
 module.exports = { miku: MIKU, rdash: RDASH_PACKED, shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH_PACKED, boxes: BOXES, atext: ATEXT };
 Object.defineProperty(module.exports, 'CFG', { value: CFG, enumerable: false });
+Object.defineProperty(module.exports, 'rdashNeedle', { value: RDASH_NEEDLE, enumerable: false });

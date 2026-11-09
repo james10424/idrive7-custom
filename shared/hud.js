@@ -1977,7 +1977,7 @@ class HudApp {
             if (IMAGE_TYPES[w.type]) ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
             else {
                 if (w.type === 'miku' && !this._sprite(w, this._connOf(w))) return;
-                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : w.type === 'miku' ? mikuShader(w, this.setting('mikuParts')) : shaders[w.type],
+                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : w.type === 'miku' ? mikuShader(w, this.setting('mikuParts')) : w.type === 'rdash' && w.needleOnly ? shaders.rdashNeedle : shaders[w.type],
                     time: w.type === 'miku' || undefined }, base));
             }
             if (!ref) { this.log.warn('widget "' + w.id + '": layer refused'); return; }
@@ -2053,8 +2053,8 @@ class HudApp {
             pk.u('u_podG', [pg[0] - w.x, pg[1] - w.y, pg[2], pg[3]]);
             pk.u('u_arrow', [ar[0] - w.x, ar[1] - w.y, ar[2]]);
             pk.u('u_batIcon', [bi[0] - w.x, bi[1] - w.y]);
-            pk.u('u_gearV', [w.gearPitch || 0, -1]);
-            pk.u('u_lamps', [0, 0, 0, 0]);
+            if (w.needleOnly) pk.u('u_speedV', [0]);   // the needle's own layer: only the speed changes
+            else { pk.u('u_gearV', [w.gearPitch || 0, -1]); pk.u('u_lamps', [0, 0, 0, 0]); }
             pk.flush();
         } else if (w.type === 'mdash') {
             const ty = w.tyres || [0, 0, 0], L = w.gaugeL || {}, R = w.gaugeR || {}, b = w.blade || {};
@@ -2411,6 +2411,12 @@ class HudApp {
             let f = mph <= mid ? 0.5 * mph / mid : 0.5 + 0.5 * (mph - mid) / (top - mid);
             if (mph < st) f = rest + (f5 - rest) * mph / st;
             const vals = [Math.round(Math.min(1, Math.max(-0.5, f)) * 500) / 500, q(isNum(fuel) ? fuel : 0)];
+            if (w.needleOnly) {   // the speed needle's own layer (over the text): only its speed
+                if (!force && vals[0] === x.last) return;
+                x.last = vals[0];
+                x.c.uniform(x.ref, 'u_speedV', [vals[0]]);
+                return;
+            }
             const key = vals.join('|') + '|' + pods.join('|') + '|' + led + '|' + shiftAt + '|' + led2 + '|' + gi + '|' + lamps.join('');
             if (!force && key === x.last) return;
             x.last = key;
