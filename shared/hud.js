@@ -252,18 +252,15 @@ const MIKU_DROOP_W = 1.6;        // her droop's spring (rad/s, critically damped
 const MIKU_RISE_W = 3;           // waking in the loop: about 1.5 s
 const MIKU_WAKE_W = 5;           // waking for good when the car moves: about 1 s
 const MIKU_POINT_C = 16.7;
-const MIKU_WEIGHT_K = 12;        // the weight shift's spring (1/s^2): about a second onto the other leg
-const MIKU_WEIGHT_C = 7;         // critically damped
 
 /**
- * The Miku shader for a widget and the "Miku parts" setting: leaving the legs, the glances and dozing, or (bare)
- * everything but the lean out of the shader altogether, to find which part a display can't take. The layout's
- * "legs": false and "idle": false do the same.
+ * The Miku shader for a widget and the "Miku parts" setting: leaving the glances and dozing, or (bare) everything
+ * but the lean out of the shader altogether, to find what a display can't take. The layout's "idle": false does the
+ * same as noIdle.
  */
 function mikuShader(w, parts) {
-    const noLegs = w.legs === false || parts === 'noLegs' || parts === 'neither' || parts === 'bare';
-    const noIdle = w.idle === false || parts === 'noIdle' || parts === 'neither' || parts === 'bare';
-    return (noLegs ? '#define MIKU_NO_LEGS\n' : '') + (noIdle ? '#define MIKU_NO_IDLE\n' : '') + (parts === 'bare' ? '#define MIKU_BARE\n' : '') + shaders.miku;
+    const noIdle = w.idle === false || parts === 'noIdle' || parts === 'bare';
+    return (noIdle ? '#define MIKU_NO_IDLE\n' : '') + (parts === 'bare' ? '#define MIKU_BARE\n' : '') + shaders.miku;
 }
 
 /**
@@ -2156,7 +2153,7 @@ class HudApp {
             c.uniform(ref, 'u_frame', j.frame);
             c.uniform(ref, 'u_origin', [ft[0] - w.x - j.anchor[0], ft[1] - w.y - j.anchor[1]]);
             // the fixed sprite values go up as three vec4 arrays (u_spr: the eye frames, the tails, the crop and the
-            // tables' counts; u_arm; u_leg), which shaders.js miku names back with #define; the per-frame tables (lean,
+            // tables' counts; u_arm), which shaders.js miku names back with #define; the per-frame tables (lean,
             // glance and doze frames, head and hip shifts) are pixel rows under the atlas (_sprite, mikuData). Few
             // uniforms: the cluster's GPU restarted on the 0.1.9 .. 0.1.12 shader's 55 uniform vectors (or its size)
             const spr = fr('idle').concat(fr('half'), fr('shut'), fr('talk'));
@@ -2171,15 +2168,6 @@ class HudApp {
             c.uniform(ref, 'u_armSide', [am[0] ? am[0].side : -1, am[1] ? am[1].side : 1, (isNum(w.point) ? w.point : 60) * Math.PI / 180,
                 (isNum(w.balance) ? w.balance : 50) * Math.PI / 180]);
             x.lookN = sp.counts.look; x.dozeN = sp.counts.doze;
-            // the legs (up to 2): sprites the shader bends at the knee with the feet planted, hips following the lean
-            const lg = Array.isArray(j.legs) ? j.legs.slice(0, 2) : [], legF = [];
-            [0, 1].forEach((i) => {
-                const g = lg[i];
-                legF.push(...(g ? g.rect : [0, 0, 0, 0]), ...(g ? [g.at[0], g.at[1], g.hip[0], g.hip[1]] : [0, 0, 0, 0]),
-                    ...(g ? [g.knee[0], g.knee[1], g.ankle[0], g.ankle[1]] : [0, 0, 0, 0]));
-            });
-            c.uniform(ref, 'u_leg', legF, { type: 'vec4' });
-            x.legN = lg.length;
             c.uniform(ref, 'u_idle', [0, 0, 0, 0]);
             c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.breathe === false ? 0 : 1, 0]);
             // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
@@ -2484,7 +2472,7 @@ class HudApp {
             x.spd = isNum(x.spd) ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / MIKU_TAU_MS)) : sv;
             // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
             const u = [step(Math.tanh(x.lean * 1.15)), step(x.spd), step(x.point), this.themeName === 'night' ? 0.8 : 1];
-            const ui = [step(x.look), step(x.doze), x.legN ? step(x.ws || 0) : 0, 0];
+            const ui = [step(x.look), step(x.doze), 0, 0];
             const key = u.join('|'), keyI = ui.join('|');
             if (force || keyI !== x.lastI) { x.lastI = keyI; x.c.uniform(x.ref, 'u_idle', ui); }
             if (!force && key === x.last) return;
@@ -2510,8 +2498,7 @@ class HudApp {
      * MIKU_DOZE_PHASE_MS (x.doze 0 .. 1: eyes shut, then the head drooping), wakes for as long (head up, eyes open,
      * glancing), dozes again, and so on; x.doze rides a critically damped spring so neither the droop nor the waking
      * snaps. Any g past the deadzone or
-     * pulling away ends both smoothly; the lean itself is never gated. Half the glances also shift her weight onto the
-     * leg on that side (x.ws -1 .. 1, the other knee bending) or back onto both; idle ending or dozing stands her straight.
+     * pulling away ends both smoothly; the lean itself is never gated.
      */
     _mikuIdle(x, now, dt, gLong, speed) {
         const idle = !isNum(gLong) || Math.abs(gLong) < MIKU_IDLE_G, still = isNum(speed) && speed < 1;
@@ -2524,17 +2511,13 @@ class HudApp {
         if (dozing) x.wokeUp = true;
         const rnd = (a, b) => a + Math.random() * (b - a);
         // the glance's target: none unless idle (and not dozing); otherwise turn, hold, return, pause, at random
-        if (!idle || dozing || x.lookN < 3) { x.lookT = 0; x.lookUntil = 0; x.wsT = 0; }
+        if (!idle || dozing || x.lookN < 3) { x.lookT = 0; x.lookUntil = 0; }
         else if (x.idleMs >= MIKU_GLANCE_AFTER_MS) {
             // the first glance: straight away when the car goes idle, soon after she wakes in the doze loop
             if (!x.lookUntil) { x.lookT = 0; x.lookUntil = now + (x.idleMs - dt < MIKU_GLANCE_AFTER_MS ? 0 : x.wokeUp ? rnd(800, 1800) : rnd(2000, 6000)); x.wokeUp = false; }
             if (now >= x.lookUntil) {
                 if (x.lookT) { x.lookT = 0; x.lookUntil = now + rnd(2000, 6000); }
-                else {
-                    x.lookT = (Math.random() < 0.5 ? -1 : 1) * rnd(0.45, 1); x.lookUntil = now + rnd(1000, 3000) + 500;
-                    // half the glances also shift her weight: onto the leg on the glance's side, or back onto both
-                    if (Math.random() < 0.5) x.wsT = x.wsT ? 0 : Math.sign(x.lookT) * rnd(0.6, 1);
-                }
+                else { x.lookT = (Math.random() < 0.5 ? -1 : 1) * rnd(0.45, 1); x.lookUntil = now + rnd(1000, 3000) + 500; }
             }
         }
         for (let left = dt / 1000; left > 0; left -= 0.01) {
@@ -2543,14 +2526,6 @@ class HudApp {
             x.look = Math.max(-1, Math.min(1, x.look + x.lookV * h));
         }
         if (!x.lookT && Math.abs(x.look) < 0.002 && Math.abs(x.lookV) < 0.01) { x.look = 0; x.lookV = 0; }
-        // the weight shift, onto one leg and back, on its own spring
-        if (!isNum(x.ws)) { x.ws = 0; x.wsV = 0; x.wsT = x.wsT || 0; }
-        for (let left = dt / 1000; left > 0; left -= 0.01) {
-            const h = Math.min(0.01, left);
-            x.wsV += (MIKU_WEIGHT_K * (x.wsT - x.ws) - MIKU_WEIGHT_C * x.wsV) * h;
-            x.ws = Math.max(-1, Math.min(1, x.ws + x.wsV * h));
-        }
-        if (!x.wsT && Math.abs(x.ws) < 0.002 && Math.abs(x.wsV) < 0.01) { x.ws = 0; x.wsV = 0; }
         // the droop and the waking on a critically damped spring: each starts gently and settles without a bounce
         const target = dozing ? 1 : 0, w = dozing ? MIKU_DROOP_W : looping ? MIKU_RISE_W : MIKU_WAKE_W;
         for (let left = dt / 1000; left > 0; left -= 0.01) {

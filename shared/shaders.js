@@ -1213,14 +1213,10 @@ const MIKU = `// The Miku layout's character (GLSL ES 1.00), from frames baked o
 // u_idle = (look, doze, glance frames, doze frames): while the car idles she glances around (look -1 .. 1 blends the
 // baked glances, head and eyes, the same way as the lean) and, stopped a while, dozes off (doze 0 .. 1: eyes half
 // shut, shut, then the head drooping over the doze frames). Either takes over from the lean, which fades out under it.
-// The legs are their own sprites, under the body: the feet stay planted where the bake drew them, the hips go where
-// the lean frames put them (the tables), each thigh turns at the hip and each shin at the ankle, so the knee bends
-// (inwards, at most about 15 deg). Both knees flex a little with the lean, the one on the side she leans to more;
-// u_idle.z -1 .. 1 shifts her weight onto that leg (the body moves over it, the other knee bends).
-// The per-frame tables (lean, glance and doze frames, head and hip shifts) are pixel rows under the atlas art (dat,
+// The per-frame tables (lean, glance and doze frames, head shifts) are pixel rows under the atlas art (dat,
 // hud.js mikuData), not uniforms, and nothing loops: the cluster's GPU restarted on 0.1.9 .. 0.1.12's 55 uniform
-// vectors and unrolled loops. MIKU_NO_LEGS and MIKU_NO_IDLE (the layout's "legs": false, "idle": false) leave
-// those parts out.
+// vectors and unrolled loops; then on legs and glances together (each alone ran), so the legs are gone again.
+// MIKU_NO_IDLE (the layout's "idle": false) leaves the glances and dozing out, MIKU_BARE all but the lean.
 // Positions are in frame px; u_origin is where the frame's top-left sits in the layer. v_uv (0,0) is the top-left.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -1238,7 +1234,7 @@ uniform vec2 u_origin;      // the frame's top-left in layer px
 uniform vec4 u_hip;         // waist y, head y (frame px), breathing 0..1, 0
 uniform vec4 u_armSide;     // x, y: arm 0's and arm 1's side (-1 left, 1 right); z: how far a pointing arm swings up (rad);
                             // w: how far the arm away from the lean swings up and out at a full lean to balance her (rad)
-uniform vec4 u_idle;        // look -1 .. 1, doze 0 .. 1, weight shift -1 .. 1 (onto the right leg), 0
+uniform vec4 u_idle;        // look -1 .. 1, doze 0 .. 1, 0, 0
 
 uniform vec4 u_spr[6];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
 #define u_fA u_spr[0]   // idle.xy, half.xy (atlas px of each frame's top-left)
@@ -1257,13 +1253,6 @@ uniform vec4 u_arm[8];   // cluster-render takes at most 30 uniform names a laye
 #define u_arm1At u_arm[5]
 #define u_arm1L u_arm[6]
 #define u_arm1R u_arm[7]
-uniform vec4 u_leg[6];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
-#define u_leg0 u_leg[0]   // atlas rect of a leg sprite (w = 0: none)
-#define u_leg0A u_leg[1]   // its top-left and its hip (frame px, at rest)
-#define u_leg0B u_leg[2]   // its knee and ankle (frame px, at rest)
-#define u_leg1 u_leg[3]
-#define u_leg1A u_leg[4]
-#define u_leg1B u_leg[5]
 
 // a sprite pixel: atlas rect r, point p in sprite px; premultiplied; transparent outside the rect
 vec4 tap(vec4 r, vec2 p) {
@@ -1310,26 +1299,6 @@ vec4 leanAt(float i, vec2 fb, vec4 upright) {
     return tap(vec4(dat(i), u_frame), fb);
 }
 
-// a leg: the foot planted (as drawn), the hip moved by h (px, sideways) and dropped as far as the bend shortens the
-// leg (so thigh and shin meet at the knee; the hip itself is under the skirt); the shin turned at the ankle and the
-// thigh at the hip so the knee bends inwards by th (rad). The thigh fades into the shin over a few px past the knee
-// and the foot is drawn over the shin's end, so the joints show no seam
-vec4 leg(vec4 r, vec4 A, vec4 B, float side, float h, float th, vec2 p) {
-    if (r.z <= 0.0) return vec4(0.0);
-    vec2 hip0 = A.zw, knee = B.xy, ank = B.zw;
-    float phi = asin(clamp(h / max(1.0, ank.y - hip0.y), -0.5, 0.5));
-    float a = phi + side * th * 0.5, b = phi - side * th * 0.5;
-    vec2 hip = hip0 + vec2(h, (knee.y - hip0.y) * (1.0 - cos(a)) + (ank.y - knee.y) * (1.0 - cos(b)));
-    vec4 c = vec4(0.0);
-    vec2 qs = ank + rot(p - ank, -b);
-    if (qs.y >= knee.y - 6.0 && qs.y <= ank.y + 2.0) c = tap(r, qs - A.xy);
-    if (p.y >= ank.y) c = over(tap(r, p - A.xy), c);
-    vec2 qt = hip0 + rot(p - hip, -a);
-    float wt = 1.0 - smoothstep(knee.y - 4.0, knee.y + 4.0, qt.y);
-    if (wt > 0.0) c = over(tap(r, qt - A.xy) * wt, c);
-    return c;
-}
-
 void main() {
     vec2 px = vec2(v_uv.x * u_size.x, v_uv.y * u_size.y);
     vec2 f = px - u_origin;                         // frame px
@@ -1345,24 +1314,6 @@ void main() {
     float calm = 1.0 - smoothstep(0.0, 0.3, max(abs(look), doze));
     float lean = clamp(u_drive.x, -1.0, 1.0) * calm, sway = 0.05 * sin(t * 0.8) * calm;
     float brake = max(0.0, -lean);
-    // the knees: both flex with the lean (the side she leans to more, about 7 deg at a full lean), and the weight
-    // shift bends the leg it leaves (15 deg); together eased into 15 deg. The bent legs are shorter, so she dips
-    float ws = 0.0, le0 = clamp(lean + sway, -1.0, 1.0);
-    float bend0 = 0.0, bend1 = 0.0, legLen = max(1.0, u_leg0B.w - u_leg0A.w);
-    // each leg's side: its hip left or right of the frame's middle
-    float side0 = u_leg0A.z < u_frame.x * 0.5 ? -1.0 : 1.0, side1 = u_leg1A.z < u_frame.x * 0.5 ? -1.0 : 1.0;
-#ifndef MIKU_NO_LEGS
-    if (u_leg0.z > 0.0 || u_leg1.z > 0.0) {
-        ws = clamp(u_idle.z, -1.0, 1.0);
-        float fl = abs(le0) * 0.12;
-        bend0 = smin(fl * (side0 * le0 > 0.0 ? 1.0 : 0.45) + 0.26 * max(0.0, -side0 * ws), 0.26, 0.06);
-        bend1 = smin(fl * (side1 * le0 > 0.0 ? 1.0 : 0.45) + 0.26 * max(0.0, -side1 * ws), 0.26, 0.06);
-    }
-#endif
-    float dip = legLen * (2.0 - cos(bend0 * 0.5) - cos(bend1 * 0.5)) * 0.5, wsPx = ws * 3.0;
-    vec2 fl0 = f;                                    // the legs' own frame px: the feet stay put
-    f -= vec2(wsPx, dip);                            // the rest of her moves over the weight leg and dips
-
     // breathing: a slight stretch above the waist
     float hipY = u_hip.x, up = max(0.0, hipY - f.y);
     vec2 fb = f;
@@ -1408,18 +1359,10 @@ void main() {
     float i0 = min(floor(k), last - 1.0), fr = k - i0;   // linear: an eased blend would pause at every baked angle
     float i1 = i0 + 1.0;
     vec4 c = u_counts.x < 2.5 ? upright : mix(leanAt(i0, fb, upright), leanAt(i1, fb, upright), fr);
-    vec2 sh0 = dat(16.0 + i0), sh1 = dat(16.0 + i1);   // head and hip shifts at the two angles
+    vec2 sh0 = dat(16.0 + i0), sh1 = dat(16.0 + i1);   // head shifts at the two angles
     // the arms, in front: u_drive.z points (-1 the left arm out to the left .. 1 the right arm out to the right)
     float le = clamp(lean + sway, -1.0, 1.0), pt = clamp(u_drive.z, -1.0, 1.0);
     float r0 = u_armSide.x < 0.0 ? max(0.0, -pt) : max(0.0, pt), r1 = u_armSide.y < 0.0 ? max(0.0, -pt) : max(0.0, pt);
-    // the legs, under the body, their hips where the lean puts them and over the weight leg
-#ifndef MIKU_NO_LEGS
-    if (u_leg0.z > 0.0 || u_leg1.z > 0.0) {
-        float hs = (u_counts.x < 2.5 ? 0.0 : mix(sh0.y, sh1.y, fr)) + wsPx;
-        c = over(c, leg(u_leg0, u_leg0A, u_leg0B, side0, hs, bend0, fl0));
-        c = over(c, leg(u_leg1, u_leg1A, u_leg1B, side1, hs, bend1, fl0));
-    }
-#endif
 #ifndef MIKU_BARE
     c = over(arm(u_arm0, u_arm0At, u_arm0L, u_arm0R, u_armSide.x, le, r0, fb), c);
     c = over(arm(u_arm1, u_arm1At, u_arm1L, u_arm1R, u_armSide.y, le, r1, fb), c);
