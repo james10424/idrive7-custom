@@ -4,12 +4,10 @@
 #   ./scripts/deploy.sh root@<car-ip-or-hostname> [layout.json ...]
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
 #   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
-#   ./scripts/deploy.sh root@<car> --miku-sit <bake output folder>  (Custom Cluster's sitting Miku; no theme shows her for now)
 #
 # --miku copies the folder's atlas.json and atlas.rgba (from tools/live2d_bake) to the app's data folder,
 # <app>/data/miku/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
 # next time it builds the layout (switch to another layout and back, or restart the app).
-# --miku-sit pushes a sitting bake (config pose "sit") to Custom Cluster's data folder, <app>/data/miku-sit/.
 #
 # scripts/remove-miku.sh takes them off the car again.
 #
@@ -25,8 +23,6 @@
 set -euo pipefail
 
 APP_ID="${APP:-custom_hud}"
-# the sitting Miku belongs to Custom Cluster
-if [ "${2:-}" = "--miku-sit" ] && [ -z "${APP:-}" ]; then APP_ID="custom_cluster"; fi
 OAP_ROOT="/var/opt/public/oap"
 
 usage() {
@@ -41,7 +37,7 @@ CAR_HOST="$1"; shift
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIKU_SRC=""
 MIKU_DIR="miku"
-if [ "${1:-}" = "--miku" ] || [ "${1:-}" = "--miku-sit" ]; then
+if [ "${1:-}" = "--miku" ]; then
     MIKU_DIR="${1#--}"
     [ $# -eq 2 ] && [ -d "$2" ] || { echo "Usage: $(basename "$0") <car-ssh-host> $1 <bake output folder>" >&2; exit 1; }
     MIKU_SRC="$2"; shift 2

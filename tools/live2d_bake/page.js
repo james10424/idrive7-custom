@@ -39,7 +39,6 @@
  *   headY       model y across her face (15% down the figure): where the bake measures how far each lean moves her
  *               head, so the tails can follow it
  *   pad         px of transparent border round each sprite (2)
- *   pose        "sit": the sitting pose for Custom Cluster's Regal instead (bakeSit, with "sit")
  */
 const C = window.Live2DCubismCore;
 
@@ -177,8 +176,7 @@ class Renderer {
 
     _mesh(i) {
         const gl = this.gl, d = this.L.model.drawables;
-        // a bake's own rig (the sitting pose) can move the vertices before they're drawn
-        const pos = (this.warp && this.warp(i, d.vertexPositions[i])) || d.vertexPositions[i];
+        const pos = d.vertexPositions[i];
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.tex[d.textureIndices[i]]);
         gl.bindBuffer(gl.ARRAY_BUFFER, this.bufPos); gl.bufferData(gl.ARRAY_BUFFER, pos, gl.DYNAMIC_DRAW);
@@ -572,230 +570,12 @@ async function bake(L, cfg) {
     const show = document.createElement('img'); show.src = atlas.toDataURL(); view.appendChild(show);
 }
 
-/* ---------- the sitting pose ---------- */
-/* Config "pose": "sit" (Custom Cluster's Regal, on the ledge over the boost bar): her sitting facing you on an edge,
- * legs hanging down. Our own rig on the model's meshes (the .moc3's own rig can't be changed): every vertex of the legs
- * between the hips and the knees is pulled up toward the hips (the thighs point at you, so they look short), and below
- * the knees moved up by as much, so the shins hang from under the skirt. The shins are their own sprites (the HUD swings
- * them, over her: her long hair hangs behind them); the body frames (idle, and the blink's half and shut as crops
- * round her face) keep the thighs.
- * config "sit" { leg: "part id" (both legs' part), hip: model y of the hips, knee: model y of the knees, thigh: how much
- * of the thigh shows (0.25), split: model x between the legs (0), together: how far the legs are pulled in toward split below the
- * hips (0 = as drawn, 0.3 = knees and feet 30% closer; the skirt's knee sag follows), skirt: ["part id"] (her skirt, resting on her lap: below the
- * hips its flare pulled in by "narrow" (0.2), its hem "drape" (0.06) model units past the knees and sagging "sag" (0.06)
- * over each knee, at kneeX (0.12) either side of split), hands: model units above the knees where her hands rest (the ledge's edge: each of cfg.arms turned out from its
- * shoulder until the palm's bottom edge is there, the thumb hanging below it; leave out to keep the arms as drawn), behind: ["part id"] (what hangs behind her, a bow's ribbons: it
- * lies on the seat, tucked under the skirt to "tuck" (0.1) of its length below the hips) }. Hip is where the thighs turn: under the skirt. Anything wholly below the knees (a shoe's sparkle in
- * another part) goes with the shins. Writes atlas.json with "pose": "sit". */
-async function bakeSit(L, cfg) {
-    const pad = cfg.pad || 2, sit = Object.assign({ leg: 'Part15', hip: 0.15, knee: -0.68, thigh: 0.25, split: 0 }, cfg.sit || {});
-    const hidden = cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
-    const legPart = inParts(L, [sit.leg]);
-    const armParts = (cfg.arms || []).map((a) => inParts(L, a.parts || []));
-    const armIn = (i) => armParts.some((f) => f(i));
-    const R = new Renderer(L);
-    const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
-    makeCuts(L, cfg.cut, Object.assign({}, cfg.params, idle));
-    setParams(L, Object.assign({}, cfg.params, idle));
-    L.model.update();
-    const dv = L.model.drawables, low = new Set();
-    for (let i = 0; i < dv.count; i++) {
-        const v = dv.vertexPositions[i];
-        let all = v.length > 0;
-        for (let k = 1; k < v.length && all; k += 2) all = v[k] < sit.knee;
-        if (all && !legPart(i) && !armIn(i)) low.add(i);
-    }
-    const isLeg = (i) => legPart(i) || low.has(i);
-    // the rig: thighs foreshortened toward the hips, everything below the knees up by what the thighs lost
-    const lift = (sit.hip - sit.knee) * (1 - sit.thigh), kneeAt = sit.hip - (sit.hip - sit.knee) * sit.thigh;
-    // the skirt lies on the thighs: below the hips it's pulled in from its flare (narrow) and stretched so its hem reaches
-    // just past the knees, sagging over each knee (drape) and less between them. Its meshes are those in the skirt parts
-    // that end above the knees (ribbons hanging further down stay as they are)
-    // what hangs behind her below the hips (a back bow's ribbons) lies on the seat behind her: foreshortened like the thighs
-    const behindIn = inParts(L, sit.behind || []);
-    const tuck = isFinite(sit.tuck) ? sit.tuck : 0.1;   // how much of it still shows below the hips
-    const skirtIn = inParts(L, sit.skirt || []), skirt = new Set();
-    let hem = Infinity;
-    for (let i = 0; i < dv.count; i++) {
-        if (!skirtIn(i) || isLeg(i) || behindIn(i) || hidden(i) || !C.Utils.hasIsVisibleBit(dv.dynamicFlags[i]) || dv.opacities[i] <= 0.01) continue;
-        const v = dv.vertexPositions[i];
-        let lo = Infinity;
-        for (let k = 1; k < v.length; k += 2) lo = Math.min(lo, v[k]);
-        if (lo >= sit.knee) { skirt.add(i); hem = Math.min(hem, lo); }
-    }
-    const hemTo = kneeAt - (isFinite(sit.drape) ? sit.drape : 0.06), ks = isFinite(hem) && hem < sit.hip ? (sit.hip - hemTo) / (sit.hip - hem) : 1;
-    // the legs closer together: below the hips pulled in toward split, all the way from the knees down ("together", 0 .. 1)
-    const tog = isFinite(sit.together) ? sit.together : 0;
-    const inward = (x, y) => y >= sit.hip ? x : sit.split + (x - sit.split) * (1 - tog * Math.min(1, (sit.hip - y) / Math.max(1e-6, sit.hip - sit.knee)));
-    const narrow = isFinite(sit.narrow) ? sit.narrow : 0.2, sag = isFinite(sit.sag) ? sit.sag : 0.06, kx = (isFinite(sit.kneeX) ? sit.kneeX : 0.12) * (1 - tog);
-    if (skirt.size) log('sitting: the skirt (' + skirt.size + ' meshes) hem at model y ' + hem.toFixed(2) + ' rests just past the knees at ' + hemTo.toFixed(2));
-    // her hands on the ledge: each arm (cfg.arms) turned out from its shoulder until its palm's bottom edge is "hands"
-    // model units above the knees (the ledge's edge), so she leans on her hands beside her, thumbs over the edge
-    const armTurn = armParts.map((f) => {
-        if (!isFinite(sit.hands)) return null;
-        let top = -Infinity, bot = Infinity;
-        const vs = [];
-        for (let i = 0; i < dv.count; i++) {
-            if (!f(i) || hidden(i) || !C.Utils.hasIsVisibleBit(dv.dynamicFlags[i])) continue;
-            const v = dv.vertexPositions[i]; vs.push(v);
-            for (let k = 1; k < v.length; k += 2) { top = Math.max(top, v[k]); bot = Math.min(bot, v[k]); }
-        }
-        if (!vs.length) return null;
-        const band = top - (top - bot) * 0.06;
-        let px = 0, n = 0;
-        vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) if (v[k + 1] >= band) { px += v[k]; n++; } });
-        const P = [px / n, top], side = Math.sign(P[0] - sit.split) || 1, want = kneeAt + sit.hands;
-        // where the palm's bottom edge is with the arm turned by a: the hand is the outer fifth of the arm; its lower edge
-        // across it in 8 columns, the middle of those (the thumb hangs lower in a column or two and goes below the edge)
-        const lowAt = (a) => {
-            const c = Math.cos(a), sn = Math.sin(a), pts = [];
-            let far = 0;
-            vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) {
-                const x = P[0] + (v[k] - P[0]) * c - (v[k + 1] - P[1]) * sn, y = P[1] + (v[k] - P[0]) * sn + (v[k + 1] - P[1]) * c;
-                pts.push([x, y]); far = Math.max(far, Math.hypot(x - P[0], y - P[1]));
-            } });
-            const hand = pts.filter((q) => Math.hypot(q[0] - P[0], q[1] - P[1]) > 0.8 * far);
-            let x0 = Infinity, x1 = -Infinity;
-            hand.forEach((q) => { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); });
-            const col = new Array(8).fill(Infinity);
-            hand.forEach((q) => { const b = Math.min(7, Math.floor((q[0] - x0) / Math.max(1e-6, x1 - x0) * 8)); col[b] = Math.min(col[b], q[1]); });
-            const lows = col.filter(isFinite).sort((p, q) => p - q);
-            return lows[Math.floor(lows.length / 2)];
-        };
-        // out is clockwise for her right arm (on your left), anticlockwise for the other; search 0 .. 80 degrees
-        let a0 = 0, a1 = 1.4;
-        if (lowAt(0) >= want) return null;
-        for (let t = 0; t < 40; t++) { const m = (a0 + a1) / 2; if (lowAt(side * m) < want) a0 = m; else a1 = m; }
-        const a = side * a1;
-        log('sitting: arm ' + (side < 0 ? 'on your left' : 'on your right') + ' turned out ' + Math.abs(a * 180 / Math.PI).toFixed(1) + ' degrees, palm on the ledge');
-        const c = Math.cos(a), sn = Math.sin(a), ext = [Infinity, Infinity, -Infinity, -Infinity];
-        vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) {
-            const x = P[0] + (v[k] - P[0]) * c - (v[k + 1] - P[1]) * sn, y = P[1] + (v[k] - P[0]) * sn + (v[k + 1] - P[1]) * c;
-            ext[0] = Math.min(ext[0], x); ext[1] = Math.min(ext[1], y); ext[2] = Math.max(ext[2], x); ext[3] = Math.max(ext[3], y);
-        } });
-        return { f, P, c, s: sn, ext };
-    });
-    R.warp = (i, v) => {
-        const t = armTurn.find((q) => q && q.f(i));
-        if (t) {
-            const o = new Float32Array(v);
-            for (let k = 0; k < o.length; k += 2) {
-                const dx = v[k] - t.P[0], dy = v[k + 1] - t.P[1];
-                o[k] = t.P[0] + dx * t.c - dy * t.s; o[k + 1] = t.P[1] + dx * t.s + dy * t.c;
-            }
-            return o;
-        }
-        if (behindIn(i) && !isLeg(i) && !skirt.has(i)) {
-            const o = new Float32Array(v);
-            for (let k = 1; k < o.length; k += 2) if (v[k] < sit.hip) o[k] = sit.hip - (sit.hip - v[k]) * tuck;
-            return o;
-        }
-        if (skirt.has(i)) {
-            const o = new Float32Array(v);
-            for (let k = 0; k < o.length; k += 2) {
-                const x = v[k], y = v[k + 1];
-                if (y >= sit.hip) continue;
-                const w = Math.min(1, (sit.hip - y) / Math.max(1e-6, sit.hip - hem));   // 0 at the hips .. 1 at the hem
-                const b = Math.exp(-Math.pow((Math.abs(x - sit.split) - kx) / (kx * 0.6), 2));   // 1 over a knee
-                o[k] = sit.split + (x - sit.split) * (1 - narrow * w);
-                o[k + 1] = sit.hip - (sit.hip - y) * ks - sag * w * w * (b - 0.5);
-            }
-            return o;
-        }
-        if (!isLeg(i)) return null;
-        const o = new Float32Array(v);
-        for (let k = 1; k < o.length; k += 2) {
-            const y = v[k];
-            if (y < sit.hip) { o[k - 1] = inward(v[k - 1], y); o[k] = y >= sit.knee ? sit.hip - (sit.hip - y) * sit.thigh : y + lift; }
-        }
-        return o;
-    };
-    let box = bounds(L, (i) => !hidden(i));
-    const figH = box[3] - box[1], centreX = (box[0] + box[2]) / 2;
-    const ppu = cfg.pxPerUnit || (cfg.heightPx || 200) / figH;
-    const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - 0.4 * figH;
-    const m = 0.02 * figH;
-    armTurn.forEach((t) => { if (t) { box[0] = Math.min(box[0], t.ext[0]); box[2] = Math.max(box[2], t.ext[2]); } });   // the hands out to her sides
-    box = [box[0] - m, box[1] + lift - m, box[2] + m, box[3] + m];   // she's shorter by the thighs
-    const fw = Math.ceil((box[2] - box[0]) * ppu), fh = Math.ceil((box[3] - box[1]) * ppu);
-    const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
-    const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
-    const copy = (src, x, y, w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(src, -x, -y); return c; };
-    // the legs alone, rigged; cut at the knees: above into the body frames, below into one shin sprite each
-    const legs = render({ only: (i) => isLeg(i) && !hidden(i) });
-    const kneeY = Math.round(toFrame(0, kneeAt)[1]), splitX = Math.round(toFrame(sit.split, 0)[0]);
-    const ov = 0;   // the shins start at the knees: the HUD draws them over her (her long hair hangs behind them)
-    const thighs = copy(legs, 0, 0, fw, kneeY + 1);
-    const shins = [[0, splitX], [splitX, fw]].map(([x0, x1], j) => {
-        const c = copy(legs, x0, kneeY - ov, x1 - x0, fh - kneeY + ov), bb = alphaBox(c);
-        return bb ? { n: 'shin' + j, cv: c, bb, at: [x0, kneeY - ov] } : null;
-    }).filter(Boolean);
-    log('sitting: frame ' + fw + 'x' + fh + ' px, knees at y ' + kneeY + ', shins ' + shins.map((q) => q.bb[2] + 'x' + q.bb[3]).join(' and '));
-    const names = ['idle', 'half', 'shut'], frames = {};
-    for (const n of names) {
-        const f = (cfg.frames && cfg.frames[n]) || {};
-        const ex = await expressionParams(f.expressions);
-        setParams(L, Object.assign({}, cfg.params, ex, f.params || {}));
-        L.model.update();
-        const c = document.createElement('canvas'); c.width = fw; c.height = fh;
-        const q = c.getContext('2d');
-        q.drawImage(thighs, 0, 0);
-        q.drawImage(render({ skip: (i) => hidden(i) || isLeg(i) }), 0, 0);
-        frames[n] = c;
-    }
-    // the face crop: where half or shut differ from idle
-    const base = frames.idle.getContext('2d').getImageData(0, 0, fw, fh).data;
-    let x0 = fw, y0 = fh, x1 = -1, y1 = -1;
-    ['half', 'shut'].forEach((n) => {
-        const dd = frames[n].getContext('2d').getImageData(0, 0, fw, fh).data;
-        for (let k = 0; k < dd.length; k += 4) {
-            if (Math.abs(dd[k] - base[k]) + Math.abs(dd[k + 1] - base[k + 1]) + Math.abs(dd[k + 2] - base[k + 2]) + Math.abs(dd[k + 3] - base[k + 3]) < 6) continue;
-            const qq = k / 4, x = qq % fw, y = (qq - x) / fw;
-            x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
-        }
-    });
-    if (x1 < 0) throw new Error('half and shut look the same as idle: check frames.half and frames.shut');
-    x0 = Math.max(0, x0 - 4); y0 = Math.max(0, y0 - 4); x1 = Math.min(fw - 1, x1 + 4); y1 = Math.min(fh - 1, y1 + 4);
-    const crop = [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
-    // the atlas: the body frame (her hair hangs past the knees, so the whole height), the two crops and the shins in a row
-    const bodyH = fh;
-    const items = [{ n: 'idle', cv: frames.idle, bb: [0, 0, fw, bodyH] }, { n: 'half', cv: frames.half, bb: crop }, { n: 'shut', cv: frames.shut, bb: crop }]
-        .concat(shins.map((q) => ({ n: q.n, cv: q.cv, bb: q.bb })));
-    let x = pad; const at = {};
-    items.forEach((it) => { at[it.n] = [x, pad]; x += it.bb[2] + 2 * pad; });
-    let AW = 64; while (AW < x) AW *= 2;
-    const AH = Math.max.apply(null, items.map((it) => it.bb[3])) + 2 * pad;
-    if (AW > 1024 || AH > 1024) throw new Error('the sitting atlas would be ' + AW + 'x' + AH + ': over 1024 px a side; lower heightPx');
-    const atlas = document.createElement('canvas'); atlas.width = AW; atlas.height = AH;
-    const ag = atlas.getContext('2d');
-    items.forEach((it) => ag.drawImage(it.cv, it.bb[0], it.bb[1], it.bb[2], it.bb[3], at[it.n][0], at[it.n][1], it.bb[2], it.bb[3]));
-    const info = {
-        version: 1, pose: 'sit', atlas: [AW, AH], frame: [fw, bodyH], frames: { idle: at.idle, half: at.half, shut: at.shut }, crop,
-        // the seat: the middle of her, at the knees (the edge she sits on)
-        anchor: [Math.round(toFrame(centreX, 0)[0]), kneeY], waistY: Math.round(toFrame(0, waist)[1]),
-        // each shin: its atlas rect, where its top-left sits in the frame, and the knee (its pivot) in the frame
-        shins: shins.map((q) => ({ rect: [at[q.n][0], at[q.n][1], q.bb[2], q.bb[3]], at: [q.at[0] + q.bb[0], q.at[1] + q.bb[1]], knee: kneeY })),
-    };
-    const px = ag.getImageData(0, 0, AW, AH).data;
-    await fetch('/out/atlas.rgba', { method: 'POST', body: new Blob([px]) });
-    await fetch('/out/atlas.json', { method: 'POST', body: JSON.stringify(info, null, 1) });
-    await fetch('/out/preview.png', { method: 'POST', body: await new Promise((r) => atlas.toBlob(r, 'image/png')) });
-    log('atlas ' + AW + 'x' + AH + ' (' + (AW * AH * 8 / 1048576).toFixed(2) + ' MiB of the cluster\'s pixel memory), face crop ' + crop[2] + 'x' + crop[3]);
-    // a look at her as the cluster draws her, shins hanging
-    const look = document.createElement('canvas'); look.width = fw * 2; look.height = fh * 2;
-    const lg = look.getContext('2d'); lg.fillStyle = '#000'; lg.fillRect(0, 0, look.width, look.height); lg.scale(2, 2);
-    lg.drawImage(frames.idle, 0, 0, fw, bodyH, 0, 0, fw, bodyH); shins.forEach((q) => lg.drawImage(q.cv, q.at[0], q.at[1]));
-    view.appendChild(look);
-    const show = document.createElement('img'); show.src = atlas.toDataURL(); show.style.background = '#000'; view.appendChild(show);
-}
-
 (async () => {
     try {
         const L = await loadModel();
         const cfg = withDefaults(await json('/config.json'));
         log('model: ' + L.model.parameters.count + ' parameters, ' + L.model.parts.count + ' parts, ' + L.model.drawables.count + ' drawables, ' + L.imgs.length + ' textures');
         if (/[?&]inspect/.test(location.search)) await inspect(L, cfg);
-        else if (cfg.pose === 'sit') await bakeSit(L, cfg);
         else await bake(L, cfg);
         log('done');
         document.title = 'Miku bake: done';

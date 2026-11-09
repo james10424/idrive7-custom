@@ -37,7 +37,6 @@ const TYPES = {
     atext: ['text', 'font'],
     odo: [],
     miku: [],
-    mikuSit: [],
 };
 const CLASSES = ['ambient', 'content', 'overlay', 'alert'];
 // the HUD modes a layout can have a variant for (hud.js header); "normal" is every layout's own

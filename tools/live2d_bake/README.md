@@ -89,30 +89,10 @@ Custom HUD dropped its **Miku lean** setting in 0.1.19 (the lean didn't read cle
 
 The bake draws these frames in perspective too, so the lean reads in depth: above the waist her upper body gets shorter as she tips out of the screen, its top narrower leaning back and wider leaning toward you. `"perspective": { "widen": 0.14, "shorten": 0.1 }` in `lean` sets how much (0 for none). The bake log has "head drop per lean angle": it should be largest at the left end (her head going down as she leans toward you, braking). If the right end is larger, flip the signs.
 
-### Sitting (Custom Cluster)
-
-For now no theme places her (Regal had her in 0.1.36; tools/gen_regal.py says how to put her back). The engine still draws her as a `mikuSit` widget: sitting on the ledge between the speed window and the lower window, at its left end, facing you, her legs hanging over the boost bar and swinging. That's a bake of its own, from a copy of your config with:
-
-- `"pose": "sit"`, and `"heightPx"` (290 with RetrynowMiku: her feet reach the boost bar).
-- `"sit"`: the bake's own rig on the model's meshes (the model's compiled rig can't be changed):
-  - `leg`: the part holding both legs; `hip`, `knee`: the model y where her thighs turn (under the skirt) and of her knees; `split`: the model x between her legs. The thighs point at you, so they're drawn short (`thigh`, 0.25 of their length); everything below the knees moves up by as much, and each shin becomes its own sprite, which the cluster swings.
-  - `together`: pulls her legs in toward `split` below the hips, fully from the knees down (0 as drawn, 0.35 with RetrynowMiku: knees and feet a third closer). The skirt's sag over the knees follows.
-  - `skirt`: the skirt's parts. It rests on her lap: below the hips its flare is pulled in (`narrow`, 0.2), its hem reaches just past the knees (`drape`, 0.06 model units) and sags over each knee (`sag`, 0.06, at `kneeX` either side of `split`). Meshes in those parts that hang below the knees (ribbons) aren't skirt.
-  - `hands`: her hands rest on the ledge: each arm in the config's `arms` (the HUD bake's, `Part16` and `Part17` with RetrynowMiku) is turned out from its shoulder until its palm's bottom edge (the thumb hangs below it, over the edge) is `hands` model units above the knees (0.03 with RetrynowMiku: about 4 px, the speed window's bottom edge). The frame widens to fit them. Leave it out to keep the arms as drawn.
-  - `behind`: what hangs behind her (a back bow's ribbons): tucked under the skirt, onto the seat (`tuck`, 0.1 of its length shows).
-
-With RetrynowMiku: `{ "leg": "Part15", "hip": 0.45, "knee": -0.68, "thigh": 0.25, "split": 0, "together": 0.35, "hands": 0.03, "skirt": ["Part64", "Part11", "Part18"], "behind": ["ArtMesh117_Skinning", "ArtMesh118_Skinning"] }`. The bake page shows her as the cluster draws her, under the atlas. With `"arms": [{ "parts": ["Part16"] }, { "parts": ["Part17"] }]` too. The atlas is 512x233 (0.9 MiB of the cluster's pixel memory): her body, her face with eyes half shut and shut, and the two shins. Deploy to Custom Cluster (the script finds that app by itself):
-
-```bash
-./scripts/deploy.sh root@<car> --miku-sit <folder>
-```
-
-It lands in Custom Cluster's `data/miku-sit/`; switch the theme away and back (or restart the app). The shader reads 5 pixels of the image per screen pixel, against the 32 Custom HUD's Miku reads.
-
 ### Updating or removing
 
 - **New bake:** run the deploy again (it overwrites both files), then switch layouts again. The app sees the new files and replaces the old image.
-- **Remove her:** delete `data/miku/` on the car. Miku then draws nothing.
+- **Remove her:** delete `data/miku/` on the car (`./scripts/remove-miku.sh root@<car> --miku`). Miku then draws nothing.
 - **Reinstalling or updating Custom HUD** from the Store keeps its data folder, as far as we know; if Miku says the frames are missing after an update, deploy again.
 
 ### When it doesn't show
@@ -121,7 +101,7 @@ The status row says why, after "Miku:":
 
 | Status row | Meaning |
 | --- | --- |
-| `no baked frames in .../data/miku` (or `miku-sit`) | The folder or `atlas.rgba` is missing: deploy again (`--miku-sit` for the sitting one). |
+| `no baked frames in .../data/miku` | The folder or `atlas.rgba` is missing: deploy again. |
 | `atlas.json: ...` or `Unexpected ...` | The JSON is not from this bake tool, or was cut short: deploy again. |
 | `atlas.rgba is N bytes, ... needs M` | The two files don't belong together (one from an older bake): deploy both again. |
 | `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it (a precaution, see [What the cluster can take](#what-the-cluster-can-take)). |

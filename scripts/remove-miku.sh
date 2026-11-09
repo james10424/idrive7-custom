@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Remove baked Miku frames from the car over SSH (what deploy.sh --miku / --miku-sit pushed, or an older --miku-fb).
+# Remove baked Miku frames from the car over SSH (what deploy.sh --miku pushed, or an older --miku-fb).
 # Your bake folders on this computer are left alone.
 #
 #   ./scripts/remove-miku.sh root@<car> --miku-fb               (Custom HUD's data/miku-fb/, the forward/back lean)
 #   ./scripts/remove-miku.sh root@<car> --miku                  (Custom HUD's data/miku/, the Miku layout's frames)
-#   ./scripts/remove-miku.sh root@<car> --miku-sit              (Custom Cluster's data/miku-sit/, sitting Miku)
-#   ./scripts/remove-miku.sh root@<car> --miku-fb --miku-sit -y (several at once; -y skips the question)
+#   ./scripts/remove-miku.sh root@<car> --miku --miku-fb -y     (several at once; -y skips the question)
 #
 # Each folder is looked for in its app's data folder (/var/opt/public/oap/oap_<uid>/data/, the app found by its
 # source/package.json, as deploy.sh does); one that isn't there is skipped. The app notices on its next layout build
@@ -15,7 +14,7 @@ set -euo pipefail
 OAP_ROOT="/var/opt/public/oap"
 
 usage() {
-    echo "Usage: $(basename "$0") <car-ssh-host> --miku | --miku-fb | --miku-sit [...] [-y]" >&2
+    echo "Usage: $(basename "$0") <car-ssh-host> --miku | --miku-fb [...] [-y]" >&2
     exit 1
 }
 
@@ -27,7 +26,6 @@ TARGETS=()
 for a in "$@"; do
     case "$a" in
         --miku|--miku-fb) TARGETS+=("custom_hud:${a#--}") ;;
-        --miku-sit) TARGETS+=("custom_cluster:miku-sit") ;;
         -y) YES=1 ;;
         *) usage ;;
     esac

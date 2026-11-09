@@ -1200,12 +1200,11 @@ class HudApp {
      */
     _sprite(w, ci) {
         // the HUD's Miku from miku/ (a forward/back lean bake, lean.axis "fb", works there too: its leanAxis turns
-        // the arms' balance off); Custom Cluster's sitting Miku (mikuSit) has her own bake, miku-sit/, and no table rows
-        const sit = w.type === 'mikuSit';
-        const sub = sit ? 'miku-sit' : 'miku', dir = path.join(this.ctx.dataDir || '.', sub);
+        // the arms' balance off)
+        const sub = 'miku', dir = path.join(this.ctx.dataDir || '.', sub);
         let st;
         try { st = fs.statSync(path.join(dir, 'atlas.rgba')); } catch (e) { st = null; }
-        const pre = (sit ? 'sit:' : 'sprite:') + ci + ':', key = pre + dir + ':' + (st ? st.mtimeMs : 0);
+        const pre = 'sprite:' + ci + ':', key = pre + dir + ':' + (st ? st.mtimeMs : 0);
         if (this.atlases.has(key)) return this.atlases.get(key);
         // another bake (or a newer file) on this connection: drop the old asset before uploading, so one is in the
         // pixel memory at a time. Swapping this way while running works on the car (Nov 9 2026: Custom HUD 0.1.18's
@@ -1224,9 +1223,8 @@ class HudApp {
             const art = fs.readFileSync(path.join(dir, 'atlas.rgba'));
             if (art.length !== aw * ah * 4) throw new Error('atlas.rgba is ' + art.length + ' bytes, ' + aw + 'x' + ah + ' RGBA needs ' + aw * ah * 4);
             // the per-frame tables go in a few rows under the art, which the shader reads (mikuData), not in uniforms
-            if (sit !== (info.pose === 'sit')) throw new Error(sit ? 'atlas.json is not a sitting bake (config "pose": "sit")' : 'atlas.json is a ' + (info.pose || 'other') + ' bake: bake the standing one');
-            if (sit && !(Array.isArray(info.shins) && info.shins.length === 2)) throw new Error('atlas.json: the sitting bake needs her two shins');
-            const data = sit ? { px: Buffer.alloc(0), rows: 0, counts: {} } : mikuData(info, aw), h = ah + data.rows;
+            if (info.pose) throw new Error('atlas.json is a ' + info.pose + ' bake (no layout draws one now): bake the standing one');
+            const data = mikuData(info, aw), h = ah + data.rows;
             if (h > 1024) throw new Error('atlas ' + aw + 'x' + ah + ' leaves no room under 1024 px for its ' + data.rows + ' rows of tables; bake again with the current tools/live2d_bake');
             const px = Buffer.concat([art, data.px]);
             const c = this._clientAt(ci);
@@ -1239,7 +1237,7 @@ class HudApp {
                 (info.tails ? 'tails, ' : '') + aw + 'x' + h + ' RGBA asset, ' + mib(a.bytes) + ' of pixel memory');
             return a;
         } catch (e) {
-            this.problem = (sit ? 'Sitting Miku: ' : 'Miku: ') + e.message;
+            this.problem = 'Miku: ' + e.message;
             this.log.warn('widget "' + w.id + '": ' + e.message);
             return null;
         }
@@ -2012,9 +2010,9 @@ class HudApp {
             const base = { target: this.target, klass: w.class || 'content', z: w.z || 0, x: w.x, y: w.y, w: w.w, h: w.h };
             if (IMAGE_TYPES[w.type]) ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
             else {
-                if ((w.type === 'miku' || w.type === 'mikuSit') && !this._sprite(w, this._connOf(w))) return;
+                if (w.type === 'miku' && !this._sprite(w, this._connOf(w))) return;
                 ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : w.type === 'miku' ? mikuShader(w, this.setting('mikuParts')) : w.type === 'rdash' && w.needleOnly ? shaders.rdashNeedle : shaders[w.type],
-                    time: w.type === 'miku' || w.type === 'mikuSit' || undefined }, base));
+                    time: w.type === 'miku' || undefined }, base));
             }
             if (!ref) { this.log.warn('widget "' + w.id + '": layer refused'); return; }
         }
@@ -2248,19 +2246,6 @@ class HudApp {
             const cr = Array.isArray(j.crop) && j.crop.length === 4 ? j.crop : [0, 0, 0, 0];
             c.uniform(ref, 'u_spr', spr.concat(rect(tl), tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1], cr,
                 [sp.counts.lean, sp.counts.look, sp.counts.doze, sp.dataY]), { type: 'vec4' });
-        } else if (w.type === 'mikuSit') {
-            // the bake's "anchor" (her middle, at the knees: the edge she sits on) goes on the widget's "seat" point
-            const sp = this._sprite(w, x.ci), j = sp.info, fr = j.frame, sh = j.shins, seat = Array.isArray(w.seat) ? w.seat : [w.x + w.w / 2, w.y + w.h / 2];
-            c.bind(ref, 'u_atlas', sp.ref);
-            c.uniform(ref, 'u_size', [w.w, w.h]);
-            c.uniform(ref, 'u_atlasSize', sp.size);
-            c.uniform(ref, 'u_spr', j.frames.idle.concat(j.frames.half, j.frames.shut, fr, j.crop, sh[0].rect, sh[1].rect, sh[0].at, sh[1].at), { type: 'vec4' });
-            // the legs swing "swing" deg each way (35)
-            c.uniform(ref, 'u_body', [isNum(j.waistY) ? j.waistY : fr[1] * 0.4, (isNum(w.swing) ? w.swing : 35) * Math.PI / 180, 0, 0]);
-            x.origin = [seat[0] - w.x - j.anchor[0], seat[1] - w.y - j.anchor[1]];
-            x.lookN = 0; x.dozeN = 0;   // no glances; the HUD Miku's doze loop
-            c.uniform(ref, 'u_sit', x.origin.concat([0, 1]));
-            x.timer = setInterval(() => this._guard('widget ' + w.id, () => this._update(x, Date.now(), false)), MIKU_MS);
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);
@@ -2596,16 +2581,6 @@ class HudApp {
             if (!force && key === x.last) return;
             x.last = key;
             x.c.uniform(x.ref, 'u_drive', u);
-        } else if (w.type === 'mikuSit') {
-            // only the doze loop (stopped 15 s: 5 s asleep, 5 s awake, ...); the blink, breath and swinging legs run in
-            // the shader on the renderer's clock
-            const d = this.car.data(), dt = x.at ? Math.min(500, now - x.at) : 0;
-            x.at = now;
-            this._mikuIdle(x, now, dt, d.gLong, this._raw('speed'));
-            const u = x.origin.concat([Math.round(x.doze * 500) / 500, this.themeName === 'night' ? 0.8 : 1]), key = u.join('|');
-            if (!force && key === x.last) return;
-            x.last = key;
-            x.c.uniform(x.ref, 'u_sit', u);
         } else if (w.type === 'lights') {
             const rpm = this._raw('rpm'), sp = this._shift(), n = w.count || 12;
             // the lights fill from "from" rpm (3000) up to the shift point; a "from" at or past it means the last 500 rpm
