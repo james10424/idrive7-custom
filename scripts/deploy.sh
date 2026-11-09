@@ -4,10 +4,12 @@
 #   ./scripts/deploy.sh root@<car-ip-or-hostname> [layout.json ...]
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
 #   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
+#   ./scripts/deploy.sh root@<car> --miku-fb <bake output folder>   (her forward/back lean bake)
 #
 # --miku copies the folder's atlas.json and atlas.rgba (from tools/live2d_bake) to the app's data folder,
 # <app>/data/miku/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
-# next time it builds the layout (switch to another layout and back, or restart the app).
+# next time it builds the layout (switch to another layout and back, or restart the app). --miku-fb does the same
+# with a forward/back lean bake (lean.axis "fb"), to <app>/data/miku-fb/, for the app's "Miku lean" setting.
 #
 # With no files it pushes the app's built-in layouts from apps/<app>/hud/layouts/.
 # They land in the app's data folder, <app>/data/layouts/, where a file overrides the
@@ -34,8 +36,10 @@ CAR_HOST="$1"; shift
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MIKU_SRC=""
-if [ "${1:-}" = "--miku" ]; then
-    [ $# -eq 2 ] && [ -d "$2" ] || { echo "Usage: $(basename "$0") <car-ssh-host> --miku <bake output folder>" >&2; exit 1; }
+MIKU_DIR="miku"
+if [ "${1:-}" = "--miku" ] || [ "${1:-}" = "--miku-fb" ]; then
+    [ "$1" = "--miku-fb" ] && MIKU_DIR="miku-fb"
+    [ $# -eq 2 ] && [ -d "$2" ] || { echo "Usage: $(basename "$0") <car-ssh-host> $1 <bake output folder>" >&2; exit 1; }
     MIKU_SRC="$2"; shift 2
     [ -f "$MIKU_SRC/atlas.json" ] && [ -f "$MIKU_SRC/atlas.rgba" ] || { echo "No atlas.json and atlas.rgba in $MIKU_SRC" >&2; exit 1; }
     python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$MIKU_SRC/atlas.json" || { echo "Not valid JSON: $MIKU_SRC/atlas.json" >&2; exit 1; }
@@ -58,10 +62,10 @@ echo "App folder on the car: ${APP_DIR}"
 
 if [ -n "$MIKU_SRC" ]; then
     OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
-    ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/miku'"
-    scp "$MIKU_SRC/atlas.json" "$MIKU_SRC/atlas.rgba" "${CAR_HOST}:${APP_DIR}/data/miku/"
-    ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/miku'"
-    echo "Pushed the Miku frames to ${APP_DIR}/data/miku. Switch to another layout and back (or restart the app) to load them."
+    ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/${MIKU_DIR}'"
+    scp "$MIKU_SRC/atlas.json" "$MIKU_SRC/atlas.rgba" "${CAR_HOST}:${APP_DIR}/data/${MIKU_DIR}/"
+    ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/${MIKU_DIR}'"
+    echo "Pushed the Miku frames to ${APP_DIR}/data/${MIKU_DIR}. Switch to another layout and back (or restart the app) to load them."
     exit 0
 fi
 

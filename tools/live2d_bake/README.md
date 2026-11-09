@@ -79,6 +79,16 @@ scp <folder>/atlas.json <folder>/atlas.rgba root@<car>:/var/opt/public/oap/oap_<
 ssh root@<car> 'chown -R "$(stat -c %u:%g /var/opt/public/oap/oap_<id>/data)" /var/opt/public/oap/oap_<id>/data/miku'
 ```
 
+### The forward/back lean
+
+The **Miku lean** setting on the app page picks Sideways (the bake in `data/miku/`) or Forward and back (`data/miku-fb/`). The forward/back one is a second bake from a copy of your config with `"axis": "fb"` in `lean`, and `lean.params` bending her toward you at a full lean right (pulling away), for example `{ "ParamBodyAngleY": -10, "ParamAngleY": -20, "ParamEyeBallY": 0.4 }` (negated, she leans away, toward the windshield, when braking). Bake it to its own `--out` folder and deploy it with:
+
+```bash
+./scripts/deploy.sh root@<car> --miku-fb <folder>
+```
+
+The bake log has "head drop per lean angle": it should grow toward the right end (her head going down as she leans toward you). If it shrinks, flip the signs. Switching the setting rebuilds the layout and swaps the uploaded image: the old one is dropped first, so only one is in the cluster's memory.
+
 ### Updating or removing
 
 - **New bake:** run the deploy again (it overwrites both files), then switch layouts again. The app sees the new files and replaces the old image.
@@ -91,7 +101,7 @@ The status row says why, after "Miku:":
 
 | Status row | Meaning |
 | --- | --- |
-| `no baked frames in .../data/miku` | The folder or `atlas.rgba` is missing: deploy again. |
+| `no baked frames in .../data/miku` (or `miku-fb`) | The folder or `atlas.rgba` is missing: deploy again (`--miku-fb` for the forward/back lean). |
 | `atlas.json: ...` or `Unexpected ...` | The JSON is not from this bake tool, or was cut short: deploy again. |
 | `atlas.rgba is N bytes, ... needs M` | The two files don't belong together (one from an older bake): deploy both again. |
 | `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it (a precaution, see [What the cluster can take](#what-the-cluster-can-take)). |

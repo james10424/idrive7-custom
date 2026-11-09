@@ -266,8 +266,8 @@ function mikuShader(w, parts) {
  * The Miku shader's tables as pixel rows to go under the atlas art: 56 entries of two values each, each entry a 3x3 px
  * block (so a bilinear read at its middle gets it whole), opaque (alpha 255: a canvas or driver that premultiplies
  * leaves it alone), each value 12 bits: (v + 1024) * 2 in R (high 8) and B's high or low nibble, in G likewise:
- * -1024 .. 1023.5 px in half px. Entries: 0-15 the lean frames' atlas x, y; 16-31 each lean frame's head and hip
- * shift; 32-39 the glance frames' x, y; 40-47 each glance's head shift; 48-51 the doze frames' x, y; 52-55 each doze
+ * -1024 .. 1023.5 px in half px. Entries: 0-15 the lean frames' atlas x, y; 16-31 each lean frame's head shift x, y
+ * (y: the forward/back lean's head drop; 0 sideways); 32-39 the glance frames' x, y; 40-47 each glance's head shift; 48-51 the doze frames' x, y; 52-55 each doze
  * frame's head shift x, y. Returns { px, rows, counts: { lean, look, doze } }.
  */
 function mikuData(j, aw) {
@@ -277,7 +277,7 @@ function mikuData(j, aw) {
     const doze = Array.isArray(j.doze) ? j.doze.slice(0, 4) : [];
     const e = [];
     for (let i = 0; i < 16; i++) e[i] = xy(lean[i]);
-    for (let i = 0; i < 16; i++) e[16 + i] = [num(j.leanShift, i), num(j.hipShift, i)];
+    for (let i = 0; i < 16; i++) e[16 + i] = [num(j.leanShift, i), num(j.leanShiftY, i)];
     for (let i = 0; i < 8; i++) { e[32 + i] = xy(look[i]); e[40 + i] = [num(j.lookShift, i), 0]; }
     for (let i = 0; i < 4; i++) { e[48 + i] = xy(doze[i]); e[52 + i] = xy(Array.isArray(j.dozeShift) ? j.dozeShift[i] : null); }
     const per = Math.floor(aw / 3), rows = Math.ceil(e.length / per) * 3, px = Buffer.alloc(aw * rows * 4, 0);
@@ -1180,14 +1180,16 @@ class HudApp {
     }
 
     /**
-     * The Miku layout's baked frames: <data>/miku/atlas.json and
+     * The Miku layout's baked frames: <data>/miku/atlas.json and (miku-fb/ for the forward/back lean)
      * atlas.rgba (straight-alpha RGBA, atlas[0] x atlas[1] px), made by tools/live2d_bake and pushed by
      * scripts/deploy.sh --miku. They are not in the app: the character's art stays with its owner. Uploaded once as an
      * RGBA asset per connection and kept in this.atlases (so the pixel memory counts it); new files (a later bake)
      * drop the old asset. Null, with this.problem set, when the files are missing or bad.
      */
     _sprite(w, ci) {
-        const dir = path.join(this.ctx.dataDir || '.', 'miku');
+        // the "Miku lean" setting picks the bake: sideways (miku/) or forward/back (miku-fb/). Switching it rebuilds
+        // the layout, and the other folder's files replace the uploaded atlas (one Miku atlas a connection at a time)
+        const fb = this.setting('mikuLean') === 'fb', dir = path.join(this.ctx.dataDir || '.', fb ? 'miku-fb' : 'miku');
         let st;
         try { st = fs.statSync(path.join(dir, 'atlas.rgba')); } catch (e) { st = null; }
         const key = 'sprite:' + ci + ':' + dir + ':' + (st ? st.mtimeMs : 0);
@@ -1196,7 +1198,7 @@ class HudApp {
             if (k.indexOf('sprite:' + ci + ':') === 0) { a.c.drop(a.ref); this.atlases.delete(k); }
         });
         try {
-            if (!st) throw new Error('no baked frames in ' + dir + ' (tools/live2d_bake, then scripts/deploy.sh --miku)');
+            if (!st) throw new Error('no baked frames in ' + dir + ' (tools/live2d_bake, then scripts/deploy.sh ' + (fb ? '--miku-fb' : '--miku') + ')');
             const info = JSON.parse(fs.readFileSync(path.join(dir, 'atlas.json'), 'utf8'));
             const [aw, ah] = info.atlas || [];
             if (!(aw > 0 && ah > 0)) throw new Error('atlas.json: bad "atlas" size');
@@ -2188,7 +2190,8 @@ class HudApp {
             });
             c.uniform(ref, 'u_arm', armF, { type: 'vec4' });
             c.uniform(ref, 'u_armSide', [am[0] ? am[0].side : -1, am[1] ? am[1].side : 1, (isNum(w.point) ? w.point : 60) * Math.PI / 180,
-                (isNum(w.balance) ? w.balance : 50) * Math.PI / 180]);
+                // the arms balance a sideways lean only: leaning toward or away from you they just ride along
+                j.leanAxis === 'fb' ? 0 : (isNum(w.balance) ? w.balance : 50) * Math.PI / 180]);
             x.lookN = sp.counts.look; x.dozeN = sp.counts.doze;
             c.uniform(ref, 'u_idle', [0, 0, 0, 0]);
             c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.breathe === false ? 0 : 1, 0]);

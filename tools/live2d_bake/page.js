@@ -8,10 +8,14 @@
  *   frames      { idle | half | shut | talk: { params: { id: value }, expressions: ["X.exp3.json"] } }: each frame's
  *               own parameters, on top of "params": the blink (eyes open, half, shut) and a smile with the mouth open
  *   lean        { steps: 11, params: { id: value at a full lean right }, left: { id: value }, right: { id: value },
- *               face: 0.6 }: her, standing on a bus, leaning with the model's body and head rotation, baked at "steps"
+ *               face: 0.6, axis: "side" }: her, standing on a bus, leaning with the model's body and head rotation, baked at "steps"
  *               angles from a full lean left (the car braking) to a full lean right (pulling away); each angle's params
  *               are "params" times -1 .. 1. From "face" on, the left ones add "left" (the braking face) and the right
- *               ones "right" (the happy face). Neighbouring angles are close enough to blend without a double image
+ *               ones "right" (the happy face). Neighbouring angles are close enough to blend without a double image.
+ *               axis "fb" bakes the forward/back lean instead (a bake of its own, for the HUD's "Miku lean" setting,
+ *               deployed with --miku-fb): "params" then bend her toward you at a full lean right (pulling away) and
+ *               away from you, toward the windshield, at a full lean left (braking), e.g. ParamBodyAngleY and
+ *               ParamAngleY; the bake also measures how far each angle moves her head up or down, for the tails
  *   look        { steps: 3, params: { id: value at a full glance right }, lead: ["id", ...] }: her glancing around
  *               while the car idles, head turned with the eyes leading: baked at "steps" angles each way ("params"
  *               times -1 .. 1); the "lead" ones (the eyes) get there twice as fast. steps 0: no glances
@@ -493,6 +497,10 @@ async function bake(L, cfg) {
     const top0 = headTop(frames.idle);
     const dozeShift = dozeNames.map((n) => [Math.round((headX(frames[n]) - x0) * 10) / 10, headTop(frames[n]) - top0]);
     if (DN) log('head shift per doze frame (px): ' + dozeShift.map((v) => v.join('/')).join(', '));
+    // the forward/back lean moves her head up and down more than sideways: the tails follow that too
+    const fbLean = cfg.lean && cfg.lean.axis === 'fb';
+    const shiftY = fbLean ? leanNames.map((n) => headTop(frames[n]) - top0) : null;
+    if (fbLean) log('head drop per lean angle (px): ' + shiftY.join(', '));
     const an = cfg.anchor || [(box[0] + box[2]) / 2, box[1] + 0.006 * figH], ap = cfg.anchorPx || [0, 0], anchor = toFrame(an[0], an[1]);
     const info = {
         version: 1, atlas: [AW, AH], frame: [fw, fh],
@@ -502,6 +510,7 @@ async function bake(L, cfg) {
         hipY: Math.round(toFrame(0, waist)[1]), headY: Math.round((bandY0 + bandY1) / 2), leanShift: shift,
     };
     // the face, glance and doze frames are crops of this rect (frame px); their positions are the crops' top-lefts
+    if (fbLean) { info.leanAxis = 'fb'; info.leanShiftY = shiftY; }
     if (crop) info.crop = crop;
     if (LK) { info.look = lookNames.map((n) => byN[n].at); info.lookShift = lookShift; }
     if (DN) { info.doze = dozeNames.map((n) => byN[n].at); info.dozeShift = dozeShift; }
