@@ -108,9 +108,16 @@ const DEMO_SONGS = [['Queen', 'Bohemian Rhapsody'], ['YOASOBI', '夜に駆ける
     ['Daft Punk', 'Harder, Better, Faster, Stronger (Alive 2007 version, extended)']];
 setInterval(() => {
     const song = mode === 'manual' ? (typeof manual.music === 'string' ? ['', manual.music] : null) : DEMO_SONGS[Math.floor(Date.now() / 8000) % DEMO_SONGS.length];
-    hu.feed('de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', 'playerMetadata', song ? { uiType: 'TWO_LINES',
-        firstLineText: song[0], firstLineType: 'ARTIST', secondLineText: song[1], secondLineType: 'TITLE', threeRowText: '' }
-        : { uiType: 'UNDEFINED', firstLineText: '', firstLineType: 'UNDEFINED', secondLineText: '', secondLineType: 'UNDEFINED', threeRowText: '' });
+    // as the car's player sends it (Nov 9 2026): playerMetadata holds only the artist and the album; the title is in the
+    // track list, found by the playing track's id
+    const id = song ? DEMO_SONGS.indexOf(song) + 1 : 0;
+    hu.feed('de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', 'playerMetadata', song ? { uiType: 'TWO_LINES', trackId: id,
+        firstLineText: song[0] || 'Unknown artist', firstLineType: 'ARTIST', secondLineText: 'Unknown album', secondLineType: 'ALBUM', threeRowText: '' }
+        : { uiType: 'UNDEFINED', trackId: 0, firstLineText: '', firstLineType: 'UNDEFINED', secondLineText: '', secondLineType: 'UNDEFINED', threeRowText: '' });
+    hu.feed('de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', 'tracks', { sessionId: 1, startIndex: 0, totalLength: DEMO_SONGS.length + 1,
+        tracks: DEMO_SONGS.map((d, i) => ({ trackId: i + 1, firstLine: d[1], firstLineExtension: '', secondLine: d[0] }))
+            .concat(song && song[0] === '' ? [{ trackId: 0, firstLine: song[1], firstLineExtension: '', secondLine: '' }] : []) });
+    hu.feed('de.bmw.infotainment.hmi.hmimediastate.HmiMediaState', 'trackSelection', { sessionId: 1, selectedTrackId: song && song[0] === '' ? 0 : id });
 }, 1000);
 // BMW's HUD driver assistance block (DisplayDataServer functionalLibraryData, the catalog's enum names): ACC with a car ahead, or all off
 setInterval(() => {

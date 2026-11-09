@@ -778,8 +778,10 @@ class HudApp {
     /** The song title BMW's player shows (app.json config.music), for {{musicTitle}}. */
     _startMedia() {
         if (!this.config.music) return;
+        this.media = { pm: null, mm: null, tracks: null, sel: null };
+        const on = (k) => (v) => this._guard('media', () => { this.media[k] = v && typeof v === 'object' ? v : null; this._pickTitle(k); });
         Promise.resolve().then(() => this.ctx.signals.watch(MEDIA.iface, MEDIA.instance, {
-            playerMetadata: (v) => this._guard('media', () => this._onMedia(v)),
+            playerMetadata: on('pm'), mainMenuMetadata: on('mm'), tracks: on('tracks'), trackSelection: on('sel'),
         }, this.log)).then((s) => {
             this.mediaSub = s;
             this.log.info('signal HmiMediaState ' + (s && s.error ? 'error: ' + s.error : 'subscribed'));
@@ -788,23 +790,46 @@ class HudApp {
         this.fontT = setTimeout(() => this._guard('font', () => this._sysFont()), 2000);
     }
 
-    /** playerMetadata: the line whose type is TITLE; else a line not typed ARTIST or ALBUM, the second first (BMW's
-     *  player fills the artist then the title: the car showed "Aimer", the artist, from the first line, Nov 8 2026);
-     *  else the first line. A type name we don't know is matched by the word in it (…TITLE, …ARTIST). */
-    _onMedia(v) {
-        if (!v || typeof v !== 'object') return;
-        const lines = [[v.firstLineText, v.firstLineType], [v.secondLineText, v.secondLineType]];
+    /** The title, from HmiMediaState: playerMetadata's line typed TITLE; else (the car's player sends only ARTIST and
+     *  ALBUM there, "Aimer" / "Sleepless Nights", Nov 9 2026) the playing track's entry in the track list (by trackId,
+     *  its first line), or mainMenuMetadata's first line that isn't the artist or album; else an untyped playerMetadata
+     *  line (the second first); else the artist. Each source's raw text is logged when it changes, to confirm on the car. */
+    _pickTitle(changed) {
+        const m = this.media, pm = m.pm || {};
+        const clean = (x) => String(x || '').replace(/\s+/g, ' ').trim();
         const kind = (ty) => {
             const n = enumNum(ty, MEDIA_ITEM);
             if (n >= 0 && n !== null) return n;
-            const s = String(ty || '').toUpperCase();
-            return /TITLE/.test(s) ? MEDIA_ITEM.TITLE : /ARTIST/.test(s) ? MEDIA_ITEM.ARTIST : /ALBUM/.test(s) ? MEDIA_ITEM.ALBUM : 0;
+            const u = String(ty || '').toUpperCase();
+            return /TITLE/.test(u) ? MEDIA_ITEM.TITLE : /ARTIST/.test(u) ? MEDIA_ITEM.ARTIST : /ALBUM/.test(u) ? MEDIA_ITEM.ALBUM : 0;
         };
-        const has = (l) => String(l[0] || '').trim() !== '';
-        const hit = lines.find((l) => has(l) && kind(l[1]) === MEDIA_ITEM.TITLE) ||
-            [lines[1], lines[0]].find((l) => has(l) && kind(l[1]) !== MEDIA_ITEM.ARTIST && kind(l[1]) !== MEDIA_ITEM.ALBUM);
-        const t = String((hit ? hit[0] : v.firstLineText) || '').replace(/\s+/g, ' ').trim();
-        if (t !== this.musicTitle) this.log.info('now playing ' + JSON.stringify(t) + ' (lines ' + JSON.stringify(lines) + ', uiType ' + JSON.stringify(v.uiType) + ')');
+        const lines = [[clean(pm.firstLineText), kind(pm.firstLineType)], [clean(pm.secondLineText), kind(pm.secondLineType)]];
+        const other = lines.filter((l) => l[0] && (l[1] === MEDIA_ITEM.ARTIST || l[1] === MEDIA_ITEM.ALBUM)).map((l) => l[0]);
+        const fresh = (x) => x && other.indexOf(x) < 0;
+        // the raw sources, logged once per change
+        const id = m.sel && m.sel.selectedTrackId !== undefined ? m.sel.selectedTrackId : pm.trackId;
+        const list = m.tracks && Array.isArray(m.tracks.tracks) ? m.tracks.tracks : [];
+        const tr = id !== undefined ? list.find((t) => t && String(t.trackId) === String(id)) : null;
+        const mm = m.mm ? [clean(m.mm.firstLineText), clean(m.mm.secondLineText), clean(m.mm.thirdLineText)] : null;
+        const raw = JSON.stringify({ track: tr ? [clean(tr.firstLine), clean(tr.secondLine)] : null, id: id, of: list.length, menu: mm });
+        if (raw !== this.mediaRaw) { this.mediaRaw = raw; this.log.info('media sources (' + changed + '): ' + raw); }
+        let t = '', from = '';
+        const typed = lines.find((l) => l[0] && l[1] === MEDIA_ITEM.TITLE);
+        if (typed) { t = typed[0]; from = 'player TITLE'; }
+        if (!t && tr) {
+            const c = [clean(tr.firstLine), clean(tr.secondLine)].find(fresh);
+            if (c) { t = c; from = 'track list'; }
+        }
+        if (!t && mm) {
+            const c = mm.find(fresh);
+            if (c) { t = c; from = 'main menu'; }
+        }
+        if (!t) {
+            const u = [lines[1], lines[0]].find((l) => l[0] && l[1] !== MEDIA_ITEM.ARTIST && l[1] !== MEDIA_ITEM.ALBUM);
+            if (u) { t = u[0]; from = 'player line'; }
+        }
+        if (!t) { t = lines[0][0]; from = t ? 'artist (no title anywhere)' : 'nothing'; }
+        if (t !== this.musicTitle) this.log.info('now playing ' + JSON.stringify(t) + ' from ' + from + ' (player lines ' + JSON.stringify(lines) + ', uiType ' + JSON.stringify(pm.uiType) + ')');
         this.musicTitle = t;
     }
 
