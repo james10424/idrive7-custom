@@ -23,8 +23,9 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
   - **Bring your own model:** no character ships with the app. You bake frames from a Live2D model on your own computer with [tools/live2d_bake](../../tools/live2d_bake/README.md) and copy them to the car with `scripts/deploy.sh <car> --miku <folder>` ([deployment steps](../../tools/live2d_bake/README.md#deploy-to-the-car)). The app reads them from `miku/` in its data folder. Until they're there the layout draws nothing and the status row says why.
   - **Like standing on a bus:** pull away and she leans right, brake and she leans left, with the model's own body and head moving (her happy face when you pull away hard, her braking face when you brake hard). When the car settles she sways back past upright once or twice before standing still. Her arm on the side away from the lean swings up and out to catch her balance (the other a little), and her twin tails move with her head.
   - **Idle:** she blinks, breathes, sways a little and smiles as if talking now and then. The faster you go, the more her twin tails spread, lift and flutter.
+  - **Glancing and dozing:** a second after the car stops pulling or braking (under 0.03 g) she starts glancing left and right now and then, eyes first, then her head, holding a second or three. Stopped for 15 s, she dozes off: eyes shut, head drooping, nodding awake now and then. Pulling away or braking wakes her and the lean takes over.
   - **During route guidance** she steps aside, because BMW's turn map and street name fill her corner; she comes back when the route ends.
-  - The frames go up once as one image (about 4 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up while she moves.
+  - The frames go up once as one image (about 9 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up while she moves.
   - Redline is gone: if you had it picked anywhere, it switches to Miku (so does Perch, its working name).
 
 ## Themes

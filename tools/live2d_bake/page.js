@@ -12,6 +12,12 @@
  *               angles from a full lean left (the car braking) to a full lean right (pulling away); each angle's params
  *               are "params" times -1 .. 1. From "face" on, the left ones add "left" (the braking face) and the right
  *               ones "right" (the happy face). Neighbouring angles are close enough to blend without a double image
+ *   look        { steps: 3, params: { id: value at a full glance right }, lead: ["id", ...] }: her glancing around
+ *               while the car idles, head turned with the eyes leading: baked at "steps" angles each way ("params"
+ *               times -1 .. 1); the "lead" ones (the eyes) get there twice as fast. steps 0: no glances
+ *   doze        { steps: 3, params: { id: value fully drooped }, hold: { id: value } }: her dozing off when the car has
+ *               stood still a while, head drooping forward over "steps" frames ("params" times 0 .. 1) with "hold" set
+ *               on every one (the eyes shut: frames.shut's params by default). steps 0: she only shuts her eyes
  *   tails       ["part id", ...]: drawn in their own sprite (swung by the HUD), hidden in the body frames
  *   tailsRoot   0..1: where the tails hang from, as a fraction down the tails sprite (0.15)
  *   anchor      [x, y] the model point between her feet (model units, y up, as ?inspect's grid shows them; the bottom
@@ -45,11 +51,15 @@ const DEFAULTS = {
         right: { ParamEyeLSmile: 1, ParamEyeRSmile: 1, ParamEyeLOpen: 0, ParamEyeROpen: 0, ParamMouthForm: 1, ParamMouthOpenY: 0.7 },
         face: 0.6,
     },
+    look: { steps: 3, params: { ParamAngleX: 25, ParamEyeBallX: 1 }, lead: ['ParamEyeBallX', 'ParamEyeBallY'] },
+    doze: { steps: 3, params: { ParamAngleY: -30 } },
 };
 function withDefaults(cfg) {
     const c = Object.assign({}, cfg);
     c.frames = Object.assign({}, DEFAULTS.frames, cfg.frames || {});
     c.lean = Object.assign({}, DEFAULTS.lean, cfg.lean || {});
+    c.look = Object.assign({}, DEFAULTS.look, cfg.look || {});
+    c.doze = Object.assign({}, DEFAULTS.doze, cfg.doze || {});
     return c;
 }
 const logEl = document.getElementById('log'), view = document.getElementById('view');
@@ -348,6 +358,32 @@ async function bake(L, cfg) {
         frames[n] = render(body);
         names.push(n); leanNames.push(n);
     }
+    // the glances, left to right (the middle one is idle): head and eyes only, so the arms and tails still fit her
+    const LK = Math.max(0, Math.min(3, Math.round(cfg.look.steps || 0))), lkp = cfg.look.params || {}, lead = new Set(cfg.look.lead || []);
+    const lookNames = [];
+    for (let s = -LK; s <= LK && LK; s++) {
+        if (!s) { lookNames.push('idle'); continue; }
+        const a = s / LK, q = {};
+        Object.keys(lkp).forEach((id) => { q[id] = lkp[id] * (lead.has(id) ? Math.sign(a) * Math.min(1, 2 * Math.abs(a)) : a); });
+        setParams(L, Object.assign({}, cfg.params, idle, q));
+        L.model.update();
+        const n = 'look' + (s + LK);
+        frames[n] = render(body);
+        names.push(n); lookNames.push(n);
+    }
+    // dozing: the head drooping forward, eyes shut (after the upright half and shut frames on the HUD)
+    const DN = Math.max(0, Math.min(4, Math.round(cfg.doze.steps || 0))), dzp = cfg.doze.params || {};
+    const hold = cfg.doze.hold || (cfg.frames.shut && cfg.frames.shut.params) || {};
+    const dozeNames = [];
+    for (let k = 1; k <= DN; k++) {
+        const q = Object.assign({}, hold);
+        Object.keys(dzp).forEach((id) => { q[id] = dzp[id] * k / DN; });
+        setParams(L, Object.assign({}, cfg.params, idle, q));
+        L.model.update();
+        const n = 'doze' + k;
+        frames[n] = render(body);
+        names.push(n); dozeNames.push(n);
+    }
     // each arm: its shoulder (the middle of its topmost vertices) and its middle, in frame px, at rest and at a full lean
     // each way (the lean's own arm sway included), so the HUD can carry the sprite with her and turn it as she turns it
     const armAt = (f) => {
@@ -414,6 +450,17 @@ async function bake(L, cfg) {
     const x0 = headX(frames.idle);
     const shift = leanNames.map((n) => Math.round((headX(frames[n]) - x0) * 10) / 10);
     log('head shift per lean angle (px): ' + shift.join(', '));
+    const lookShift = lookNames.map((n) => Math.round((headX(frames[n]) - x0) * 10) / 10);
+    if (LK) log('head shift per glance (px): ' + lookShift.join(', '));
+    // a drooping head also drops: the top of her head (the first row with a few solid pixels) against idle's
+    const headTop = (cv) => {
+        const dd = cv.getContext('2d').getImageData(0, 0, fw, fh).data;
+        for (let y = 0; y < fh; y++) { let n = 0; for (let x = 0; x < fw; x++) if (dd[(y * fw + x) * 4 + 3] > 128) n++; if (n >= 3) return y; }
+        return 0;
+    };
+    const top0 = headTop(frames.idle);
+    const dozeShift = dozeNames.map((n) => [Math.round((headX(frames[n]) - x0) * 10) / 10, headTop(frames[n]) - top0]);
+    if (DN) log('head shift per doze frame (px): ' + dozeShift.map((v) => v.join('/')).join(', '));
     const an = cfg.anchor || [(box[0] + box[2]) / 2, box[1] + 0.006 * figH], ap = cfg.anchorPx || [0, 0], anchor = toFrame(an[0], an[1]);
     const info = {
         version: 1, atlas: [AW, AH], frame: [fw, fh],
@@ -422,6 +469,8 @@ async function bake(L, cfg) {
         anchor: [Math.round(anchor[0] - ap[0]), Math.round(anchor[1] - ap[1])],
         hipY: Math.round(toFrame(0, waist)[1]), headY: Math.round((bandY0 + bandY1) / 2), leanShift: shift,
     };
+    if (LK) { info.look = lookNames.map((n) => byN[n].at); info.lookShift = lookShift; }
+    if (DN) { info.doze = dozeNames.map((n) => byN[n].at); info.dozeShift = dozeShift; }
     if (tl) {
         const t = byN.tails, root = cfg.tailsRoot || 0.15;
         info.tails = { rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]], at: [t.bb[0], t.bb[1]], rootY: Math.round(t.bb[3] * root), length: Math.round(t.bb[3] * (1 - root)) };

@@ -49,5 +49,19 @@
       "ParamMouthOpenY": 0.7
     },
     "face": 0.6
+  },
+  "look": {
+    "steps": 3,
+    "params": {
+      "ParamAngleX": 25,
+      "ParamEyeBallX": 1
+    },
+    "lead": ["ParamEyeBallX", "ParamEyeBallY"]
+  },
+  "doze": {
+    "steps": 3,
+    "params": {
+      "ParamAngleY": -30
+    }
   }
 }

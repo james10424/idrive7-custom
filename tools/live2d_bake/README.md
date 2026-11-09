@@ -55,7 +55,7 @@ Both files must be there, under exactly those names, straight from the bake (`at
 
 2. Make the app load them. It reads the frames only when it builds the layout, and does not watch the folder, so on the center screen open **Custom HUD**, pick another layout, then **Miku** again (or restart the app).
 
-3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "1 layer" and about "6.6 MiB of 16 MiB pixels" (it depends on the bake). The app's log has a line like `miku frames: 14 of 144x278, tails, 1024x846 RGBA asset, 6.6 MiB of pixel memory`.
+3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "1 layer" and about "8.8 MiB of 16 MiB pixels" (it depends on the bake). The app's log has a line like `miku frames: 23 of 144x278, tails, 1024x1128 RGBA asset, 8.8 MiB of pixel memory`.
 
 ### By hand
 
@@ -106,4 +106,4 @@ Not yet checked on a car: the app folder path (from the Store's docs) and SSH as
 
 ## What it makes
 
-One image, 1024 px wide: her upright with eyes open, half shut and shut and with a smile, the same standing pose at 11 lean angles from a full lean left (braking face) to a full lean right (happy face), the twin tails on their own, and (with `arms` in the config) each arm on its own, which the HUD swings up from the shoulder to point toward the indicator. The angles are close enough that the HUD blends between neighbours without a double image. The model itself is never changed. On the car the GPU animates these: blinks, breathing, the lean as on a bus, and the tails following her head and streaming out with speed.
+One image, 1024 px wide: her upright with eyes open, half shut and shut and with a smile, the same standing pose at 11 lean angles from a full lean left (braking face) to a full lean right (happy face), glancing left and right (head and eyes, 3 angles each way, from `look`), dozing (head drooping, eyes shut, 3 frames, from `doze`), the twin tails on their own, and (with `arms` in the config) each arm on its own, which the HUD swings up from the shoulder to point toward the indicator. The angles are close enough that the HUD blends between neighbours without a double image. The model itself is never changed. On the car the GPU animates these: blinks, breathing, the lean as on a bus, and the tails following her head and streaming out with speed.

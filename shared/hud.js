@@ -241,6 +241,14 @@ const MIKU_TAU_MS = 450;        // the Miku character's speed follows the car th
 const MIKU_SPRING_K = 25;        // her lean's spring (1/s^2): about 0.8 Hz
 const MIKU_SPRING_C = 3.5;
 const MIKU_POINT_K = 70;         // the pointing arm's spring (1/s^2): about 1.3 Hz
+const MIKU_IDLE_G = 0.03;        // below this |longitudinal g| the car idles: she glances around (the lean is not gated)
+const MIKU_GLANCE_AFTER_MS = 1000; // the first glance this long after the car goes idle
+const MIKU_LOOK_K = 30;          // the glance's spring (1/s^2): a turn of about half a second
+const MIKU_LOOK_C = 11;          // critically damped: no overshoot
+const MIKU_DOZE_AFTER_MS = 15000; // stopped and idle this long: she dozes off
+const MIKU_DOZE_TAU_MS = 1200;   // her head droops this slowly (about 4 s to the bottom)
+const MIKU_NOD_TAU_MS = 150;     // and snaps up this fast when she nods awake
+const MIKU_WAKE_TAU_MS = 250;    // waking for good when the car moves
 const MIKU_POINT_C = 16.7;       // critically damped: it rises and settles without bouncing       // its damping (1/s): a sway or two past upright, then still
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
@@ -2080,6 +2088,22 @@ class HudApp {
             });
             c.uniform(ref, 'u_armSide', [am[0] ? am[0].side : -1, am[1] ? am[1].side : 1, (isNum(w.point) ? w.point : 60) * Math.PI / 180,
                 (isNum(w.balance) ? w.balance : 50) * Math.PI / 180]);
+            // the glances (left to right, odd, up to 7, the middle one idle) and the doze frames (up to 4); an older bake
+            // without them still dozes, eyes shut
+            const lk = Array.isArray(j.look) && j.look.length >= 3 && j.look.length % 2 ? j.look.slice(0, 7) : [];
+            const dz = Array.isArray(j.doze) ? j.doze.slice(0, 4) : [];
+            const lkF = [], lkH = [], dzF = [], dzH = [];
+            for (let i = 0; i < 8; i++) { const v = lk[i] || [0, 0]; lkF.push(v[0], v[1]); lkH.push(Array.isArray(j.lookShift) && isNum(j.lookShift[i]) ? j.lookShift[i] : 0); }
+            for (let i = 0; i < 4; i++) {
+                const v = dz[i] || [0, 0], h = Array.isArray(j.dozeShift) && Array.isArray(j.dozeShift[i]) ? j.dozeShift[i] : [0, 0];
+                dzF.push(v[0], v[1]); dzH.push(h[0] || 0, h[1] || 0);
+            }
+            c.uniform(ref, 'u_look', lkF, { type: 'vec4' });
+            c.uniform(ref, 'u_lookHead', lkH, { type: 'vec4' });
+            c.uniform(ref, 'u_doze', dzF, { type: 'vec4' });
+            c.uniform(ref, 'u_dozeHead', dzH, { type: 'vec4' });
+            x.lookN = lk.length; x.dozeN = dz.length;
+            c.uniform(ref, 'u_idle', [0, 0, lk.length, dz.length]);
             c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.breathe === false ? 0 : 1, 0]);
             // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
             // moved only every third frame would step. A message goes up only when the lean or speed changes a step
@@ -2374,10 +2398,13 @@ class HudApp {
                 x.point = Math.max(-1, Math.min(1, x.point + x.pointV * h));
             }
             const v = this._raw('speed'), sv = isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0, step = (f) => Math.round(f * 500) / 500;
+            this._mikuIdle(x, now, dt, d.gLong, v);
             x.spd = isNum(x.spd) ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / MIKU_TAU_MS)) : sv;
             // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
             const u = [step(Math.tanh(x.lean * 1.15)), step(x.spd), step(x.point), this.themeName === 'night' ? 0.8 : 1];
-            const key = u.join('|');
+            const ui = [step(x.look), step(x.doze), x.lookN || 0, x.dozeN || 0];
+            const key = u.join('|'), keyI = ui.join('|');
+            if (force || keyI !== x.lastI) { x.lastI = keyI; x.c.uniform(x.ref, 'u_idle', ui); }
             if (!force && key === x.last) return;
             x.last = key;
             x.c.uniform(x.ref, 'u_drive', u);
@@ -2392,6 +2419,47 @@ class HudApp {
             x.c.uniform(x.ref, 'u_lit', [lit]);
             x.c.uniform(x.ref, 'u_strobe', [sp.now ? 1 : 0]);
         }
+    }
+
+    /**
+     * The Miku character while the car idles (|longitudinal g| under MIKU_IDLE_G): from MIKU_GLANCE_AFTER_MS on she
+     * glances left or right now and then (x.look -1 .. 1 on a critically damped spring: turn, hold 1 to 3 s, back,
+     * a pause of 2 to 6 s), and once the car has also stood still for MIKU_DOZE_AFTER_MS she dozes off (x.doze 0 .. 1:
+     * eyes shut, then the head drooping), nodding awake every 6 to 14 s and drooping again. Any g past the deadzone or
+     * pulling away ends both smoothly; the lean itself is never gated.
+     */
+    _mikuIdle(x, now, dt, gLong, speed) {
+        const idle = !isNum(gLong) || Math.abs(gLong) < MIKU_IDLE_G, still = isNum(speed) && speed < 1;
+        x.idleMs = idle ? (x.idleMs || 0) + dt : 0;
+        x.stillMs = idle && still ? (x.stillMs || 0) + dt : 0;
+        if (!isNum(x.look)) { x.look = 0; x.lookV = 0; x.doze = 0; x.lookT = 0; x.lookUntil = 0; x.nodAt = 0; x.nodUntil = 0; }
+        const dozing = x.dozeN !== undefined && x.stillMs >= MIKU_DOZE_AFTER_MS;
+        const rnd = (a, b) => a + Math.random() * (b - a);
+        // the glance's target: none unless idle (and not dozing); otherwise turn, hold, return, pause, at random
+        if (!idle || dozing || x.lookN < 3) { x.lookT = 0; x.lookUntil = 0; }
+        else if (x.idleMs >= MIKU_GLANCE_AFTER_MS) {
+            if (!x.lookUntil) { x.lookT = 0; x.lookUntil = now + (x.idleMs - dt < MIKU_GLANCE_AFTER_MS ? 0 : rnd(2000, 6000)); }
+            if (now >= x.lookUntil) {
+                if (x.lookT) { x.lookT = 0; x.lookUntil = now + rnd(2000, 6000); }
+                else { x.lookT = (Math.random() < 0.5 ? -1 : 1) * rnd(0.45, 1); x.lookUntil = now + rnd(1000, 3000) + 500; }
+            }
+        }
+        for (let left = dt / 1000; left > 0; left -= 0.01) {
+            const h = Math.min(0.01, left);
+            x.lookV += (MIKU_LOOK_K * (x.lookT - x.look) - MIKU_LOOK_C * x.lookV) * h;
+            x.look = Math.max(-1, Math.min(1, x.look + x.lookV * h));
+        }
+        if (!x.lookT && Math.abs(x.look) < 0.002 && Math.abs(x.lookV) < 0.01) { x.look = 0; x.lookV = 0; }
+        // dozing: droop slowly to 1; now and then nod awake (up to 0.25, eyes half open) and droop again. The droop
+        // waits for the glance to come back first
+        let target = 0, tau = MIKU_WAKE_TAU_MS;
+        if (dozing && Math.abs(x.look) < 0.05) {
+            if (!x.nodAt) x.nodAt = now + rnd(6000, 14000) + 4000;
+            if (now >= x.nodAt) { x.nodUntil = now + rnd(700, 1200); x.nodAt = x.nodUntil + rnd(6000, 14000); }
+            if (now < x.nodUntil) { target = 0.25; tau = MIKU_NOD_TAU_MS; } else { target = 1; tau = MIKU_DOZE_TAU_MS; }
+        } else if (!dozing) x.nodAt = 0;
+        x.doze += (target - x.doze) * (1 - Math.exp(-dt / tau));
+        if (target === 0 && x.doze < 0.002) x.doze = 0;
     }
 
     /** A rounded tag: fill in the tone colour (bright for a fresh grade), text centred on it. Empty text: nothing. */
