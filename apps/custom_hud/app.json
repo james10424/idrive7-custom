@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.14",
+  "version": "0.1.15",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -337,6 +337,34 @@
       "label": "Show boost (Sport layout)",
       "type": "bool",
       "default": true
+    },
+    {
+      "key": "mikuParts",
+      "label": "Miku parts (to find what the cluster can't take)",
+      "type": "choice",
+      "default": "full",
+      "options": [
+        [
+          "full",
+          "All of her"
+        ],
+        [
+          "noLegs",
+          "No legs"
+        ],
+        [
+          "noIdle",
+          "No glances or dozing"
+        ],
+        [
+          "neither",
+          "No legs, glances or dozing"
+        ],
+        [
+          "bare",
+          "Bare: only the lean (no blink, arms, tails, legs, glances)"
+        ]
+      ]
     },
     {
       "key": "demo",

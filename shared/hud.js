@@ -256,11 +256,14 @@ const MIKU_WEIGHT_K = 12;        // the weight shift's spring (1/s^2): about a s
 const MIKU_WEIGHT_C = 7;         // critically damped
 
 /**
- * The Miku shader for a widget: "legs": false or "idle": false in the layout leave the legs (straight, in the body
- * frames' place: none) or the glances and dozing out of the shader altogether, to find which part a display can't take.
+ * The Miku shader for a widget and the "Miku parts" setting: leaving the legs, the glances and dozing, or (bare)
+ * everything but the lean out of the shader altogether, to find which part a display can't take. The layout's
+ * "legs": false and "idle": false do the same.
  */
-function mikuShader(w) {
-    return (w.legs === false ? '#define MIKU_NO_LEGS\n' : '') + (w.idle === false ? '#define MIKU_NO_IDLE\n' : '') + shaders.miku;
+function mikuShader(w, parts) {
+    const noLegs = w.legs === false || parts === 'noLegs' || parts === 'neither' || parts === 'bare';
+    const noIdle = w.idle === false || parts === 'noIdle' || parts === 'neither' || parts === 'bare';
+    return (noLegs ? '#define MIKU_NO_LEGS\n' : '') + (noIdle ? '#define MIKU_NO_IDLE\n' : '') + (parts === 'bare' ? '#define MIKU_BARE\n' : '') + shaders.miku;
 }
 
 /**
@@ -1961,7 +1964,7 @@ class HudApp {
             if (IMAGE_TYPES[w.type]) ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
             else {
                 if (w.type === 'miku' && !this._sprite(w, this._connOf(w))) return;
-                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : w.type === 'miku' ? mikuShader(w) : shaders[w.type],
+                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : w.type === 'miku' ? mikuShader(w, this.setting('mikuParts')) : shaders[w.type],
                     time: w.type === 'miku' || undefined }, base));
             }
             if (!ref) { this.log.warn('widget "' + w.id + '": layer refused'); return; }

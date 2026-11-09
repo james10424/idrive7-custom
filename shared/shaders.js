@@ -1372,10 +1372,15 @@ void main() {
     float bt = mod(t, 4.6), bt2 = mod(t + 1.9, 12.0);
     float blink = smoothstep(0.0, 0.07, bt) * (1.0 - smoothstep(0.1, 0.24, bt))
         + smoothstep(0.25, 0.31, bt2) * (1.0 - smoothstep(0.34, 0.46, bt2));
-    vec4 cIdle = tap(vec4(u_fA.xy, u_frame), fb), cHalf = cropTap(u_fA.zw, fb, cIdle), cShut = cropTap(u_fB.xy, fb, cIdle);
+    vec4 cIdle = tap(vec4(u_fA.xy, u_frame), fb);
+#ifdef MIKU_BARE
+    vec4 upright = cIdle;
+#else
+    vec4 cHalf = cropTap(u_fA.zw, fb, cIdle), cShut = cropTap(u_fB.xy, fb, cIdle);
     vec4 upright = blink < 0.5 ? mix(cIdle, cHalf, blink * 2.0) : mix(cHalf, cShut, blink * 2.0 - 1.0);
     float talk = smoothstep(0.85, 1.0, sin(t * 0.37)) * (1.0 - smoothstep(0.0, 0.3, abs(lean))) * calm;
     if (talk > 0.001) upright = mix(upright, cropTap(u_fB.zw, fb, cIdle), talk);
+#endif
     // glancing: the two nearest baked glances, the middle one being upright (blinking) itself
     float lookMid = (lookN - 1.0) * 0.5, lookHead = 0.0;
     vec2 dozeHead = vec2(0.0);
@@ -1415,11 +1420,14 @@ void main() {
         c = over(c, leg(u_leg1, u_leg1A, u_leg1B, side1, hs, bend1, fl0));
     }
 #endif
+#ifndef MIKU_BARE
     c = over(arm(u_arm0, u_arm0At, u_arm0L, u_arm0R, u_armSide.x, le, r0, fb), c);
     c = over(arm(u_arm1, u_arm1At, u_arm1L, u_arm1R, u_armSide.y, le, r1, fb), c);
+#endif
 
     // twin tails, behind. They hang from her head, so they move with it as she leans (the ends trailing a little);
     // a wave runs down them, faster and wider with speed, and the wind spreads them out and lifts them
+#ifndef MIKU_BARE
     if (u_tails.z > 0.0) {
         vec2 tp = f - u_tailsAt.xy;
         float w = clamp((tp.y - u_tailsAt.z) / max(1.0, u_tailsAt.w), 0.0, 1.0);
@@ -1434,6 +1442,7 @@ void main() {
         tp.y += spd * 14.0 * w * w;                            // lifted by the wind
         c = over(c, tap(u_tails, tp));
     }
+#endif
 
     vec3 rgb = c.rgb / max(c.a, 0.0001);
     gl_FragColor = vec4(rgb * u_drive.w, c.a);
