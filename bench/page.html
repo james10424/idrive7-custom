@@ -71,6 +71,7 @@
       <label class="chk"><input type="checkbox" id="road"> <span id="backdropName">backdrop</span></label>
       <label class="chk" title="BMW's own HUD content, drawn over our layers as the car does: its speed and speed-limit sign bottom-left (x 150..355, y 314..378, measured Nov 5 2026). The limit is a stand-in: the bench has no speed-limit signal."><input type="checkbox" id="bmwhud" checked> BMW's HUD</label>
       <label class="chk" title="What the driver sees: the hood hides the top corners of the cluster, the dash camera hides its top middle, and BMW draws its gear box and belt light over us; on the HUD only a window is visible through the windshield. Measured from car photos, Nov 5 2026 (shared/visible.js)."><input type="checkbox" id="carview" checked> car view</label>
+      <label class="chk" title="Draw the displays (at most 30 times a second, as cluster-render). Off: the picture holds still and the page uses next to no CPU; the apps, the renderer and the layers table keep running."><input type="checkbox" id="redraw" checked> redraw</label>
       <span id="fps"></span>
     </div>
     <div id="views"><canvas id="hud" class="view" width="800" height="480"></canvas></div>
@@ -466,7 +467,8 @@
   const FRAME_MS = 1000 / 30;
   function frame(t) {
     const animated = scene.some((l) => l.kind === 'effect' && l.time);
-    if ((dirty || animated) && t - lastDraw >= FRAME_MS - 2) {
+    const redraw = document.getElementById('redraw').checked;
+    if (redraw && (dirty || animated) && t - lastDraw >= FRAME_MS - 2) {
       lastDraw = t;
       dirty = false;
       views.forEach((v) => {
@@ -499,11 +501,11 @@
       if (primaryApp) lastValues = valuesByApp[primaryApp] || lastValues;
       frames++;
     }
-    if (t - lastFpsT > 1000) { document.getElementById('fps').textContent = frames + ' redraws/s'; frames = 0; lastFpsT = t; }
+    if (t - lastFpsT > 1000) { document.getElementById('fps').textContent = redraw ? frames + ' redraws/s' : 'redraw off'; frames = 0; lastFpsT = t; }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  ['outlines', 'road', 'carview', 'bmwhud'].forEach((id) => document.getElementById(id).addEventListener('change', () => { dirty = true; }));
+  ['outlines', 'road', 'carview', 'bmwhud', 'redraw'].forEach((id) => document.getElementById(id).addEventListener('change', () => { dirty = true; }));
   const capEl = document.getElementById('cap');
   capEl.addEventListener('change', () => fetch('/cap', { method: 'POST', body: JSON.stringify({ cap: Number(capEl.value) || 0 }) }));
 
