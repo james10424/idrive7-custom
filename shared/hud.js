@@ -724,10 +724,11 @@ class HudApp {
             }
             this._statusSoon();
         });
-        c.on('target', (name, state, holder, reason) => {
+        c.on('target', (name, state, holder, reason, guideOff, disabled) => {
             if (name !== this.target) return;
-            this.targetState = { state, holder, reason };
-            this.log.info('target ' + name + tag + ' ' + state + (holder ? ' (holder ' + holder + ')' : '') + (reason ? ': ' + reason : ''));
+            this.targetState = { state, holder, reason, disabled: !!disabled };
+            this.log.info('target ' + name + tag + ' ' + state + (holder ? ' (holder ' + holder + ')' : '') + (reason ? ': ' + reason : '') +
+                (disabled ? ' (disabled by cluster-render\'s mapping guard: two strikes; as root: /var/opt/cluster-render/current/cluster-render guard-reset)' : ''));
             this._statusSoon();
         });
         c.on('refused', (op, ref, reason) => {
@@ -1281,6 +1282,9 @@ class HudApp {
     /** ", 3 of 5 layers drawn (2 waiting: <reason>)" while some layers aren't shown; "" when all are. Counts layers, not widgets. */
     _drawnNote() {
         const ts = this.targetState;
+        // cluster-render's mapping guard turned this target off (two display restarts right after its mappings); it stays
+        // off, even across reboots, until "cluster-render guard-reset" as root (cluster-render README, the mapping guard)
+        if (ts && ts.disabled) return ', off: cluster-render\'s guard disabled this display after 2 strikes (as root: cluster-render guard-reset)';
         if (ts && (ts.state === 'waiting' || ts.state === 'parked') && ts.holder) {
             // holder "none" is no BMW content: on iDrive 7 it is the cluster panel holding the scene id the HUD shares
             // ("scene id in use by another target"); a stock holder says which wait it is (a pop-up or guidance, or the slot)
