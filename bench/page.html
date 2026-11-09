@@ -501,7 +501,7 @@
       if (primaryApp) lastValues = valuesByApp[primaryApp] || lastValues;
       frames++;
     }
-    if (t - lastFpsT > 1000) { document.getElementById('fps').textContent = redraw ? frames + ' redraws/s' : 'redraw off'; frames = 0; lastFpsT = t; }
+    if (t - lastFpsT > 1000) { { const f = document.getElementById('fps'); f.textContent = redraw ? frames + ' redraws/s' : 'redraw off'; f.style.color = redraw ? '' : 'var(--err)'; } frames = 0; lastFpsT = t; }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
