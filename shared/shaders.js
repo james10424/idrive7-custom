@@ -1446,12 +1446,13 @@ const SDASH_PACKED = packCfg(SDASH, CFG.sdash);
 const RDASH_PACKED = packCfg(RDASH, CFG.rdash);
 const RDASH_NEEDLE = packCfg(RDASH.replace('#endif\nvarying', '#endif\n#define NEEDLE_LAYER\nvarying'), CFG.rdash);
 
-// Miku lying down (Custom Cluster's Regal, in the black strip under the center dash), from tools/live2d_bake's lying
-// pose (config pose "lie"): one frame of her on her back, head right, and the blink's half and shut as crops of it
-// round her face. She blinks (idle -> half -> shut, eased) and breathes (her chest rising, a slight stretch across her
-// body); dozing (u_lie.z 0 .. 1, the app's doze loop) shuts her eyes and slows and deepens her breath. Three texture
-// reads: well under what the cluster's GPU took (tools/shader_budget.js).
-const MIKU_LIE = `#ifdef GL_FRAGMENT_PRECISION_HIGH
+// Miku sitting (Custom Cluster's Regal, on the ledge over the boost bar), from tools/live2d_bake's sitting pose (config
+// pose "sit"): her body frame (thighs pointing at you), the blink's half and shut as crops round her face, and each shin
+// its own sprite hanging from the knee. She blinks (idle -> half -> shut, eased), breathes (a slight stretch above the
+// waist) and swings her legs, one forward as the other goes back: a shin swung by angle a shows cos(a) of its length
+// (and a little wider coming toward you). Dozing (u_sit.z 0 .. 1, the app's doze loop) shuts her eyes, slows her breath
+// and stills her legs. Five texture reads (tools/shader_budget.js; Custom HUD's Miku reads 32).
+const MIKU_SIT = `#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
 precision mediump float;
@@ -1461,9 +1462,10 @@ uniform vec2 u_size;
 uniform float u_time;
 uniform sampler2D u_atlas;
 uniform vec2 u_atlasSize;
-uniform vec4 u_spr[3];   // idle.xy, half.xy (atlas px); shut.xy, frame w, h; the face crop rect (frame px)
-uniform vec4 u_lie;      // the frame's top-left in layer px, doze 0 .. 1, brightness
-uniform vec4 u_breath;   // her chest from x0 to x1 (frame px), the line down her middle (y), 0
+uniform vec4 u_spr[6];   // idle.xy, half.xy (atlas px); shut.xy, frame w, h; the face crop (frame px); shin 0's and
+                         // shin 1's atlas rects; their top-lefts (at the knees) in frame px
+uniform vec4 u_sit;      // the frame's top-left in layer px, doze 0 .. 1, brightness
+uniform vec4 u_body;     // waist y (frame px), the legs' swing (rad), 0, 0
 
 vec4 tap(vec4 r, vec2 p) {
     if (p.x < 0.0 || p.y < 0.0 || p.x > r.z || p.y > r.w) return vec4(0.0);
@@ -1475,18 +1477,24 @@ vec4 crop(vec2 at, vec2 p, vec4 idle) {
     if (q.x < 1.5 || q.y < 1.5 || q.x > u_spr[2].z - 1.5 || q.y > u_spr[2].w - 1.5) return idle;
     return tap(vec4(at, u_spr[2].zw), q);
 }
+// a shin swung by angle a about its top edge (the knee): foreshortened to cos(a), wider by a little toward you
+vec4 shin(vec4 r, vec2 at, float a, vec2 f) {
+    vec2 q = f - at;
+    float hw = r.z * 0.5;
+    return tap(r, vec2((q.x - hw) / (1.0 + 0.08 * sin(a)) + hw, q.y / cos(a)));
+}
+vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
 
 void main() {
-    vec2 f = v_uv * u_size - u_lie.xy;
-    float t = mod(u_time, 1200.0), doze = clamp(u_lie.z, 0.0, 1.0);
-    // breathing: across her body over the chest, about the line down her middle; slower and deeper asleep
-    float x0 = u_breath.x, x1 = u_breath.y;
-    float chest = smoothstep(x0, mix(x0, x1, 0.4), f.x) * (1.0 - smoothstep(mix(x0, x1, 0.8), x1 + 0.3 * (x1 - x0), f.x));
-    float br = mix(0.5 + 0.5 * sin(t * 1.7), 0.5 + 0.5 * sin(t * 0.8), doze) * mix(0.03, 0.05, doze) * chest;
-    vec2 p = vec2(f.x, u_breath.z + (f.y - u_breath.z) / (1.0 + br));
+    vec2 f = v_uv * u_size - u_sit.xy;
+    float t = mod(u_time, 1200.0), doze = clamp(u_sit.z, 0.0, 1.0);
+    // breathing: a slight stretch above the waist; slower and deeper asleep
+    float up = max(0.0, u_body.x - f.y);
+    float br = mix(0.5 + 0.5 * sin(t * 1.7), 0.5 + 0.5 * sin(t * 0.8), doze) * mix(0.012, 0.02, doze);
+    vec2 p = vec2(f.x, f.y < u_body.x ? u_body.x - up / (1.0 + br) : f.y);
     vec4 idle = tap(vec4(u_spr[0].xy, u_spr[1].zw), p);
     // the blink, eased; dozing holds her eyes half then fully shut
-    float bt = mod(t, 5.2), bt2 = mod(t + 2.3, 13.0);
+    float bt = mod(t, 4.9), bt2 = mod(t + 2.3, 12.0);
     float blink = smoothstep(0.0, 0.08, bt) * (1.0 - smoothstep(0.11, 0.26, bt))
         + smoothstep(0.25, 0.31, bt2) * (1.0 - smoothstep(0.34, 0.46, bt2));
     float e = max(blink, smoothstep(0.0, 1.0, doze));
@@ -1495,11 +1503,16 @@ void main() {
         vec4 cHalf = crop(u_spr[0].zw, p, idle), cShut = crop(u_spr[1].xy, p, idle);   // "half" is reserved in GLSL ES
         c = e < 0.5 ? mix(idle, cHalf, e * 2.0) : mix(cHalf, cShut, e * 2.0 - 1.0);
     }
+    // the legs swinging, one forward as the other goes back, a little unevenly; still asleep
+    float sw = u_body.y * (1.0 - doze) * (0.8 + 0.2 * sin(t * 0.31));
+    float a0 = sw * sin(t * 2.4), a1 = sw * sin(t * 2.4 + 3.1);
+    c = over(shin(u_spr[3], u_spr[5].xy, a0, f), c);
+    c = over(shin(u_spr[4], u_spr[5].zw, a1, f), c);
     vec3 rgb = c.rgb / max(c.a, 0.0001);
-    gl_FragColor = vec4(rgb * u_lie.w, c.a);
+    gl_FragColor = vec4(rgb * u_sit.w, c.a);
 }
 `;
 
-module.exports = { miku: MIKU, mikuLie: MIKU_LIE, rdash: RDASH_PACKED, shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH_PACKED, boxes: BOXES, atext: ATEXT };
+module.exports = { miku: MIKU, mikuSit: MIKU_SIT, rdash: RDASH_PACKED, shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH_PACKED, boxes: BOXES, atext: ATEXT };
 Object.defineProperty(module.exports, 'CFG', { value: CFG, enumerable: false });
 Object.defineProperty(module.exports, 'rdashNeedle', { value: RDASH_NEEDLE, enumerable: false });
