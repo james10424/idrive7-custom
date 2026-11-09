@@ -1026,12 +1026,13 @@ class HudApp {
         return null;
     }
 
-    /** Average consumption for the period picked on the center screen, in the car's unit; null when not sent lately. */
+    /** Average consumption for the period picked on the center screen, in the car's unit; null before the car sends it.
+     *  The last value stands until the next: the car notifies it only when it changes (a 2-minute timeout here showed
+     *  "--" on the car, Nov 9 2026). */
     _consumption() {
-        const now = Date.now();
         let v = null;
-        if (isNum(this.consAvg) && now - this.consAt < 120000) v = this.consAvg;
-        else if (isNum(this.consBc) && now - this.consBcAt < 120000) {
+        if (isNum(this.consAvg)) v = this.consAvg;
+        else if (isNum(this.consBc)) {
             const c = this.config.consumption || {};
             v = this.consBc * (isNum(c.factor) ? c.factor : 0.1) + (isNum(c.offset) ? c.offset : 0);
         } else return this.car.data().demo ? (this.setting('units') === 'us' ? 235.215 / 9.8 : 9.8) : null;
