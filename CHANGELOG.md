@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 8 2026
 
+- **Custom Cluster 0.1.29:** the song title is gone from Regal and Sport: on the car the player never gave the title (playerMetadata had only the artist and album, and the track list and main menu showed nothing either). The app no longer subscribes to HmiMediaState or loads the car's fonts; Regal is down to 4 layers.
 - **Custom HUD 0.1.11:** when cluster-render's mapping guard has turned the HUD off (two display restarts right after its mappings; it stays off until `cluster-render guard-reset` as root), the status page says so instead of "0 of 1 layer drawn (1 waiting: target idle)", and the log names the reset command.
 - **Custom Cluster 0.1.28:** the song title, for real this time: the car's player sends only the artist and the album in HmiMediaState playerMetadata ("Aimer" / "Sleepless Nights", car log Nov 9 2026), so the title now comes from the playing track's entry in HmiMediaState tracks (by trackSelection's id), else mainMenuMetadata's first line that isn't the artist or album, else the artist as before. The log says where each title came from and the raw sources when they change. The bench sends media the car's way.
 - **Custom HUD 0.1.10:** fixes "at most 30 uniforms a layer" on the car: 0.1.9's Miku set 34 uniform names on her one layer and cluster-render refused it. The fixed sprite values (eye frames and tails, arms, legs) now go up as three vec4 arrays, 20 names in all. The bench now refuses a 31st uniform name the same way the car does.
