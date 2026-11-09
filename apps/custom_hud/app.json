@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",

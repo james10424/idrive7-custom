@@ -1211,8 +1211,8 @@ const MIKU = `// The Miku layout's character (GLSL ES 1.00), from frames baked o
 // asset (u_atlas, straight alpha, u_atlasSize px). She stands, as on a bus: the bake posed her at u_counts.x lean angles
 // (11) with the model's own body and head rotation, from a full lean left with the braking face to a full lean right
 // with the happy face, close enough together that the shader can blend the two nearest to u_drive.x without a double
-// image (-1 hard braking .. +1 pulling away hard; the app gives it a spring, so she sways back past upright when the car
-// settles). Upright she blinks
+// image (-1 hard braking .. +1 pulling away hard; the app eases it toward the g, so she straightens when the car
+// settles without swaying past upright). Upright she blinks
 // (idle -> half -> shut, eased) and now and then smiles as if talking. The twin tails are their own sprite: a wave runs
 // down them and speed blows them out. The upper body breathes (a slight stretch above the waist). Nothing is uploaded
 // after the atlas; she is animated on the renderer's clock (u_time). u_drive = (lean, speed, point, brightness): point
