@@ -25,6 +25,10 @@
  *               the Miku widget's "feet" point; anchorPx [x, y] px added to it on the HUD (right, down)
  *   arms        [{ parts: ["part id"] }, ...] (up to 2): her arms, each its own sprite that the HUD turns from the
  *               shoulder (to point toward the indicator); left out of the body frames
+ *   legs        [{ parts: ["part id"], drawables: ["drawable id"], knee: 0.5, ankle: 0.85 }, ...] (up to 2): her legs,
+ *               each its own sprite, left out of the body frames. The HUD plants the foot and turns the thigh at the
+ *               hip and the shin at the knee to bend it; knee and ankle are fractions down the leg (from the top of its
+ *               mesh, under the skirt, to the sole)
  *   hide        ["part id"]: left out entirely
  *   cut         { "drawable id": model y }: that drawable's triangles wholly below the y left out (in the idle pose)
  *   heightPx    her height on the HUD in px (200), or pxPerUnit: HUD px per model unit
@@ -202,6 +206,12 @@ async function expressionParams(names) {
     }
     return out;
 }
+/* Is drawable i one of these drawables (by id) or inside one of these parts? */
+function inLeg(L, leg) {
+    const byPart = inParts(L, leg.parts || []), d = L.model.drawables, ids = new Set();
+    (leg.drawables || []).forEach((id) => { const i = d.ids.indexOf(id); if (i >= 0) ids.add(i); else log('  (no drawable "' + id + '")'); });
+    return (i) => ids.has(i) || byPart(i);
+}
 /* Is drawable i inside one of these parts (by id), at any depth? */
 function inParts(L, ids) {
     const parts = L.model.parts, d = L.model.drawables, want = new Set();
@@ -314,6 +324,9 @@ async function bake(L, cfg) {
     // body frame. The bake measures where each shoulder sits and how the arm turns at a full lean each way
     const armsIn = (cfg.arms || []).map((a) => inParts(L, a.parts || []));
     const isArm = (i) => armsIn.some((f) => f(i));
+    // legs: each its own sprite (the HUD bends them at the knee with her feet planted); left out of every body frame
+    const legsIn = (cfg.legs || []).slice(0, 2).map((g) => inLeg(L, g));
+    const isLeg = (i) => legsIn.some((f) => f(i));
     const R = new Renderer(L);
     const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
     makeCuts(L, cfg.cut, Object.assign({}, cfg.params, idle));
@@ -333,7 +346,7 @@ async function bake(L, cfg) {
     const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
     log('frame ' + fw + 'x' + fh + ' px');
     const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
-    const body = { skip: (i) => hidden(i) || (tails ? tails(i) : false) || isArm(i) };
+    const body = { skip: (i) => hidden(i) || (tails ? tails(i) : false) || isArm(i) || isLeg(i) };
     const names = ['idle', 'half', 'shut', 'talk'], frames = {};
     for (const n of names) {
         const f = (cfg.frames && cfg.frames[n]) || {};
@@ -416,6 +429,32 @@ async function bake(L, cfg) {
         const cv = render({ only: (i) => f(i) && !hidden(i) }), bb = alphaBox(cv);
         if (bb && armPose[j].rest) arms.push({ j, cv, bb, pose: armPose[j] });
     });
+    // each leg at rest: its sprite, and the hip (the top of its mesh), knee and ankle in frame px, each at the middle
+    // of the leg's drawn width on that row
+    const legs = [];
+    legsIn.forEach((f, j) => {
+        const d = L.model.drawables, g = cfg.legs[j];
+        let top = -Infinity, bot = Infinity;
+        for (let i = 0; i < d.count; i++) {
+            if (!f(i) || hidden(i) || !C.Utils.hasIsVisibleBit(d.dynamicFlags[i])) continue;
+            const v = d.vertexPositions[i];
+            for (let k = 1; k < v.length; k += 2) { top = Math.max(top, v[k]); bot = Math.min(bot, v[k]); }
+        }
+        if (!isFinite(top)) return;
+        const cv = render({ only: (i) => f(i) && !hidden(i) }), bb = alphaBox(cv);
+        if (!bb) return;
+        const dd = cv.getContext('2d').getImageData(0, 0, fw, fh).data;
+        const mid = (y) => {
+            const r = Math.max(0, Math.min(fh - 1, Math.round(y)));
+            let a = -1, b = -1;
+            for (let x = 0; x < fw; x++) if (dd[(r * fw + x) * 4 + 3] > 128) { if (a < 0) a = x; b = x; }
+            return a < 0 ? fw / 2 : (a + b) / 2;
+        };
+        const yAt = (fr) => toFrame(0, top - fr * (top - bot))[1];
+        const hy = Math.max(yAt(0), bb[1] + 2), ky = yAt(isFinite(g.knee) ? g.knee : 0.5), ay = yAt(isFinite(g.ankle) ? g.ankle : 0.85);
+        legs.push({ j, cv, bb, hip: [mid(hy + 3), hy], knee: [mid(ky), ky], ankle: [mid(ay), ay] });
+        log('  leg ' + j + ': hip ' + mid(hy + 3).toFixed(1) + ',' + hy.toFixed(1) + ' knee ' + mid(ky).toFixed(1) + ',' + ky.toFixed(1) + ' ankle ' + mid(ay).toFixed(1) + ',' + ay.toFixed(1));
+    });
     let tl = null;
     if (tails) {
         const cv = render({ only: tails }), bb = alphaBox(cv);
@@ -425,14 +464,19 @@ async function bake(L, cfg) {
     const items = names.map((n) => ({ n, cv: frames[n], bb: [0, 0, fw, fh] }));
     if (tl) items.push({ n: 'tails', cv: tl.cv, bb: tl.bb });
     arms.forEach((a) => items.push({ n: 'arm' + a.j, cv: a.cv, bb: a.bb }));
-    let x = 0, y = 0, rowH = 0;
+    legs.forEach((g) => items.push({ n: 'leg' + g.j, cv: g.cv, bb: g.bb }));
+    // shelves: the frames make rows; each smaller sprite goes in the first row with room beside them (the atlas only
+    // grows a row when nothing fits)
+    const rows = [];
     items.forEach((it) => {
         const w = it.bb[2] + 2 * pad, h = it.bb[3] + 2 * pad;
-        if (x + w > 1024) { x = 0; y += rowH; rowH = 0; }
-        it.at = [x + pad, y + pad]; x += w; rowH = Math.max(rowH, h);
+        const frame = names.includes(it.n);   // the frames keep their order, row after row
+        let r = rows.find((q) => q.x + w <= 1024 && h <= q.h && (!frame || q === rows[rows.length - 1]));
+        if (!r) { r = { x: 0, y: rows.length ? rows[rows.length - 1].y + rows[rows.length - 1].h : 0, h }; rows.push(r); }
+        it.at = [r.x + pad, r.y + pad]; r.x += w;
     });
     let AW = 64; while (AW < Math.max.apply(null, items.map((it) => it.at[0] + it.bb[2] + pad))) AW *= 2;
-    const AH = y + rowH;
+    const AH = rows.length ? rows[rows.length - 1].y + rows[rows.length - 1].h : 0;
     const atlas = document.createElement('canvas'); atlas.width = AW; atlas.height = AH;
     const ag = atlas.getContext('2d');
     items.forEach((it) => ag.drawImage(it.cv, it.bb[0], it.bb[1], it.bb[2], it.bb[3], it.at[0], it.at[1], it.bb[2], it.bb[3]));
@@ -469,6 +513,25 @@ async function bake(L, cfg) {
         anchor: [Math.round(anchor[0] - ap[0]), Math.round(anchor[1] - ap[1])],
         hipY: Math.round(toFrame(0, waist)[1]), headY: Math.round((bandY0 + bandY1) / 2), leanShift: shift,
     };
+    if (legs.length) {
+        // where her hips go at each lean angle: the middle of the body frame (legless) on the row the legs hang from
+        const hipRow = Math.round(legs[0].hip[1] + 4);
+        const rowMid = (cv) => {
+            const dd = cv.getContext('2d').getImageData(0, Math.max(0, hipRow - 2), fw, 5).data;
+            let sx = 0, sa = 0;
+            for (let k = 0; k < dd.length; k += 4) { const a = dd[k + 3]; sx += ((k / 4) % fw) * a; sa += a; }
+            return sa ? sx / sa : fw / 2;
+        };
+        const h0 = rowMid(frames.idle);
+        info.hipShift = leanNames.map((n) => Math.round((rowMid(frames[n]) - h0) * 10) / 10);
+        log('hip shift per lean angle (px): ' + info.hipShift.join(', '));
+        const cx = toFrame(centreX, 0)[0], r1 = (v) => Math.round(v * 10) / 10;
+        info.legs = legs.map((g) => {
+            const t = byN['leg' + g.j];
+            return { rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]], at: [t.bb[0], t.bb[1]], hip: g.hip.map(r1), knee: g.knee.map(r1), ankle: g.ankle.map(r1),
+                side: Math.sign(g.hip[0] - cx) || 1 };
+        });
+    }
     if (LK) { info.look = lookNames.map((n) => byN[n].at); info.lookShift = lookShift; }
     if (DN) { info.doze = dozeNames.map((n) => byN[n].at); info.dozeShift = dozeShift; }
     if (tl) {
