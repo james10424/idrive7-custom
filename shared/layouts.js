@@ -35,6 +35,7 @@ const TYPES = {
     swatchimg: [],
     boxes: ['boxes'],
     atext: ['text', 'font'],
+    odo: [],
     miku: [],
     mikuSit: [],
 };

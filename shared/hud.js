@@ -126,6 +126,10 @@
  *             half, four dark test colours over the bottom half
  *   swatchimg calibration: image layer, the identical picture painted into pixels (calibration.js
  *             swatchImage), so a photo of the two strips shows how the effect and image paths differ
+ *   odo       effect layer (shaders.js odo): a mechanical odometer, "drums" (6) digit drums of "font"'s glyph atlas
+ *             (r_gl), "color" role, "gap" px between drums (2), "frame" px (1); the car's KombiIF mileageKilometre in
+ *             the units setting's unit, the last drum turning with the distance (from the speed between whole km) and
+ *             the others rolling over as the real gears do. Blank drums without a reading.
  *   atext     effect layer (shaders.js atext): text drawn by the GPU from a glyph atlas, the probe for the path
  *             that needs no pixel writes. The font's glyphs go up once per connection as an R8 asset (one byte a
  *             pixel, not a layer, shared by every atext widget on that font); the widget is "cells" equal cells
@@ -492,6 +496,7 @@ class HudApp {
         this.carUnits = { press: null, temp: null, psiSeen: false };   // the car's display units, for the TPMS values
         this.program = null;             // 'S' / 'M' from the MDrive gearbox display, else null (D)
         this.fuelL = null; this.rangeKm = null; this.ambient = null;   // KombiIF tank / range, outside temperature
+        this.odoKm = null; this.odoAcc = 0; this.odoAt = 0;              // KombiIF odometer (whole km) and the distance since its last km
         this.tyres = { p: {}, t: {} };                                  // TPMS pressure (bar) and temperature (C) per corner FL FR RL RR
         this.activeName = null;          // the layout shown now ('off' = nothing)
         this.pixelBytes = 0;             // what the layout's image layers and glyph atlases cost of cluster-render's pixel memory
@@ -536,6 +541,10 @@ class HudApp {
                     const f = v && v.fluidLevelFuelTank, r = v && v.range;
                     this.fuelL = isNum(f) && f >= 0 && f < 255 ? f : null;
                     this.rangeKm = isNum(r) && r >= 0 && r < 4095 ? r : null;
+                    // the odometer, whole km (cauliflowermossgrape's Live Data reads it here; MileageSupreme never came)
+                    const m = v && v.mileageKilometre;
+                    const km = isNum(m) && m > 0 && m < 16777215 ? m : null;
+                    if (km !== this.odoKm) { this.odoKm = km; this.odoAcc = 0; }
                 },
             },
             // the trip computer for the period picked on the center screen (this trip, since refuelling, individual, long term):
@@ -1469,6 +1478,23 @@ class HudApp {
         return kind === 'p' ? (rear ? 2.5 : 2.3) : (rear ? 27 : 24);
     }
 
+    /**
+     * The odometer in km, between the car's whole-km readings too: the distance driven since its last km comes from the
+     * speed (kept under the next km, so the drums never pass the car's own reading). Time-based, so any number of
+     * widgets may ask each tick. Null without a reading; the demo drive starts at 23817 km.
+     */
+    _odometer(now) {
+        if (!isNum(now)) now = Date.now();
+        const dt = this.odoAt ? Math.min(1000, Math.max(0, now - this.odoAt)) : 0;
+        this.odoAt = now;
+        const sp = this._raw('speed');
+        if (isNum(sp) && sp > 0) this.odoAcc += sp * dt / 3600000;
+        // KombiIF's whole km, else MileageSupreme's (no longer asked for: it never came on the car)
+        const base = isNum(this.odoKm) ? this.odoKm : this.mileage;
+        if (isNum(base)) { this.odoAcc = Math.min(this.odoAcc, 0.999); return base + this.odoAcc; }
+        return this.car.data().demo ? 23817 + this.odoAcc : null;
+    }
+
     _raw(name) {
         if (name === 'boost') return this._boost();
         if (name === 'rpm' && isNum(this.rpmF)) return this.rpmF;
@@ -1600,9 +1626,6 @@ class HudApp {
     }
 
     _cruiseLit() { return this.accOn || (!!this.car.data().demo && Math.floor(Date.now() / 10000) % 3 === 2); }
-
-    /** The odometer in km, null when the car has not sent it; the demo drive's made up. */
-    _odometer() { return isNum(this.mileage) ? this.mileage : this.car.data().demo ? 37415 : null; }
 
     /** Where the red and orange marks start on a rev scale that ends at `max` rpm, as fractions 0..1: red from the
      *  redline, but always covering at least the last 500 rpm (the M40i's scale ends right at its 7000 redline),
@@ -2011,6 +2034,18 @@ class HudApp {
                 this.log.info('widget "' + w.id + '": ' + x.cells + ' cells of ' + (w.w / x.cells).toFixed(1) + 'x' + w.h +
                     ' px; the glyphs keep their shape at w ' + x.cells * a.cellW + ', h ' + a.cellH);
             }
+        } else if (w.type === 'odo') {
+            const a = this._atlas(w.font || 'r_gl', x.ci);
+            x.atlas = a;
+            const dig = '0123456789'.split('').map((ch) => Math.max(0, a.chars.indexOf(ch))).concat([0, 0]);
+            x.drums = Math.max(1, Math.min(8, w.drums || 6));
+            c.bind(ref, 'u_font', a.ref);
+            c.uniform(ref, 'u_grid', [a.cols, a.rows]);
+            c.uniform(ref, 'u_dig', dig, { type: 'vec4' });
+            c.uniform(ref, 'u_color', rgba(color(t, w.color || 'fg')));
+            c.uniform(ref, 'u_size', [w.w, w.h]);
+            c.uniform(ref, 'u_odo', [x.drums, isNum(w.gap) ? w.gap : 2, 0, isNum(w.frame) ? w.frame : 1]);
+            c.uniform(ref, 'u_drum', [0, 0, 0, 0, 0, 0, 0, 0], { type: 'vec4' });
         } else if (w.type === 'gridlabels') this._paintGridLabels(x);
         else if (w.type === 'icon') this._blit(x, null, paintIcon(w.icon, w.w, w.h, color(t, w.color || 'fg')));
         else if (w.type === 'sdash') {
@@ -2294,6 +2329,24 @@ class HudApp {
             if (!force && s === x.last) return;
             x.last = s; x.lastPaint = now;
             x.c.uniform(x.ref, 'u_text', this._atlasCodes(x, s), { type: 'vec4' });
+        } else if (w.type === 'odo') {
+            // the drums of a mechanical odometer in the units setting's unit: the last turns with the distance, each other
+            // rolls over only through its lower neighbours' last unit (9 -> 0), as the gears of a real one
+            const km = this._odometer(now), us = this.setting('units') === 'us';
+            const n = x.drums, drums = [0, 0, 0, 0, 0, 0, 0, 0];
+            if (isNum(km)) {
+                const v = (us ? km * 0.621371 : km) % Math.pow(10, n);
+                for (let k = 0; k < n; k++) {
+                    const p = Math.pow(10, k), lower = v % p;
+                    const roll = k === 0 ? v % 1 : Math.max(0, lower - (p - 1));
+                    drums[n - 1 - k] = Math.round((Math.floor(v / p) % 10 + roll) * 50) / 50;
+                }
+            }
+            const key = isNum(km) + '|' + drums.join(',');
+            if (!force && key === x.last) return;
+            x.last = key;
+            x.c.uniform(x.ref, 'u_odo', [n, isNum(w.gap) ? w.gap : 2, isNum(km) ? 1 : 0, isNum(w.frame) ? w.frame : 1]);
+            x.c.uniform(x.ref, 'u_drum', drums, { type: 'vec4' });
         } else if (w.type === 'text') {
             if (!force && now - x.lastPaint < (w.rate || TEXT_MS)) return;
             const s = w.needs && this._token(w.needs) === '--' ? '' : this._resolve(w.text);
