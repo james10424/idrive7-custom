@@ -1198,6 +1198,9 @@ class HudApp {
         try { st = fs.statSync(path.join(dir, 'atlas.rgba')); } catch (e) { st = null; }
         const pre = (sit ? 'sit:' : 'sprite:') + ci + ':', key = pre + dir + ':' + (st ? st.mtimeMs : 0);
         if (this.atlases.has(key)) return this.atlases.get(key);
+        // another bake (or a newer file) on this connection: drop the old asset before uploading, so one is in the
+        // pixel memory at a time. Swapping this way while running works on the car (Nov 9 2026: Custom HUD 0.1.18's
+        // Miku lean setting swapped her 1024x564 atlas between the sideways and fb bakes and the new frames showed)
         this.atlases.forEach((a, k) => {
             if (k.indexOf(pre) === 0) { a.c.drop(a.ref); this.atlases.delete(k); }
         });
