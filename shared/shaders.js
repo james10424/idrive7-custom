@@ -1245,11 +1245,12 @@ uniform vec4 u_dozeHead[2]; // how far her head sits from upright in each (x, y 
 uniform vec4 u_legs;        // x, y: leg 0's and leg 1's side (-1 left, 1 right); z: weight shift -1 .. 1; w: 0
 uniform vec4 u_hipShift[3]; // how far her hips sit from upright at each lean angle (px), four per vec4
 
-uniform vec4 u_spr[4];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
+uniform vec4 u_spr[5];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
 #define u_fA u_spr[0]   // idle.xy, half.xy (atlas px of each frame's top-left)
 #define u_fB u_spr[1]   // shut.xy, talk.xy
 #define u_tails u_spr[2]   // atlas rect of the tails sprite (w = 0: none)
 #define u_tailsAt u_spr[3]   // its top-left in frame px, root y in the sprite, length px
+#define u_crop u_spr[4]   // the face, glance and doze frames are crops of this rect (frame px; w = 0: whole frames)
 uniform vec4 u_arm[8];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
 #define u_arm0 u_arm[0]   // atlas rect of an arm sprite (w = 0: none)
 #define u_arm0At u_arm[1]   // its top-left and its shoulder (the pivot), frame px, at rest
@@ -1275,6 +1276,14 @@ vec4 tap(vec4 r, vec2 p) {
 }
 vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
 vec2 rot(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
+// a face, glance or doze frame at atlas px "at": inside the crop rect its own pixels, idle's round it (an older
+// bake's whole frames when there is no crop)
+vec4 cropTap(vec2 at, vec2 fb, vec4 idle) {
+    if (u_crop.z <= 0.0) return tap(vec4(at, u_frame), fb);
+    vec2 q = fb - u_crop.xy;
+    if (q.x < 1.5 || q.y < 1.5 && u_crop.y > 0.5 || q.x > u_crop.z - 1.5 || q.y > u_crop.w - 1.5) return idle;
+    return tap(vec4(at, u_crop.zw), q);
+}
 float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
 
 // an arm: carried and turned with her lean (as the bake measured it), swung up and out from the shoulder to balance
@@ -1416,16 +1425,16 @@ void main() {
     float bt = mod(t, 4.6), bt2 = mod(t + 1.9, 12.0);
     float blink = smoothstep(0.0, 0.07, bt) * (1.0 - smoothstep(0.1, 0.24, bt))
         + smoothstep(0.25, 0.31, bt2) * (1.0 - smoothstep(0.34, 0.46, bt2));
-    vec4 cIdle = tap(vec4(u_fA.xy, u_frame), fb), cHalf = tap(vec4(u_fA.zw, u_frame), fb), cShut = tap(vec4(u_fB.xy, u_frame), fb);
+    vec4 cIdle = tap(vec4(u_fA.xy, u_frame), fb), cHalf = cropTap(u_fA.zw, fb, cIdle), cShut = cropTap(u_fB.xy, fb, cIdle);
     vec4 upright = blink < 0.5 ? mix(cIdle, cHalf, blink * 2.0) : mix(cHalf, cShut, blink * 2.0 - 1.0);
     float talk = smoothstep(0.85, 1.0, sin(t * 0.37)) * (1.0 - smoothstep(0.0, 0.3, abs(lean))) * calm;
-    if (talk > 0.001) upright = mix(upright, tap(vec4(u_fB.zw, u_frame), fb), talk);
+    if (talk > 0.001) upright = mix(upright, cropTap(u_fB.zw, fb, cIdle), talk);
     // glancing: the two nearest baked glances, the middle one being upright (blinking) itself
     float lookMid = (lookN - 1.0) * 0.5, lookHead = 0.0;
     if (look != 0.0) {
         float lk = (look + 1.0) * lookMid, j0 = min(floor(lk), lookN - 2.0), lf = lk - j0;
-        vec4 a = abs(j0 - lookMid) < 0.5 ? upright : tap(vec4(lookFrame(j0), u_frame), fb);
-        vec4 b = abs(j0 + 1.0 - lookMid) < 0.5 ? upright : tap(vec4(lookFrame(j0 + 1.0), u_frame), fb);
+        vec4 a = abs(j0 - lookMid) < 0.5 ? upright : cropTap(lookFrame(j0), fb, cIdle);
+        vec4 b = abs(j0 + 1.0 - lookMid) < 0.5 ? upright : cropTap(lookFrame(j0 + 1.0), fb, cIdle);
         upright = mix(a, b, lf);
         lookHead = mix(lookHeadAt(j0), lookHeadAt(j0 + 1.0), lf);
     }
@@ -1433,8 +1442,8 @@ void main() {
     vec2 dozeHead = vec2(0.0);
     if (doze > 0.0) {
         float dk = doze * (2.0 + dozeN), d0 = min(floor(dk), 1.0 + dozeN), df = dk - d0, d1 = d0 + 1.0;
-        vec4 a = d0 < 0.5 ? upright : d0 < 1.5 ? cHalf : d0 < 2.5 ? cShut : tap(vec4(dozeFrame(d0 - 3.0), u_frame), fb);
-        vec4 b = d1 < 1.5 ? cHalf : d1 < 2.5 ? cShut : tap(vec4(dozeFrame(d1 - 3.0), u_frame), fb);
+        vec4 a = d0 < 0.5 ? upright : d0 < 1.5 ? cHalf : d0 < 2.5 ? cShut : cropTap(dozeFrame(d0 - 3.0), fb, cIdle);
+        vec4 b = d1 < 1.5 ? cHalf : d1 < 2.5 ? cShut : cropTap(dozeFrame(d1 - 3.0), fb, cIdle);
         upright = mix(a, b, df);
         dozeHead = mix(dozeHeadAt(d0 - 3.0), dozeHeadAt(d1 - 3.0), df);
     }

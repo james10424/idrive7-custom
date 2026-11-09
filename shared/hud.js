@@ -154,6 +154,8 @@
  * "themes": [...] shows it only in those themes. Text "color2": a second role, the colour at the bottom
  * of the box (a top-to-bottom gradient, the chrome look). Text: "hotWhen": "now" turns it the shift red
  * at the shift point; "coldWhen": "cold" turns it blue while the cold guard lowers the shift point.
+ * "outline": px draws a solid border that wide round the glyphs, in "outlineColor" (ink), so light text stands out
+ * on a lit lamp; "litGear": the Regal gear row slot (P 0 R 1 N 2 D 3, number 5) turns it "litColor" (fg) while lit.
  * Text "slide": { signal ("accGap" = the car ahead in m), max, yTop, yBottom }: the text's middle rides from yBottom (0)
  * to yTop (max) inside its box, blank without a value; "hotWhen": "closing" turns it red while the car ahead closes fast.
  * scale: "over" as revbar; "redFrom": true draws the numbers from the redline on in red.
@@ -1160,7 +1162,9 @@ class HudApp {
             if (!st) throw new Error('no baked frames in ' + dir + ' (tools/live2d_bake, then scripts/deploy.sh --miku)');
             const info = JSON.parse(fs.readFileSync(path.join(dir, 'atlas.json'), 'utf8'));
             const [aw, ah] = info.atlas || [];
-            if (!(aw > 0 && ah > 0 && aw <= 2048 && ah <= 2048)) throw new Error('atlas.json: bad "atlas" size');
+            if (!(aw > 0 && ah > 0)) throw new Error('atlas.json: bad "atlas" size');
+            // the instrument cluster (KOMBI) restarted on a 1024x1128 RGBA asset (Nov 2026): nothing over 1024 a side
+            if (aw > 1024 || ah > 1024) throw new Error('atlas ' + aw + 'x' + ah + ' is over 1024 px a side, which restarts the instrument cluster; bake again with the current tools/live2d_bake');
             if (!info.frames || !info.frames.idle || !Array.isArray(info.frame) || !Array.isArray(info.anchor)) throw new Error('atlas.json: needs "frame", "anchor" and frames.idle');
             const px = fs.readFileSync(path.join(dir, 'atlas.rgba'));
             if (px.length !== aw * ah * 4) throw new Error('atlas.rgba is ' + px.length + ' bytes, ' + aw + 'x' + ah + ' RGBA needs ' + aw * ah * 4);
@@ -1578,6 +1582,12 @@ class HudApp {
     }
 
     /** {{token}} -> display text. */
+    /** The Regal gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D and S 3, M 5 the gear number), -1 for none. */
+    _regalGear() {
+        const stage = this._token('stage');
+        return Object.prototype.hasOwnProperty.call(REGAL_GEARS, stage) ? REGAL_GEARS[stage] : -1;
+    }
+
     _token(tok) {
         const us = this.setting('units') === 'us';
         const fix = (v, n) => (isNum(v) ? v.toFixed(n) : '--');
@@ -2156,7 +2166,9 @@ class HudApp {
             // moved only every third frame would step. A message goes up only when the lean or speed changes a step
             x.timer = setInterval(() => this._guard('widget ' + w.id, () => this._update(x, Date.now(), false)), MIKU_MS);
             const tl = j.tails || null;
-            c.uniform(ref, 'u_spr', spr.concat(rect(tl), tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1]), { type: 'vec4' });
+            // u_spr[4]: the rect the face, glance and doze frames are crops of (none: an older bake's whole frames)
+            const cr = Array.isArray(j.crop) && j.crop.length === 4 ? j.crop : [0, 0, 0, 0];
+            c.uniform(ref, 'u_spr', spr.concat(rect(tl), tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1], cr), { type: 'vec4' });
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);
@@ -2240,6 +2252,9 @@ class HudApp {
                     role = [0, 1, 2, 3].map((i) => Math.round(a[i] + (b[i] - a[i]) * f));
                 }
             } else if (w.near && this._nearMark(w.near[0]) === w.near[1]) role = w.nearColor || 'fg';
+            // "litGear": the Regal gear row's slot (P 0, R 1, N 2, D 3, the gear number 5): while the lit gear box sits
+            // behind it, the text turns "litColor" (fg: white on the box is 5.0:1, WCAG AA; the VFD orange was 1.9:1)
+            if (isNum(w.litGear) && this._regalGear() === w.litGear) role = w.litColor || 'fg';
             if (w.hotWhen === 'closing') { if (this._closing()) role = 'hot'; }
             else if (w.hotWhen || w.coldWhen) {
                 const sp = this._shift();
@@ -2270,6 +2285,7 @@ class HudApp {
                 font: w.font, color: color(this.theme, role), align: w.align, spacing: w.spacing, offsetY: offY,
                 color2: w.color2 && role !== 'hot' ? color(this.theme, w.color2) : null,
                 glow: w.glow ? this.theme.glow : 0,
+                outline: w.outline ? { px: w.outline, color: color(this.theme, w.outlineColor || 'ink') } : null,
             });
             this._blitDiff(x, buf);
         } else if (w.type === 'badge') {
@@ -2356,7 +2372,7 @@ class HudApp {
             // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
             const n2 = w.led2N || 15, r2 = w.led2Range || [0, 1.5], b2 = this._raw(w.led2Signal || 'boost');
             const led2 = isNum(b2) ? Math.floor(Math.min(1, Math.max(0, (b2 - r2[0]) / (r2[1] - r2[0]))) * n2 + 0.5) / n2 : 0;
-            const stage = this._token('stage'), gi = Object.prototype.hasOwnProperty.call(REGAL_GEARS, stage) ? REGAL_GEARS[stage] : -1;
+            const gi = this._regalGear();
             const bl = this._brakeLamp(), lamps = [bl === 'park' ? 1 : bl === 'hold' ? 2 : 0, this._turnLit('L') ? 1 : 0, this._turnLit('R') ? 1 : 0, this._cruiseLit() ? 1 : 0];
             // speed on the 0..spdMax mph scale with spdMid at its middle, each half linear
             const mid = w.spdMid || 55, top = w.spdMax || 85, mph = isNum(sp) ? Math.max(0, sp * 0.621371) : 0;

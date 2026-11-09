@@ -26,7 +26,7 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
   - **Glancing and dozing:** a second after the car stops pulling or braking (under 0.03 g) she starts glancing left and right now and then, eyes first, then her head, holding a second or three. Stopped for 15 s, she starts dozing in a loop: 5 s asleep (eyes shut, head drooping), 5 s awake and glancing, then asleep again, easing in and out of each. Pulling away or braking wakes her and the lean takes over.
   - **Legs:** her feet stay planted while her hips move with the lean, and her knees flex a little as she sways. Now and then, while idle, she shifts her weight onto one leg and bends the other knee.
   - **During route guidance** she steps aside, because BMW's turn map and street name fill her corner; she comes back when the route ends.
-  - The frames go up once as one image (about 9 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up while she moves.
+  - The frames go up once as one image (about 4.4 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up while she moves.
   - Redline is gone: if you had it picked anywhere, it switches to Miku (so does Perch, its working name).
 
 ## Themes

@@ -460,23 +460,51 @@ async function bake(L, cfg) {
         const cv = render({ only: tails }), bb = alphaBox(cv);
         if (bb) tl = { cv, bb };
     }
-    // pack the frames in rows no wider than 1024, then the tails
-    const items = names.map((n) => ({ n, cv: frames[n], bb: [0, 0, fw, fh] }));
+    // the face, glance and doze frames differ from idle only around her head: each keeps just one crop, the same rect
+    // for all of them (where any of them differs from idle, plus a margin), and the HUD draws idle round it
+    const cropped = names.filter((n) => n !== 'idle' && n.indexOf('lean') !== 0);
+    let crop = null;
+    if (cropped.length) {
+        const base = frames.idle.getContext('2d').getImageData(0, 0, fw, fh).data;
+        let x0 = fw, y0 = fh, x1 = -1, y1 = -1;
+        cropped.forEach((n) => {
+            const dd = frames[n].getContext('2d').getImageData(0, 0, fw, fh).data;
+            for (let k = 0; k < dd.length; k += 4) {
+                if (Math.abs(dd[k] - base[k]) + Math.abs(dd[k + 1] - base[k + 1]) + Math.abs(dd[k + 2] - base[k + 2]) + Math.abs(dd[k + 3] - base[k + 3]) < 6) continue;
+                const q = k / 4, x = q % fw, y = (q - x) / fw;
+                x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+            }
+        });
+        if (x1 >= 0) {
+            const m = 4;
+            x0 = Math.max(0, x0 - m); y0 = Math.max(0, y0 - m); x1 = Math.min(fw - 1, x1 + m); y1 = Math.min(fh - 1, y1 + m);
+            crop = [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
+            log('face, glance and doze frames cropped to ' + crop[2] + 'x' + crop[3] + ' at ' + crop[0] + ',' + crop[1]);
+        }
+    }
+    // pack everything into the atlas, at most 1024 px a side: the instrument cluster (KOMBI) restarted on a
+    // 1024x1128 RGBA asset (Nov 2026)
+    const items = names.map((n) => ({ n, cv: frames[n], bb: crop && cropped.includes(n) ? crop : [0, 0, fw, fh] }));
     if (tl) items.push({ n: 'tails', cv: tl.cv, bb: tl.bb });
     arms.forEach((a) => items.push({ n: 'arm' + a.j, cv: a.cv, bb: a.bb }));
     legs.forEach((g) => items.push({ n: 'leg' + g.j, cv: g.cv, bb: g.bb }));
-    // shelves: the frames make rows; each smaller sprite goes in the first row with room beside them (the atlas only
-    // grows a row when nothing fits)
-    const rows = [];
-    items.forEach((it) => {
+    // a skyline: tallest first, each where its top lands lowest (then leftmost)
+    const MAX = 1024, sky = new Array(MAX).fill(0);
+    items.slice().sort((a, b) => b.bb[3] - a.bb[3] || b.bb[2] - a.bb[2]).forEach((it) => {
         const w = it.bb[2] + 2 * pad, h = it.bb[3] + 2 * pad;
-        const frame = names.includes(it.n);   // the frames keep their order, row after row
-        let r = rows.find((q) => q.x + w <= 1024 && h <= q.h && (!frame || q === rows[rows.length - 1]));
-        if (!r) { r = { x: 0, y: rows.length ? rows[rows.length - 1].y + rows[rows.length - 1].h : 0, h }; rows.push(r); }
-        it.at = [r.x + pad, r.y + pad]; r.x += w;
+        let bx = -1, by = Infinity;
+        for (let x = 0; x + w <= MAX; x++) {
+            let y = 0;
+            for (let k = x; k < x + w; k++) if (sky[k] > y) y = sky[k];
+            if (y < by) { by = y; bx = x; }
+        }
+        if (bx < 0) throw new Error('a sprite ' + w + ' px wide does not fit in ' + MAX + ' px');
+        for (let k = bx; k < bx + w; k++) sky[k] = by + h;
+        it.at = [bx + pad, by + pad];
     });
     let AW = 64; while (AW < Math.max.apply(null, items.map((it) => it.at[0] + it.bb[2] + pad))) AW *= 2;
-    const AH = rows.length ? rows[rows.length - 1].y + rows[rows.length - 1].h : 0;
+    const AH = Math.max.apply(null, items.map((it) => it.at[1] + it.bb[3] + pad));
+    if (AW > MAX || AH > MAX) throw new Error('the atlas would be ' + AW + 'x' + AH + ': over ' + MAX + ' px a side, which restarts the instrument cluster. Bake fewer or smaller frames (heightPx, lean.steps, look.steps, doze.steps)');
     const atlas = document.createElement('canvas'); atlas.width = AW; atlas.height = AH;
     const ag = atlas.getContext('2d');
     items.forEach((it) => ag.drawImage(it.cv, it.bb[0], it.bb[1], it.bb[2], it.bb[3], it.at[0], it.at[1], it.bb[2], it.bb[3]));
@@ -513,6 +541,8 @@ async function bake(L, cfg) {
         anchor: [Math.round(anchor[0] - ap[0]), Math.round(anchor[1] - ap[1])],
         hipY: Math.round(toFrame(0, waist)[1]), headY: Math.round((bandY0 + bandY1) / 2), leanShift: shift,
     };
+    // the face, glance and doze frames are crops of this rect (frame px); their positions are the crops' top-lefts
+    if (crop) info.crop = crop;
     if (legs.length) {
         // where her hips go at each lean angle: the middle of the body frame (legless) on the row the legs hang from
         const hipRow = Math.round(legs[0].hip[1] + 4);
