@@ -26,6 +26,7 @@ Puts your own readouts on the windshield HUD: speed, gear, a shift bar, boost, o
   - **Glancing and dozing:** a second after the car stops pulling or braking (under 0.03 g) she starts glancing left and right now and then, eyes first, then her head, holding a second or three. Stopped for 15 s, she starts dozing in a loop: 5 s asleep (eyes shut, head drooping), 5 s awake and glancing, then asleep again, easing in and out of each. Pulling away or braking wakes her and the lean takes over.
   - **During route guidance** she steps aside, because BMW's turn map and street name fill her corner; she comes back when the route ends.
   - The frames go up once as one image (about 4.4 MiB of cluster-render's 16 MiB pixel memory), and the GPU animates them on cluster-render's own clock: one layer, and only a tiny update goes up while she moves.
+  - **The cluster's GPU limits her.** A bigger shader restarted the instrument cluster: legs that bend, together with the glances, were too much, though each ran alone. **Miku parts** on the app page (All of her, No glances or dozing, Bare) leaves parts out, to test on the car without a new release. See [What the cluster can take](../../tools/live2d_bake/README.md#what-the-cluster-can-take) for what was tested and how to recover.
   - Redline is gone: if you had it picked anywhere, it switches to Miku (so does Perch, its working name).
 
 ## Themes

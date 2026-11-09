@@ -94,7 +94,7 @@ The status row says why, after "Miku:":
 | `no baked frames in .../data/miku` | The folder or `atlas.rgba` is missing: deploy again. |
 | `atlas.json: ...` or `Unexpected ...` | The JSON is not from this bake tool, or was cut short: deploy again. |
 | `atlas.rgba is N bytes, ... needs M` | The two files don't belong together (one from an older bake): deploy both again. |
-| `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it, because the instrument cluster restarts on it. |
+| `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it (a precaution, see [What the cluster can take](#what-the-cluster-can-take)). |
 | `atlas asset refused` | cluster-render had no room: another app is using most of its 16 MiB of pixel memory. |
 
 Nothing shows during route guidance either: that's on purpose, BMW's turn map uses her corner.
@@ -109,4 +109,30 @@ Not yet checked on a car: the app folder path (from the Store's docs) and SSH as
 
 One image, at most 1024 px a side: her upright with eyes open, half shut and shut and with a smile, the same standing pose at 11 lean angles from a full lean left (braking face) to a full lean right (happy face), glancing left and right (head and eyes, 3 angles each way, from `look`), dozing (head drooping, eyes shut, 3 frames, from `doze`), the twin tails on their own, and (with `arms` in the config) each arm on its own, which the HUD swings up from the shoulder to point toward the indicator. The angles are close enough that the HUD blends between neighbours without a double image. The face, glance and doze frames differ from upright only around her head, so each keeps just that crop (one rect for all of them); the HUD draws the upright frame round it. The model itself is never changed.
 
-**At most 1024 px a side.** The instrument cluster (KOMBI) restarted twice on a 1024x1128 atlas (Custom HUD 0.1.10, Nov 9 2026), then cluster-render's guard turned the HUD off. The bake refuses an atlas over 1024 px either way, and Custom HUD 0.1.12 or later refuses to upload one (the status row says so). With your model the atlas is 1024x564 (4.4 MiB of pixel memory). On the car the GPU animates these: blinks, breathing, the lean as on a bus, and the tails following her head and streaming out with speed.
+With your model the atlas is 1024x564 (4.4 MiB of pixel memory). On the car the GPU animates these: blinks, breathing, the lean as on a bus, glances and dozing, and the tails following her head and streaming out with speed.
+
+## What the cluster can take
+
+The HUD is drawn by the instrument cluster's own GPU (the KOMBI), and it has a limit on how big a shader can be. Past it, the KOMBI restarts about 2 s after the HUD appears. That blanks the cluster for a few seconds. After two restarts in a row, cluster-render's guard turns the HUD off until you reset it.
+
+What we found on a 2020 M340i (cluster-render 0.4.5, Nov 9 2026):
+
+- **The shader is the limit, not the image.** Custom HUD 0.1.9 to 0.1.15 all restarted the KOMBI, even with the atlas cut from 1024x1128 to 1024x564, below the 1024x846 that had run fine. Cutting the shader's uniforms from 55 vectors to 29 and removing its loops (0.1.14) wasn't enough either.
+- **The parts ran alone but not together.** With the "Miku parts" setting (0.1.15), every subset held: no legs, no glances or dozing, and only the lean. All of her at once (legs plus glances and dozing) restarted it straight away.
+- **What runs now (0.1.16):** the lean with its faces, blinks and the smile, breathing, the arms, the tails, glances and dozing. The legs as their own bending sprites are gone; her legs are part of the body frames again.
+
+So treat today's shader as about the ceiling. Anything new needs code taken out first, for example per-pixel maths moved into the app and sent as a few uniforms. Put it behind the "Miku parts" setting so the car can test it without a new release.
+
+We still refuse an atlas over 1024 px a side, in the bake and in the app. It cost nothing to keep, though the 1024x1128 crash was most likely the shader too.
+
+**If the cluster restarts:** park, and on the car's center screen set Custom HUD's layout to Off, or "Miku parts" to Bare. Then, as root on the car:
+
+```bash
+cat /var/opt/cluster-render/state/guard.txt
+```
+
+```bash
+rm -f /var/opt/cluster-render/state/guard.txt && systemctl restart cluster-render.service
+```
+
+The first shows whether the guard has turned the HUD off (`hud 0x323 ...` with 2 strikes); the second clears it. `cluster-render guard-reset` does the same, but the command isn't on the car's PATH: run `/var/opt/cluster-render/current/cluster-render -c /var/opt/cluster-render/current/cluster-render.conf guard-reset`. Copy cluster-render's log for a look: `scp root@<car>:/var/opt/cluster-render/log/cluster-render.log .`
