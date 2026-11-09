@@ -1477,11 +1477,12 @@ vec4 crop(vec2 at, vec2 p, vec4 idle) {
     if (q.x < 1.5 || q.y < 1.5 || q.x > u_spr[2].z - 1.5 || q.y > u_spr[2].w - 1.5) return idle;
     return tap(vec4(at, u_spr[2].zw), q);
 }
-// a shin swung by angle a about its top edge (the knee): foreshortened to cos(a), wider by a little toward you
+// a shin swung by angle a about its top edge (the knee): foreshortened to cos(a), and in perspective bigger toward you
+// (a > 0) and smaller away, so a foot coming at you hangs lower than one going back and the two swings read apart
 vec4 shin(vec4 r, vec2 at, float a, vec2 f) {
     vec2 q = f - at;
-    float hw = r.z * 0.5;
-    return tap(r, vec2((q.x - hw) / (1.0 + 0.08 * sin(a)) + hw, q.y / cos(a)));
+    float hw = r.z * 0.5, p = 1.0 + 0.2 * sin(a);
+    return tap(r, vec2((q.x - hw) / p + hw, q.y / (cos(a) * p)));
 }
 vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
 
@@ -1503,9 +1504,13 @@ void main() {
         vec4 cHalf = crop(u_spr[0].zw, p, idle), cShut = crop(u_spr[1].xy, p, idle);   // "half" is reserved in GLSL ES
         c = e < 0.5 ? mix(idle, cHalf, e * 2.0) : mix(cHalf, cShut, e * 2.0 - 1.0);
     }
-    // the legs swinging, one forward as the other goes back, a little unevenly; still asleep
+    // the legs swinging, a little unevenly; still asleep. A loop of 8 swings: 4 in turn (one forward as the other goes
+    // back), then 4 in step (both together). Between them the second leg catches up half a swing in about a second
+    // (its offset only ever grows, by pi each time, so the loop joins up)
     float sw = u_body.y * (1.0 - doze) * (0.8 + 0.2 * sin(t * 0.31));
-    float a0 = sw * sin(t * 2.4), a1 = sw * sin(t * 2.4 + 3.1);
+    float ph = t * 2.4, q = mod(ph, 50.2655) / 25.1327;
+    float off = 3.1 + 3.14159 * (smoothstep(0.9, 1.0, q) + smoothstep(1.9, 2.0, q));
+    float a0 = sw * sin(ph), a1 = sw * sin(ph + off);
     c = over(shin(u_spr[3], u_spr[5].xy, a0, f), c);
     c = over(shin(u_spr[4], u_spr[5].zw, a1, f), c);
     vec3 rgb = c.rgb / max(c.a, 0.0001);
