@@ -13,12 +13,12 @@
  *               are "params" times -1 .. 1. From "face" on, the left ones add "left" (the braking face) and the right
  *               ones "right" (the happy face). Neighbouring angles are close enough to blend without a double image.
  *               axis "fb" bakes the forward/back lean instead (a bake of its own, for the HUD's "Miku lean" setting,
- *               deployed with --miku-fb): "params" then bend her toward you at a full lean right (pulling away) and
- *               away from you, toward the windshield, at a full lean left (braking), e.g. ParamBodyAngleY and
+ *               deployed with --miku-fb): "params" then tip her back, away from you, at a full lean right (pulling
+ *               away, pressed into the seat) and toward you at a full lean left (braking), e.g. ParamBodyAngleY and
  *               ParamAngleY; the bake also measures how far each angle moves her head up or down, for the tails.
  *               perspective { widen: 0.14, shorten: 0.1 } (fb only): above the waist she tips out of the screen, so
- *               at a full lean her upper body is "shorten" shorter and its top "widen" wider toward you (narrower
- *               away), for depth
+ *               at a full lean her upper body is "shorten" shorter and its top "widen" narrower leaning back (wider
+ *               leaning toward you), for depth
  *   look        { steps: 3, params: { id: value at a full glance right }, lead: ["id", ...] }: her glancing around
  *               while the car idles, head turned with the eyes leading: baked at "steps" angles each way ("params"
  *               times -1 .. 1); the "lead" ones (the eyes) get there twice as fast. steps 0: no glances
@@ -341,7 +341,7 @@ async function bake(L, cfg) {
     log('frame ' + fw + 'x' + fh + ' px');
     const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
     // the forward/back lean in perspective: above the waist she tips out of the screen, so her upper body gets shorter
-    // (by "shorten" at a full lean) and its top wider toward you, narrower away (by "widen"); her legs stay as they are.
+    // (by "shorten" at a full lean) and its top narrower leaning back (a full lean right), wider toward you (by "widen"); her legs stay as they are.
     // Baked into the frames, so the HUD's shader does nothing more. persp(a, x, y) moves a frame px point the same way
     const fbLean = cfg.lean && cfg.lean.axis === 'fb';
     const pv = fbLean ? Object.assign({ widen: 0.14, shorten: 0.1 }, cfg.lean.perspective || {}) : null;
@@ -349,7 +349,7 @@ async function bake(L, cfg) {
     const persp = (a, x, y) => {
         if (!pv || y >= waistPx) return [x, y];
         const up = (waistPx - y) * (1 - pv.shorten * Math.abs(a)), u = up / waistPx;
-        return [cxPx + (x - cxPx) * (1 + pv.widen * a * u), waistPx - up];
+        return [cxPx + (x - cxPx) * (1 - pv.widen * a * u), waistPx - up];
     };
     // the same on a render at SS times the size, row by row: each row above the waist comes from the row it was before
     // the shortening, scaled about her middle
@@ -363,7 +363,7 @@ async function bake(L, cfg) {
         for (let y = 0; y < Math.floor(wy); y++) {
             const up = wy - y - 0.5, src = wy - up / k;
             if (src < 0) continue;
-            const sx = 1 + pv.widen * a * (up / wy);
+            const sx = 1 - pv.widen * a * (up / wy);
             g.drawImage(big, 0, src, W, 1, cx - cx * sx, y, W * sx, 1);
         }
         return shrink(out, fw, fh);

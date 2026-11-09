@@ -1229,7 +1229,7 @@ void main() {
 const MIKU = `// The Miku layout's character (GLSL ES 1.00), from frames baked offline (tools/live2d_bake) into one RGBA atlas
 // asset (u_atlas, straight alpha, u_atlasSize px). She stands, as on a bus: the bake posed her at u_counts.x lean angles
 // (11) with the model's own body and head rotation, from a full lean left with the braking face to a full lean right
-// with the happy face (a forward/back bake: away from you braking, toward you pulling away), close enough together
+// with the happy face (a forward/back bake: toward you braking, back pulling away), close enough together
 // that the shader can blend the two nearest to u_drive.x without a double image (-1 hard braking .. +1 pulling away
 // hard; the app eases it toward the g, so she straightens when the car settles without swaying past upright). Upright
 // she blinks

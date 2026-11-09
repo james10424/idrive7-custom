@@ -81,13 +81,13 @@ ssh root@<car> 'chown -R "$(stat -c %u:%g /var/opt/public/oap/oap_<id>/data)" /v
 
 ### The forward/back lean
 
-The **Miku lean** setting on the app page picks Sideways (the bake in `data/miku/`) or Forward and back (`data/miku-fb/`). The forward/back one is a second bake from a copy of your config with `"axis": "fb"` in `lean`, and `lean.params` bending her toward you at a full lean right (pulling away), for example `{ "ParamBodyAngleY": -10, "ParamAngleY": -20, "ParamEyeBallY": 0.4 }` (negated, she leans away, toward the windshield, when braking). Bake it to its own `--out` folder and deploy it with:
+The **Miku lean** setting on the app page picks Sideways (the bake in `data/miku/`) or Forward and back (`data/miku-fb/`). The forward/back one is a second bake from a copy of your config with `"axis": "fb"` in `lean`, and `lean.params` tipping her back, away from you, at a full lean right (pulling away, as if pressed into a seat), for example `{ "ParamBodyAngleY": 10, "ParamAngleY": 30, "ParamEyeBallY": -0.6 }` (negated, she leans toward you when braking). Bake it to its own `--out` folder and deploy it with:
 
 ```bash
 ./scripts/deploy.sh root@<car> --miku-fb <folder>
 ```
 
-The bake draws these frames in perspective too, so the lean reads in depth: above the waist her upper body gets shorter as she tips out of the screen, its top wider leaning toward you and narrower leaning away. `"perspective": { "widen": 0.14, "shorten": 0.1 }` in `lean` sets how much (0 for none). The bake log has "head drop per lean angle": it should be largest at the right end (her head going down as she leans toward you). If the left end is larger, flip the signs. Switching the setting rebuilds the layout and swaps the uploaded image: the old one is dropped first, so only one is in the cluster's memory.
+The bake draws these frames in perspective too, so the lean reads in depth: above the waist her upper body gets shorter as she tips out of the screen, its top narrower leaning back and wider leaning toward you. `"perspective": { "widen": 0.14, "shorten": 0.1 }` in `lean` sets how much (0 for none). The bake log has "head drop per lean angle": it should be largest at the left end (her head going down as she leans toward you, braking). If the right end is larger, flip the signs. Switching the setting rebuilds the layout and swaps the uploaded image: the old one is dropped first, so only one is in the cluster's memory.
 
 ### Updating or removing
 
