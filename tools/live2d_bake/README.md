@@ -81,13 +81,13 @@ ssh root@<car> 'chown -R "$(stat -c %u:%g /var/opt/public/oap/oap_<id>/data)" /v
 
 ### The forward/back lean
 
-The **Miku lean** setting on the app page picks Sideways (the bake in `data/miku/`) or Forward and back (`data/miku-fb/`). The forward/back one is a second bake from a copy of your config with `"axis": "fb"` in `lean`, and `lean.params` tipping her back, away from you, at a full lean right (pulling away, as if pressed into a seat), for example `{ "ParamBodyAngleY": 10, "ParamAngleY": 30, "ParamEyeBallY": -0.6 }` (negated, she leans toward you when braking). Bake it to its own `--out` folder and deploy it with:
+Custom HUD dropped its **Miku lean** setting in 0.1.19 (the lean didn't read clearly enough), so the app always loads `data/miku/`. The bake still makes a forward/back lean: deployed with `--miku` in place of the sideways one, the HUD draws it (its `leanAxis` keeps her arms from swinging out). It's a bake from a copy of your config with `"axis": "fb"` in `lean`, and `lean.params` tipping her back, away from you, at a full lean right (pulling away, as if pressed into a seat), for example `{ "ParamBodyAngleY": 10, "ParamAngleY": 30, "ParamEyeBallY": -0.6 }` (negated, she leans toward you when braking). Bake it to its own `--out` folder. A `data/miku-fb/` left on the car from Custom HUD 0.1.18 does nothing now; take it off with:
 
 ```bash
-./scripts/deploy.sh root@<car> --miku-fb <folder>
+./scripts/remove-miku.sh root@<car> --miku-fb
 ```
 
-The bake draws these frames in perspective too, so the lean reads in depth: above the waist her upper body gets shorter as she tips out of the screen, its top narrower leaning back and wider leaning toward you. `"perspective": { "widen": 0.14, "shorten": 0.1 }` in `lean` sets how much (0 for none). The bake log has "head drop per lean angle": it should be largest at the left end (her head going down as she leans toward you, braking). If the right end is larger, flip the signs. Switching the setting rebuilds the layout and swaps the uploaded image: the old one is dropped first, so only one is in the cluster's memory.
+The bake draws these frames in perspective too, so the lean reads in depth: above the waist her upper body gets shorter as she tips out of the screen, its top narrower leaning back and wider leaning toward you. `"perspective": { "widen": 0.14, "shorten": 0.1 }` in `lean` sets how much (0 for none). The bake log has "head drop per lean angle": it should be largest at the left end (her head going down as she leans toward you, braking). If the right end is larger, flip the signs.
 
 ### Sitting (Custom Cluster)
 
@@ -121,7 +121,7 @@ The status row says why, after "Miku:":
 
 | Status row | Meaning |
 | --- | --- |
-| `no baked frames in .../data/miku` (or `miku-fb`) | The folder or `atlas.rgba` is missing: deploy again (`--miku-fb` for the forward/back lean). |
+| `no baked frames in .../data/miku` (or `miku-sit`) | The folder or `atlas.rgba` is missing: deploy again (`--miku-sit` for the sitting one). |
 | `atlas.json: ...` or `Unexpected ...` | The JSON is not from this bake tool, or was cut short: deploy again. |
 | `atlas.rgba is N bytes, ... needs M` | The two files don't belong together (one from an older bake): deploy both again. |
 | `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it (a precaution, see [What the cluster can take](#what-the-cluster-can-take)). |

@@ -1181,18 +1181,17 @@ class HudApp {
     }
 
     /**
-     * The Miku layout's baked frames: <data>/miku/atlas.json and (miku-fb/ for the forward/back lean)
+     * The Miku layout's baked frames: <data>/miku/atlas.json and
      * atlas.rgba (straight-alpha RGBA, atlas[0] x atlas[1] px), made by tools/live2d_bake and pushed by
      * scripts/deploy.sh --miku. They are not in the app: the character's art stays with its owner. Uploaded once as an
      * RGBA asset per connection and kept in this.atlases (so the pixel memory counts it); new files (a later bake)
      * drop the old asset. Null, with this.problem set, when the files are missing or bad.
      */
     _sprite(w, ci) {
-        // the "Miku lean" setting picks the bake: sideways (miku/) or forward/back (miku-fb/). Switching it rebuilds
-        // the layout, and the other folder's files replace the uploaded atlas (one Miku atlas a connection at a time)
-        // Custom Cluster's sitting Miku (mikuSit) has her own bake, miku-sit/, and no table rows
-        const sit = w.type === 'mikuSit', fb = !sit && this.setting('mikuLean') === 'fb';
-        const sub = sit ? 'miku-sit' : fb ? 'miku-fb' : 'miku', dir = path.join(this.ctx.dataDir || '.', sub);
+        // the HUD's Miku from miku/ (a forward/back lean bake, lean.axis "fb", works there too: its leanAxis turns
+        // the arms' balance off); Custom Cluster's sitting Miku (mikuSit) has her own bake, miku-sit/, and no table rows
+        const sit = w.type === 'mikuSit';
+        const sub = sit ? 'miku-sit' : 'miku', dir = path.join(this.ctx.dataDir || '.', sub);
         let st;
         try { st = fs.statSync(path.join(dir, 'atlas.rgba')); } catch (e) { st = null; }
         const pre = (sit ? 'sit:' : 'sprite:') + ci + ':', key = pre + dir + ':' + (st ? st.mtimeMs : 0);
