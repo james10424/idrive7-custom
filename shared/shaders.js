@@ -1399,4 +1399,31 @@ void main() {
 }
 `;
 
-module.exports = { miku: MIKU, rdash: RDASH, shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH, boxes: BOXES, atext: ATEXT };
+/* cluster-render keeps at most 32 uniform names a layer. The set-once values of the big layouts' shaders (geometry,
+ * shapes, colours) go up as one vec4 array, u_cfg, one slot each in this order; the shader keeps their old names through
+ * #define (a float is .x, a vec2 .xy, a vec3 .xyz). The values that change while driving stay their own uniforms, so a
+ * tick still sends only what changed. hud.js packs the values in the same order (CFG below). */
+const CFG = {
+    sdash: ['u_geo', 'u_k', 'u_w', 'u_inner', 'u_scale', 'u_ticks', 'u_redFrom', 'u_orange', 'u_fuelSeg', 'u_oilSeg', 'u_hole',
+        'u_holeR', 'u_holeCut', 'u_holeFade', 'u_holeFadeK', 'u_strip', 'u_gapRail', 'u_vbar0', 'u_vbar1', 'u_vbarC0', 'u_vbarC1', 'u_topEnd'],
+    rdash: ['u_podL', 'u_podWin', 'u_ctr', 'u_win1', 'u_win2', 'u_vfdL', 'u_vfdR', 'u_led', 'u_led2', 'u_gearBox', 'u_lampB',
+        'u_spd', 'u_spdVirt', 'u_spdK', 'u_fuelG', 'u_podG', 'u_arrow', 'u_batIcon'],
+};
+function packCfg(src, names) {
+    const SW = { float: '.x', vec2: '.xy', vec3: '.xyz', vec4: '' };
+    let defs = 'uniform vec4 u_cfg[' + names.length + '];   // the set-once values, one slot each (shaders.js CFG)\n';
+    names.forEach((n, i) => {
+        const re = new RegExp('^uniform\\s+(float|vec2|vec3|vec4)\\s+' + n + '\\s*;([^\\n]*)\\n', 'm');
+        const m = re.exec(src);
+        if (!m) throw new Error('packCfg: no uniform ' + n);
+        src = src.replace(m[0], '');
+        defs += '#define ' + n + ' u_cfg[' + i + ']' + SW[m[1]] + (m[2].trim() ? '   ' + m[2].trim() : '') + '\n';
+    });
+    const at = src.search(/^(?:const |float |vec[234] |bool |void |#define )/m);   // after the uniforms, before the first code
+    return src.slice(0, at) + defs + src.slice(at);
+}
+const SDASH_PACKED = packCfg(SDASH, CFG.sdash);
+const RDASH_PACKED = packCfg(RDASH, CFG.rdash);
+
+module.exports = { miku: MIKU, rdash: RDASH_PACKED, shiftbar: SHIFTBAR, arc: ARC, revbar: REVBAR, lights: LIGHTS, fill: FILL, box: BOX, grid: GRID, segbar: SEGBAR, mdash: MDASH, mtach: MTACH, sdash: SDASH_PACKED, boxes: BOXES, atext: ATEXT };
+Object.defineProperty(module.exports, 'CFG', { value: CFG, enumerable: false });

@@ -1623,6 +1623,22 @@ class HudApp {
     }
 
     /** {{token}} -> display text. */
+    /** Collects a big shader's set-once uniforms (shaders.js CFG) into its one u_cfg vec4 array, sent by flush(); any
+     *  other uniform goes straight through. cluster-render keeps at most 32 uniform names a layer. */
+    _cfgPacker(c, ref, type) {
+        const names = shaders.CFG[type] || [], vals = {};
+        return {
+            u: (name, v, opts) => {
+                if (names.indexOf(name) >= 0) vals[name] = v; else c.uniform(ref, name, v, opts);
+            },
+            flush: () => {
+                const flat = [];
+                names.forEach((n) => { const v = (vals[n] || []).slice(0, 4); while (v.length < 4) v.push(0); flat.push(...v); });
+                c.uniform(ref, 'u_cfg', flat, { type: 'vec4' });
+            },
+        };
+    }
+
     /** The Regal gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D and S 3, M 5 the gear number), -1 for none. */
     _regalGear() {
         const stage = this._token('stage');
@@ -1984,57 +2000,61 @@ class HudApp {
         } else if (w.type === 'gridlabels') this._paintGridLabels(x);
         else if (w.type === 'icon') this._blit(x, null, paintIcon(w.icon, w.w, w.h, color(t, w.color || 'fg')));
         else if (w.type === 'sdash') {
-            c.uniform(ref, 'u_size', [w.w, w.h]);
-            c.uniform(ref, 'u_geo', w.geo);
-            c.uniform(ref, 'u_k', w.k);
-            c.uniform(ref, 'u_w', [w.band]);
-            c.uniform(ref, 'u_inner', [w.inner || w.band + 18]);
-            c.uniform(ref, 'u_scale', w.scale || [w.geo[2], w.geo[0]]);
-            c.uniform(ref, 'u_ticks', w.ticks);
+            const pk = this._cfgPacker(c, ref, 'sdash');
+            pk.u('u_size', [w.w, w.h]);
+            pk.u('u_geo', w.geo);
+            pk.u('u_k', w.k);
+            pk.u('u_w', [w.band]);
+            pk.u('u_inner', [w.inner || w.band + 18]);
+            pk.u('u_scale', w.scale || [w.geo[2], w.geo[0]]);
+            pk.u('u_ticks', w.ticks);
             const [redFrom, orange] = this._redMarks(w.rpmMax || 8000);
-            c.uniform(ref, 'u_redFrom', [redFrom]);
-            c.uniform(ref, 'u_orange', [orange]);
-            c.uniform(ref, 'u_fuelSeg', w.fuelSeg);
-            c.uniform(ref, 'u_oilSeg', w.oilSeg);
-            c.uniform(ref, 'u_hole', this._hole(w));
-            c.uniform(ref, 'u_holeR', [this._holeRadius(w)]);
-            c.uniform(ref, 'u_holeCut', Array.isArray(w.holeCut) && w.holeCut.length === 4 ? w.holeCut : [0, 0, 0, 0]);
+            pk.u('u_redFrom', [redFrom]);
+            pk.u('u_orange', [orange]);
+            pk.u('u_fuelSeg', w.fuelSeg);
+            pk.u('u_oilSeg', w.oilSeg);
+            pk.u('u_hole', this._hole(w));
+            pk.u('u_holeR', [this._holeRadius(w)]);
+            pk.u('u_holeCut', Array.isArray(w.holeCut) && w.holeCut.length === 4 ? w.holeCut : [0, 0, 0, 0]);
             const rel = (r) => (Array.isArray(r) && r.length === 4 ? [r[0] - w.x, r[1] - w.y, r[2], r[3]] : [0, 0, 0, 0]);
-            c.uniform(ref, 'u_holeMask', rel(w.holeMask).concat(rel(w.holeOpen)), { type: 'vec4' });
+            pk.u('u_holeMask', rel(w.holeMask).concat(rel(w.holeOpen)), { type: 'vec4' });
             const hf = Array.isArray(w.holeFade) && w.holeFade.length >= 4 ? w.holeFade : null;
-            c.uniform(ref, 'u_holeFade', hf ? [hf[0] - w.x, hf[1] - w.y, hf[2], hf[3]] : [0, 0, 0, 0]);
-            c.uniform(ref, 'u_holeFadeK', [hf && isNum(hf[4]) ? hf[4] : 30, hf && isNum(hf[5]) ? hf[5] : 0.85]);
-            c.uniform(ref, 'u_strip', w.strip);
+            pk.u('u_holeFade', hf ? [hf[0] - w.x, hf[1] - w.y, hf[2], hf[3]] : [0, 0, 0, 0]);
+            pk.u('u_holeFadeK', [hf && isNum(hf[4]) ? hf[4] : 30, hf && isNum(hf[5]) ? hf[5] : 0.85]);
+            pk.u('u_strip', w.strip);
             const gg = w.gapGauge && Array.isArray(w.gapGauge.box) ? w.gapGauge.box : null;
-            c.uniform(ref, 'u_gapRail', gg ? [gg[0] - w.x, gg[1] - w.y, gg[2], gg[3]] : [0, 0, 0, 0]);
-            c.uniform(ref, 'u_gapG', [-1, 0]);
+            pk.u('u_gapRail', gg ? [gg[0] - w.x, gg[1] - w.y, gg[2], gg[3]] : [0, 0, 0, 0]);
+            pk.u('u_gapG', [-1, 0]);
             const vb = Array.isArray(w.vbars) ? w.vbars.slice(0, 2) : [];
             [0, 1].forEach((i) => {
                 const b = vb[i] && Array.isArray(vb[i].box) ? vb[i] : null;
-                c.uniform(ref, 'u_vbar' + i, b ? [b.box[0] - w.x, b.box[1] - w.y, b.box[2], b.box[3]] : [0, 0, 0, 0]);
-                c.uniform(ref, 'u_vbarC' + i, rgb(color(t, (b && b.color) || 'fg')));
+                pk.u('u_vbar' + i, b ? [b.box[0] - w.x, b.box[1] - w.y, b.box[2], b.box[3]] : [0, 0, 0, 0]);
+                pk.u('u_vbarC' + i, rgb(color(t, (b && b.color) || 'fg')));
             });
-            c.uniform(ref, 'u_vbarV', [-1, -1]);
-            c.uniform(ref, 'u_stripFill', Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
-            c.uniform(ref, 'u_stripRoute', [-1]);
-            c.uniform(ref, 'u_topEnd', [w.topEnd]);
+            pk.u('u_vbarV', [-1, -1]);
+            pk.u('u_stripFill', Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
+            pk.u('u_stripRoute', [-1]);
+            pk.u('u_topEnd', [w.topEnd]);
+            pk.flush();
         } else if (w.type === 'rdash') {
+            const pk = this._cfgPacker(c, ref, 'rdash');
             const o4 = (r) => (Array.isArray(r) && r.length === 4 ? [r[0] - w.x, r[1] - w.y, r[2], r[3]] : [0, 0, 0, 0]);
             const sp = w.spd || [0, 0, 0, 0], sv = w.spdVirt || [300, 45];
-            c.uniform(ref, 'u_size', [w.w, w.h]);
+            pk.u('u_size', [w.w, w.h]);
             ['podL', 'podWin', 'ctr', 'win1', 'win2', 'vfdL', 'vfdR', 'led', 'led2', 'gearBox', 'lampB'].forEach((k) => {
-                c.uniform(ref, 'u_' + k, o4(w[k]));
+                pk.u('u_' + k, o4(w[k]));
             });
-            c.uniform(ref, 'u_spd', [sp[0] - w.x, sp[1] - w.y, sp[2] - w.y, sp[3] - w.y]);
-            c.uniform(ref, 'u_spdVirt', [sv[0], sv[1] * Math.PI / 180]);
-            c.uniform(ref, 'u_spdK', [w.spdMid || 55, w.spdMax || 85, w.spdStep || 5]);
+            pk.u('u_spd', [sp[0] - w.x, sp[1] - w.y, sp[2] - w.y, sp[3] - w.y]);
+            pk.u('u_spdVirt', [sv[0], sv[1] * Math.PI / 180]);
+            pk.u('u_spdK', [w.spdMid || 55, w.spdMax || 85, w.spdStep || 5]);
             const fg = w.fuelG || [0, 0, 0, 0], pg = w.podG || [0, 0, 0, 0], ar = w.arrow || [0, 0, 0], bi = w.batIcon || [-99, -99];
-            c.uniform(ref, 'u_fuelG', [fg[0] - w.x, fg[1] - w.y, fg[2], fg[3]]);
-            c.uniform(ref, 'u_podG', [pg[0] - w.x, pg[1] - w.y, pg[2], pg[3]]);
-            c.uniform(ref, 'u_arrow', [ar[0] - w.x, ar[1] - w.y, ar[2]]);
-            c.uniform(ref, 'u_batIcon', [bi[0] - w.x, bi[1] - w.y]);
-            c.uniform(ref, 'u_gearV', [w.gearPitch || 0, -1]);
-            c.uniform(ref, 'u_lamps', [0, 0, 0, 0]);
+            pk.u('u_fuelG', [fg[0] - w.x, fg[1] - w.y, fg[2], fg[3]]);
+            pk.u('u_podG', [pg[0] - w.x, pg[1] - w.y, pg[2], pg[3]]);
+            pk.u('u_arrow', [ar[0] - w.x, ar[1] - w.y, ar[2]]);
+            pk.u('u_batIcon', [bi[0] - w.x, bi[1] - w.y]);
+            pk.u('u_gearV', [w.gearPitch || 0, -1]);
+            pk.u('u_lamps', [0, 0, 0, 0]);
+            pk.flush();
         } else if (w.type === 'mdash') {
             const ty = w.tyres || [0, 0, 0], L = w.gaugeL || {}, R = w.gaugeR || {}, b = w.blade || {};
             const bars = Array.isArray(w.segbars) ? w.segbars.slice(0, 4) : [];
