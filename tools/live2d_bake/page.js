@@ -584,7 +584,7 @@ async function bake(L, cfg) {
  * hips (0 = as drawn, 0.3 = knees and feet 30% closer; the skirt's knee sag follows), skirt: ["part id"] (her skirt, resting on her lap: below the
  * hips its flare pulled in by "narrow" (0.2), its hem "drape" (0.06) model units past the knees and sagging "sag" (0.06)
  * over each knee, at kneeX (0.12) either side of split), hands: model units above the knees where her hands rest (the ledge's edge: each of cfg.arms turned out from its
- * shoulder until its lowest point is there; leave out to keep the arms as drawn), behind: ["part id"] (what hangs behind her, a bow's ribbons: it
+ * shoulder until the palm's bottom edge is there, the thumb hanging below it; leave out to keep the arms as drawn), behind: ["part id"] (what hangs behind her, a bow's ribbons: it
  * lies on the seat, tucked under the skirt to "tuck" (0.1) of its length below the hips) }. Hip is where the thighs turn: under the skirt. Anything wholly below the knees (a shoe's sparkle in
  * another part) goes with the shins. Writes atlas.json with "pose": "sit". */
 async function bakeSit(L, cfg) {
@@ -629,8 +629,8 @@ async function bakeSit(L, cfg) {
     const inward = (x, y) => y >= sit.hip ? x : sit.split + (x - sit.split) * (1 - tog * Math.min(1, (sit.hip - y) / Math.max(1e-6, sit.hip - sit.knee)));
     const narrow = isFinite(sit.narrow) ? sit.narrow : 0.2, sag = isFinite(sit.sag) ? sit.sag : 0.06, kx = (isFinite(sit.kneeX) ? sit.kneeX : 0.12) * (1 - tog);
     if (skirt.size) log('sitting: the skirt (' + skirt.size + ' meshes) hem at model y ' + hem.toFixed(2) + ' rests just past the knees at ' + hemTo.toFixed(2));
-    // her hands on the ledge: each arm (cfg.arms) turned out from its shoulder until its lowest point is "hands" model
-    // units above the knees (the ledge's edge), so she leans on her hands beside her
+    // her hands on the ledge: each arm (cfg.arms) turned out from its shoulder until its palm's bottom edge is "hands"
+    // model units above the knees (the ledge's edge), so she leans on her hands beside her, thumbs over the edge
     const armTurn = armParts.map((f) => {
         if (!isFinite(sit.hands)) return null;
         let top = -Infinity, bot = Infinity;
@@ -645,18 +645,29 @@ async function bakeSit(L, cfg) {
         let px = 0, n = 0;
         vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) if (v[k + 1] >= band) { px += v[k]; n++; } });
         const P = [px / n, top], side = Math.sign(P[0] - sit.split) || 1, want = kneeAt + sit.hands;
+        // where the palm's bottom edge is with the arm turned by a: the hand is the outer fifth of the arm; its lower edge
+        // across it in 8 columns, the middle of those (the thumb hangs lower in a column or two and goes below the edge)
         const lowAt = (a) => {
-            const c = Math.cos(a), sn = Math.sin(a);
-            let lo = Infinity;
-            vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) lo = Math.min(lo, P[1] + (v[k] - P[0]) * sn + (v[k + 1] - P[1]) * c); });
-            return lo;
+            const c = Math.cos(a), sn = Math.sin(a), pts = [];
+            let far = 0;
+            vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) {
+                const x = P[0] + (v[k] - P[0]) * c - (v[k + 1] - P[1]) * sn, y = P[1] + (v[k] - P[0]) * sn + (v[k + 1] - P[1]) * c;
+                pts.push([x, y]); far = Math.max(far, Math.hypot(x - P[0], y - P[1]));
+            } });
+            const hand = pts.filter((q) => Math.hypot(q[0] - P[0], q[1] - P[1]) > 0.8 * far);
+            let x0 = Infinity, x1 = -Infinity;
+            hand.forEach((q) => { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); });
+            const col = new Array(8).fill(Infinity);
+            hand.forEach((q) => { const b = Math.min(7, Math.floor((q[0] - x0) / Math.max(1e-6, x1 - x0) * 8)); col[b] = Math.min(col[b], q[1]); });
+            const lows = col.filter(isFinite).sort((p, q) => p - q);
+            return lows[Math.floor(lows.length / 2)];
         };
         // out is clockwise for her right arm (on your left), anticlockwise for the other; search 0 .. 80 degrees
         let a0 = 0, a1 = 1.4;
         if (lowAt(0) >= want) return null;
         for (let t = 0; t < 40; t++) { const m = (a0 + a1) / 2; if (lowAt(side * m) < want) a0 = m; else a1 = m; }
         const a = side * a1;
-        log('sitting: arm ' + (side < 0 ? 'on your left' : 'on your right') + ' turned out ' + Math.abs(a * 180 / Math.PI).toFixed(1) + ' degrees, hand on the ledge');
+        log('sitting: arm ' + (side < 0 ? 'on your left' : 'on your right') + ' turned out ' + Math.abs(a * 180 / Math.PI).toFixed(1) + ' degrees, palm on the ledge');
         const c = Math.cos(a), sn = Math.sin(a), ext = [Infinity, Infinity, -Infinity, -Infinity];
         vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) {
             const x = P[0] + (v[k] - P[0]) * c - (v[k + 1] - P[1]) * sn, y = P[1] + (v[k] - P[0]) * sn + (v[k + 1] - P[1]) * c;
