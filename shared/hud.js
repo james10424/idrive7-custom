@@ -31,8 +31,9 @@
  * Effect shaders: cluster-render's v_uv has (0,0) at the TOP-left (PROTOCOL.md; confirmed on the car,
  * Nov 4 2026, when a box's header strip drew at the bottom). The bench draws the same way.
  *
- * Layer packing (Nov 5 2026): cluster-render draws at most 8 layers per client connection (its
- * CompositorLimits.per_client; 32 across all clients; a 9th is refused with "too many layers"), which the car
+ * Layer packing (Nov 5 2026): cluster-render drew at most 8 layers per client connection (its
+ * CompositorLimits.per_client; 32 across all clients; a 9th is refused with "too many layers"; 0.4.2 raised these to
+ * 64 and 96, and LAYER_BUDGET follows), which the car
  * photos showed as a theme's shaders plus the first few text widgets. So the image widgets (text, scale, stripe, badge, gridlabels, icon, swatchimg) are
  * packed into SHEETS, one image layer per sheet, instead of one layer each. Widgets are grouped by
  * (class, z) and placed in file order: a widget goes into the first sheet of its group opened after every
@@ -48,8 +49,8 @@
  * Sheet size vs layer count: a rebuild re-sends every sheet whole, through the car's upload budget (floor
  * 2000 KB/s, ceiling 5500, the HUD gets at most half), so sheets are kept small: the limit starts at a
  * quarter of the target area (345,600 px on the panel, 96,000 on the HUD). If that needs more than
- * LAYER_BUDGET (8) layers in all (effects + own + sheets), the limit is doubled and the layout re-planned,
- * up to unlimited; if even unlimited needs more than 8, a warning says so and the layout is drawn anyway.
+ * LAYER_BUDGET (64) layers on a connection (effects + own + sheets), the limit is doubled and the layout re-planned,
+ * up to unlimited; if even unlimited needs more, a warning says so and the layout is drawn anyway.
  * The rebuild log line names the layout, widget and layer counts, the limit used and the bytes of the
  * whole-sheet writes; the status row names the layer count, not the widget count; and two seconds after a
  * rebuild cluster-render's own status text is asked for and logged.
@@ -133,8 +134,8 @@
  *             message of glyph codes. "text" tokens as text, "font", "color" role, "align" left | right | center.
  *             Up to 32 cells; only the characters the font has.
  * Any image widget: "own": true gives it its own image layer instead of a place in a packed sheet (above).
- * Any widget: "conn": 0..3 puts its layer (or its sheet) on that connection to cluster-render. The 8-layer limit
- *   is per connection, so a second socket from the same app gets another 8 (DukeAPenguin saw 28 layers over four
+ * Any widget: "conn": 0..3 puts its layer (or its sheet) on that connection to cluster-render. The layer limit
+ *   is per connection, so a second socket from the same app gets another 64 (8 before 0.4.2: DukeAPenguin saw 28 layers over four
  *   sockets on his car, Nov 5 2026; the calibration grids probe it here: L5..L16 on connections 2..4). 0 (the
  *   default) is the app's own connection; a layout never asks for more than it needs, each extra one is opened
  *   on first use and named <app id>_<n>. Sheets never span connections.
@@ -233,8 +234,8 @@ const BOOST_SCALE = { factor: 0.01, offset: 0, invalid: 255 }; // see header com
 // the widget types drawn as pixels (image layers, packed into sheets unless "own": true); the rest are shaders
 const IMAGE_TYPES = { text: true, scale: true, stripe: true, badge: true, gridlabels: true, icon: true, swatchimg: true };
 const STATUS_ASK_MS = 2000;      // after a rebuild: ask cluster-render for its own status text
-const LAYER_BUDGET = 8;          // cluster-render's limit per client connection (CompositorLimits.per_client; confirmed on the car Nov 5 2026)
-const MAX_CONN = 4;              // connections a layout may ask for ("conn"): 32 layers service-wide / 8 per connection
+const LAYER_BUDGET = 64;         // cluster-render's limit per client connection (CompositorLimits.per_client: 8 until 0.4.2, 64 since)
+const MAX_CONN = 4;              // connections a layout may ask for ("conn"); 96 layers service-wide, 64 per connection
 const PIXEL_BYTES = 16 * 1024 * 1024;   // cluster-render's pixel memory for every app's images together (CompositorLimits.pixel_bytes)
 const SHEET_AREA_FRAC = 4;       // the first sheet size limit: 1/4 of the target area (see the header)
 const MIKU_MS = 16;              // the Miku character's own update rate (60 Hz)
@@ -734,7 +735,7 @@ class HudApp {
 
     /**
      * Connection i to cluster-render, made on first use: 0 is the app's own (named after the app); a widget's
-     * "conn" asks for 1..3, named <app id>_2 .. _4, each with its own 8 layers. Layers made before a connection
+     * "conn" asks for 1..3, named <app id>_2 .. _4, each with its own 64 layers. Layers made before a connection
      * is up are replayed by the client when it connects.
      */
     _clientAt(i) {

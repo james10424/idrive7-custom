@@ -60,7 +60,7 @@ More themes are on the way.
 
 ## On the car
 
-Tested on a 2020 M340i. The car draws at most 8 layers per connection, and every theme fits in that. Still to be checked:
+Tested on a 2020 M340i. cluster-render draws up to 64 layers per connection (since 0.4.2), and every theme uses far fewer. Still to be checked:
 
 - whether Sport and Regal draw complete (if not, the first row of the app's page says how many parts are drawn and why the rest are not);
 - whether BMW's warning lights still show over the dash (start the car with a seat belt off and look);

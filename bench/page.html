@@ -62,7 +62,7 @@
   <span class="pill" id="target">target: ?</span>
   <span class="pill" id="pixels" title="cluster-render's pixel memory: 16 MiB for every image of every app together, each image counted twice">pixels: ?</span>
   <button id="restart">Restart apps</button>
-  <label class="chk" title="The car seems to draw only an app's first 8 layers. Layers past the cap get state waiting and are not drawn; 0 = unlimited. Changing it restarts the app."><span>layer cap</span> <input type="number" id="cap" min="0" max="64" step="1" value="0"></label>
+  <label class="chk" title="A lower per-connection cap to try a layout under (cluster-render draws 64 a connection since 0.4.2, 8 before). Layers past the cap get state waiting and are not drawn; 0 = unlimited. Changing it restarts the app."><span>layer cap</span> <input type="number" id="cap" min="0" max="64" step="1" value="0"></label>
 </header>
 <main>
   <div class="stage">
@@ -95,7 +95,7 @@
     <section>
       <h2>Layers</h2>
       <table><thead><tr><th>conn:ref</th><th>kind</th><th>class/z</th><th>rect</th><th>car</th></tr></thead><tbody id="layers"></tbody></table>
-      <div class="note">conn: the app's connection to cluster-render (1 is its own; a layout's "conn" widgets open more, each with its own 8 layers). Red: over the layer cap, state waiting, not drawn. The car column flags a layer the driver can't fully see (hood, BMW's gear box or belt light, outside the HUD window); hover for the reason.</div>
+      <div class="note">conn: the app's connection to cluster-render (1 is its own; a layout's "conn" widgets open more, each with its own 64 layers). Red: over the layer cap, state waiting, not drawn. The car column flags a layer the driver can't fully see (hood, BMW's gear box or belt light, outside the HUD window); hover for the reason.</div>
     </section>
   </aside>
   <div id="log"></div>

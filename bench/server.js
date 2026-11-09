@@ -7,8 +7,9 @@
  * app_id: custom_hud (the default, the 800x480 HUD) and / or custom_cluster (the 1920x720 cluster). Several apps run
  * together, as on the car: each its own process and connection to the one fake cluster-render, and the page draws each
  * app's target (its app.json config.target) with its own center-screen panel; the vehicle signals go to all of them.
- * The service's limits are modelled: 8 layers per connection (BENCH_LAYER_CAP=8; off by default), 32 across every
- * connection and 16 MiB of pixel memory with each image counted twice (both always on; see bench/README.md).
+ * The service's limits are modelled (cluster-render 0.4.2 and later): 64 layers per connection, 96 across every
+ * connection and 16 MiB of pixel memory with each image counted twice (always on; see bench/README.md). BENCH_LAYER_CAP
+ * sets a lower cap to try a layout under, off by default.
  *
  * - Listens on a Unix socket speaking cluster-render protocol v1 (the framing
  *   and ops the vendored client sends: u32 LE length, u8 type 'J'/'F'/'M').
@@ -41,13 +42,14 @@ const visible = require('../shared/visible');
 const shaderBudget = require('../tools/shader_budget');   // what the KOMBI took on the car (texture reads, size)
 
 const PORT = Number(process.env.BENCH_PORT) || 8078;
-// BENCH_LAYER_CAP: the car seems to draw only an app's first 8 layers (photos, Nov 5 2026).
-// 0 = unlimited. Layers past the cap get state 'waiting' and are not drawn. POST /cap sets it live.
+// BENCH_LAYER_CAP: a lower per-connection cap to try a layout under (cluster-render before 0.4.2 drew 8; photos, Nov 5
+// 2026). 0 = off. Layers past the cap get state 'waiting' and are not drawn. POST /cap sets it live.
 let layerCap = Math.max(0, Number(process.env.BENCH_LAYER_CAP) || 0);
-// The service's other two limits, always on (CompositorLimits): 32 layers across every connection, and 16 MiB of
+// The service's own limits, always on (CompositorLimits, 0.4.2 and later): 64 layers a connection and 96 across every
+// connection ("too many layers"), and 16 MiB of
 // pixel memory for every image together, each image counted twice (Compositor::add_image), refused with the
 // service's own words "the service's pixel memory is full". BENCH_PIXEL_MIB overrides the 16 (0 = unlimited).
-const TOTAL_LAYERS = 32;
+const TOTAL_LAYERS = 96, LAYERS_PER_CLIENT = 64;
 const PIXEL_BYTES = (process.env.BENCH_PIXEL_MIB === undefined ? 16 : Math.max(0, Number(process.env.BENCH_PIXEL_MIB) || 0)) * 1024 * 1024;
 // the service's accounting: an image or asset costs its bytes twice (compositor.cpp: the pixels and a rectangle scratch)
 function pixelBytes() { let n = 0; layers.forEach((l) => { if (l.image) n += l.iw * l.ih * (l.bpp || 4) * 2; }); return n; }
@@ -218,7 +220,9 @@ const renderServer = net.createServer((sock) => {
                 if (m.class && CLASSES.indexOf(m.class) < 0) return refuse('layer', m.ref, 'unknown class ' + m.class);
                 if (m.z !== undefined && (m.z < -1000 || m.z > 1000)) return refuse('layer', m.ref, 'z out of -1000..1000');
                 const [tw, th] = TARGETS[m.target];
-                if (layerCount() >= TOTAL_LAYERS) return refuse('layer', m.ref, 'too many layers');
+                let mineL = 0;
+                layers.forEach((o) => { if (o.conn === conn && o.kind !== 'asset') mineL++; });
+                if (layerCount() >= TOTAL_LAYERS || mineL >= LAYERS_PER_CLIENT) return refuse('layer', m.ref, 'too many layers');
                 if (m.kind === 'image' && PIXEL_BYTES && m.iw > 0 && m.ih > 0 && pixelBytes() + m.iw * m.ih * 8 > PIXEL_BYTES) {
                     return refuse('layer', m.ref, "the service's pixel memory is full");
                 }
@@ -600,7 +604,7 @@ renderServer.listen(SOCK, () => {
         log('info', 'bench renderer on ' + SOCK);
         log('info', 'open http://localhost:' + PORT);
         if (layerCap) log('info', 'layer cap ' + layerCap + ' (BENCH_LAYER_CAP): layers past it get state waiting and are not drawn');
-        log('info', 'the service\'s limits: ' + TOTAL_LAYERS + ' layers across every connection, pixel memory ' + (PIXEL_BYTES ? mib(PIXEL_BYTES) : 'unlimited') + ' (every image counted twice)');
+        log('info', 'the service\'s limits: ' + LAYERS_PER_CLIENT + ' layers a connection, ' + TOTAL_LAYERS + ' across every connection, pixel memory ' + (PIXEL_BYTES ? mib(PIXEL_BYTES) : 'unlimited') + ' (every image counted twice)');
         apps.forEach(startApp);
     });
 });
