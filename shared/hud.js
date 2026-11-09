@@ -154,8 +154,7 @@
  * "themes": [...] shows it only in those themes. Text "color2": a second role, the colour at the bottom
  * of the box (a top-to-bottom gradient, the chrome look). Text: "hotWhen": "now" turns it the shift red
  * at the shift point; "coldWhen": "cold" turns it blue while the cold guard lowers the shift point.
- * "outline": px draws a solid border that wide round the glyphs, in "outlineColor" (ink), so light text stands out
- * on a lit lamp; "litGear": the Regal gear row slot (P 0 R 1 N 2 D 3, number 5) turns it "litColor" (fg) while lit.
+ * "litGear": the Regal gear row slot (P 0 R 1 N 2 D 3, number 5) turns it "litColor" (fg) while lit.
  * Text "slide": { signal ("accGap" = the car ahead in m), max, yTop, yBottom }: the text's middle rides from yBottom (0)
  * to yTop (max) inside its box, blank without a value; "hotWhen": "closing" turns it red while the car ahead closes fast.
  * scale: "over" as revbar; "redFrom": true draws the numbers from the redline on in red.
@@ -2285,7 +2284,6 @@ class HudApp {
                 font: w.font, color: color(this.theme, role), align: w.align, spacing: w.spacing, offsetY: offY,
                 color2: w.color2 && role !== 'hot' ? color(this.theme, w.color2) : null,
                 glow: w.glow ? this.theme.glow : 0,
-                outline: w.outline ? { px: w.outline, color: color(this.theme, w.outlineColor || 'ink') } : null,
             });
             this._blitDiff(x, buf);
         } else if (w.type === 'badge') {

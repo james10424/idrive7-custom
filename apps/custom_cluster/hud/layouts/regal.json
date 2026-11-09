@@ -321,7 +321,8 @@
       "text": "P",
       "font": "r_vfd",
       "color": "vfd",
-      "align": "center"
+      "align": "center",
+      "litGear": 0
     },
     {
       "id": "gear_R",
@@ -334,7 +335,8 @@
       "text": "R",
       "font": "r_vfd",
       "color": "vfd",
-      "align": "center"
+      "align": "center",
+      "litGear": 1
     },
     {
       "id": "gear_N",
@@ -347,7 +349,8 @@
       "text": "N",
       "font": "r_vfd",
       "color": "vfd",
-      "align": "center"
+      "align": "center",
+      "litGear": 2
     },
     {
       "id": "gear_D",
@@ -360,7 +363,8 @@
       "text": "D",
       "font": "r_vfd",
       "color": "vfd",
-      "align": "center"
+      "align": "center",
+      "litGear": 3
     },
     {
       "id": "gear_num",
@@ -373,7 +377,8 @@
       "text": "{{gearInD}}",
       "font": "r_vfd",
       "color": "vfd",
-      "align": "center"
+      "align": "center",
+      "litGear": 5
     },
     {
       "id": "vfd_clock",
@@ -406,7 +411,7 @@
       "type": "text",
       "z": 5,
       "x": 1281,
-      "y": 335,
+      "y": 338,
       "w": 78,
       "h": 25,
       "text": "{{range4}}",

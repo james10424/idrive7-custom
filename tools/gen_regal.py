@@ -62,12 +62,14 @@ wd.append(centred('vfd_mph', 528, 243, 60, 21, '{{u:speed}}', 'r_lbl', 'vfd'))
 wd.append(centred('vfd_odo', 504, 280, 116, 25, '{{odometer}}', 'r_seg_s', 'vfd'))
 # the gear row: P R N D, a gap, then the gear number while driving (lit in manual, M)
 for i, g in enumerate('PRND'):
-    wd.append(centred('gear_' + g, GEAR_X0 + GEAR_P * i, 323, 20, 24, g, 'r_vfd', 'vfd'))
-wd.append(centred('gear_num', GEAR_X0 + GEAR_P * 5, 323, 20, 24, '{{gearInD}}', 'r_vfd', 'vfd'))
+    wd.append(centred('gear_' + g, GEAR_X0 + GEAR_P * i, 323, 20, 24, g, 'r_vfd', 'vfd', litGear=i))
+wd.append(centred('gear_num', GEAR_X0 + GEAR_P * 5, 323, 20, 24, '{{gearInD}}', 'r_vfd', 'vfd', litGear=5))
+# the lit letter (on the gear box) turns the white text colour: 5.0:1 on the box (WCAG AA), the VFD orange was 1.9:1
 # right VFD: the clock, the range
 wd.append(centred('vfd_clock', 1332, 228, 132, 36, '{{time}}', 'r_seg_m', 'vfd'))
 wd.append(centred('vfd_rlabel', 1332, 274, 60, 17, 'RANGE', 'r_tiny', 'vfd'))
-wd.append(text('vfd_range', 1281, 290, 78, 25, '{{range4}}', 'r_seg_s', 'vfd', 'right'))
+wd.append(text('vfd_range', 1281, 293, 78, 25,   # bottom on the unit's (car photo, Nov 9 2026)
+     '{{range4}}', 'r_seg_s', 'vfd', 'right'))
 wd.append(text('vfd_runit', 1362, 296, 26, 21, '{{u:distUc}}', 'r_lbl', 'vfd', 'left'))
 
 # lower window: fuel and the LED revs
