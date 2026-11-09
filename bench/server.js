@@ -38,6 +38,7 @@ const { takeBuildLock, BUILD_LOCK_WAIT_MS } = require('./build_lock');
 // What the driver sees of each target (hood curve, BMW's gear box and belt light, the HUD window):
 // one source of truth, shared with the app's layout check. The page gets it in the 'hello' event.
 const visible = require('../shared/visible');
+const shaderBudget = require('../tools/shader_budget');   // what the KOMBI took on the car (texture reads, size)
 
 const PORT = Number(process.env.BENCH_PORT) || 8078;
 // BENCH_LAYER_CAP: the car seems to draw only an app's first 8 layers (photos, Nov 5 2026).
@@ -247,6 +248,10 @@ const renderServer = net.createServer((sock) => {
                     nl.image = Buffer.alloc(m.iw * m.ih * 4);
                 } else if (m.kind === 'effect') {
                     if (!m.fs) return refuse('layer', m.ref, 'effect without fs');
+                    // the car's KOMBI restarted on a shader with 38 texture reads (Custom HUD 0.1.15); refuse that here first
+                    const sb = shaderBudget.check(m.fs);
+                    if (sb.level === 'crash') return refuse('layer', m.ref, 'shader ' + sb.text);
+                    if (sb.level === 'warn') log('warn', 'layer ' + m.ref + ': shader ' + sb.text);
                     nl.fs = m.fs; nl.time = !!m.time; nl.binds = {};
                 } else {
                     log('warn', 'layer ' + m.ref + ': kind ' + m.kind + ' is not drawn by the bench');
