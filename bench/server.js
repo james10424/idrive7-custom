@@ -317,6 +317,9 @@ const renderServer = net.createServer((sock) => {
                     if (!WIDTH[m.type]) return refuse('uniform', m.ref, 'unknown uniform type "' + m.type + '"');
                     if (v.length > 1024 || v.length % WIDTH[m.type]) return refuse('uniform', m.ref, 'uniform ' + m.name + ': ' + v.length + ' numbers is not whole ' + m.type + 's (or over 1024)');
                 } else if (v.length > 4) return refuse('uniform', m.ref, 'uniform ' + m.name + ': ' + v.length + ' numbers without a type (max 4)');
+                // the car's cluster-render keeps at most 30 uniform names a layer and refuses a new one past that (Custom HUD
+                // 0.1.9's Miku sent 34 and the car refused it, Nov 8 2026; the bench had let it through)
+                if (!l.uniforms[m.name] && Object.keys(l.uniforms).length >= 30) return refuse('uniform', m.ref, 'at most 30 uniforms a layer');
                 l.uniforms[m.name] = { v, type: m.type || null };
                 sceneChanged();
                 return;

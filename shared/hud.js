@@ -2070,8 +2070,9 @@ class HudApp {
             c.uniform(ref, 'u_atlasSize', j.atlas);
             c.uniform(ref, 'u_frame', j.frame);
             c.uniform(ref, 'u_origin', [ft[0] - w.x - j.anchor[0], ft[1] - w.y - j.anchor[1]]);
-            c.uniform(ref, 'u_fA', fr('idle').concat(fr('half')));
-            c.uniform(ref, 'u_fB', fr('shut').concat(fr('talk')));
+            // cluster-render takes at most 30 uniform names a layer: the fixed sprite values go up as three vec4 arrays
+            // (u_spr: the eye frames and the tails; u_arm; u_leg), which shaders.js miku names back with #define
+            const spr = fr('idle').concat(fr('half'), fr('shut'), fr('talk'));
             // the lean angles (odd count, up to 16; without them she is always upright)
             const ln = Array.isArray(j.lean) && j.lean.length >= 3 ? j.lean.slice(0, 15) : [fr('idle')];
             const lflat = [], hflat = [];
@@ -2082,13 +2083,13 @@ class HudApp {
             c.uniform(ref, 'u_leanN', [ln.length]);
             // the arms (up to 2): sprites the shader turns from the shoulders to point toward the indicator
             const am = Array.isArray(j.arms) ? j.arms.slice(0, 2) : [], v3 = (o) => (Array.isArray(o) ? [o[0] || 0, o[1] || 0, o[2] || 0, 0] : [0, 0, 0, 0]);
+            const armF = [];
             [0, 1].forEach((i) => {
                 const a = am[i];
-                c.uniform(ref, 'u_arm' + i, a ? a.rect : [0, 0, 0, 0]);
-                c.uniform(ref, 'u_arm' + i + 'At', a ? [a.at[0], a.at[1], a.shoulder[0], a.shoulder[1]] : [0, 0, 0, 0]);
-                c.uniform(ref, 'u_arm' + i + 'L', v3(a && a.left));
-                c.uniform(ref, 'u_arm' + i + 'R', v3(a && a.right));
+                armF.push(...(a ? a.rect : [0, 0, 0, 0]), ...(a ? [a.at[0], a.at[1], a.shoulder[0], a.shoulder[1]] : [0, 0, 0, 0]),
+                    ...v3(a && a.left), ...v3(a && a.right));
             });
+            c.uniform(ref, 'u_arm', armF, { type: 'vec4' });
             c.uniform(ref, 'u_armSide', [am[0] ? am[0].side : -1, am[1] ? am[1].side : 1, (isNum(w.point) ? w.point : 60) * Math.PI / 180,
                 (isNum(w.balance) ? w.balance : 50) * Math.PI / 180]);
             // the glances (left to right, odd, up to 7, the middle one idle) and the doze frames (up to 4); an older bake
@@ -2108,12 +2109,13 @@ class HudApp {
             x.lookN = lk.length; x.dozeN = dz.length;
             // the legs (up to 2): sprites the shader bends at the knee with the feet planted, hips following the lean
             const lg = Array.isArray(j.legs) ? j.legs.slice(0, 2) : [], hs = [];
+            const legF = [];
             [0, 1].forEach((i) => {
                 const g = lg[i];
-                c.uniform(ref, 'u_leg' + i, g ? g.rect : [0, 0, 0, 0]);
-                c.uniform(ref, 'u_leg' + i + 'A', g ? [g.at[0], g.at[1], g.hip[0], g.hip[1]] : [0, 0, 0, 0]);
-                c.uniform(ref, 'u_leg' + i + 'B', g ? [g.knee[0], g.knee[1], g.ankle[0], g.ankle[1]] : [0, 0, 0, 0]);
+                legF.push(...(g ? g.rect : [0, 0, 0, 0]), ...(g ? [g.at[0], g.at[1], g.hip[0], g.hip[1]] : [0, 0, 0, 0]),
+                    ...(g ? [g.knee[0], g.knee[1], g.ankle[0], g.ankle[1]] : [0, 0, 0, 0]));
             });
+            c.uniform(ref, 'u_leg', legF, { type: 'vec4' });
             for (let i = 0; i < 12; i++) hs.push(Array.isArray(j.hipShift) && isNum(j.hipShift[i]) ? j.hipShift[i] : 0);
             c.uniform(ref, 'u_hipShift', hs, { type: 'vec4' });
             x.legSides = [lg[0] ? lg[0].side : -1, lg[1] ? lg[1].side : 1];
@@ -2125,8 +2127,7 @@ class HudApp {
             // moved only every third frame would step. A message goes up only when the lean or speed changes a step
             x.timer = setInterval(() => this._guard('widget ' + w.id, () => this._update(x, Date.now(), false)), MIKU_MS);
             const tl = j.tails || null;
-            c.uniform(ref, 'u_tails', rect(tl));
-            c.uniform(ref, 'u_tailsAt', tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1]);
+            c.uniform(ref, 'u_spr', spr.concat(rect(tl), tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1]), { type: 'vec4' });
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);

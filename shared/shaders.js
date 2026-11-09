@@ -1231,20 +1231,10 @@ uniform sampler2D u_atlas;
 uniform vec2 u_atlasSize;
 uniform vec2 u_frame;       // frame w, h
 uniform vec2 u_origin;      // the frame's top-left in layer px
-uniform vec4 u_fA;          // idle.xy, half.xy (atlas px of each frame's top-left)
-uniform vec4 u_fB;          // shut.xy, talk.xy
 uniform vec4 u_lean[8];     // the lean angles' frames, left to right, two per vec4 (atlas px of each frame's top-left)
 uniform vec4 u_head[4];     // how far her head sits from upright at each angle (px), four per vec4
 uniform float u_leanN;      // how many angles (odd, up to 16; the middle one is upright)
 uniform vec4 u_hip;         // waist y, head y (frame px), breathing 0..1, 0
-uniform vec4 u_arm0;        // atlas rect of an arm sprite (w = 0: none)
-uniform vec4 u_arm0At;      // its top-left and its shoulder (the pivot), frame px, at rest
-uniform vec4 u_arm0L;       // at a full lean left: the shoulder's move (px) and the arm's turn (rad, the lean's own sway)
-uniform vec4 u_arm0R;       // the same at a full lean right
-uniform vec4 u_arm1;
-uniform vec4 u_arm1At;
-uniform vec4 u_arm1L;
-uniform vec4 u_arm1R;
 uniform vec4 u_armSide;     // x, y: arm 0's and arm 1's side (-1 left, 1 right); z: how far a pointing arm swings up (rad);
                             // w: how far the arm away from the lean swings up and out at a full lean to balance her (rad)
 uniform vec4 u_idle;        // look -1 .. 1, doze 0 .. 1, glance frames (odd, up to 7; the middle is idle), doze frames (up to 4)
@@ -1252,16 +1242,30 @@ uniform vec4 u_look[4];     // the glances' frames, left to right, two per vec4
 uniform vec4 u_lookHead[2]; // how far her head sits from upright in each (px), four per vec4
 uniform vec4 u_doze[2];     // the doze frames, two per vec4
 uniform vec4 u_dozeHead[2]; // how far her head sits from upright in each (x, y px), two per vec4
-uniform vec4 u_leg0;        // atlas rect of a leg sprite (w = 0: none)
-uniform vec4 u_leg0A;       // its top-left and its hip (frame px, at rest)
-uniform vec4 u_leg0B;       // its knee and ankle (frame px, at rest)
-uniform vec4 u_leg1;
-uniform vec4 u_leg1A;
-uniform vec4 u_leg1B;
 uniform vec4 u_legs;        // x, y: leg 0's and leg 1's side (-1 left, 1 right); z: weight shift -1 .. 1; w: 0
 uniform vec4 u_hipShift[3]; // how far her hips sit from upright at each lean angle (px), four per vec4
-uniform vec4 u_tails;       // atlas rect of the tails sprite (w = 0: none)
-uniform vec4 u_tailsAt;     // its top-left in frame px, root y in the sprite, length px
+
+uniform vec4 u_spr[4];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
+#define u_fA u_spr[0]   // idle.xy, half.xy (atlas px of each frame's top-left)
+#define u_fB u_spr[1]   // shut.xy, talk.xy
+#define u_tails u_spr[2]   // atlas rect of the tails sprite (w = 0: none)
+#define u_tailsAt u_spr[3]   // its top-left in frame px, root y in the sprite, length px
+uniform vec4 u_arm[8];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
+#define u_arm0 u_arm[0]   // atlas rect of an arm sprite (w = 0: none)
+#define u_arm0At u_arm[1]   // its top-left and its shoulder (the pivot), frame px, at rest
+#define u_arm0L u_arm[2]   // at a full lean left: the shoulder's move (px) and the arm's turn (rad, the lean's own sway)
+#define u_arm0R u_arm[3]   // the same at a full lean right
+#define u_arm1 u_arm[4]
+#define u_arm1At u_arm[5]
+#define u_arm1L u_arm[6]
+#define u_arm1R u_arm[7]
+uniform vec4 u_leg[6];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
+#define u_leg0 u_leg[0]   // atlas rect of a leg sprite (w = 0: none)
+#define u_leg0A u_leg[1]   // its top-left and its hip (frame px, at rest)
+#define u_leg0B u_leg[2]   // its knee and ankle (frame px, at rest)
+#define u_leg1 u_leg[3]
+#define u_leg1A u_leg[4]
+#define u_leg1B u_leg[5]
 
 // a sprite pixel: atlas rect r, point p in sprite px; premultiplied; transparent outside the rect
 vec4 tap(vec4 r, vec2 p) {
