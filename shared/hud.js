@@ -253,7 +253,45 @@ const MIKU_RISE_W = 3;           // waking in the loop: about 1.5 s
 const MIKU_WAKE_W = 5;           // waking for good when the car moves: about 1 s
 const MIKU_POINT_C = 16.7;
 const MIKU_WEIGHT_K = 12;        // the weight shift's spring (1/s^2): about a second onto the other leg
-const MIKU_WEIGHT_C = 7;         // critically damped       // critically damped: it rises and settles without bouncing       // its damping (1/s): a sway or two past upright, then still
+const MIKU_WEIGHT_C = 7;         // critically damped
+
+/**
+ * The Miku shader for a widget: "legs": false or "idle": false in the layout leave the legs (straight, in the body
+ * frames' place: none) or the glances and dozing out of the shader altogether, to find which part a display can't take.
+ */
+function mikuShader(w) {
+    return (w.legs === false ? '#define MIKU_NO_LEGS\n' : '') + (w.idle === false ? '#define MIKU_NO_IDLE\n' : '') + shaders.miku;
+}
+
+/**
+ * The Miku shader's tables as pixel rows to go under the atlas art: 56 entries of two values each, each entry a 3x3 px
+ * block (so a bilinear read at its middle gets it whole), opaque (alpha 255: a canvas or driver that premultiplies
+ * leaves it alone), each value 12 bits: (v + 1024) * 2 in R (high 8) and B's high or low nibble, in G likewise:
+ * -1024 .. 1023.5 px in half px. Entries: 0-15 the lean frames' atlas x, y; 16-31 each lean frame's head and hip
+ * shift; 32-39 the glance frames' x, y; 40-47 each glance's head shift; 48-51 the doze frames' x, y; 52-55 each doze
+ * frame's head shift x, y. Returns { px, rows, counts: { lean, look, doze } }.
+ */
+function mikuData(j, aw) {
+    const xy = (v) => (Array.isArray(v) ? [Number(v[0]) || 0, Number(v[1]) || 0] : [0, 0]), num = (a, i) => (Array.isArray(a) && isNum(a[i]) ? a[i] : 0);
+    const lean = Array.isArray(j.lean) && j.lean.length >= 3 ? j.lean.slice(0, 15) : [j.frames.idle];
+    const look = Array.isArray(j.look) && j.look.length >= 3 && j.look.length % 2 ? j.look.slice(0, 7) : [];
+    const doze = Array.isArray(j.doze) ? j.doze.slice(0, 4) : [];
+    const e = [];
+    for (let i = 0; i < 16; i++) e[i] = xy(lean[i]);
+    for (let i = 0; i < 16; i++) e[16 + i] = [num(j.leanShift, i), num(j.hipShift, i)];
+    for (let i = 0; i < 8; i++) { e[32 + i] = xy(look[i]); e[40 + i] = [num(j.lookShift, i), 0]; }
+    for (let i = 0; i < 4; i++) { e[48 + i] = xy(doze[i]); e[52 + i] = xy(Array.isArray(j.dozeShift) ? j.dozeShift[i] : null); }
+    const per = Math.floor(aw / 3), rows = Math.ceil(e.length / per) * 3, px = Buffer.alloc(aw * rows * 4, 0);
+    const q = (v) => Math.max(0, Math.min(4095, Math.round((v + 1024) * 2)));
+    e.forEach((v, i) => {
+        const a = q(v[0]), b = q(v[1]), x0 = (i % per) * 3, y0 = Math.floor(i / per) * 3;
+        for (let dy = 0; dy < 3; dy++) for (let dx = 0; dx < 3; dx++) {
+            const o = ((y0 + dy) * aw + x0 + dx) * 4;
+            px[o] = a >> 4; px[o + 1] = b >> 4; px[o + 2] = ((a & 15) << 4) | (b & 15); px[o + 3] = 255;
+        }
+    });
+    return { px, rows, counts: { lean: lean.length, look: look.length, doze: doze.length } };
+}       // critically damped: it rises and settles without bouncing       // its damping (1/s): a sway or two past upright, then still
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
@@ -1165,16 +1203,20 @@ class HudApp {
             // the instrument cluster (KOMBI) restarted on a 1024x1128 RGBA asset (Nov 2026): nothing over 1024 a side
             if (aw > 1024 || ah > 1024) throw new Error('atlas ' + aw + 'x' + ah + ' is over 1024 px a side, which restarts the instrument cluster; bake again with the current tools/live2d_bake');
             if (!info.frames || !info.frames.idle || !Array.isArray(info.frame) || !Array.isArray(info.anchor)) throw new Error('atlas.json: needs "frame", "anchor" and frames.idle');
-            const px = fs.readFileSync(path.join(dir, 'atlas.rgba'));
-            if (px.length !== aw * ah * 4) throw new Error('atlas.rgba is ' + px.length + ' bytes, ' + aw + 'x' + ah + ' RGBA needs ' + aw * ah * 4);
+            const art = fs.readFileSync(path.join(dir, 'atlas.rgba'));
+            if (art.length !== aw * ah * 4) throw new Error('atlas.rgba is ' + art.length + ' bytes, ' + aw + 'x' + ah + ' RGBA needs ' + aw * ah * 4);
+            // the per-frame tables go in a few rows under the art, which the shader reads (mikuData), not in uniforms
+            const data = mikuData(info, aw), h = ah + data.rows;
+            if (h > 1024) throw new Error('atlas ' + aw + 'x' + ah + ' leaves no room under 1024 px for its ' + data.rows + ' rows of tables; bake again with the current tools/live2d_bake');
+            const px = Buffer.concat([art, data.px]);
             const c = this._clientAt(ci);
-            const ref = c.asset({ target: this.target, format: 'rgba8', w: aw, h: ah, sampling: 'bilinear' });
-            if (!ref) throw new Error('atlas asset refused (' + aw + 'x' + ah + ')');
+            const ref = c.asset({ target: this.target, format: 'rgba8', w: aw, h, sampling: 'bilinear' });
+            if (!ref) throw new Error('atlas asset refused (' + aw + 'x' + h + ')');
             c.pixels(ref, null, px);
-            const a = { ref, c, ci, info, bytes: aw * ah * 8 };
+            const a = { ref, c, ci, info, size: [aw, h], dataY: ah, counts: data.counts, bytes: aw * h * 8 };
             this.atlases.set(key, a);
             this.log.info('miku frames: ' + Object.keys(info.frames).length + ' of ' + info.frame.join('x') + ', ' +
-                (info.tails ? 'tails, ' : '') + aw + 'x' + ah + ' RGBA asset, ' + mib(a.bytes) + ' of pixel memory');
+                (info.tails ? 'tails, ' : '') + aw + 'x' + h + ' RGBA asset, ' + mib(a.bytes) + ' of pixel memory');
             return a;
         } catch (e) {
             this.problem = 'Miku: ' + e.message;
@@ -1919,7 +1961,8 @@ class HudApp {
             if (IMAGE_TYPES[w.type]) ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
             else {
                 if (w.type === 'miku' && !this._sprite(w, this._connOf(w))) return;
-                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : shaders[w.type], time: w.type === 'miku' || undefined }, base));
+                ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : w.type === 'miku' ? mikuShader(w) : shaders[w.type],
+                    time: w.type === 'miku' || undefined }, base));
             }
             if (!ref) { this.log.warn('widget "' + w.id + '": layer refused'); return; }
         }
@@ -2106,21 +2149,14 @@ class HudApp {
             const rect = (o) => (o && Array.isArray(o.rect) ? o.rect : [0, 0, 0, 0]);
             c.bind(ref, 'u_atlas', sp.ref);
             c.uniform(ref, 'u_size', [w.w, w.h]);
-            c.uniform(ref, 'u_atlasSize', j.atlas);
+            c.uniform(ref, 'u_atlasSize', sp.size);
             c.uniform(ref, 'u_frame', j.frame);
             c.uniform(ref, 'u_origin', [ft[0] - w.x - j.anchor[0], ft[1] - w.y - j.anchor[1]]);
-            // cluster-render takes at most 30 uniform names a layer: the fixed sprite values go up as three vec4 arrays
-            // (u_spr: the eye frames and the tails; u_arm; u_leg), which shaders.js miku names back with #define
+            // the fixed sprite values go up as three vec4 arrays (u_spr: the eye frames, the tails, the crop and the
+            // tables' counts; u_arm; u_leg), which shaders.js miku names back with #define; the per-frame tables (lean,
+            // glance and doze frames, head and hip shifts) are pixel rows under the atlas (_sprite, mikuData). Few
+            // uniforms: the cluster's GPU restarted on the 0.1.9 .. 0.1.12 shader's 55 uniform vectors (or its size)
             const spr = fr('idle').concat(fr('half'), fr('shut'), fr('talk'));
-            // the lean angles (odd count, up to 16; without them she is always upright)
-            const ln = Array.isArray(j.lean) && j.lean.length >= 3 ? j.lean.slice(0, 15) : [fr('idle')];
-            const lflat = [], hflat = [];
-            for (let i = 0; i < 16; i++) { const v = ln[i] || [0, 0]; lflat.push(v[0], v[1]); }
-            for (let i = 0; i < 16; i++) hflat.push(Array.isArray(j.leanShift) && isNum(j.leanShift[i]) ? j.leanShift[i] : 0);
-            c.uniform(ref, 'u_lean', lflat, { type: 'vec4' });
-            c.uniform(ref, 'u_head', hflat, { type: 'vec4' });
-            c.uniform(ref, 'u_leanN', [ln.length]);
-            // the arms (up to 2): sprites the shader turns from the shoulders to point toward the indicator
             const am = Array.isArray(j.arms) ? j.arms.slice(0, 2) : [], v3 = (o) => (Array.isArray(o) ? [o[0] || 0, o[1] || 0, o[2] || 0, 0] : [0, 0, 0, 0]);
             const armF = [];
             [0, 1].forEach((i) => {
@@ -2131,36 +2167,17 @@ class HudApp {
             c.uniform(ref, 'u_arm', armF, { type: 'vec4' });
             c.uniform(ref, 'u_armSide', [am[0] ? am[0].side : -1, am[1] ? am[1].side : 1, (isNum(w.point) ? w.point : 60) * Math.PI / 180,
                 (isNum(w.balance) ? w.balance : 50) * Math.PI / 180]);
-            // the glances (left to right, odd, up to 7, the middle one idle) and the doze frames (up to 4); an older bake
-            // without them still dozes, eyes shut
-            const lk = Array.isArray(j.look) && j.look.length >= 3 && j.look.length % 2 ? j.look.slice(0, 7) : [];
-            const dz = Array.isArray(j.doze) ? j.doze.slice(0, 4) : [];
-            const lkF = [], lkH = [], dzF = [], dzH = [];
-            for (let i = 0; i < 8; i++) { const v = lk[i] || [0, 0]; lkF.push(v[0], v[1]); lkH.push(Array.isArray(j.lookShift) && isNum(j.lookShift[i]) ? j.lookShift[i] : 0); }
-            for (let i = 0; i < 4; i++) {
-                const v = dz[i] || [0, 0], h = Array.isArray(j.dozeShift) && Array.isArray(j.dozeShift[i]) ? j.dozeShift[i] : [0, 0];
-                dzF.push(v[0], v[1]); dzH.push(h[0] || 0, h[1] || 0);
-            }
-            c.uniform(ref, 'u_look', lkF, { type: 'vec4' });
-            c.uniform(ref, 'u_lookHead', lkH, { type: 'vec4' });
-            c.uniform(ref, 'u_doze', dzF, { type: 'vec4' });
-            c.uniform(ref, 'u_dozeHead', dzH, { type: 'vec4' });
-            x.lookN = lk.length; x.dozeN = dz.length;
+            x.lookN = sp.counts.look; x.dozeN = sp.counts.doze;
             // the legs (up to 2): sprites the shader bends at the knee with the feet planted, hips following the lean
-            const lg = Array.isArray(j.legs) ? j.legs.slice(0, 2) : [], hs = [];
-            const legF = [];
+            const lg = Array.isArray(j.legs) ? j.legs.slice(0, 2) : [], legF = [];
             [0, 1].forEach((i) => {
                 const g = lg[i];
                 legF.push(...(g ? g.rect : [0, 0, 0, 0]), ...(g ? [g.at[0], g.at[1], g.hip[0], g.hip[1]] : [0, 0, 0, 0]),
                     ...(g ? [g.knee[0], g.knee[1], g.ankle[0], g.ankle[1]] : [0, 0, 0, 0]));
             });
             c.uniform(ref, 'u_leg', legF, { type: 'vec4' });
-            for (let i = 0; i < 12; i++) hs.push(Array.isArray(j.hipShift) && isNum(j.hipShift[i]) ? j.hipShift[i] : 0);
-            c.uniform(ref, 'u_hipShift', hs, { type: 'vec4' });
-            x.legSides = [lg[0] ? lg[0].side : -1, lg[1] ? lg[1].side : 1];
             x.legN = lg.length;
-            c.uniform(ref, 'u_legs', [x.legSides[0], x.legSides[1], 0, 0]);
-            c.uniform(ref, 'u_idle', [0, 0, lk.length, dz.length]);
+            c.uniform(ref, 'u_idle', [0, 0, 0, 0]);
             c.uniform(ref, 'u_hip', [j.hipY, isNum(j.headY) ? j.headY : 0, j.breathe === false ? 0 : 1, 0]);
             // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
             // moved only every third frame would step. A message goes up only when the lean or speed changes a step
@@ -2168,7 +2185,8 @@ class HudApp {
             const tl = j.tails || null;
             // u_spr[4]: the rect the face, glance and doze frames are crops of (none: an older bake's whole frames)
             const cr = Array.isArray(j.crop) && j.crop.length === 4 ? j.crop : [0, 0, 0, 0];
-            c.uniform(ref, 'u_spr', spr.concat(rect(tl), tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1], cr), { type: 'vec4' });
+            c.uniform(ref, 'u_spr', spr.concat(rect(tl), tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1], cr,
+                [sp.counts.lean, sp.counts.look, sp.counts.doze, sp.dataY]), { type: 'vec4' });
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);
@@ -2463,11 +2481,9 @@ class HudApp {
             x.spd = isNum(x.spd) ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / MIKU_TAU_MS)) : sv;
             // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
             const u = [step(Math.tanh(x.lean * 1.15)), step(x.spd), step(x.point), this.themeName === 'night' ? 0.8 : 1];
-            const ui = [step(x.look), step(x.doze), x.lookN || 0, x.dozeN || 0];
+            const ui = [step(x.look), step(x.doze), x.legN ? step(x.ws || 0) : 0, 0];
             const key = u.join('|'), keyI = ui.join('|');
             if (force || keyI !== x.lastI) { x.lastI = keyI; x.c.uniform(x.ref, 'u_idle', ui); }
-            const keyW = step(x.ws || 0);
-            if (x.legN && (force || keyW !== x.lastW)) { x.lastW = keyW; x.c.uniform(x.ref, 'u_legs', [x.legSides[0], x.legSides[1], keyW, 0]); }
             if (!force && key === x.last) return;
             x.last = key;
             x.c.uniform(x.ref, 'u_drive', u);
