@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 9 2026
 
+- **Custom Cluster 0.1.37:** sitting Miku rests her hands on the ledge, on the speed window's bottom edge beside her, her arms turned out from the shoulders (22 degrees with RetrynowMiku). The bake turns each arm in `arms` until its lowest point is `sit.hands` model units above the knees (0.03), and widens her frame to fit (212x229, the atlas still 512x233); the Regal widget is 220 px wide for it (x 428). Rebake and deploy with `--miku-sit`. Checked on the bench, not on the car.
 - **Sitting Miku bake:** her legs closer together. tools/live2d_bake's sitting pose takes `sit.together` (0 to 1), pulling the legs in toward `split` below the hips, fully from the knees down; the skirt's sag over the knees moves in with them. With RetrynowMiku 0.35. No app change: rebake and deploy with `--miku-sit`. Checked on the bench, not on the car.
 
 ## Nov 8 2026

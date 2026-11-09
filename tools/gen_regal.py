@@ -145,7 +145,7 @@ wd.append(ndl)
 # the knees) goes
 SEAT = (538, 441)
 wd.append({'id': 'miku_sit', 'type': 'mikuSit', 'class': 'content', 'z': 9, 'toggle': 'mikuSit',
-           'x': SEAT[0] - 80, 'y': 298, 'w': 160, 'h': 238, 'seat': list(SEAT), 'swing': 35})
+           'x': SEAT[0] - 110, 'y': 298, 'w': 220, 'h': 238, 'seat': list(SEAT), 'swing': 35})
 
 out = {
     'schemaVersion': 2, 'name': 'Regal', 'theme': 'regal',

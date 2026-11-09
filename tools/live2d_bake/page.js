@@ -583,13 +583,16 @@ async function bake(L, cfg) {
  * of the thigh shows (0.25), split: model x between the legs (0), together: how far the legs are pulled in toward split below the
  * hips (0 = as drawn, 0.3 = knees and feet 30% closer; the skirt's knee sag follows), skirt: ["part id"] (her skirt, resting on her lap: below the
  * hips its flare pulled in by "narrow" (0.2), its hem "drape" (0.06) model units past the knees and sagging "sag" (0.06)
- * over each knee, at kneeX (0.12) either side of split), behind: ["part id"] (what hangs behind her, a bow's ribbons: it
+ * over each knee, at kneeX (0.12) either side of split), hands: model units above the knees where her hands rest (the ledge's edge: each of cfg.arms turned out from its
+ * shoulder until its lowest point is there; leave out to keep the arms as drawn), behind: ["part id"] (what hangs behind her, a bow's ribbons: it
  * lies on the seat, tucked under the skirt to "tuck" (0.1) of its length below the hips) }. Hip is where the thighs turn: under the skirt. Anything wholly below the knees (a shoe's sparkle in
  * another part) goes with the shins. Writes atlas.json with "pose": "sit". */
 async function bakeSit(L, cfg) {
     const pad = cfg.pad || 2, sit = Object.assign({ leg: 'Part15', hip: 0.15, knee: -0.68, thigh: 0.25, split: 0 }, cfg.sit || {});
     const hidden = cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
     const legPart = inParts(L, [sit.leg]);
+    const armParts = (cfg.arms || []).map((a) => inParts(L, a.parts || []));
+    const armIn = (i) => armParts.some((f) => f(i));
     const R = new Renderer(L);
     const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
     makeCuts(L, cfg.cut, Object.assign({}, cfg.params, idle));
@@ -600,7 +603,7 @@ async function bakeSit(L, cfg) {
         const v = dv.vertexPositions[i];
         let all = v.length > 0;
         for (let k = 1; k < v.length && all; k += 2) all = v[k] < sit.knee;
-        if (all && !legPart(i)) low.add(i);
+        if (all && !legPart(i) && !armIn(i)) low.add(i);
     }
     const isLeg = (i) => legPart(i) || low.has(i);
     // the rig: thighs foreshortened toward the hips, everything below the knees up by what the thighs lost
@@ -626,7 +629,51 @@ async function bakeSit(L, cfg) {
     const inward = (x, y) => y >= sit.hip ? x : sit.split + (x - sit.split) * (1 - tog * Math.min(1, (sit.hip - y) / Math.max(1e-6, sit.hip - sit.knee)));
     const narrow = isFinite(sit.narrow) ? sit.narrow : 0.2, sag = isFinite(sit.sag) ? sit.sag : 0.06, kx = (isFinite(sit.kneeX) ? sit.kneeX : 0.12) * (1 - tog);
     if (skirt.size) log('sitting: the skirt (' + skirt.size + ' meshes) hem at model y ' + hem.toFixed(2) + ' rests just past the knees at ' + hemTo.toFixed(2));
+    // her hands on the ledge: each arm (cfg.arms) turned out from its shoulder until its lowest point is "hands" model
+    // units above the knees (the ledge's edge), so she leans on her hands beside her
+    const armTurn = armParts.map((f) => {
+        if (!isFinite(sit.hands)) return null;
+        let top = -Infinity, bot = Infinity;
+        const vs = [];
+        for (let i = 0; i < dv.count; i++) {
+            if (!f(i) || hidden(i) || !C.Utils.hasIsVisibleBit(dv.dynamicFlags[i])) continue;
+            const v = dv.vertexPositions[i]; vs.push(v);
+            for (let k = 1; k < v.length; k += 2) { top = Math.max(top, v[k]); bot = Math.min(bot, v[k]); }
+        }
+        if (!vs.length) return null;
+        const band = top - (top - bot) * 0.06;
+        let px = 0, n = 0;
+        vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) if (v[k + 1] >= band) { px += v[k]; n++; } });
+        const P = [px / n, top], side = Math.sign(P[0] - sit.split) || 1, want = kneeAt + sit.hands;
+        const lowAt = (a) => {
+            const c = Math.cos(a), sn = Math.sin(a);
+            let lo = Infinity;
+            vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) lo = Math.min(lo, P[1] + (v[k] - P[0]) * sn + (v[k + 1] - P[1]) * c); });
+            return lo;
+        };
+        // out is clockwise for her right arm (on your left), anticlockwise for the other; search 0 .. 80 degrees
+        let a0 = 0, a1 = 1.4;
+        if (lowAt(0) >= want) return null;
+        for (let t = 0; t < 40; t++) { const m = (a0 + a1) / 2; if (lowAt(side * m) < want) a0 = m; else a1 = m; }
+        const a = side * a1;
+        log('sitting: arm ' + (side < 0 ? 'on your left' : 'on your right') + ' turned out ' + Math.abs(a * 180 / Math.PI).toFixed(1) + ' degrees, hand on the ledge');
+        const c = Math.cos(a), sn = Math.sin(a), ext = [Infinity, Infinity, -Infinity, -Infinity];
+        vs.forEach((v) => { for (let k = 0; k < v.length; k += 2) {
+            const x = P[0] + (v[k] - P[0]) * c - (v[k + 1] - P[1]) * sn, y = P[1] + (v[k] - P[0]) * sn + (v[k + 1] - P[1]) * c;
+            ext[0] = Math.min(ext[0], x); ext[1] = Math.min(ext[1], y); ext[2] = Math.max(ext[2], x); ext[3] = Math.max(ext[3], y);
+        } });
+        return { f, P, c, s: sn, ext };
+    });
     R.warp = (i, v) => {
+        const t = armTurn.find((q) => q && q.f(i));
+        if (t) {
+            const o = new Float32Array(v);
+            for (let k = 0; k < o.length; k += 2) {
+                const dx = v[k] - t.P[0], dy = v[k + 1] - t.P[1];
+                o[k] = t.P[0] + dx * t.c - dy * t.s; o[k + 1] = t.P[1] + dx * t.s + dy * t.c;
+            }
+            return o;
+        }
         if (behindIn(i) && !isLeg(i) && !skirt.has(i)) {
             const o = new Float32Array(v);
             for (let k = 1; k < o.length; k += 2) if (v[k] < sit.hip) o[k] = sit.hip - (sit.hip - v[k]) * tuck;
@@ -657,6 +704,7 @@ async function bakeSit(L, cfg) {
     const ppu = cfg.pxPerUnit || (cfg.heightPx || 200) / figH;
     const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - 0.4 * figH;
     const m = 0.02 * figH;
+    armTurn.forEach((t) => { if (t) { box[0] = Math.min(box[0], t.ext[0]); box[2] = Math.max(box[2], t.ext[2]); } });   // the hands out to her sides
     box = [box[0] - m, box[1] + lift - m, box[2] + m, box[3] + m];   // she's shorter by the thighs
     const fw = Math.ceil((box[2] - box[0]) * ppu), fh = Math.ceil((box[3] - box[1]) * ppu);
     const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
