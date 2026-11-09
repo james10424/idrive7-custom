@@ -461,10 +461,13 @@
   if (/[?&]backdrop=1/.test(location.search)) document.getElementById('road').checked = true;
   if (/[?&]car=0/.test(location.search)) document.getElementById('carview').checked = false;
   if (/[?&]bmw=0/.test(location.search)) document.getElementById('bmwhud').checked = false;
-  let frames = 0, lastFpsT = performance.now();
+  let frames = 0, lastFpsT = performance.now(), lastDraw = -Infinity;
+  // at most 30 redraws a second, as cluster-render's tick (cluster-render.conf fps = 30); a faster screen skips frames
+  const FRAME_MS = 1000 / 30;
   function frame(t) {
     const animated = scene.some((l) => l.kind === 'effect' && l.time);
-    if (dirty || animated) {
+    if ((dirty || animated) && t - lastDraw >= FRAME_MS - 2) {
+      lastDraw = t;
       dirty = false;
       views.forEach((v) => {
       canvas = v.canvas; ctx = v.ctx; view = v.target; VW = v.VW; VH = v.VH;
