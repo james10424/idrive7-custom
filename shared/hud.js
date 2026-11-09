@@ -1189,16 +1189,18 @@ class HudApp {
     _sprite(w, ci) {
         // the "Miku lean" setting picks the bake: sideways (miku/) or forward/back (miku-fb/). Switching it rebuilds
         // the layout, and the other folder's files replace the uploaded atlas (one Miku atlas a connection at a time)
-        const fb = this.setting('mikuLean') === 'fb', dir = path.join(this.ctx.dataDir || '.', fb ? 'miku-fb' : 'miku');
+        // Custom Cluster's lying Miku (mikuLie) has her own bake, miku-lie/, and no table rows
+        const lie = w.type === 'mikuLie', fb = !lie && this.setting('mikuLean') === 'fb';
+        const sub = lie ? 'miku-lie' : fb ? 'miku-fb' : 'miku', dir = path.join(this.ctx.dataDir || '.', sub);
         let st;
         try { st = fs.statSync(path.join(dir, 'atlas.rgba')); } catch (e) { st = null; }
-        const key = 'sprite:' + ci + ':' + dir + ':' + (st ? st.mtimeMs : 0);
+        const pre = (lie ? 'lie:' : 'sprite:') + ci + ':', key = pre + dir + ':' + (st ? st.mtimeMs : 0);
         if (this.atlases.has(key)) return this.atlases.get(key);
         this.atlases.forEach((a, k) => {
-            if (k.indexOf('sprite:' + ci + ':') === 0) { a.c.drop(a.ref); this.atlases.delete(k); }
+            if (k.indexOf(pre) === 0) { a.c.drop(a.ref); this.atlases.delete(k); }
         });
         try {
-            if (!st) throw new Error('no baked frames in ' + dir + ' (tools/live2d_bake, then scripts/deploy.sh ' + (fb ? '--miku-fb' : '--miku') + ')');
+            if (!st) throw new Error('no baked frames in ' + dir + ' (tools/live2d_bake, then scripts/deploy.sh --' + sub + ')');
             const info = JSON.parse(fs.readFileSync(path.join(dir, 'atlas.json'), 'utf8'));
             const [aw, ah] = info.atlas || [];
             if (!(aw > 0 && ah > 0)) throw new Error('atlas.json: bad "atlas" size');
@@ -1208,7 +1210,8 @@ class HudApp {
             const art = fs.readFileSync(path.join(dir, 'atlas.rgba'));
             if (art.length !== aw * ah * 4) throw new Error('atlas.rgba is ' + art.length + ' bytes, ' + aw + 'x' + ah + ' RGBA needs ' + aw * ah * 4);
             // the per-frame tables go in a few rows under the art, which the shader reads (mikuData), not in uniforms
-            const data = mikuData(info, aw), h = ah + data.rows;
+            if (lie !== (info.pose === 'lie')) throw new Error(lie ? 'atlas.json is not a lying bake (config "pose": "lie")' : 'atlas.json is the lying bake (for Custom Cluster): bake the standing one');
+            const data = lie ? { px: Buffer.alloc(0), rows: 0, counts: {} } : mikuData(info, aw), h = ah + data.rows;
             if (h > 1024) throw new Error('atlas ' + aw + 'x' + ah + ' leaves no room under 1024 px for its ' + data.rows + ' rows of tables; bake again with the current tools/live2d_bake');
             const px = Buffer.concat([art, data.px]);
             const c = this._clientAt(ci);
@@ -1221,7 +1224,7 @@ class HudApp {
                 (info.tails ? 'tails, ' : '') + aw + 'x' + h + ' RGBA asset, ' + mib(a.bytes) + ' of pixel memory');
             return a;
         } catch (e) {
-            this.problem = 'Miku: ' + e.message;
+            this.problem = (lie ? 'Lying Miku: ' : 'Miku: ') + e.message;
             this.log.warn('widget "' + w.id + '": ' + e.message);
             return null;
         }
@@ -1979,9 +1982,9 @@ class HudApp {
             const base = { target: this.target, klass: w.class || 'content', z: w.z || 0, x: w.x, y: w.y, w: w.w, h: w.h };
             if (IMAGE_TYPES[w.type]) ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
             else {
-                if (w.type === 'miku' && !this._sprite(w, this._connOf(w))) return;
+                if ((w.type === 'miku' || w.type === 'mikuLie') && !this._sprite(w, this._connOf(w))) return;
                 ref = c.effect(Object.assign({ fs: w.type === 'swatch' ? calibration.SWATCH : w.type === 'miku' ? mikuShader(w, this.setting('mikuParts')) : w.type === 'rdash' && w.needleOnly ? shaders.rdashNeedle : shaders[w.type],
-                    time: w.type === 'miku' || undefined }, base));
+                    time: w.type === 'miku' || w.type === 'mikuLie' || undefined }, base));
             }
             if (!ref) { this.log.warn('widget "' + w.id + '": layer refused'); return; }
         }
@@ -2203,6 +2206,19 @@ class HudApp {
             const cr = Array.isArray(j.crop) && j.crop.length === 4 ? j.crop : [0, 0, 0, 0];
             c.uniform(ref, 'u_spr', spr.concat(rect(tl), tl ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]] : [0, 0, 0, 1], cr,
                 [sp.counts.lean, sp.counts.look, sp.counts.doze, sp.dataY]), { type: 'vec4' });
+        } else if (w.type === 'mikuLie') {
+            // her frame centred in the widget's box, lying on its bottom edge (less "floor" px)
+            const sp = this._sprite(w, x.ci), j = sp.info, fr = j.frame;
+            c.bind(ref, 'u_atlas', sp.ref);
+            c.uniform(ref, 'u_size', [w.w, w.h]);
+            c.uniform(ref, 'u_atlasSize', sp.size);
+            c.uniform(ref, 'u_spr', j.frames.idle.concat(j.frames.half, j.frames.shut, fr, j.crop), { type: 'vec4' });
+            const br = Array.isArray(j.breathe) ? j.breathe : [0, 0, fr[1] / 2];
+            c.uniform(ref, 'u_breath', [br[0], br[1], br[2], 0]);
+            x.origin = [Math.round((w.w - fr[0]) / 2), w.h - fr[1] - (isNum(w.floor) ? w.floor : 0)];
+            x.lookN = 0; x.dozeN = 0;   // no glances; the HUD Miku's doze loop
+            c.uniform(ref, 'u_lie', x.origin.concat([0, 1]));
+            x.timer = setInterval(() => this._guard('widget ' + w.id, () => this._update(x, Date.now(), false)), MIKU_MS);
         } else if (w.type === 'swatch') {
             c.uniform(ref, 'u_size', [w.w, w.h]);
             c.uniform(ref, 'u_n', [w.steps || 11]);
@@ -2506,6 +2522,16 @@ class HudApp {
             if (!force && key === x.last) return;
             x.last = key;
             x.c.uniform(x.ref, 'u_drive', u);
+        } else if (w.type === 'mikuLie') {
+            // lying still: only the doze loop (stopped 15 s: 5 s asleep, 5 s awake, ...); the blink and breath run in
+            // the shader on the renderer's clock
+            const d = this.car.data(), dt = x.at ? Math.min(500, now - x.at) : 0;
+            x.at = now;
+            this._mikuIdle(x, now, dt, d.gLong, this._raw('speed'));
+            const u = x.origin.concat([Math.round(x.doze * 500) / 500, this.themeName === 'night' ? 0.8 : 1]), key = u.join('|');
+            if (!force && key === x.last) return;
+            x.last = key;
+            x.c.uniform(x.ref, 'u_lie', u);
         } else if (w.type === 'lights') {
             const rpm = this._raw('rpm'), sp = this._shift(), n = w.count || 12;
             // the lights fill from "from" rpm (3000) up to the shift point; a "from" at or past it means the last 500 rpm

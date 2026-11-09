@@ -89,6 +89,22 @@ The **Miku lean** setting on the app page picks Sideways (the bake in `data/miku
 
 The bake draws these frames in perspective too, so the lean reads in depth: above the waist her upper body gets shorter as she tips out of the screen, its top narrower leaning back and wider leaning toward you. `"perspective": { "widen": 0.14, "shorten": 0.1 }` in `lean` sets how much (0 for none). The bake log has "head drop per lean angle": it should be largest at the left end (her head going down as she leans toward you, braking). If the right end is larger, flip the signs. Switching the setting rebuilds the layout and swaps the uploaded image: the old one is dropped first, so only one is in the cluster's memory.
 
+### Lying down (Custom Cluster)
+
+Custom Cluster's Regal theme can show her lying on her back in the black strip under the centre panel (x 803 to 1073, y 586 to 720, under the fuel gauge, clear of BMW's seat-belt light and gear letter). That's a bake of its own, from a copy of your config with:
+
+- `"pose": "lie"`, and `"heightPx"` so she fits the strip lying down: she's turned a quarter turn, so the frame's height is her width (250 gave 250x123 px with RetrynowMiku).
+- `"lie": { "leg": "Part15", "hip": 0.15, "knee": -0.68, "kneeAngle": 50, "split": 0 }`: the part holding both legs, the model y of her hips and knees, how far the knee comes up (deg), and the model x between her legs. The leg on the left of the standing figure (the upper one lying down) is cut at the knee and bent; anything wholly below its knee (a shoe's sparkle in another part) goes with the shin.
+- For gravity, set the model's hair and skirt swing parameters in `"params"` so they fall toward her side. With RetrynowMiku the sideways lean's own hair, skirt (`erd11` to `erd13`) and `Param_Angle_Rotation_*` values, negative, pull them down.
+
+The bake writes the same three files, about 512x127 px (0.5 MiB of the cluster's pixel memory): her lying, and her face with eyes half shut and shut. Deploy to Custom Cluster (the script finds that app by itself):
+
+```bash
+./scripts/deploy.sh root@<car> --miku-lie <folder>
+```
+
+It lands in Custom Cluster's `data/miku-lie/`; switch the theme away and back (or restart the app). The shader reads 3 pixels of the image per screen pixel, against the 32 Custom HUD's Miku reads.
+
 ### Updating or removing
 
 - **New bake:** run the deploy again (it overwrites both files), then switch layouts again. The app sees the new files and replaces the old image.

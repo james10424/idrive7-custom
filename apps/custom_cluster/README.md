@@ -27,6 +27,7 @@ The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needle
 - **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. Over the 55, the speed in big orange VFD digits (mph or km/h by the units setting); under it, P R N D with the gear number, the lit one boxed, and the needle sweeps over them. No turn signals: BMW's own indicator sound stays.
 - **Middle, bottom:** the fuel needle in the middle, a yellow LED boost bar (0 to 1.5 bar) on its left and an LED rev bar that turns yellow from your shift point on its right.
 - **Bottom:** BMW's belt light and gear letter. There is no map window.
+- **Under the middle:** your own Live2D character (Miku with the RetrynowMiku model) lying on her back in the black strip under the fuel gauge, head right, one knee up. She blinks and breathes, and stopped for 15 s she dozes: 5 s asleep (eyes shut, breathing slower and deeper), 5 s awake, and so on, the same loop as Custom HUD's Miku. No character ships with the app: bake her with [tools/live2d_bake](../../tools/live2d_bake/README.md#lying-down-custom-cluster) and deploy with `--miku-lie`. Without the bake nothing is drawn there.
 
 More themes are on the way.
 
@@ -47,6 +48,7 @@ More themes are on the way.
 - **Shift point before redline:** how far below the redline the shift lights peak (300 rpm by default).
 - **Cold-engine rev guard:** until the oil reaches 80°C, the shift point starts at 4500 rpm and climbs as the oil warms up.
 - **Show boost.**
+- **Miku lying under the dash (Regal):** on by default; shows only with her bake deployed.
 - **Demo data:** fake driving data for trying it out parked.
 - **Calibration grid:** a theme that draws lines every 50 px with labels, for checking on a photo where things land on the real screen. It also carries a few test marks used to measure cluster-render's limits on the car.
 

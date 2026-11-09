@@ -39,6 +39,7 @@
  *   headY       model y across her face (15% down the figure): where the bake measures how far each lean moves her
  *               head, so the tails can follow it
  *   pad         px of transparent border round each sprite (2)
+ *   pose        "lie": the lying pose for Custom Cluster's Regal instead (bakeLie, with "lie")
  */
 const C = window.Live2DCubismCore;
 
@@ -570,12 +571,139 @@ async function bake(L, cfg) {
     const show = document.createElement('img'); show.src = atlas.toDataURL(); view.appendChild(show);
 }
 
+/* ---------- the lying pose ---------- */
+/* Config "pose": "lie" (Custom Cluster's Regal, in the black strip under its center dash): her on her back, seen from
+ * above, head to the right, one knee bent up and the other leg flat, as one frame turned a quarter turn clockwise; the
+ * blink's half and shut frames as crops of it round her face. config "lie" { leg: "part id" (both legs' part), hip: model
+ * y of the hips, knee: model y of the knees, kneeAngle: deg (50), split: model x between the legs (0) }: the leg on the
+ * left of the standing figure (the upper one lying down) is cut at the knee, the thigh turned out by kneeAngle at the
+ * hip and the shin turned back so the foot comes down by the other leg. Writes atlas.json with "pose": "lie". */
+async function bakeLie(L, cfg) {
+    const pad = cfg.pad || 2, lie = Object.assign({ leg: 'Part15', hip: 0.15, knee: -0.68, kneeAngle: 50, split: 0 }, cfg.lie || {});
+    const hidden = cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
+    const legPart = inParts(L, [lie.leg]);
+    const R = new Renderer(L);
+    const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
+    makeCuts(L, cfg.cut, Object.assign({}, cfg.params, idle));
+    setParams(L, Object.assign({}, cfg.params, idle));
+    L.model.update();
+    // whatever lies wholly below the knee on the bent leg's side (a shoe's sparkle in another part) goes with the shin
+    const dv = L.model.drawables, low = new Set();
+    for (let i = 0; i < dv.count; i++) {
+        const v = dv.vertexPositions[i];
+        let all = v.length > 0;
+        for (let k = 0; k < v.length && all; k += 2) all = v[k] < lie.split && v[k + 1] < lie.knee;
+        if (all && !legPart(i)) low.add(i);
+    }
+    const isLeg = (i) => legPart(i) || low.has(i);
+    let box = bounds(L, (i) => !hidden(i));
+    const figH = box[3] - box[1], centreX = (box[0] + box[2]) / 2;
+    const ppu = cfg.pxPerUnit || (cfg.heightPx || 200) / figH;
+    const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - 0.4 * figH;
+    const th = (lie.kneeAngle || 50) * Math.PI / 180, thigh = lie.hip - lie.knee;
+    // room on the left for the knee turned out
+    const m = 0.02 * figH;
+    box = [Math.min(box[0], lie.split - 0.13 - thigh * Math.sin(th)) - m, box[1] - m, box[2] + m, box[3] + m];
+    const fw = Math.ceil((box[2] - box[0]) * ppu), fh = Math.ceil((box[3] - box[1]) * ppu);
+    const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
+    const S = SS, W = fw * S, H = fh * S;
+    const copy = (src) => { const c = document.createElement('canvas'); c.width = src.width; c.height = src.height; c.getContext('2d').drawImage(src, 0, 0); return c; };
+    // the legs alone, at SS times the size; the left one cut at the knee and bent, the right one as it is
+    const legs = copy(R.draw(W, H, box, { only: (i) => isLeg(i) && !hidden(i) }));
+    const splitX = toFrame(lie.split, 0)[0] * S, hipY = toFrame(0, lie.hip)[1] * S, kneeY = toFrame(0, lie.knee)[1] * S;
+    const mid = (y) => {   // the middle of the left leg on row y (big px)
+        const r = Math.round(Math.max(0, Math.min(H - 1, y))), dd = legs.getContext('2d').getImageData(0, r, Math.floor(splitX), 1).data;
+        let a = -1, b = -1;
+        for (let x = 0; x < dd.length / 4; x++) if (dd[x * 4 + 3] > 128) { if (a < 0) a = x; b = x; }
+        return a < 0 ? splitX / 2 : (a + b) / 2;
+    };
+    const hip = [mid(hipY + 4 * S), hipY], knee = [mid(kneeY), kneeY];
+    const lt = Math.hypot(knee[0] - hip[0], knee[1] - hip[1]);
+    let ls = 0;
+    { const dd = legs.getContext('2d').getImageData(0, 0, Math.floor(splitX), H).data;
+      for (let y = H - 1; y > 0 && !ls; y--) for (let x = 0; x < Math.floor(splitX); x++) if (dd[(y * Math.floor(splitX) + x) * 4 + 3] > 128) { ls = y - kneeY; break; } }
+    const phi = Math.asin(Math.min(1, lt * Math.sin(th) / Math.max(1, ls)));
+    const nk = [hip[0] + (knee[0] - hip[0]) * Math.cos(th) - (knee[1] - hip[1]) * Math.sin(th),
+        hip[1] + (knee[0] - hip[0]) * Math.sin(th) + (knee[1] - hip[1]) * Math.cos(th)];
+    log('lying: thigh ' + (lt / S).toFixed(0) + ' px, shin ' + (ls / S).toFixed(0) + ' px, knee out ' + (lie.kneeAngle || 50) + ' deg, shin back ' + (phi * 180 / Math.PI).toFixed(0) + ' deg');
+    const ov = 0.35 * Math.abs(mid(kneeY) - splitX) / 2 + 2 * S;   // the pieces overlap round the knee so it has no gap
+    const legsOut = document.createElement('canvas'); legsOut.width = W; legsOut.height = H;
+    const g = legsOut.getContext('2d'); g.imageSmoothingQuality = 'high';
+    g.save(); g.beginPath(); g.rect(splitX, 0, W - splitX, H); g.clip(); g.drawImage(legs, 0, 0); g.restore();
+    // the shin, from the knee back toward the other leg
+    g.save(); g.translate(nk[0], nk[1]); g.rotate(-phi); g.translate(-knee[0], -knee[1]);
+    g.beginPath(); g.rect(0, kneeY - ov, splitX, H); g.clip(); g.drawImage(legs, 0, 0); g.restore();
+    // the thigh, turned out at the hip, over the shin
+    g.save(); g.translate(hip[0], hip[1]); g.rotate(th); g.translate(-hip[0], -hip[1]);
+    g.beginPath(); g.rect(0, 0, splitX, kneeY + ov); g.clip(); g.drawImage(legs, 0, 0); g.restore();
+    // each frame: the legs, the body (no legs) over them, scaled down, turned a quarter turn clockwise (head right)
+    const turn = (c) => {
+        const n = document.createElement('canvas'); n.width = c.height; n.height = c.width;
+        const q = n.getContext('2d'); q.translate(c.height, 0); q.rotate(Math.PI / 2); q.drawImage(c, 0, 0); return n;
+    };
+    const names = ['idle', 'half', 'shut'], frames = {};
+    for (const n of names) {
+        const f = (cfg.frames && cfg.frames[n]) || {};
+        const ex = await expressionParams(f.expressions);
+        setParams(L, Object.assign({}, cfg.params, ex, f.params || {}));
+        L.model.update();
+        const big = document.createElement('canvas'); big.width = W; big.height = H;
+        const q = big.getContext('2d');
+        q.drawImage(legsOut, 0, 0);
+        q.drawImage(R.draw(W, H, box, { skip: (i) => hidden(i) || isLeg(i) }), 0, 0);
+        frames[n] = turn(shrink(big, fw, fh));
+    }
+    // trimmed to her, every frame the same
+    const bb = alphaBox(frames.idle), FW = bb[2], FH = bb[3];
+    names.forEach((n) => { const c = document.createElement('canvas'); c.width = FW; c.height = FH; c.getContext('2d').drawImage(frames[n], -bb[0], -bb[1]); frames[n] = c; });
+    // turned and trimmed: standing (x, y) frame px is lying (fh - y - bb[0], x - bb[1])
+    const lieAt = (x, y) => [fh - y - bb[0], x - bb[1]];
+    log('lying frame ' + FW + 'x' + FH + ' px (the strip under Regal\'s dash is about 134 px high)');
+    // the face crop: where half or shut differ from idle
+    const base = frames.idle.getContext('2d').getImageData(0, 0, FW, FH).data;
+    let x0 = FW, y0 = FH, x1 = -1, y1 = -1;
+    ['half', 'shut'].forEach((n) => {
+        const dd = frames[n].getContext('2d').getImageData(0, 0, FW, FH).data;
+        for (let k = 0; k < dd.length; k += 4) {
+            if (Math.abs(dd[k] - base[k]) + Math.abs(dd[k + 1] - base[k + 1]) + Math.abs(dd[k + 2] - base[k + 2]) + Math.abs(dd[k + 3] - base[k + 3]) < 6) continue;
+            const qq = k / 4, x = qq % FW, y = (qq - x) / FW;
+            x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y);
+        }
+    });
+    if (x1 < 0) throw new Error('half and shut look the same as idle: check frames.half and frames.shut');
+    x0 = Math.max(0, x0 - 4); y0 = Math.max(0, y0 - 4); x1 = Math.min(FW - 1, x1 + 4); y1 = Math.min(FH - 1, y1 + 4);
+    const crop = [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
+    // the atlas: idle, then the two crops beside it
+    let AW = 64; while (AW < FW + 2 * crop[2] + 6 * pad) AW *= 2;
+    const AH = Math.max(FH, crop[3]) + 2 * pad;
+    if (AW > 1024 || AH > 1024) throw new Error('the lying atlas would be ' + AW + 'x' + AH + ': over 1024 px a side; lower heightPx');
+    const atlas = document.createElement('canvas'); atlas.width = AW; atlas.height = AH;
+    const ag = atlas.getContext('2d');
+    const at = { idle: [pad, pad], half: [FW + 3 * pad, pad], shut: [FW + crop[2] + 5 * pad, pad] };
+    ag.drawImage(frames.idle, at.idle[0], at.idle[1]);
+    ['half', 'shut'].forEach((n) => ag.drawImage(frames[n], crop[0], crop[1], crop[2], crop[3], at[n][0], at[n][1], crop[2], crop[3]));
+    // her chest, for the breathing: from the waist to the neck along her, and the line down her middle
+    const neckY = toFrame(0, box[3] - m - 0.2 * figH)[1], wy = toFrame(0, waist)[1], cx = toFrame(centreX, 0)[0];
+    const bw = lieAt(cx, wy), bn = lieAt(cx, neckY);
+    const info = {
+        version: 1, pose: 'lie', atlas: [AW, AH], frame: [FW, FH], frames: at, crop,
+        anchor: [Math.round(FW / 2), FH], breathe: [Math.round(bw[0]), Math.round(bn[0]), Math.round(bw[1])],
+    };
+    const px = ag.getImageData(0, 0, AW, AH).data;
+    await fetch('/out/atlas.rgba', { method: 'POST', body: new Blob([px]) });
+    await fetch('/out/atlas.json', { method: 'POST', body: JSON.stringify(info, null, 1) });
+    await fetch('/out/preview.png', { method: 'POST', body: await new Promise((r) => atlas.toBlob(r, 'image/png')) });
+    log('atlas ' + AW + 'x' + AH + ' (' + (AW * AH * 8 / 1048576).toFixed(2) + ' MiB of the cluster\'s pixel memory), face crop ' + crop[2] + 'x' + crop[3]);
+    const show = document.createElement('img'); show.src = atlas.toDataURL(); show.style.background = '#000'; view.appendChild(show);
+}
+
 (async () => {
     try {
         const L = await loadModel();
         const cfg = withDefaults(await json('/config.json'));
         log('model: ' + L.model.parameters.count + ' parameters, ' + L.model.parts.count + ' parts, ' + L.model.drawables.count + ' drawables, ' + L.imgs.length + ' textures');
         if (/[?&]inspect/.test(location.search)) await inspect(L, cfg);
+        else if (cfg.pose === 'lie') await bakeLie(L, cfg);
         else await bake(L, cfg);
         log('done');
         document.title = 'Miku bake: done';
