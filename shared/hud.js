@@ -239,8 +239,7 @@ const PIXEL_BYTES = 16 * 1024 * 1024;   // cluster-render's pixel memory for eve
 const SHEET_AREA_FRAC = 4;       // the first sheet size limit: 1/4 of the target area (see the header)
 const MIKU_MS = 16;              // the Miku character's own update rate (60 Hz)
 const MIKU_TAU_MS = 450;        // the Miku character's speed follows the car this smoothly
-const MIKU_SPRING_K = 25;        // her lean's spring (1/s^2): about 0.8 Hz
-const MIKU_SPRING_C = 3.5;
+const MIKU_LEAN_TAU_MS = 250;    // her lean eases toward the g this smoothly (no spring: no sway back past upright)
 const MIKU_POINT_K = 70;         // the pointing arm's spring (1/s^2): about 1.3 Hz
 const MIKU_IDLE_G = 0.03;        // below this |longitudinal g| the car idles: she glances around (the lean is not gated)
 const MIKU_GLANCE_AFTER_MS = 1000; // the first glance this long after the car goes idle
@@ -251,7 +250,7 @@ const MIKU_DOZE_PHASE_MS = 5000; // then dozes this long, wakes this long (glanc
 const MIKU_DROOP_W = 1.6;        // her droop's spring (rad/s, critically damped): about 3 s to the bottom
 const MIKU_RISE_W = 3;           // waking in the loop: about 1.5 s
 const MIKU_WAKE_W = 5;           // waking for good when the car moves: about 1 s
-const MIKU_POINT_C = 16.7;
+const MIKU_POINT_C = 16.7;       // critically damped: it rises and settles without bouncing
 
 /**
  * The Miku shader for a widget and the "Miku parts" setting: leaving the glances and dozing, or (bare) everything
@@ -291,7 +290,7 @@ function mikuData(j, aw) {
         }
     });
     return { px, rows, counts: { lean: lean.length, look: look.length, doze: doze.length } };
-}       // critically damped: it rises and settles without bouncing       // its damping (1/s): a sway or two past upright, then still
+}
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
@@ -2000,7 +1999,8 @@ class HudApp {
             c.uniform(ref, 'u_hole', this._hole(w));
             c.uniform(ref, 'u_holeR', [this._holeRadius(w)]);
             c.uniform(ref, 'u_holeCut', Array.isArray(w.holeCut) && w.holeCut.length === 4 ? w.holeCut : [0, 0, 0, 0]);
-            c.uniform(ref, 'u_holeMask', Array.isArray(w.holeMask) && w.holeMask.length === 4 ? [w.holeMask[0] - w.x, w.holeMask[1] - w.y, w.holeMask[2], w.holeMask[3]] : [0, 0, 0, 0]);
+            const rel = (r) => (Array.isArray(r) && r.length === 4 ? [r[0] - w.x, r[1] - w.y, r[2], r[3]] : [0, 0, 0, 0]);
+            c.uniform(ref, 'u_holeMask', rel(w.holeMask).concat(rel(w.holeOpen)), { type: 'vec4' });
             const hf = Array.isArray(w.holeFade) && w.holeFade.length >= 4 ? w.holeFade : null;
             c.uniform(ref, 'u_holeFade', hf ? [hf[0] - w.x, hf[1] - w.y, hf[2], hf[3]] : [0, 0, 0, 0]);
             c.uniform(ref, 'u_holeFadeK', [hf && isNum(hf[4]) ? hf[4] : 30, hf && isNum(hf[5]) ? hf[5] : 0.85]);
@@ -2445,19 +2445,15 @@ class HudApp {
             x.c.uniform(x.ref, 'u_peak', [peak]);
             x.c.uniform(x.ref, 'u_shiftNow', [sp.now ? 1 : 0]);
         } else if (w.type === 'miku') {
-            // lean: the longitudinal g, -0.4 g .. +0.4 g to -1 .. 1, through a spring; speed 0..130 km/h to 0..1, eased
-            // over MIKU_TAU_MS; both sent in steps of 0.002 (a small uniform message, at most one per MIKU_MS, and only while she moves)
+            // lean: the longitudinal g, -0.4 g .. +0.4 g to -1 .. 1, eased over MIKU_LEAN_TAU_MS; speed 0..130 km/h to
+            // 0..1, eased over MIKU_TAU_MS; both sent in steps of 0.002 (a small uniform message, at most one per MIKU_MS, and only while she moves)
             const d = this.car.data(), dt = x.at ? Math.min(500, now - x.at) : 0;
             x.at = now;
-            // standing on a bus: the lean is a spring pulled towards the g (about 0.8 Hz, lightly damped), so she leans
-            // into a pull, then sways back past upright and settles when it ends
+            // standing on a bus: the lean eases toward the g (as Unreal's FInterpTo, but 1 - exp(-dt / tau), the same at
+            // any update rate), so she leans into a pull and straightens when it ends, without swaying back past upright;
+            // the ease also smooths the car's steppy, noisy g
             const g = isNum(d.gLong) ? Math.max(-0.4, Math.min(0.4, d.gLong)) / 0.4 : 0;
-            if (!isNum(x.lean)) { x.lean = g; x.leanV = 0; }
-            for (let left = dt / 1000; left > 0; left -= 0.01) {
-                const h = Math.min(0.01, left);
-                x.leanV += (MIKU_SPRING_K * (g - x.lean) - MIKU_SPRING_C * x.leanV) * h;
-                x.lean = Math.max(-1.2, Math.min(1.2, x.lean + x.leanV * h));
-            }
+            x.lean = isNum(x.lean) ? x.lean + (g - x.lean) * (1 - Math.exp(-dt / MIKU_LEAN_TAU_MS)) : g;
             // pointing: toward the indicator ('L' -1, 'R' 1, hazards or none 0), on a quicker spring (about 1.3 Hz, no
             // overshoot) so the arm rises and falls smoothly
             const tp = this._turnSide(), dtp = dt / 1000;

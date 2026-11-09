@@ -735,7 +735,8 @@ uniform vec4 u_oilSeg;
 uniform vec4 u_hole;      // map window x, y, w, h, already inset (w 0 = none)
 uniform float u_holeR;    // the hole's corner radius px
 uniform vec4 u_holeCut;   // corners kept black: top w, h and bottom w, h px of a triangle in each, mirrored left / right
-uniform vec4 u_holeMask;  // a rectangle kept black inside the window: x, y, w, h px (w 0 = none)
+uniform vec4 u_holeMask[2]; // [0] a rectangle kept black inside the window, [1] one opened past its edge: x, y, w, h px
+                          // (w 0 = none; one array, as the layer is at cluster-render's 32 uniform names)
 uniform vec4 u_holeFade;  // a rectangle darkened inside the window, fading out round it: x, y, w, h px (w 0 = none)
 uniform vec2 u_holeFadeK; // that fade: feather px, darkness 0..1 at its middle
 uniform vec4 u_strip;     // bottom strip: left end x, top y, height, slant px
@@ -911,8 +912,14 @@ void main() {
         if (u_holeCut.z > 0.0)
             hd = max(hd, (1.0 - lp.x / u_holeCut.z - (u_hole.w - lp.y) / u_holeCut.w) * u_holeCut.z * u_holeCut.w / length(u_holeCut.zw));
         // and a rectangle ("holeMask"): BMW's speed-limit sign at the window's left edge (car photo, Nov 8 2026)
-        if (u_holeMask.z > 0.0) {
-            vec2 mq = abs(p - (u_holeMask.xy + u_holeMask.zw * 0.5)) - u_holeMask.zw * 0.5;
+        // and one opened past the window's edge ("holeOpen"): BMW's speed is right-aligned at x ~546 and its hundreds
+        // digit reaches left past the window (104 read 04, car photo Nov 9 2026)
+        if (u_holeMask[1].z > 0.0) {
+            vec2 oq = abs(p - (u_holeMask[1].xy + u_holeMask[1].zw * 0.5)) - u_holeMask[1].zw * 0.5;
+            hd = min(hd, length(max(oq, 0.0)) + min(max(oq.x, oq.y), 0.0));
+        }
+        if (u_holeMask[0].z > 0.0) {
+            vec2 mq = abs(p - (u_holeMask[0].xy + u_holeMask[0].zw * 0.5)) - u_holeMask[0].zw * 0.5;
             hd = max(hd, -(length(max(mq, 0.0)) + min(max(mq.x, mq.y), 0.0)));
         }
         c.a *= clamp(hd + 0.5, 0.0, 1.0);
@@ -1236,7 +1243,7 @@ uniform vec4 u_armSide;     // x, y: arm 0's and arm 1's side (-1 left, 1 right)
                             // w: how far the arm away from the lean swings up and out at a full lean to balance her (rad)
 uniform vec4 u_idle;        // look -1 .. 1, doze 0 .. 1, 0, 0
 
-uniform vec4 u_spr[6];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
+uniform vec4 u_spr[6];   // cluster-render takes at most 32 uniform names a layer, u_time among them: these fixed values go up as one array
 #define u_fA u_spr[0]   // idle.xy, half.xy (atlas px of each frame's top-left)
 #define u_fB u_spr[1]   // shut.xy, talk.xy
 #define u_tails u_spr[2]   // atlas rect of the tails sprite (w = 0: none)
@@ -1244,7 +1251,7 @@ uniform vec4 u_spr[6];   // cluster-render takes at most 30 uniform names a laye
 #define u_crop u_spr[4]   // the face, glance and doze frames are crops of this rect (frame px; w = 0: whole frames)
 #define u_counts u_spr[5]   // lean frames (odd, up to 15), glance frames (odd, up to 7, the middle idle), doze frames
                             // (up to 4), and the y of the table rows in the atlas
-uniform vec4 u_arm[8];   // cluster-render takes at most 30 uniform names a layer: these fixed values go up as one array
+uniform vec4 u_arm[8];   // cluster-render takes at most 32 uniform names a layer, u_time among them: these fixed values go up as one array
 #define u_arm0 u_arm[0]   // atlas rect of an arm sprite (w = 0: none)
 #define u_arm0At u_arm[1]   // its top-left and its shoulder (the pivot), frame px, at rest
 #define u_arm0L u_arm[2]   // at a full lean left: the shoulder's move (px) and the arm's turn (rad, the lean's own sway)

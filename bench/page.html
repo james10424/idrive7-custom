@@ -401,9 +401,12 @@
     });
     ctx.strokeStyle = 'rgba(200,205,215,.8)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(505, 194, 11, Math.PI * 0.9, Math.PI * 2.1); ctx.stroke();                 // gauge icon
-    // its speed, right-aligned to the unit: three digits reach left to x ~470 (118 km/h, car photo Nov 8 2026)
+    // its speed, right-aligned to the unit at x 546: each digit about 58 px wide, so "04" starts at x ~430 and a hundreds
+    // digit reaches left past the window's edge to ~372 (104 km/h read 04, car photo Nov 9 2026); drawn 1.7x wide
     const v = lastValues.speed, kmhNow = typeof v === 'number' ? Math.round(units === 'us' ? v * 0.621371 : v) : 0;
-    ctx.fillStyle = fg; ctx.font = 'bold 62px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'right'; ctx.fillText(String(kmhNow), 546, 394); ctx.textAlign = 'left';
+    ctx.save(); ctx.translate(546, 394); ctx.scale(1.7, 1);
+    ctx.fillStyle = fg; ctx.font = 'bold 62px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'right'; ctx.fillText(String(kmhNow), 0, 0);
+    ctx.restore(); ctx.textAlign = 'left';
     ctx.font = 'bold 24px -apple-system, Helvetica, sans-serif'; ctx.fillText('km/h', 552, 394);
     ctx.strokeStyle = fg; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(416, 414); ctx.lineTo(698, 414); ctx.stroke();
     // its speed-limit sign at the window's left edge, just above the fuel gauge (car photos, Nov 8 2026; a layout's "holeMask")
