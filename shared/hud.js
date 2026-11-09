@@ -171,7 +171,7 @@
  * Boost: FES displayBoostPressure while it's valid, else (app.json config.dme) the engine unit over
  * read-only UDS, absolute pressure minus outside air pressure, as cauliflowermossgrape's car_vitals does.
  *
- * Text tokens: {{speed}} {{u:speed}} {{oil}} {{coolant}} {{boost}} {{u:boost}} {{rpm}}
+ * Text tokens: {{speed}} (floored, as BMW's speedometer) {{u:speed}} {{oil}} {{coolant}} {{boost}} {{u:boost}} {{rpm}}
  * {{gear}} (P / R / N, D3 / S3 / M3 by the shifter programme, or just 3 when the selector position is unknown), {{gearnum}} (3, or P / R / N)
  * {{spd:<i>}} (speed scale label i of SPEED_SCALE: 0..200 mph, 0..320 km/h) {{range}} {{u:distLc}} (mi, km) {{ambient}} (outside, signed: +75) {{u:speedLc}} (mph, km/h) {{ampmLc}} (am, pm) {{torque}} {{u:torque}} (lb-ft, Nm) {{torquePct}} {{powerPct}} (% of config.engine's peak) {{boostHi}} {{boostMid}}
  * (gauge labels for 1.4 / 0.7 bar in the display unit) {{stage}} (P R N, D / S / M by the shifter programme) {{gearInD}} (gear number while in D) {{mode}} (COMFORT, SPORT, SPORT PLUS, SPORT INDIVIDUAL, ECO PRO, ...)
@@ -1698,9 +1698,10 @@ class HudApp {
             case 'accRel': { const v = this._acc('rel'); return isNum(v) ? String(Math.round(us ? v * 0.621371 : v)) : '--'; }   // the HUD fonts have no '+'
             case 'u:rel': return us ? 'MPH' : 'KM/H';
             case 'accSet': { const v = this._acc('set'); return isNum(v) ? String(Math.round(v)) : '--'; }
-            case 'speed': { const v = this._raw('speed'); return fix(isNum(v) ? (us ? v * 0.621371 : v) : v, 0); }
+            // speed digits floor as BMW's own do (rounding read 1 higher from x.5 up): whole km/h or mph passed
+            case 'speed': { const v = this._raw('speed'); return isNum(v) ? String(Math.floor(Math.max(0, us ? v * 0.621371 : v))) : '--'; }
             case 'u:speed': return us ? 'MPH' : 'KM/H';
-            case 'mph': { const v = this._raw('speed'); return isNum(v) ? String(Math.round(Math.max(0, v) * 0.621371)) : '--'; }   // mph whatever the units (Regal)
+            case 'mph': { const v = this._raw('speed'); return isNum(v) ? String(Math.floor(Math.max(0, v) * 0.621371)) : '--'; }   // mph whatever the units (Regal), floored as above
             case 'oil': case 'coolant': { const v = this._raw(tok); return fix(isNum(v) ? (us ? v * 9 / 5 + 32 : v) : v, 0); }
             case 'boost': { const v = this._raw('boost'); return us ? fix(isNum(v) ? v * 14.5038 : v, 1) : fix(v, 2); }
             case 'u:boost': return us ? 'PSI' : 'BAR';
