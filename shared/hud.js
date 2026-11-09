@@ -293,6 +293,8 @@ function mikuData(j, aw) {
     return { px, rows, counts: { lean: lean.length, look: look.length, doze: doze.length } };
 }
 const TICK_MS = 50;              // 20 Hz: shift bar and gauges
+const REGAL_NEEDLE_TAU_MS = 170;  // Regal's fuel and pod needles ease toward a reading: settled in about 0.5 s
+const REGAL_SPEED_TAU_MS = 50;    // its speed needle: about 0.15 s, so it keeps up with the digits
 const TEXT_MS = 200;             // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
 const TARGET_SIZES = { hud: [800, 480], panel: [1920, 720] };
@@ -2411,7 +2413,7 @@ class HudApp {
             // the pods' gauges: each "podSignals" entry's signal over its range, bottom to top
             const pods = [0, 1].map((i) => {
                 const g = (w.podSignals || [])[i], v = g && g.signal ? this._raw(g.signal) : null, r = (g && g.range) || [0, 1];
-                if (!isNum(v)) return 0;
+                if (!isNum(v)) return 0;   // no reading (the car off): the needle sweeps down to the bottom
                 // "mid": the value at the scale's middle mark (each half linear), e.g. the coolant's 110 C
                 const m = g && isNum(g.mid) ? g.mid : null;
                 if (m !== null) return q(v <= m ? 0.5 * (v - r[0]) / (m - r[0]) : 0.5 + 0.5 * (v - m) / (r[1] - m));
@@ -2432,7 +2434,21 @@ class HudApp {
             const f5 = 0.5 * st / mid;
             let f = mph <= mid ? 0.5 * mph / mid : 0.5 + 0.5 * (mph - mid) / (top - mid);
             if (mph < st) f = rest + (f5 - rest) * mph / st;
-            const vals = [Math.round(Math.min(1, Math.max(-0.5, f)) * 500) / 500, q(isNum(fuel) ? fuel : 0)];
+            // the needles ease toward their readings (as Miku's lean: 1 - exp(-dt / tau), the same at any tick rate), so
+            // they sweep instead of jumping, down to their rest when a reading goes (the car off) and up from it at the start
+            const dt = x.at ? Math.min(500, now - x.at) : 0;
+            x.at = now;
+            const ease = (prev, to, tau) => (isNum(prev) ? prev + (to - prev) * (1 - Math.exp(-dt / tau)) : to);
+            const fTo = Math.min(1, Math.max(-0.5, f)), fuelTo = Math.min(1, Math.max(0, isNum(fuel) ? fuel : 0));
+            if (!x.ez) x.ez = { f: rest, fuel: 0, pods: [0, 0] };   // from rest, as a gauge powering up
+            x.ez.f = ease(x.ez.f, fTo, REGAL_SPEED_TAU_MS);
+            x.ez.fuel = ease(x.ez.fuel, fuelTo, REGAL_NEEDLE_TAU_MS);
+            x.ez.pods = pods.map((v, i) => ease(x.ez.pods[i], v, REGAL_NEEDLE_TAU_MS));
+            // within half a step of the reading: there (so the messages stop once a needle settles)
+            const snap = (e, to) => (Math.abs(e - to) < 0.001 ? to : e);
+            x.ez.f = snap(x.ez.f, fTo); x.ez.fuel = snap(x.ez.fuel, fuelTo); x.ez.pods = x.ez.pods.map((e, i) => snap(e, pods[i]));
+            pods.splice(0, 2, q(x.ez.pods[0]), q(x.ez.pods[1]));
+            const vals = [Math.round(x.ez.f * 500) / 500, q(x.ez.fuel)];
             if (w.needleOnly) {   // the speed needle's own layer (over the text): only its speed
                 if (!force && vals[0] === x.last) return;
                 x.last = vals[0];
