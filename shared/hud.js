@@ -729,7 +729,7 @@ class HudApp {
             if (name !== this.target) return;
             this.targetState = { state, holder, reason, disabled: !!disabled };
             this.log.info('target ' + name + tag + ' ' + state + (holder ? ' (holder ' + holder + ')' : '') + (reason ? ': ' + reason : '') +
-                (disabled ? ' (disabled by cluster-render\'s mapping guard: two strikes; as root: /var/opt/cluster-render/current/cluster-render guard-reset)' : ''));
+                (disabled ? ' (disabled by cluster-render\'s mapping guard: two strikes; as root: /var/opt/cluster-render/current/cluster-render -c /var/opt/cluster-render/current/cluster-render.conf guard-reset)' : ''));
             this._statusSoon();
         });
         c.on('refused', (op, ref, reason) => {
@@ -1286,8 +1286,9 @@ class HudApp {
     _drawnNote() {
         const ts = this.targetState;
         // cluster-render's mapping guard turned this target off (two display restarts right after its mappings); it stays
-        // off, even across reboots, until "cluster-render guard-reset" as root (cluster-render README, the mapping guard)
-        if (ts && ts.disabled) return ', off: cluster-render\'s guard disabled this display after 2 strikes (as root: cluster-render guard-reset)';
+        // off, even across reboots, until cluster-render's guard-reset as root (cluster-render README, the mapping guard;
+        // the full command is in the log line above). The vendored client passes the flag since 0.1.13
+        if (ts && ts.disabled) return ', off: cluster-render\'s guard disabled this display after 2 strikes (reset it as root: guard-reset)';
         if (ts && (ts.state === 'waiting' || ts.state === 'parked') && ts.holder) {
             // holder "none" is no BMW content: on iDrive 7 it is the cluster panel holding the scene id the HUD shares
             // ("scene id in use by another target"); a stock holder says which wait it is (a pop-up or guidance, or the slot)
