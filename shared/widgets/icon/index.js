@@ -9,7 +9,7 @@ const { paintIcon } = require("./icons");
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
-const DOCS = `image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)`;
+const DOCS = `image layer; a line icon from icons.js (next to this file) ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)`;
 
 module.exports = {
   type: "icon",

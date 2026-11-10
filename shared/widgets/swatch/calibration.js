@@ -1,6 +1,6 @@
 "use strict";
 /**
- * Calibration probes for the car photos (hud.js types "swatch" and "swatchimg", each app's grid layout).
+ * Calibration probes for the car photos (widget types "swatch" and "swatchimg", each app's grid layout).
  *
  * The same picture drawn two ways, so one photo settles the colour curve of each path:
  *   SWATCH        a GLSL ES 1.00 fragment shader for an "effect" layer (drawn by the car's GPU)

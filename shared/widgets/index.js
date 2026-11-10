@@ -1,6 +1,6 @@
 "use strict";
 /**
- * The widget types: type name -> its module (shared/widgets/<type>/index.js). The engine (shared/hud.js) and the
+ * The widget types: type name -> its module (shared/widgets/<type>/index.js). The engine (shared/engine) and the
  * layout check (shared/layouts.js) know a widget only through this table.
  *
  * A module exports:

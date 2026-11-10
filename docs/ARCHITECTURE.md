@@ -8,28 +8,33 @@ layers (GLSL shaders), image layers (pixels, packed into sheets) and assets (gly
 
 ```
 shared/
-  hud.js            the entry the apps require ("./hud"): re-exports the engine
+  hud.js            the entry the apps require ("./hud"): re-exports engine/app.js
   engine/           the generic core: no widget type is named here
-    app.js          HudApp: settings, start / stop, connections, rebuild, create / update / tick through the registry
-    plan.js         layer planning: sheets, packing, blits, dirty rects
+    app.js          HudApp: settings, start / stop, connections, rebuild, create / update / tick through the registry;
+                    its header documents what every widget takes (toggle, themes, in, conn, own) and the limits
+    plan.js         layer planning: sheets, packing, blits, dirty rects, connections
     status.js       the status row and its detail line
-    modes.js        which layout and HUD mode (nav, cruise), themes
-    assets.js       glyph atlases (R8 assets) shared by effect widgets
-    cfg.js          packCfg / the u_cfg packer for big shaders (cluster-render keeps 32 uniform names a layer)
-    util.js         small helpers (isNum, rgb, rgba, mib, pad2)
-  car/              car data and the values derived from it, split by concern
-    signals.js      the kit Car plus the app's extra SOME/IP signals, the engine unit reads (UDS)
-    values.js       raw values, smoothing, boost, pedals, brake, tyres, odometer, shift point, scales
-    lamps.js        brake / turn / cruise lamps, the gear row slot
-    route.js        BMW's route guidance and media
+    modes.js        which layout shows, the HUD mode (cruise, nav), the theme, "toggle" and the map "hole"
+    assets.js       glyph atlases (R8 assets), the car's own font, the u_cfg packer
+    cfg.js          packCfg: moves a big shader's set-once uniforms into u_cfg (cluster-render keeps 32 names a layer)
+    consts.js       the engine's limits and tables
+    util.js         small helpers (isNum, rgb, rgba, mib, pad2, TEXT_MS)
+  car/              the car's data and the values derived from it
+    signals.js      the kit Car plus the app's extra SOME/IP signals, engine unit reads (UDS), guidance and media
+    values.js       rpm smoothing, the shift point and rev scale, boost, pedals, brake, 12 V, tyres, odometer, ...
+    lamps.js        parking brake / Auto Hold, indicators, cruise, the gear row's lit slot
+    route.js        BMW's route guidance
     assist.js       driver assistance and the car ahead
-    tokens.js       {{token}} text for text widgets
+    tokens.js       {{token}} -> text for text widgets (the token list is its header)
     consts.js       the car's enums and tables
+    scales.js       BMW's speed scale
   widgets/
     index.js        the registry: type name -> module
-    <type>/index.js one folder per widget type (related types may share one)
+    <type>/         one folder per type: index.js, shader.js (effect types), its helpers
+                    (grid/ also holds gridlabels, swatch/ also swatchimg and calibration.js, icon/ icons.js,
+                    miku/ sprite.js and idle.js, rdash/ its needle layer)
   layouts.js        layout files and their check (required fields come from the registry)
-  hud_text.js, hud_themes.js, icons.js, shift_score.js, sun.js, ...   shared libraries
+  hud_text.js, hud_themes.js, shift_score.js, sun.js, visible.js, ...   shared libraries
 ```
 
 The app build (`kit/tools/build.py`) copies the files and folders listed in each `app.json` `"shared"`; a folder entry
@@ -53,8 +58,16 @@ ends in `/` (`"engine/"`, `"car/"`, `"widgets/"`) and ships whole, so relative r
 | `update(hud, x, now, force)` | sends what changed (`force`: everything) |
 
 `hud` is the engine (HudApp): a module reads car values (`hud._raw`, `hud._shift`, ...), settings (`hud.setting`),
-the theme (`hud.theme`) and paints through `hud._blit` / `hud._blitDiff`. Everything a type owns (its GLSL, its
+the theme (`hud.theme`) and paints through `hud._blit` / `hud._blitDiff`. `x` is the engine's state for the widget
+(`x.w` the widget, `x.c` / `x.ref` its connection and layer, `x.last` the last values sent); a module keeps its own
+state on it too and documents it in a typedef.
+
+HudApp's methods live in several files: `engine/app.js` adds the methods of `engine/plan.js`, `status.js`, `modes.js`,
+`assets.js` and `car/*.js` to its prototype (non-enumerable, as class methods are). Everything a type owns (its GLSL, its
 helpers, its constants and state) lives in its folder; a type is removed by deleting its folder and its registry line.
+
+GLSL comments still mention `hud.js` or `shaders.js` in places: the GLSL is sent to the car as it is, and the move
+kept every shader byte for byte the same.
 
 ## Checks
 

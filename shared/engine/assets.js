@@ -145,7 +145,7 @@ module.exports = {
   },
 
   /** {{token}} -> display text. */
-  /** Collects a big shader's set-once uniforms (shaders.js CFG) into its one u_cfg vec4 array, sent by flush(); any
+  /** Collects a big shader's set-once uniforms (its module's "cfg") into its one u_cfg vec4 array, sent by flush(); any
    *  other uniform goes straight through. cluster-render keeps at most 32 uniform names a layer.
    * @param {Client} c
    * @param {number} ref

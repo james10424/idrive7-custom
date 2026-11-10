@@ -33,7 +33,7 @@ Object.keys(widgetTypes).forEach((t) => {
   TYPES[t] = widgetTypes[t].fields;
 });
 const CLASSES = ["ambient", "content", "overlay", "alert"];
-// the HUD modes a layout can have a variant for (hud.js header); "normal" is every layout's own
+// the HUD modes a layout can have a variant for (engine/app.js header); "normal" is every layout's own
 const MODES = ["cruise", "nav", "cruiseNav"];
 
 class Layouts {
