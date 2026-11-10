@@ -23,11 +23,30 @@ const READS_CRASH = 38;
 // Tokens: the biggest shader that runs on the car (Sport). Over it is untested, not known to crash.
 const TOKENS_GOOD = 7835;
 
-/** The source as the GPU compiles it: no comments, #define NAME / #ifdef / #ifndef / #else / #endif applied. */
+/**
+ * @typedef {object} ShaderCost
+ * @property {number} reads texture2D calls, inlined
+ * @property {number} tokens
+ */
+/**
+ * @typedef {object} ShaderCheck
+ * @property {"ok" | "warn" | "crash"} level
+ * @property {string} text
+ * @property {number} reads
+ * @property {number} tokens
+ */
+
+/**
+ * The source as the GPU compiles it: no comments, #define NAME / #ifdef / #ifndef / #else / #endif applied.
+ * @param {string} src
+ * @returns {string}
+ */
 function preprocess(src) {
   const s = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   const defs = new Set(),
+    /** @type {boolean[]} */
     on = [],
+    /** @type {string[]} */
     out = [];
   for (const line of s.split("\n")) {
     const t = line.trim();
@@ -58,9 +77,14 @@ function preprocess(src) {
 const TOKEN =
   /[A-Za-z_]\w*|\d+\.?\d*(?:[eE][-+]?\d+)?|[-+*/<>=!&|]=?|[(){}[\];,.?:]/g;
 
-/** { reads, tokens } of main with every function inlined; null without a main. */
+/**
+ * { reads, tokens } of main with every function inlined; null without a main.
+ * @param {string} src
+ * @returns {ShaderCost | null}
+ */
 function measure(src) {
   const s = preprocess(src);
+  /** @type {Record<string, string>} function name to body */
   const bodies = {};
   const head =
     /\b(?:void|bool|int|float|vec[234]|ivec[234]|bvec[234]|mat[234])\s+(\w+)\s*\([^)]*\)\s*\{/g;
@@ -76,7 +100,12 @@ function measure(src) {
     bodies[m[1]] = s.slice(head.lastIndex, i);
   }
   if (!bodies.main) return null;
+  /** @type {Record<string, ShaderCost>} */
   const memo = {};
+  /**
+   * @param {string} name
+   * @returns {ShaderCost}
+   */
   const cost = (name) => {
     if (memo[name]) return memo[name];
     const b = bodies[name];
@@ -98,7 +127,11 @@ function measure(src) {
   return cost("main");
 }
 
-/** { level: 'ok' | 'warn' | 'crash', text, reads, tokens } for one fragment shader. */
+/**
+ * { level: 'ok' | 'warn' | 'crash', text, reads, tokens } for one fragment shader.
+ * @param {string} src
+ * @returns {ShaderCheck}
+ */
 function check(src) {
   const r = measure(src);
   if (!r) return { level: "ok", text: "no main", reads: 0, tokens: 0 };
@@ -116,6 +149,7 @@ function check(src) {
       ...r,
     };
   }
+  /** @type {string[]} */
   const over = [];
   if (r.reads > READS_GOOD)
     over.push(
@@ -140,6 +174,7 @@ module.exports = { measure, check, READS_GOOD, READS_CRASH, TOKENS_GOOD };
 
 if (require.main === module) {
   const shaders = require("../shared/shaders");
+  /** @type {Record<string, string>} */
   const all = Object.assign({}, shaders, { rdashNeedle: shaders.rdashNeedle });
   // the Miku parts setting builds these from shaders.miku (shared/hud.js mikuShader)
   all["miku (no idle)"] = "#define MIKU_NO_IDLE\n" + shaders.miku;

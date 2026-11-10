@@ -12,6 +12,7 @@ const mgu = require("./kit/mgu");
 const HudApp = require("./hud");
 
 mgu.run({
+  /** @param {import("../../shared/hud").HudCtx} ctx the kit's app context */
   start(ctx) {
     let hud;
     try {

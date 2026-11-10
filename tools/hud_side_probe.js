@@ -19,8 +19,19 @@ const W = Number(process.env.SIDE_W) || 800,
   H = Number(process.env.SIDE_H) || 480;
 const secs = Number(process.argv[2]) || 60;
 
+/**
+ * The test picture, W x H RGBA.
+ * @returns {Buffer}
+ */
 function picture() {
   const px = Buffer.alloc(W * H * 4, 0);
+  /**
+   * @param {number} x0
+   * @param {number} y0
+   * @param {number} w
+   * @param {number} h
+   * @param {number[]} c RGB
+   */
   const fill = (x0, y0, w, h, c) => {
     for (let y = Math.max(0, y0); y < Math.min(H, y0 + h); y++)
       for (let x = Math.max(0, x0); x < Math.min(W, x0 + w); x++) {

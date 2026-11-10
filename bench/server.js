@@ -41,6 +41,92 @@ const { takeBuildLock, BUILD_LOCK_WAIT_MS } = require("./build_lock");
 const visible = require("../shared/visible");
 const shaderBudget = require("../tools/shader_budget"); // what the KOMBI took on the car (texture reads, size)
 
+/** @typedef {import("./run-app").ToApp} ToApp */
+/** @typedef {import("./run-app").FromApp} FromApp */
+/** @typedef {{ v: number[], type: string | null }} BenchUniform */
+/**
+ * A layer or asset the fake cluster-render holds, keyed "conn:ref" in layers.
+ * @typedef {object} BenchLayer
+ * @property {string} key "conn:ref"
+ * @property {number} conn
+ * @property {number} ref
+ * @property {string} app the name in the connection's hello
+ * @property {string} kind "image", "effect" or "asset" (others are registered, not drawn)
+ * @property {string} target
+ * @property {string} class
+ * @property {number} z
+ * @property {number} x
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ * @property {number} visible
+ * @property {number} opacity
+ * @property {number} exclusive
+ * @property {Record<string, BenchUniform>} uniforms
+ * @property {"shown" | "waiting"} state
+ * @property {string} reason
+ * @property {number} [iw] image or asset width
+ * @property {number} [ih]
+ * @property {number} [bpp] bytes a pixel: 4, or 1 for an r8 asset
+ * @property {Buffer} [image] image or asset pixels
+ * @property {string} [format] asset only: "r8" or "rgba8"
+ * @property {string} [fs] effect only: the fragment shader
+ * @property {boolean} [time] effect only: the renderer's clock in u_time
+ * @property {Record<string, string>} [binds] effect only: sampler name to asset key
+ * @property {boolean} [sentWhole] the page has had the whole image
+ */
+/**
+ * A layer as the page gets it in the 'scene' event: no pixels, with its visibility warnings.
+ * @typedef {Omit<BenchLayer, "image" | "bpp" | "sentWhole"> & { warnings: string[] }} SceneLayer
+ */
+/**
+ * One app the bench runs.
+ * @typedef {object} BenchApp
+ * @property {string} id
+ * @property {string} dir apps/<id>
+ * @property {string} data bench/.data/<id>, the app's data folder
+ * @property {string} stage dist/<id>, the built app
+ * @property {import("child_process").ChildProcess | null} child
+ * @property {boolean} stopping
+ * @property {NodeJS.Timeout | null} restartTimer
+ * @property {FromApp | null} lastSettings
+ * @property {FromApp | null} lastStatus
+ */
+/**
+ * An event on the page's stream (GET /events), named by t: hello, log, scene, px, app, values, settings, status, nav,
+ * assist or car.
+ * @typedef {{ t: string, [field: string]: any }} PageEvent
+ */
+/**
+ * A JSON op from an app's cluster-render client; which fields are set depends on op.
+ * @typedef {object} RenderOp
+ * @property {string} op hello, layer, asset, bind, set, drop, uniform or status
+ * @property {number} ref
+ * @property {string} [app] hello
+ * @property {number} [proto] hello
+ * @property {string} [kind]
+ * @property {string} [target]
+ * @property {string} [class]
+ * @property {number} [z]
+ * @property {number} [x]
+ * @property {number} [y]
+ * @property {number} [w]
+ * @property {number} [h]
+ * @property {number} [visible]
+ * @property {number} [opacity]
+ * @property {number} [exclusive]
+ * @property {number} [iw]
+ * @property {number} [ih]
+ * @property {string} [fs]
+ * @property {boolean} [time]
+ * @property {string} [format]
+ * @property {number} [asset] bind: the asset's ref
+ * @property {string} [sampler] bind
+ * @property {string} [name] uniform
+ * @property {string} [v] uniform: numbers separated by spaces
+ * @property {string} [type] uniform
+ */
+
 const PORT = Number(process.env.BENCH_PORT) || 8078;
 // BENCH_LAYER_CAP: a lower per-connection cap to try a layout under (cluster-render before 0.4.2 drew 8; photos, Nov 5
 // 2026). 0 = off. Layers past the cap get state 'waiting' and are not drawn. POST /cap sets it live.
@@ -58,6 +144,7 @@ const PIXEL_BYTES =
   1024 *
   1024;
 // the service's accounting: an image or asset costs its bytes twice (compositor.cpp: the pixels and a rectangle scratch)
+/** @returns {number} */
 function pixelBytes() {
   let n = 0;
   layers.forEach((l) => {
@@ -65,6 +152,10 @@ function pixelBytes() {
   });
   return n;
 }
+/**
+ * Layers, not counting assets.
+ * @returns {number}
+ */
 function layerCount() {
   let n = 0;
   layers.forEach((l) => {
@@ -74,6 +165,10 @@ function layerCount() {
 }
 const TOTAL_ASSETS = 32,
   ASSETS_PER_CLIENT = 16; // CompositorLimits assets / assets_per_client
+/**
+ * @param {number} b bytes
+ * @returns {string}
+ */
 const mib = (b) => (b / 1048576).toFixed(1) + " MiB";
 const SOCK = path.join(os.tmpdir(), "hud-bench-" + process.pid + ".sock");
 const ROOT = path.join(__dirname, "..");
@@ -81,6 +176,7 @@ const APP_IDS = process.argv.slice(2).length
   ? process.argv.slice(2)
   : [process.env.BENCH_APP || "custom_hud"];
 // one entry per app: its folders (data/ on the bench: settings.json, layouts/), its process and what it last reported
+/** @type {BenchApp[]} */
 const apps = APP_IDS.map((id) => {
   const dir = path.join(ROOT, "apps", id);
   if (!fs.existsSync(path.join(dir, "app.json"))) {
@@ -99,7 +195,12 @@ const apps = APP_IDS.map((id) => {
     lastStatus: null,
   };
 });
+/**
+ * @param {string} id
+ * @returns {BenchApp | null}
+ */
 const appOf = (id) => apps.find((a) => a.id === id) || null;
+/** @type {Record<string, [number, number]>} target name to [w, h] */
 const TARGETS = { hud: [800, 480], map: [1088, 480], panel: [1920, 720] };
 const CLASSES = ["ambient", "content", "overlay", "alert"];
 const MAX_MSG = 5529664;
@@ -116,7 +217,11 @@ const NODE8 = path.join(
 );
 const APP_NODE =
   process.env.BENCH_NODE || (fs.existsSync(NODE8) ? NODE8 : null);
-/** The target the page draws for an app: its config.target (read again on each restart). */
+/**
+ * The target the page draws for an app: its config.target (read again on each restart).
+ * @param {BenchApp} a
+ * @returns {string}
+ */
 function appView(a) {
   try {
     const t = JSON.parse(fs.readFileSync(path.join(a.dir, "app.json"), "utf8"))
@@ -129,12 +234,23 @@ function appView(a) {
 
 /* ---------- browser side: Server-Sent Events out, small POSTs in ---------- */
 
+/** @type {Set<http.ServerResponse>} the open event streams */
 const clients = new Set();
+/** @type {PageEvent[]} the last 400 log events, replayed to a new page */
 const logLines = [];
+/**
+ * An event to every page, or only to one.
+ * @param {PageEvent} obj
+ * @param {http.ServerResponse} [only]
+ */
 function send(obj, only) {
   const line = "data: " + JSON.stringify(obj) + "\n\n";
   (only ? [only] : Array.from(clients)).forEach((res) => res.write(line));
 }
+/**
+ * @param {"info" | "warn" | "error"} level
+ * @param {string} text
+ */
 function log(level, text) {
   const entry = {
     t: "log",
@@ -149,10 +265,15 @@ function log(level, text) {
 
 /* ---------- the fake cluster-render ---------- */
 
+/** @type {Map<string, BenchLayer>} */
 const layers = new Map(); // key "conn:ref" -> layer
 let nextConn = 1;
 
-/** The visibility warnings for one layer's rect on its target (the same check layouts.js runs per widget). */
+/**
+ * The visibility warnings for one layer's rect on its target (the same check layouts.js runs per widget).
+ * @param {BenchLayer} l
+ * @returns {string[]}
+ */
 function layerWarnings(l) {
   return visible
     .check(
@@ -161,10 +282,15 @@ function layerWarnings(l) {
     )
     .map((w) => w.replace(/^#\d+: /, ""));
 }
+/**
+ * Layers waiting over the layer cap.
+ * @returns {number}
+ */
 function overCap() {
   return Array.from(layers.values()).filter((l) => l.state === "waiting")
     .length;
 }
+/** @returns {SceneLayer[]} */
 function sceneMeta() {
   return Array.from(layers.values()).map((l) => ({
     key: l.key,
@@ -194,6 +320,10 @@ function sceneMeta() {
     warnings: l.kind === "asset" ? [] : layerWarnings(l),
   }));
 }
+/**
+ * The 'hello' event: targets, apps, caps and the visibility geometry.
+ * @returns {PageEvent}
+ */
 function helloMsg() {
   return {
     t: "hello",
@@ -213,7 +343,9 @@ function helloMsg() {
     },
   };
 }
+/** @type {NodeJS.Timeout | null} */
 let sceneTimer = null;
+/** Sends the scene to the pages, at most every 16 ms. */
 function sceneChanged() {
   if (sceneTimer) return;
   sceneTimer = setTimeout(() => {
@@ -224,14 +356,30 @@ function sceneChanged() {
 /* Pixels never travel on the event stream: a 'px' notice names a rect of an image layer and the page fetches its
  * bytes from GET /px (binary, the layer's current pixels). Base64 on the stream choked the page once the engine
  * packed text into 1 MB sheets (Nov 5 2026). */
+/**
+ * @param {BenchLayer} l
+ * @param {http.ServerResponse} [only]
+ */
 function sendPixels(l, only) {
   if (!l.image) return;
   sendRect(l, 0, 0, l.iw, l.ih, only);
 }
+/**
+ * @param {BenchLayer} l
+ * @param {number} x
+ * @param {number} y
+ * @param {number} w
+ * @param {number} h
+ * @param {http.ServerResponse} [only]
+ */
 function sendRect(l, x, y, w, h, only) {
   send({ t: "px", key: l.key, iw: l.iw, ih: l.ih, x, y, w, h }, only);
 }
-/** GET /px?key=&x=&y=&w=&h=: that rect of the layer's image, raw RGBA rows. */
+/**
+ * GET /px?key=&x=&y=&w=&h=: that rect of the layer's image, raw RGBA rows.
+ * @param {Record<string, string>} q the query
+ * @returns {Buffer | null} null for an unknown layer or a rect off its image
+ */
 function pixelRect(q) {
   const l = layers.get(q.key);
   const x = Number(q.x),
@@ -272,6 +420,11 @@ function pixelRect(q) {
   return out;
 }
 
+/**
+ * An event to an app's connection, as a 'J' message.
+ * @param {net.Socket} sock
+ * @param {object} obj
+ */
 function writeEv(sock, obj) {
   const body = Buffer.from(JSON.stringify(obj), "utf8");
   const m = Buffer.alloc(5 + body.length);
@@ -284,9 +437,16 @@ function writeEv(sock, obj) {
 const renderServer = net.createServer((sock) => {
   const conn = nextConn++;
   const st = { conn, app: "?", hello: false, buf: Buffer.alloc(0) };
+  /** @param {string} why */
   const bad = (why) => {
     log("error", "protocol [" + st.app + "]: " + why);
   };
+  /**
+   * Logs it and sends the app an error event.
+   * @param {string} op
+   * @param {number} ref
+   * @param {string} reason
+   */
   const refuse = (op, ref, reason) => {
     bad(op + " ref " + ref + ": " + reason);
     writeEv(sock, { ev: "error", op, ref, reason });
@@ -330,6 +490,11 @@ const renderServer = net.createServer((sock) => {
     sceneChanged();
   });
 
+  /**
+   * @param {number} type the message type byte
+   * @param {Buffer} body
+   * @returns {void}
+   */
   function handle(type, body) {
     if (type === 0x4a) return onJson(body);
     if (!st.hello) return bad("binary message before hello");
@@ -339,7 +504,12 @@ const renderServer = net.createServer((sock) => {
     bad("unknown message type 0x" + type.toString(16));
   }
 
+  /**
+   * @param {Buffer} body
+   * @returns {void}
+   */
   function onJson(body) {
+    /** @type {RenderOp} */
     let m;
     try {
       m = JSON.parse(body.toString("utf8"));
@@ -388,6 +558,7 @@ const renderServer = net.createServer((sock) => {
         ) {
           return refuse("layer", m.ref, "the service's pixel memory is full");
         }
+        /** @type {BenchLayer} */
         const nl = {
           key,
           conn,
@@ -639,6 +810,7 @@ const renderServer = net.createServer((sock) => {
           return refuse("uniform", m.ref, 'non-numeric value "' + m.v + '"');
         // PROTOCOL.md "Uniforms": without type, 1-4 numbers; with type, whole elements, up to 1024
         // numbers (an array uniform). Both the numbers and the type reach the page.
+        /** @type {Record<string, number>} */
         const WIDTH = { float: 1, vec2: 2, vec3: 3, vec4: 4, mat4: 16 };
         if (m.type !== undefined) {
           if (!WIDTH[m.type])
@@ -709,6 +881,11 @@ const renderServer = net.createServer((sock) => {
     }
   }
 
+  /**
+   * A 'F' message: a whole image, or dirty rects, for an image layer or an asset.
+   * @param {Buffer} body
+   * @returns {void}
+   */
   function onFrame(body) {
     if (body.length < 14) return bad("frame message too short");
     const ref = body.readUInt32LE(0);
@@ -733,6 +910,7 @@ const renderServer = net.createServer((sock) => {
       px.copy(l.image);
     } else {
       let o = 0;
+      /** @type {number[][]} [x, y, w, h] */
       const rects = [];
       for (let i = 0; i < n; i++) {
         const x = body.readUInt16LE(14 + i * 8),
@@ -768,18 +946,31 @@ const renderServer = net.createServer((sock) => {
 
 /* ---------- the app children ---------- */
 
+/** @type {Extract<ToApp, { t: "signals" }>} */
 let signals = { t: "signals", mode: "demo", values: {} };
+/** @type {Extract<ToApp, { t: "drive" }>} */
 let drive = { t: "drive", value: null }; // the drive mode buttons (FES actualValueModeDrivingExperience), null = car hasn't said
+/** @type {Extract<ToApp, { t: "nav" }>} */
 let nav = { t: "nav", value: null }; // route guidance (Guidance guidanceState: 'ACTIVE', 'INACTIVE'), null = car hasn't said
+/** @type {Record<string, string>} */
 let carSw = {}; // the car switches (page "Car switches": turn signals, brake lights, parking brake, ...), key -> value
+/** @type {Extract<ToApp, { t: "assist" }>} */
 let assist = { t: "assist", value: null }; // BMW's HUD driver assistance block (DisplayDataServer): 'acc' or 'off', null = car hasn't said
-/** A message to every running app (the vehicle signals are the car's, so every app gets them). */
+/**
+ * A message to every running app (the vehicle signals are the car's, so every app gets them).
+ * @param {ToApp} m
+ */
 function toApps(m) {
   apps.forEach((a) => {
     if (a.child) a.child.send(m);
   });
 }
 
+/**
+ * Builds dist/<id> with kit/tools/build.py.
+ * @param {BenchApp} a
+ * @returns {boolean} whether it built
+ */
 function build(a) {
   // The kit's build needs an oap-sdk folder; on the Mac that is a stub (see bench/README.md).
   const sdk = path.join(ROOT, "oap-sdk");
@@ -836,6 +1027,10 @@ function build(a) {
   }
 }
 
+/**
+ * Builds the app and forks run-app.js on it.
+ * @param {BenchApp} a
+ */
 function startApp(a) {
   try {
     fs.mkdirSync(a.data, { recursive: true });
@@ -847,6 +1042,7 @@ function startApp(a) {
     send({ t: "app", app: a.id, state: "stopped" });
     return;
   }
+  /** @type {import("child_process").ForkOptions} */
   const opts = {
     cwd: a.data,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
@@ -864,6 +1060,11 @@ function startApp(a) {
   Object.keys(carSw).forEach((k) =>
     c.send({ t: "car", key: k, value: carSw[k] }),
   );
+  /**
+   * The child's output into the log, line by line.
+   * @param {import("stream").Readable} stream
+   * @param {"info" | "warn"} level
+   */
   const pipe = (stream, level) => {
     let rest = "";
     stream.on("data", (d) => {
@@ -877,23 +1078,26 @@ function startApp(a) {
   };
   pipe(c.stdout, "info");
   pipe(c.stderr, "warn");
-  c.on("message", (m) => {
-    if (!m) return;
-    m.app = a.id;
-    if (m.t === "settings") a.lastSettings = m;
-    if (m.t === "status") {
-      a.lastStatus = m;
-      log(
-        "info",
-        "center screen status [" +
-          a.id +
-          "]: " +
-          m.s +
-          (m.d ? " / " + m.d : ""),
-      );
-    }
-    if (m.t === "values" || m.t === "settings" || m.t === "status") send(m);
-  });
+  c.on(
+    "message",
+    /** @param {FromApp} m */ (m) => {
+      if (!m) return;
+      m.app = a.id;
+      if (m.t === "settings") a.lastSettings = m;
+      if (m.t === "status") {
+        a.lastStatus = m;
+        log(
+          "info",
+          "center screen status [" +
+            a.id +
+            "]: " +
+            m.s +
+            (m.d ? " / " + m.d : ""),
+        );
+      }
+      if (m.t === "values" || m.t === "settings" || m.t === "status") send(m);
+    },
+  );
   c.on("exit", (code, sig) => {
     if (c !== a.child) return;
     a.child = null;
@@ -920,6 +1124,10 @@ function startApp(a) {
   );
 }
 
+/**
+ * @param {BenchApp} a
+ * @param {string} why for the log
+ */
 function restartApp(a, why) {
   // already stopping the old one, with a start queued on its exit: a second start now would run the app twice
   if (a.stopping) {
@@ -945,9 +1153,16 @@ function restartApp(a, why) {
     }, 1500);
   } else startApp(a);
 }
+/** @param {string} why */
 const restartAll = (why) => apps.forEach((a) => restartApp(a, why));
 
 // an app's own folder restarts that app; shared/ and kit/ restart them all
+/**
+ * Restarts targets when a file under dir changes.
+ * @param {string} dir
+ * @param {BenchApp[]} targets
+ * @returns {fs.FSWatcher}
+ */
 const watchFor = (dir, targets) =>
   fs.watch(dir, { recursive: true }, (ev, file) => {
     if (!file || /(^|\/)\./.test(file) || /__pycache__/.test(file)) return;
@@ -966,6 +1181,11 @@ apps.forEach((a) => watchFor(a.dir, [a]));
 
 /* ---------- HTTP ---------- */
 
+/**
+ * The request's JSON body; {} when it does not parse.
+ * @param {http.IncomingMessage} req
+ * @returns {Promise<any>}
+ */
 function body(req) {
   return new Promise((resolve) => {
     let s = "";
@@ -998,6 +1218,7 @@ const web = http.createServer(async (req, res) => {
     return fs.createReadStream(path.join(__dirname, "page.html")).pipe(res);
   }
   if (req.method === "GET" && url === "/px") {
+    /** @type {Record<string, string>} */
     const q = {};
     (req.url.split("?")[1] || "").split("&").forEach((kv) => {
       const i = kv.indexOf("=");
@@ -1204,6 +1425,7 @@ renderServer.listen(SOCK, () => {
     apps.forEach(startApp);
   });
 });
+/** Stops the apps, removes the socket and exits. */
 function shutdown() {
   apps.forEach((a) => {
     a.stopping = true;

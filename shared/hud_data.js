@@ -6,4 +6,11 @@
  */
 const path = require("path");
 
+/**
+ * The app's hud/ data, packed or as a folder (kit/runtime/pack.js).
+ * @typedef {object} HudData
+ * @property {(rel: string) => any} json the parsed JSON file, {} when missing
+ */
+
+/** @type {HudData} */
 module.exports = require("./kit/pack").open(path.join(__dirname, "hud"));

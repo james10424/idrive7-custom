@@ -11,6 +11,23 @@
  * red zone, highColor from there. midAt: 'shift' = where the shift zone starts
  * (redline - 1500), or a fraction of the bar (M climbs light blue -> blue at 50%).
  */
+/** @typedef {number[]} Rgba [r, g, b, a] 0..255 (a may be left out: opaque) */
+/**
+ * A colour theme: roles a layout names, filled in.
+ * @typedef {object} Theme
+ * @property {string} name shown in the settings
+ * @property {Rgba} fg
+ * @property {Rgba} dim
+ * @property {Rgba} track
+ * @property {Rgba} arc
+ * @property {Rgba} [hot] the shift-point red (added to every theme below)
+ * @property {number} glow 0..1
+ * @property {boolean} stripe draws the M stripe
+ * @property {{ low: Rgba, mid: Rgba, high: Rgba, midAt: "shift"|number }} bar the shift bar's zones
+ * @property {{ from: Rgba, to: Rgba }} rev the rev bar ramp
+ */
+
+/** @type {Record<string, Theme>} */
 const THEMES = {
   classic: {
     name: "Classic",
@@ -190,12 +207,14 @@ Object.keys(THEMES).forEach((k) => {
 
 // Redline layout (after cauliflowermossgrape's Redline app): rev bar segments ramp rev.from -> rev.to up to
 // the shift point; the shift lights run green -> yellow -> red in every theme; grade badges by verdict.
+/** @type {Record<string, Rgba>} */
 const LIGHTS = {
   green: [47, 210, 122],
   yellow: [255, 194, 26],
   red: [255, 42, 42],
   blue: [40, 110, 255],
 };
+/** @type {Record<string, Rgba>} */
 const VERDICT = {
   "SPOT ON": [47, 210, 122, 255],
   EARLY: [255, 194, 26, 255],
@@ -206,13 +225,19 @@ const VERDICT = {
 };
 
 // The M tricolour stripe: light blue, dark blue, red (brightened for the HUD).
+/** @type {Rgba[]} */
 const M_STRIPE = [
   [79, 180, 255, 255],
   [47, 91, 216, 255],
   [232, 38, 45, 255],
 ];
 
-/** A colour from a role name ("fg") or a literal [r,g,b,a]. */
+/**
+ * A colour from a role name ("fg") or a literal [r,g,b,a].
+ * @param {Theme} theme
+ * @param {string|Rgba} c
+ * @returns {Rgba}
+ */
 function color(theme, c) {
   if (Array.isArray(c)) return c;
   return theme[c] || theme.fg;

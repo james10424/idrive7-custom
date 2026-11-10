@@ -10,6 +10,12 @@ const path = require("path");
  * log(level, text) reports waiting and take-overs. Returns the release function, or null when it gave up. */
 const BUILD_LOCK_WAIT_MS = 120000;
 const BUILD_LOCK_STALE_MS = 300000;
+/**
+ * @param {string} distDir
+ * @param {string} id the app id
+ * @param {(level: "info" | "warn", text: string) => void} log
+ * @returns {(() => void) | null} the release function
+ */
 function takeBuildLock(distDir, id, log) {
   const dir = path.join(distDir, ".build-" + id + ".lock");
   const pidFile = path.join(dir, "pid");

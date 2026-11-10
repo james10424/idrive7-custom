@@ -10,6 +10,7 @@
  * (0.1,0.1,0.1), (0.25,0.25,0.25). If the two strips photograph differently, the effect and image
  * paths are not on the same curve (gamma, premultiplied alpha, or a colour-space conversion).
  */
+/** @type {Array<[number, number, number]>} */
 const TEST_COLOURS = [
   [0.014, 0.027, 0.05],
   [0.055, 0.105, 0.155],
@@ -41,7 +42,13 @@ void main() {
 }
 `;
 
-/** The swatch as straight RGBA (w*h*4 bytes): the same steps and colours as SWATCH. */
+/**
+ * The swatch as straight RGBA (w*h*4 bytes): the same steps and colours as SWATCH.
+ * @param {number} w
+ * @param {number} h
+ * @param {number} n grey steps
+ * @returns {Buffer}
+ */
 function swatchImage(w, h, n) {
   const steps = n > 1 ? Math.floor(n) : 1;
   const buf = Buffer.alloc(w * h * 4, 0);

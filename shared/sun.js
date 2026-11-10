@@ -9,6 +9,12 @@
  */
 const RAD = Math.PI / 180;
 
+/**
+ * @param {number} dateMs any time on the UTC date, epoch ms
+ * @param {number} lat degrees
+ * @param {number} lon degrees, east positive
+ * @returns {{ sunrise: number, sunset: number } | null} epoch ms; null in polar day or night
+ */
 function sunTimes(dateMs, lat, lon) {
   // Julian day at 0h UTC of this UTC date
   const d = new Date(dateMs);
@@ -51,6 +57,12 @@ function sunTimes(dateMs, lat, lon) {
   };
 }
 
+/**
+ * @param {number} nowMs epoch ms
+ * @param {number} lat degrees
+ * @param {number} lon degrees, east positive
+ * @returns {boolean} true between sunset and the next sunrise
+ */
 function isNight(nowMs, lat, lon) {
   // the local solar day can straddle the UTC date line: check yesterday, today and tomorrow
   for (const off of [-1, 0, 1]) {

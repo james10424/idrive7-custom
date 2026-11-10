@@ -12,6 +12,20 @@ const path = require("path");
 const data = require("./hud_data");
 const visible = require("./visible");
 
+/**
+ * A layout file (hud/layouts/<name>.json or <data>/layouts/<name>.json).
+ * @typedef {object} Layout
+ * @property {2} schemaVersion
+ * @property {string} [name]
+ * @property {string} [theme]
+ * @property {Array<"cruise"|"nav"|"cruiseNav">} [modes] the HUD modes it has variants for
+ * @property {import("./hud").Widget[]} widgets
+ */
+
+/**
+ * The widget types and the fields each must have.
+ * @type {Record<string, string[]>}
+ */
 const TYPES = {
   text: ["text", "font"],
   scale: ["font"],
@@ -43,16 +57,26 @@ const CLASSES = ["ambient", "content", "overlay", "alert"];
 const MODES = ["cruise", "nav", "cruiseNav"];
 
 class Layouts {
-  /** size: the target's [w, h] (800x480 HUD, 1920x720 cluster); widgets must fit on it. */
+  /**
+   * size: the target's [w, h] (800x480 HUD, 1920x720 cluster); widgets must fit on it.
+   * @param {string} dataDir the app's data folder
+   * @param {import("./shift_score").Log & { warn: (s: string) => void }} log
+   * @param {number[]} [size]
+   */
   constructor(dataDir, log, size) {
     this.size = size || [800, 480];
     this.dir = path.join(dataDir, "layouts");
     this.log = log;
+    /** @type {Array<() => void>} */
     this.changeListeners = [];
     this._watch();
   }
 
-  /** The layout called `name`, checked; throws with the reason when it can't be used. */
+  /**
+   * The layout called `name`, checked; throws with the reason when it can't be used.
+   * @param {string} name
+   * @returns {Layout}
+   */
   load(name) {
     if (!/^[a-z0-9_-]+$/i.test(String(name)))
       throw new Error('bad layout name "' + name + '"');
@@ -81,6 +105,11 @@ class Layouts {
     return raw;
   }
 
+  /**
+   * Throws with the reason when `p` is not a usable layout.
+   * @param {any} p the parsed file
+   * @param {string} name
+   */
   _validate(p, name) {
     const bad = (why) => {
       throw new Error('layout "' + name + '": ' + why);
@@ -193,11 +222,15 @@ class Layouts {
     });
   }
 
-  /** cb() after <data>/layouts/ changes on disk. */
+  /**
+   * cb() after <data>/layouts/ changes on disk.
+   * @param {() => void} cb
+   */
   onChange(cb) {
     this.changeListeners.push(cb);
   }
 
+  /** Watches <data>/layouts/ (creating it when missing). */
   _watch() {
     try {
       fs.mkdirSync(this.dir);

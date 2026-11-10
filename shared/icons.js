@@ -5,6 +5,16 @@
  *   gauge (engine), shock (chassis), wheel (steering), cog (gearbox), stack (the gear's shift program
  *   lines), therm (coolant), oilcan (oil), fuel (pump), tyre (a wheel seen from the side: ring, hub, tread notches).
  */
+/**
+ * Distance from (px, py) to the segment a..b.
+ * @param {number} px
+ * @param {number} py
+ * @param {number} ax
+ * @param {number} ay
+ * @param {number} bx
+ * @param {number} by
+ * @returns {number}
+ */
 function seg(px, py, ax, ay, bx, by) {
   const pax = px - ax,
     pay = py - ay,
@@ -16,8 +26,21 @@ function seg(px, py, ax, ay, bx, by) {
   );
   return Math.hypot(pax - bax * h, pay - bay * h);
 }
+/** @type {(px: number, py: number, cx: number, cy: number, r: number) => number} distance to a circle line */
 const ring = (px, py, cx, cy, r) => Math.abs(Math.hypot(px - cx, py - cy) - r);
+/** @type {(px: number, py: number, cx: number, cy: number, r: number) => number} signed distance to a filled circle */
 const disc = (px, py, cx, cy, r) => Math.hypot(px - cx, py - cy) - r;
+/**
+ * Distance to an arc of radius r around (cx, cy), from angle a0 to a1.
+ * @param {number} px
+ * @param {number} py
+ * @param {number} cx
+ * @param {number} cy
+ * @param {number} r
+ * @param {number} a0
+ * @param {number} a1
+ * @returns {number}
+ */
 function arc(px, py, cx, cy, r, a0, a1) {
   // clockwise from 12 o'clock, radians, a0 < a1
   let a = Math.atan2(px - cx, -(py - cy));
@@ -28,7 +51,11 @@ function arc(px, py, cx, cy, r, a0, a1) {
   return Math.min(e(a0), e(a1));
 }
 
-/** Distance (in box units) from (x, y) to the icon's ink; < 0 or < stroke half-width = ink. */
+/**
+ * Distance (in box units) from (x, y) to the icon's ink; < 0 or < stroke half-width = ink.
+ * @typedef {(x: number, y: number) => number} IconFn
+ * @type {Record<string, IconFn>}
+ */
 const ICONS = {
   gauge: (x, y) =>
     Math.min(
@@ -128,6 +155,14 @@ const ICONS = {
     ),
 };
 
+/**
+ * Paints an icon as straight RGBA.
+ * @param {string} name a key of ICONS; an unknown name gives a clear image
+ * @param {number} w
+ * @param {number} h
+ * @param {number[]} color [r, g, b] or [r, g, b, a], 0..255
+ * @returns {Buffer} w*h*4 bytes
+ */
 function paintIcon(name, w, h, color) {
   const f = ICONS[name],
     out = Buffer.alloc(w * h * 4, 0);

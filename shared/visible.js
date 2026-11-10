@@ -11,6 +11,7 @@
 /** Cluster (1920x720): the first visible y along each vertical line [x, y]; the hood hides
  *  everything above it. Linear between points; x 1920 is taken as y 240. Bottom and sides
  *  are fully visible. */
+/** @type {Array<[number, number]>} */
 const HOOD = [
   [0, 273],
   [100, 138],
@@ -36,18 +37,26 @@ const HOOD = [
 ];
 /** The dash camera hangs in front of the panel's top middle, from the top down to y ~132 (car photo of the Regal
  *  theme, Nov 8 2026): [x0, y0, x1, y1]. */
+/** @type {[number, number, number, number]} */
 const CAMERA = [760, 0, 1200, 135];
 /** BMW draws a solid black box over our panel here (its gear slot): [x0, y0, x1, y1]. */
+/** @type {[number, number, number, number]} */
 const BLACK_BOX = [1406, 342, 1597, 419];
 /** BMW's seat-belt warning light is drawn over us here: [x0, y0, x1, y1]. */
+/** @type {[number, number, number, number]} */
 const BELT = [587, 663, 626, 700];
 /** BMW's gear letter in the bottom row and the black box behind it, drawn over us (P / R / N / D; car photos with the
  *  Sport theme, Nov 7 2026, and Nov 9 2026: the box cut 6 px off the bottom of Sport's route strip). */
+/** @type {[number, number, number, number]} */
 const GEAR = [1380, 668, 1455, 713];
 /** The part of the 800x480 HUD target seen through the windshield (eye-position dependent). */
 const HUD_WINDOW = { x: 120, y: 100, w: 485, h: 278 };
 
-/** The first visible y at x on the panel (interpolated along HOOD). */
+/**
+ * The first visible y at x on the panel (interpolated along HOOD).
+ * @param {number} x
+ * @returns {number}
+ */
 function hoodY(x) {
   if (x <= HOOD[0][0]) return HOOD[0][1];
   const last = HOOD[HOOD.length - 1];
@@ -60,6 +69,12 @@ function hoodY(x) {
   return last[1];
 }
 
+/** @typedef {{ id?: string, x: number, y: number, w: number, h: number }} Rect a widget's box */
+/**
+ * @param {Rect} w
+ * @param {number[]} box [x0, y0, x1, y1]
+ * @returns {boolean}
+ */
 function overlaps(w, box) {
   return (
     w.x < box[2] && w.x + w.w > box[0] && w.y < box[3] && w.y + w.h > box[1]
@@ -69,6 +84,9 @@ function overlaps(w, box) {
 /**
  * Warnings (strings, one per problem) for the widgets ({ id, x, y, w, h }) of a layout on
  * `target` ('panel' or 'hud'). Never throws; a widget without numeric x/y/w/h is skipped.
+ * @param {Rect[]} widgets
+ * @param {"panel"|"hud"} target
+ * @returns {string[]}
  */
 function check(widgets, target) {
   const out = [];

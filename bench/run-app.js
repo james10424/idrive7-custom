@@ -18,6 +18,26 @@ const fs = require("fs");
 const path = require("path");
 const Module = require("module");
 
+/**
+ * The page's manual signals by name (rpm, speed, gear, ...), music a string.
+ * @typedef {Record<string, number | string>} ManualValues
+ */
+/**
+ * A message from bench/server.js.
+ * @typedef {{ t: "signals", mode: "demo" | "manual", values: ManualValues }
+ *   | { t: "set", key: string, value: any }
+ *   | { t: "drive", value: number | null }
+ *   | { t: "nav", value: string | null }
+ *   | { t: "assist", value: "acc" | "off" | null }
+ *   | { t: "car", key: string, value: string | null }} ToApp
+ */
+/**
+ * A message to bench/server.js, which adds app (the app id) and passes it on to the page.
+ * @typedef {{ t: "status", s: string, d: string, app?: string }
+ *   | { t: "settings", schema: any, values: Record<string, any>, app?: string }
+ *   | { t: "values", mode: string, values: Record<string, number | null>, app?: string }} FromApp
+ */
+
 const stage = process.argv[2],
   dataDir = process.argv[3];
 if (!stage || !dataDir) {
@@ -25,9 +45,15 @@ if (!stage || !dataDir) {
   process.exit(2);
 }
 
+/** @param {FromApp} m */
 const send = (m) => {
   if (process.connected) process.send(m);
 };
+/**
+ * Log arguments as one line.
+ * @param {any[]} a
+ * @returns {string}
+ */
 const fmt = (a) =>
   a
     .map((x) =>
@@ -70,8 +96,13 @@ const hu = headUnit(stage, {
 const { spec, settings, ui } = hu;
 
 // the app's HudApp instance, for the values the page shows (hud.js is loaded by the app's main.js)
+/** @type {any} */
 let hud = null;
 const realLoad = Module._load;
+/**
+ * @param {string} req
+ * @returns {any}
+ */
 Module._load = function (req) {
   const m = realLoad.apply(this, arguments);
   if (req === "./hud" && typeof m === "function" && !m.__bench) {
@@ -91,6 +122,12 @@ Module._load = function (req) {
 let status = "",
   detail = "";
 const text = ui.text;
+/**
+ * @param {string} n component name
+ * @param {any} t
+ * @param {number} [row]
+ * @param {number} [cell]
+ */
 ui.text = (n, t, row, cell) => {
   if (n === "STATUS" && !row) {
     status = String(t);
@@ -103,6 +140,7 @@ ui.text = (n, t, row, cell) => {
   return text(n, t, row, cell);
 };
 
+/** @returns {void} */
 const sendSettings = () =>
   send({
     t: "settings",
@@ -111,7 +149,12 @@ const sendSettings = () =>
   });
 settings.onChange(sendSettings);
 
-/** A setting from the panel, pressed on the fake HMI as the car's HMI would. */
+/**
+ * A setting from the panel, pressed on the fake HMI as the car's HMI would.
+ * @param {string} key
+ * @param {any} value
+ * @returns {void}
+ */
 function press(key, value) {
   const s = settings.item(key);
   if (!s) return log.warn("bench: no setting " + key);
@@ -128,6 +171,7 @@ function press(key, value) {
 }
 
 // manual signals as raw SOME/IP values (a copy of kit/runtime/car.js SCALE; FES boost from hud.js)
+/** @type {Record<string, [number, number]>} name to [scale, offset] */
 const SCALE = {
   rpm: [0.25, 0],
   speed: [0.015625, 0],
@@ -136,12 +180,23 @@ const SCALE = {
   torque: [0.5, -1023.5],
   boost: [0.01, 0],
 };
+/**
+ * A value in the car's units as the raw SOME/IP number.
+ * @param {string} k a SCALE name
+ * @param {number} v
+ * @returns {number}
+ */
 const raw = (k, v) => Math.round((v - SCALE[k][1]) / SCALE[k][0]);
 let mode = "demo",
+  /** @type {ManualValues} */
   manual = {},
+  /** @type {number | null} */
   drive = null,
+  /** @type {string | null} */
   nav = null,
+  /** @type {"acc" | "off" | null} */
   assist = null,
+  /** @type {Record<string, string>} */
   carSw = {};
 // the drive mode buttons, sent once a second as the car does on change (wire numbers: 1 Sport, 4 Comfort, 7 Eco Pro)
 setInterval(() => {
@@ -327,6 +382,12 @@ setInterval(() => {
 setInterval(() => {
   if (mode !== "manual") return;
   const v = manual,
+    /**
+     * The manual value k when it is a number, else d.
+     * @param {string} k
+     * @param {number} d
+     * @returns {number}
+     */
     num = (k, d) => (typeof v[k] === "number" && isFinite(v[k]) ? v[k] : d);
   const g = Math.round(num("gear", 0));
   hu.feed("de.bmw.infotainment.vehicle.CDS", "statusEngineSpeed2", {
@@ -414,6 +475,7 @@ setInterval(() => {
 setInterval(() => {
   if (!hud) return;
   const d = hud.car.data(),
+    /** @type {Record<string, number | null>} */
     out = {};
   ["rpm", "speed", "oil", "coolant", "gear", "gLong", "gLat", "torque"].forEach(
     (n) => {
@@ -429,6 +491,7 @@ setInterval(() => {
 
 // the page's car switches, as the car sends each message (catalog enum names), in demo and manual alike; a switch left at
 // "not sent" sends nothing
+/** @type {Record<string, (v: string) => void>} */
 const CAR_SW = {
   turn: (v) =>
     hu.feed("de.bmw.body.Light", "StatusFunctionsIndicators", {
@@ -492,23 +555,26 @@ setInterval(
   500,
 );
 
-process.on("message", (m) => {
-  if (!m) return;
-  if (m.t === "signals") {
-    mode = m.mode === "manual" ? "manual" : "demo";
-    manual = m.values || {};
-    // demo drive = the kit's sim; manual = live data (auto: the sim gives way once data arrives)
-    const want = mode === "manual" ? "off" : "on";
-    if (settings.get("demo") !== want) press("demo", want);
-  } else if (m.t === "set") press(m.key, m.value);
-  else if (m.t === "drive") drive = m.value;
-  else if (m.t === "nav") nav = m.value;
-  else if (m.t === "assist") assist = m.value;
-  else if (m.t === "car") {
-    if (m.value) carSw[m.key] = m.value;
-    else delete carSw[m.key];
-  }
-});
+process.on(
+  "message",
+  /** @param {ToApp} m */ (m) => {
+    if (!m) return;
+    if (m.t === "signals") {
+      mode = m.mode === "manual" ? "manual" : "demo";
+      manual = m.values || {};
+      // demo drive = the kit's sim; manual = live data (auto: the sim gives way once data arrives)
+      const want = mode === "manual" ? "off" : "on";
+      if (settings.get("demo") !== want) press("demo", want);
+    } else if (m.t === "set") press(m.key, m.value);
+    else if (m.t === "drive") drive = m.value;
+    else if (m.t === "nav") nav = m.value;
+    else if (m.t === "assist") assist = m.value;
+    else if (m.t === "car") {
+      if (m.value) carSw[m.key] = m.value;
+      else delete carSw[m.key];
+    }
+  },
+);
 process.on("disconnect", () => process.exit(0));
 process.on("SIGTERM", () => process.exit(0));
 

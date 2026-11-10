@@ -42,8 +42,77 @@
  */
 const C = window.Live2DCubismCore;
 
+/** @typedef {Record<string, number>} Params parameter id to value */
+/** @typedef {[number, number, number, number]} Box [x0, y0, x1, y1] in model units, y up */
+/** @typedef {[number, number, number, number]} Rect [x, y, w, h] in px */
+/** @typedef {(i: number) => boolean} DrawablePick whether drawable i is in */
+/** @typedef {{ params?: Params, expressions?: string[] }} FrameConfig */
+/**
+ * The --config file, with withDefaults() filled in (fields described in CONFIG above).
+ * @typedef {object} BakeConfig
+ * @property {Params} [params]
+ * @property {Record<string, FrameConfig>} frames
+ * @property {{ steps?: number, params?: Params, left?: Params, right?: Params, face?: number, axis?: string,
+ *   perspective?: { widen?: number, shorten?: number } }} lean
+ * @property {{ steps?: number, params?: Params, lead?: string[] }} look
+ * @property {{ steps?: number, params?: Params, hold?: Params }} doze
+ * @property {string[]} [tails]
+ * @property {number} [tailsRoot]
+ * @property {[number, number]} [anchor]
+ * @property {[number, number]} [anchorPx]
+ * @property {{ parts?: string[] }[]} [arms]
+ * @property {string[]} [hide]
+ * @property {Record<string, number>} [cut] drawable id to model y
+ * @property {number} [heightPx]
+ * @property {number} [pxPerUnit]
+ * @property {number} [waist]
+ * @property {number} [headY]
+ * @property {number} [pad]
+ */
+/**
+ * The loaded model: its model3.json, the Cubism Core model, its textures and display info.
+ * @typedef {object} Loaded
+ * @property {any} m3 the model3.json
+ * @property {any} model a Live2DCubismCore.Model
+ * @property {HTMLImageElement[]} imgs
+ * @property {any} cdi the cdi3.json, or null
+ * @property {Map<number, Uint16Array>} [cut] drawable index to the triangles it keeps (makeCuts)
+ */
+/** @typedef {{ only?: DrawablePick, skip?: DrawablePick }} DrawOpts */
+/**
+ * An arm at one pose: its shoulder P in frame px and the angle from it to the arm's middle.
+ * @typedef {{ P: number[], ang: number }} ArmPose
+ */
+/**
+ * A sprite to pack: its canvas, the rect of it to keep, and where that lands in the atlas.
+ * @typedef {{ n: string, cv: HTMLCanvasElement, bb: number[], at?: number[] }} AtlasItem
+ */
+/**
+ * atlas.json, what the HUD reads (positions in atlas px, offsets in frame px).
+ * @typedef {object} AtlasInfo
+ * @property {number} version
+ * @property {number[]} atlas [w, h]
+ * @property {number[]} frame [w, h]
+ * @property {Record<string, number[]>} frames frame name to its top-left
+ * @property {number[][]} lean
+ * @property {number[]} anchor
+ * @property {number} hipY
+ * @property {number} headY
+ * @property {number[]} leanShift
+ * @property {"fb"} [leanAxis]
+ * @property {number[]} [leanShiftY]
+ * @property {Rect} [crop]
+ * @property {number[][]} [look]
+ * @property {number[]} [lookShift]
+ * @property {number[][]} [doze]
+ * @property {number[][]} [dozeShift]
+ * @property {{ rect: number[], at: number[], rootY: number, length: number }} [tails]
+ * @property {{ rect: number[], at: number[], shoulder: number[], side: number, left: number[], right: number[] }[]} [arms]
+ */
+
 /* What a config leaves out: Live2D's standard parameter ids (most models use them; a missing one is skipped with a
  * note in the log). tools/live2d_bake/example.json is these written out, to start a config from. */
+/** @type {Partial<BakeConfig>} */
 const DEFAULTS = {
   frames: {
     idle: {},
@@ -83,6 +152,10 @@ const DEFAULTS = {
   },
   doze: { steps: 3, params: { ParamAngleY: -30 } },
 };
+/**
+ * @param {Partial<BakeConfig>} cfg
+ * @returns {BakeConfig}
+ */
 function withDefaults(cfg) {
   const c = Object.assign({}, cfg);
   c.frames = Object.assign({}, DEFAULTS.frames, cfg.frames || {});
@@ -91,19 +164,25 @@ function withDefaults(cfg) {
   c.doze = Object.assign({}, DEFAULTS.doze, cfg.doze || {});
   return c;
 }
-const logEl = document.getElementById("log"),
+const logEl = /** @type {HTMLElement} */ (document.getElementById("log")),
   view = document.getElementById("view");
+/** @param {string} s */
 const log = (s) => {
   logEl.textContent += "\n" + s;
 };
 const SS = 4; // render this many times bigger than the frame, then scale down
 
+/**
+ * @param {string} u
+ * @returns {Promise<any>}
+ */
 async function json(u) {
   const r = await fetch(u);
   if (!r.ok) throw new Error(u + ": " + r.status);
   return r.json();
 }
 
+/** @returns {Promise<Loaded>} */
 async function loadModel() {
   const m3 = await json("/model.json");
   const moc = C.Moc.fromArrayBuffer(
@@ -148,6 +227,7 @@ void main() {
 }`;
 
 class Renderer {
+  /** @param {Loaded} L */
   constructor(L) {
     this.L = L;
     this.canvas = document.createElement("canvas");
@@ -158,6 +238,11 @@ class Renderer {
       alpha: true,
       antialias: true,
     }));
+    /**
+     * @param {number} type
+     * @param {string} src
+     * @returns {WebGLShader}
+     */
     const sh = (type, src) => {
       const s = gl.createShader(type);
       gl.shaderSource(s, src);
@@ -175,6 +260,7 @@ class Renderer {
       pos: gl.getAttribLocation(p, "a_pos"),
       uv: gl.getAttribLocation(p, "a_uv"),
     };
+    /** @type {Record<string, WebGLUniformLocation | null>} */
     this.u = {};
     ["u_xf", "u_tex", "u_op", "u_mul", "u_scr", "u_mask"].forEach((n) => {
       this.u[n] = gl.getUniformLocation(p, n);
@@ -202,6 +288,13 @@ class Renderer {
 
   /* Draw the model into a w x h canvas: box [x0, y0, x1, y1] in model units fills it (y up). opts.only(i) /
    * opts.skip(i): which drawables. */
+  /**
+   * @param {number} w
+   * @param {number} h
+   * @param {Box | number[]} box
+   * @param {DrawOpts} [opts]
+   * @returns {HTMLCanvasElement} its own canvas, redrawn on the next call
+   */
   draw(w, h, box, opts) {
     const gl = this.gl,
       d = this.L.model.drawables,
@@ -290,6 +383,10 @@ class Renderer {
     return this.canvas;
   }
 
+  /**
+   * Draws drawable i (its cut triangles when it has some).
+   * @param {number} i
+   */
   _mesh(i) {
     const gl = this.gl,
       d = this.L.model.drawables;
@@ -319,6 +416,11 @@ class Renderer {
 }
 
 /* ---------- model helpers ---------- */
+/**
+ * Every parameter to its default, then these.
+ * @param {Loaded} L
+ * @param {Params} [values]
+ */
 function setParams(L, values) {
   const p = L.model.parameters;
   for (let i = 0; i < p.count; i++) p.values[i] = p.defaultValues[i];
@@ -334,7 +436,13 @@ function setParams(L, values) {
     );
   });
 }
+/**
+ * The parameters these .exp3.json expressions set, blended in order.
+ * @param {string[]} [names]
+ * @returns {Promise<Params>}
+ */
 async function expressionParams(names) {
+  /** @type {Params} */
   const out = {};
   for (const n of names || []) {
     const e = await json("/model/" + encodeURI(n));
@@ -350,15 +458,22 @@ async function expressionParams(names) {
   return out;
 }
 /* Is drawable i inside one of these parts (by id), at any depth? */
+/**
+ * @param {Loaded} L
+ * @param {string[]} ids
+ * @returns {DrawablePick}
+ */
 function inParts(L, ids) {
   const parts = L.model.parts,
     d = L.model.drawables,
+    /** @type {Set<number>} */
     want = new Set();
   ids.forEach((id) => {
     const k = parts.ids.indexOf(id);
     if (k >= 0) want.add(k);
     else log('  (no part "' + id + '")');
   });
+  /** @type {Map<number, boolean>} */
   const memo = new Map();
   return (i) => {
     if (memo.has(i)) return memo.get(i);
@@ -372,6 +487,12 @@ function inParts(L, ids) {
     return hit;
   };
 }
+/**
+ * The box round the visible drawables (only these, when given).
+ * @param {Loaded} L
+ * @param {DrawablePick} [only]
+ * @returns {Box}
+ */
 function bounds(L, only) {
   const d = L.model.drawables;
   let x0 = Infinity,
@@ -397,6 +518,11 @@ function bounds(L, only) {
 }
 
 /* ---------- inspect ---------- */
+/**
+ * ?inspect: the figure with a grid in model units, and each part alone.
+ * @param {Loaded} L
+ * @param {BakeConfig} cfg
+ */
 async function inspect(L, cfg) {
   setParams(L, cfg.params);
   L.model.update();
@@ -415,6 +541,7 @@ async function inspect(L, cfg) {
       box[3].toFixed(3) +
       " (y up)",
   );
+  /** @type {Record<string, string>} part id to name */
   const names = {};
   ((L.cdi && L.cdi.Parts) || []).forEach((p) => {
     names[p.Id] = p.Name;
@@ -485,6 +612,12 @@ async function inspect(L, cfg) {
 
 /* ---------- bake ---------- */
 // Scale a canvas down to w x h in halving steps (a single big step aliases)
+/**
+ * @param {HTMLCanvasElement} src
+ * @param {number} w
+ * @param {number} h
+ * @returns {HTMLCanvasElement}
+ */
 function shrink(src, w, h) {
   let c = src;
   while (c.width / 2 >= w * 1.01) {
@@ -504,6 +637,11 @@ function shrink(src, w, h) {
   g.drawImage(c, 0, 0, w, h);
   return n;
 }
+/**
+ * The rect of the canvas's pixels that are not transparent; null when none.
+ * @param {HTMLCanvasElement} cv
+ * @returns {Rect | null}
+ */
 function alphaBox(cv) {
   const d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
   let x0 = cv.width,
@@ -524,6 +662,11 @@ function alphaBox(cv) {
 /* "cut": { drawable id: model y }: drop that drawable's triangles lying wholly below the y, measured once in the idle pose
  * and dropped by index from then on (so they stay dropped as she moves): for a drawable that carries something you may
  * leave out inside a mesh you need, e.g. text built into a face mesh. */
+/**
+ * @param {Loaded} L
+ * @param {Record<string, number> | undefined} cut
+ * @param {Params} params the idle pose
+ */
 function makeCuts(L, cut, params) {
   L.cut = new Map();
   if (!cut) return;
@@ -539,6 +682,7 @@ function makeCuts(L, cut, params) {
     const v = d.vertexPositions[i],
       ix = d.indices[i],
       n = d.indexCounts ? d.indexCounts[i] : ix.length,
+      /** @type {number[]} */
       keep = [];
     for (let k = 0; k < n; k += 3) {
       const below = [ix[k], ix[k + 1], ix[k + 2]].every(
@@ -559,15 +703,23 @@ function makeCuts(L, cut, params) {
   });
 }
 
+/**
+ * Bakes the frames and sprites into the atlas and posts atlas.rgba, atlas.json and preview.png to serve.js.
+ * @param {Loaded} L
+ * @param {BakeConfig} cfg
+ */
 async function bake(L, cfg) {
   const pad = cfg.pad || 2;
+  /** @type {DrawablePick} */
   const hidden =
     cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
   const tailsIn = cfg.tails && cfg.tails.length ? inParts(L, cfg.tails) : null;
+  /** @type {DrawablePick | null} */
   const tails = tailsIn ? (i) => tailsIn(i) && !hidden(i) : null;
   // arms: each its own sprite, which the HUD turns from the shoulder (to point at the indicator); left out of every
   // body frame. The bake measures where each shoulder sits and how the arm turns at a full lean each way
   const armsIn = (cfg.arms || []).map((a) => inParts(L, a.parts || []));
+  /** @type {DrawablePick} */
   const isArm = (i) => armsIn.some((f) => f(i));
   const R = new Renderer(L);
   const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
@@ -587,8 +739,18 @@ async function bake(L, cfg) {
   box = [box[0] - m, box[1] - 0.006 * figH, box[2] + m, box[3] + 0.006 * figH];
   const fw = Math.ceil((box[2] - box[0]) * ppu),
     fh = Math.ceil((box[3] - box[1]) * ppu);
+  /**
+   * A model point in frame px.
+   * @param {number} x
+   * @param {number} y
+   * @returns {[number, number]}
+   */
   const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
   log("frame " + fw + "x" + fh + " px");
+  /**
+   * @param {DrawOpts} opts
+   * @returns {HTMLCanvasElement} a new fw x fh frame
+   */
   const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
   // the forward/back lean in perspective: above the waist she tips out of the screen, so her upper body gets shorter
   // (by "shorten" at a full lean) and its top narrower leaning back (a full lean right), wider toward you (by "widen"); her legs stay as they are.
@@ -599,6 +761,12 @@ async function bake(L, cfg) {
     : null;
   const waistPx = toFrame(0, waist)[1],
     cxPx = toFrame(centreX, 0)[0];
+  /**
+   * @param {number} a the lean, -1 .. 1
+   * @param {number} x
+   * @param {number} y
+   * @returns {number[]}
+   */
   const persp = (a, x, y) => {
     if (!pv || y >= waistPx) return [x, y];
     const up = (waistPx - y) * (1 - pv.shorten * Math.abs(a)),
@@ -607,6 +775,11 @@ async function bake(L, cfg) {
   };
   // the same on a render at SS times the size, row by row: each row above the waist comes from the row it was before
   // the shortening, scaled about her middle
+  /**
+   * @param {DrawOpts} opts
+   * @param {number} a the lean, -1 .. 1
+   * @returns {HTMLCanvasElement}
+   */
   const renderLean = (opts, a) => {
     const big = R.draw(fw * SS, fh * SS, box, opts);
     if (!pv) return shrink(big, fw, fh);
@@ -640,10 +813,12 @@ async function bake(L, cfg) {
     }
     return shrink(out, fw, fh);
   };
+  /** @type {DrawOpts} */
   const body = {
     skip: (i) => hidden(i) || (tails ? tails(i) : false) || isArm(i),
   };
   const names = ["idle", "half", "shut", "talk"],
+    /** @type {Record<string, HTMLCanvasElement>} */
     frames = {};
   for (const n of names) {
     const f = (cfg.frames && cfg.frames[n]) || {};
@@ -656,6 +831,7 @@ async function bake(L, cfg) {
   const LN = (cfg.lean && cfg.lean.steps) || 11,
     lp = (cfg.lean && cfg.lean.params) || {},
     faceAt = (cfg.lean && cfg.lean.face) || 0.6;
+  /** @type {string[]} */
   const leanNames = [];
   for (let k = 0; k < LN; k++) {
     const a = -1 + (2 * k) / (LN - 1);
@@ -663,6 +839,7 @@ async function bake(L, cfg) {
       leanNames.push("idle");
       continue;
     }
+    /** @type {Params} */
     const q = {};
     Object.keys(lp).forEach((id) => {
       q[id] = lp[id] * a;
@@ -682,6 +859,7 @@ async function bake(L, cfg) {
   const LK = Math.max(0, Math.min(3, Math.round(cfg.look.steps || 0))),
     lkp = cfg.look.params || {},
     lead = new Set(cfg.look.lead || []);
+  /** @type {string[]} */
   const lookNames = [];
   for (let s = -LK; s <= LK && LK; s++) {
     if (!s) {
@@ -689,6 +867,7 @@ async function bake(L, cfg) {
       continue;
     }
     const a = s / LK,
+      /** @type {Params} */
       q = {};
     Object.keys(lkp).forEach((id) => {
       q[id] =
@@ -707,6 +886,7 @@ async function bake(L, cfg) {
     dzp = cfg.doze.params || {};
   const hold =
     cfg.doze.hold || (cfg.frames.shut && cfg.frames.shut.params) || {};
+  /** @type {string[]} */
   const dozeNames = [];
   for (let k = 1; k <= DN; k++) {
     const q = Object.assign({}, hold);
@@ -722,6 +902,10 @@ async function bake(L, cfg) {
   }
   // each arm: its shoulder (the middle of its topmost vertices) and its middle, in frame px, at rest and at a full lean
   // each way (the lean's own arm sway included), so the HUD can carry the sprite with her and turn it as she turns it
+  /**
+   * @param {DrawablePick} f the arm's drawables
+   * @returns {ArmPose | null} null when none is visible
+   */
   const armAt = (f) => {
     const d = L.model.drawables;
     let top = -Infinity,
@@ -729,6 +913,7 @@ async function bake(L, cfg) {
       cx = 0,
       cy = 0,
       n = 0;
+    /** @param {(v: Float32Array) => void} fn called with each visible drawable's vertex positions */
     const each = (fn) => {
       for (let i = 0; i < d.count; i++) {
         if (!f(i) || hidden(i) || !C.Utils.hasIsVisibleBit(d.dynamicFlags[i]))
@@ -760,6 +945,7 @@ async function bake(L, cfg) {
       M = toFrame(cx / n, cy / n);
     return { P, ang: Math.atan2(M[1] - P[1], M[0] - P[0]) };
   };
+  /** @type {{ rest?: ArmPose | null, left?: ArmPose | null, right?: ArmPose | null }[]} */
   const armPose = armsIn.map(() => ({}));
   if (armsIn.length) {
     [
@@ -767,6 +953,7 @@ async function bake(L, cfg) {
       [LN - 1, "right"],
     ].forEach(([k, side]) => {
       const a = -1 + (2 * k) / (LN - 1),
+        /** @type {Params} */
         q = {};
       Object.keys(lp).forEach((id) => {
         q[id] = lp[id] * a;
@@ -782,6 +969,7 @@ async function bake(L, cfg) {
   }
   setParams(L, Object.assign({}, cfg.params, idle));
   L.model.update();
+  /** @type {{ j: number, cv: HTMLCanvasElement, bb: Rect, pose: (typeof armPose)[number] }[]} */
   const arms = [];
   armsIn.forEach((f, j) => {
     armPose[j].rest = armAt(f);
@@ -789,6 +977,7 @@ async function bake(L, cfg) {
       bb = alphaBox(cv);
     if (bb && armPose[j].rest) arms.push({ j, cv, bb, pose: armPose[j] });
   });
+  /** @type {{ cv: HTMLCanvasElement, bb: Rect } | null} */
   let tl = null;
   if (tails) {
     const cv = render({ only: tails }),
@@ -798,6 +987,7 @@ async function bake(L, cfg) {
   // the face, glance and doze frames differ from idle only around her head: each keeps just one crop, the same rect
   // for all of them (where any of them differs from idle, plus a margin), and the HUD draws idle round it
   const cropped = names.filter((n) => n !== "idle" && n.indexOf("lean") !== 0);
+  /** @type {Rect | null} */
   let crop = null;
   if (cropped.length) {
     const base = frames.idle.getContext("2d").getImageData(0, 0, fw, fh).data;
@@ -846,6 +1036,7 @@ async function bake(L, cfg) {
   }
   // pack everything into the atlas, at most 1024 px a side: the instrument cluster (KOMBI) restarted on a
   // 1024x1128 RGBA asset (Nov 2026)
+  /** @type {AtlasItem[]} */
   const items = names.map((n) => ({
     n,
     cv: frames[n],
@@ -919,6 +1110,7 @@ async function bake(L, cfg) {
       it.bb[3],
     ),
   );
+  /** @type {Record<string, AtlasItem>} */
   const byN = {};
   items.forEach((it) => {
     byN[it.n] = it;
@@ -928,6 +1120,11 @@ async function bake(L, cfg) {
   const headMid = Math.round(toFrame(0, headY)[1]);
   const bandY0 = Math.max(0, headMid - Math.round(fh * 0.04)),
     bandY1 = Math.min(fh, headMid + Math.round(fh * 0.04));
+  /**
+   * The x of her head in a frame: the alpha centroid of the band at headY.
+   * @param {HTMLCanvasElement} cv
+   * @returns {number}
+   */
   const headX = (cv) => {
     const dd = cv
       .getContext("2d")
@@ -951,6 +1148,11 @@ async function bake(L, cfg) {
   );
   if (LK) log("head shift per glance (px): " + lookShift.join(", "));
   // a drooping head also drops: the top of her head (the first row with a few solid pixels) against idle's
+  /**
+   * The top row of her head in a frame.
+   * @param {HTMLCanvasElement} cv
+   * @returns {number}
+   */
   const headTop = (cv) => {
     const dd = cv.getContext("2d").getImageData(0, 0, fw, fh).data;
     for (let y = 0; y < fh; y++) {
@@ -978,6 +1180,7 @@ async function bake(L, cfg) {
   const an = cfg.anchor || [(box[0] + box[2]) / 2, box[1] + 0.006 * figH],
     ap = cfg.anchorPx || [0, 0],
     anchor = toFrame(an[0], an[1]);
+  /** @type {AtlasInfo} */
   const info = {
     version: 1,
     atlas: [AW, AH],
@@ -1015,10 +1218,20 @@ async function bake(L, cfg) {
   }
   if (arms.length) {
     const cx = toFrame(centreX, 0)[0],
+      /**
+       * Rounded to 0.1.
+       * @param {number} x
+       * @returns {number}
+       */
       r1 = (x) => Math.round(x * 10) / 10;
     info.arms = arms.map((a) => {
       const t = byN["arm" + a.j],
         r = a.pose.rest;
+      /**
+       * The pose against rest: [dx, dy, angle].
+       * @param {ArmPose | null | undefined} q
+       * @returns {number[]}
+       */
       const off = (q) =>
         q
           ? [

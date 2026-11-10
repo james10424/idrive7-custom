@@ -14,9 +14,45 @@
  */
 const data = require("./hud_data");
 
+/**
+ * One glyph's cell in a baked font atlas (hud/fonts/<name>.json).
+ * @typedef {object} Glyph
+ * @property {number} x atlas x
+ * @property {number} y atlas y
+ * @property {number} w
+ * @property {number} h
+ * @property {number} ox x offset from the pen
+ * @property {number} advance
+ */
+/**
+ * A loaded baked font.
+ * @typedef {object} Font
+ * @property {number} width atlas width
+ * @property {Buffer} alpha one coverage byte per atlas pixel
+ * @property {{ size: number, cellHeight: number, baseline: number, glyphs: Record<string, Glyph> }} metrics
+ */
+/**
+ * Text drawing options.
+ * @typedef {object} TextOpts
+ * @property {string} font baked font name
+ * @property {number[]} [color] [r, g, b, a] 0..255, default white
+ * @property {number[]} [color2] the colour at the box bottom (a gradient)
+ * @property {"left"|"center"|"right"} [align]
+ * @property {number} [x] shifts the start, px
+ * @property {number} [offsetY] px
+ * @property {number} [spacing] extra px between characters
+ * @property {number} [glow] 0..1, a soft halo under the text
+ */
+
+/** @type {Map<string, Font>} */
 const loadedFonts = new Map();
+/** @type {Set<string>} */
 const warnedMissing = new Set();
 
+/**
+ * @param {string} name
+ * @returns {Font}
+ */
 function loadFont(name) {
   if (loadedFonts.has(name)) return loadedFonts.get(name);
   const metrics = data.json("fonts/" + name + ".json");
@@ -39,6 +75,11 @@ function loadFont(name) {
   return font;
 }
 
+/**
+ * @param {Font} font
+ * @param {string} ch
+ * @returns {Glyph} the space (or an empty glyph) when missing
+ */
 function glyphOf(font, ch) {
   const g = font.metrics.glyphs[ch];
   if (g) return g;
@@ -51,7 +92,13 @@ function glyphOf(font, ch) {
   );
 }
 
-/** Width in px of `text` in `fontName` with `spacing`. */
+/**
+ * Width in px of `text` in `fontName` with `spacing`.
+ * @param {string|number} text
+ * @param {string} fontName
+ * @param {number} [spacing]
+ * @returns {number}
+ */
 function measure(text, fontName, spacing) {
   const font = loadFont(fontName);
   const chars = String(text).split("");
@@ -62,7 +109,14 @@ function measure(text, fontName, spacing) {
   return w;
 }
 
-/** Coverage mask (boxW*boxH bytes) of the text laid out in the box. */
+/**
+ * Coverage mask (boxW*boxH bytes) of the text laid out in the box.
+ * @param {number} boxW
+ * @param {number} boxH
+ * @param {string|number} text
+ * @param {TextOpts} opts
+ * @returns {Buffer}
+ */
 function mask(boxW, boxH, text, opts) {
   const font = loadFont(opts.font);
   const spacing = opts.spacing || 0;
@@ -96,7 +150,15 @@ function mask(boxW, boxH, text, opts) {
   return out;
 }
 
-/** Separable box blur on a coverage mask, radius r, `passes` times (~gaussian at 3). */
+/**
+ * Separable box blur on a coverage mask, radius r, `passes` times (~gaussian at 3).
+ * @param {Buffer} src w*h bytes
+ * @param {number} w
+ * @param {number} h
+ * @param {number} r
+ * @param {number} passes
+ * @returns {Buffer}
+ */
 function blur(src, w, h, r, passes) {
   let a = Buffer.from(src);
   let b = Buffer.alloc(a.length);
@@ -129,11 +191,26 @@ function blur(src, w, h, r, passes) {
   return a;
 }
 
+/**
+ * The text as straight RGBA (boxW*boxH*4 bytes).
+ * @param {number} boxW
+ * @param {number} boxH
+ * @param {string|number} text
+ * @param {TextOpts} opts
+ * @returns {Buffer}
+ */
 function drawText(boxW, boxH, text, opts) {
   return tint(mask(boxW, boxH, text, opts), boxW, boxH, opts);
 }
 
-/** Colour a coverage mask (plus optional glow) into straight RGBA. opts: color, color2 (bottom, for a gradient), glow, font. */
+/**
+ * Colour a coverage mask (plus optional glow) into straight RGBA. opts: color, color2 (bottom, for a gradient), glow, font.
+ * @param {Buffer} m coverage, boxW*boxH bytes
+ * @param {number} boxW
+ * @param {number} boxH
+ * @param {TextOpts} opts
+ * @returns {Buffer} boxW*boxH*4 bytes
+ */
 function tint(m, boxW, boxH, opts) {
   const color = opts.color || [255, 255, 255, 255];
   let halo = null;

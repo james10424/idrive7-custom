@@ -234,8 +234,285 @@ const shaders = require("./shaders");
 const calibration = require("./calibration");
 const Car = require("./kit/car");
 
+/** @typedef {import("./cluster_render_client.js").ClusterRender} Client */
+/** @typedef {import("./shift_score").CarData} CarData */
+/** @typedef {import("./shift_score").Car} Car */
+
+/**
+ * @typedef {object} Log
+ * @property {(s: string) => void} info
+ * @property {(s: string) => void} warn
+ * @property {(s: string) => void} error
+ */
+
+/**
+ * A setting's schema entry (ctx.settings.item).
+ * @typedef {object} SettingItem
+ * @property {string} type "bool", "choice", "number", ...
+ * @property {Array<Array<*>>} [options] choices: [value, label]
+ * @property {number[]} [steps] numbers: the allowed values
+ * @property {*} [default]
+ */
+
+/**
+ * The HudApp constructor's ctx: the kit's app context.
+ * @typedef {object} HudCtx
+ * @property {Log} log
+ * @property {{ text: (id: string, s: string) => void }} ui
+ * @property {object} settings
+ * @property {(key: string) => *} settings.get
+ * @property {(key: string) => (SettingItem | undefined)} settings.item
+ * @property {(fn: (key: string) => void) => void} settings.onChange
+ * @property {{ watch: (iface: string, instance: string,
+ *   handlers: Record<string, (v: *) => void>, log: Log) => *
+ * }} signals the car's SOME/IP signals
+ * @property {{ id: string, config?: HudConfig }} spec app.json
+ * @property {string} [dataDir] the app's data folder
+ */
+
+/**
+ * app.json "config" (see the header for what each does).
+ * @typedef {object} HudConfig
+ * @property {"hud" | "panel"} [target]
+ * @property {string} [statusName]
+ * @property {string} [socketPath]
+ * @property {{ lat: number, lon: number }} [location]
+ * @property {Record<string, string>} [choiceAliases]
+ * @property {Record<string, *>} [acc] gap / rel / set: { factor, offset }
+ * @property {Record<string, *>} [pedal]
+ * @property {{ factor?: number, offset?: number }} [battery]
+ * @property {{ factor?: number, offset?: number }} [consumption]
+ * @property {{ torqueNm?: number, powerKw?: number }} [engine]
+ * @property {Record<string, *>} [dme] engine unit reads (read-only UDS)
+ * @property {Record<string, *>} [music]
+ * @property {number} [tankLitres]
+ * @property {number} [utcOffsetMinutes]
+ * @property {boolean} [lamps]
+ * @property {boolean} [pedals]
+ * @property {boolean} [indicators]
+ * @property {boolean} [carAhead]
+ */
+
+/**
+ * A widget's common fields as read from a layout file (see the header);
+ * each type's own fields are in Widget's index signature.
+ * @typedef {object} WidgetFields
+ * @property {string} id
+ * @property {string} type text, scale, arc, sdash, miku, ...
+ * @property {number} x target px
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ * @property {string} [class] the layer class ("content")
+ * @property {number} [z]
+ * @property {number} [conn] connection 0..3
+ * @property {boolean} [own] an image widget on its own layer
+ * @property {string} [toggle] "<setting>", "!<setting>", "<choice>=<value>"
+ * @property {string[]} [themes]
+ * @property {Record<string, object | false>} [in] per HUD mode
+ * @property {string} [text] template with {{tokens}}
+ * @property {string} [font] a hud/fonts name, or "@sys"
+ * @property {string} [color] colour role
+ * @property {string} [color2]
+ * @property {string} [align] left | right | center
+ * @property {number} [spacing]
+ * @property {number} [size] "@sys" text px
+ * @property {boolean} [glow]
+ * @property {number} [rate] ms between text paints
+ * @property {string} [needs] a token; blank while it is "--"
+ * @property {string} [colorBy]
+ * @property {Array<*>} [near] ["speed" | "rpm", label index]
+ * @property {number} [nearFade]
+ * @property {string} [nearColor]
+ * @property {number} [litGear]
+ * @property {string} [litColor]
+ * @property {string} [hotWhen]
+ * @property {string} [coldWhen]
+ * @property {string} [hotColor]
+ * @property {{ signal: string, min?: number, max?: number,
+ *   yTop: number, yBottom: number }} [slide]
+ * @property {string} [tone]
+ * @property {string} [signal]
+ * @property {number} [min]
+ * @property {number} [max]
+ * @property {number[]} [range] [lo, hi]
+ * @property {number[]} [hole] [x, y, w, h] target px
+ * @property {string} [holeWhen]
+ * @property {number} [holeInset]
+ * @property {number} [holeRadius]
+ * @property {number} [cells] atext
+ * @property {number} [drums] odo
+ * @property {number} [over] rpm past the redline's thousand
+ */
+/** @typedef {WidgetFields & Record<string, *>} Widget */
+
+/** @typedef {{ x: number, y: number, w: number, h: number }} Rect */
+
+/**
+ * A packed image layer (_plan, _createSheet).
+ * @typedef {object} Sheet
+ * @property {"sheet"} kind
+ * @property {string} klass
+ * @property {number} z
+ * @property {number} conn
+ * @property {number} x
+ * @property {number} y
+ * @property {number} w
+ * @property {number} h
+ * @property {Widget[]} members
+ * @property {number} ref 0 until made
+ * @property {?Client} c
+ * @property {number} ci
+ * @property {?Buffer} buf the whole sheet while it is being filled
+ */
+/**
+ * An effect or "own" image widget's layer in a plan.
+ * @typedef {{ kind: "layer", w: Widget, klass: string, z: number,
+ *   conn: number }} LayerEntry
+ */
+/** @typedef {LayerEntry | Sheet} PlanEntry */
+
+/**
+ * A font's glyph atlas on a connection (_atlas): an R8 asset.
+ * @typedef {object} GlyphAtlas
+ * @property {number} ref
+ * @property {Client} c
+ * @property {number} ci
+ * @property {number} cols
+ * @property {number} rows
+ * @property {number} cellW
+ * @property {number} cellH
+ * @property {string[]} chars the glyph at each cell
+ * @property {number} bytes pixel memory
+ */
+/** @typedef {{ lean: number, look: number, doze: number }} MikuCounts */
+/**
+ * The Miku bake's atlas.json (tools/live2d_bake); only what is read here.
+ * @typedef {object} MikuInfo
+ * @property {number[]} atlas [w, h]
+ * @property {number[]} frame [w, h]
+ * @property {number[]} anchor frame px between her feet
+ * @property {Record<string, number[]>} frames idle, half, shut, talk
+ * @property {Array<number[]>} [lean]
+ * @property {Array<number[]>} [look]
+ * @property {Array<number[]>} [doze]
+ * @property {number[]} [leanShift]
+ * @property {number[]} [leanShiftY]
+ * @property {number[]} [lookShift]
+ * @property {Array<number[]>} [dozeShift]
+ * @property {Array<Record<string, *>>} [arms]
+ * @property {Record<string, *>} [tails]
+ * @property {number[]} [crop]
+ * @property {number} [hipY]
+ * @property {number} [headY]
+ * @property {boolean} [breathe]
+ * @property {string} [leanAxis] "fb" for a forward/back bake
+ * @property {string} [pose]
+ */
+/**
+ * The Miku frames as an RGBA asset on a connection (_sprite).
+ * @typedef {object} SpriteAtlas
+ * @property {number} ref
+ * @property {Client} c
+ * @property {number} ci
+ * @property {MikuInfo} info
+ * @property {number[]} size [w, h] with the table rows
+ * @property {number} dataY where the table rows start
+ * @property {MikuCounts} counts
+ * @property {number} bytes pixel memory
+ */
+
+/**
+ * The engine's state per drawn widget (this.widgets).
+ * @typedef {object} WidgetState
+ * @property {Widget} w
+ * @property {number} ref its layer, or its sheet's
+ * @property {Client} c
+ * @property {number} ci connection index
+ * @property {?Sheet} sheet
+ * @property {*} last the last values sent (a key)
+ * @property {number} lastPaint ms
+ * @property {?Buffer} px the last painted pixels (_blitDiff)
+ * @property {ReturnType<typeof setInterval>} [timer] its own update timer (miku)
+ * @property {GlyphAtlas} [atlas] atext, odo
+ * @property {number} [cells] atext
+ * @property {number} [drums] odo
+ * @property {Array<Array<*>>} [gauges] mdash: [uniform, gauge]
+ * @property {Array<Record<string, *>>} [bars] mdash segbars
+ * @property {number} [at] ms of the last eased update
+ * @property {{ f: number, fuel: number, pods: number[] }} [ez] rdash
+ * @property {number} [lean] miku, eased -1..1
+ * @property {number} [spd] miku, eased 0..1
+ * @property {number} [point] miku, -1..1
+ * @property {number} [pointV]
+ * @property {number} [look] miku glance -1..1
+ * @property {number} [lookV]
+ * @property {number} [lookT] the glance's target
+ * @property {number} [lookUntil] ms
+ * @property {number} [lookN] glance frames
+ * @property {number} [doze] miku 0..1
+ * @property {number} [dozeV]
+ * @property {number} [dozeN] doze frames
+ * @property {number} [idleMs]
+ * @property {number} [stillMs]
+ * @property {boolean} [wokeUp]
+ * @property {string} [lastI] the last u_idle key
+ */
+/** @typedef {{ c: Client, ci: number, ref: number, key: string }} LayerRef */
+/** @typedef {{ state: string, reason?: string }} LayerState */
+/**
+ * @typedef {{ state: string, holder?: string, reason?: string,
+ *   disabled: boolean }} TargetState
+ */
+/**
+ * _cfgPacker's result.
+ * @typedef {object} CfgPacker
+ * @property {(name: string, v: number[], opts?: object) => void} u
+ * @property {() => void} flush
+ */
+/**
+ * The shift point (ShiftScore.shiftPoint) with hud's own flags.
+ * @typedef {object} ShiftPoint
+ * @property {number} rpm
+ * @property {boolean} cold
+ * @property {boolean} now the rpm is at or past it
+ * @property {boolean} oilCold
+ */
+/**
+ * What each part is set to in a drive mode (SETUP).
+ * @typedef {{ engine: string, chassis: string, steering: string,
+ *   gearbox: string }} SetupRows
+ */
+/**
+ * hud's own signal values, raw (DataFrontVehicle).
+ * @typedef {{ gapX: ?number, gapY: ?number, speedX: ?number,
+ *   speedY: ?number, q: *, at: number }} Ahead
+ */
+/**
+ * GapVehicleDrivingAhead, raw.
+ * @typedef {{ gap: ?number, q: *, measured: boolean, at: number }} Ahead2
+ */
+/**
+ * The route while guiding (Guidance), raw distances.
+ * @typedef {object} Route
+ * @property {?number} [leftRaw]
+ * @property {?string} [leftText] BMW's formatted distance
+ * @property {*} [leftUnit]
+ * @property {?number} [timeLeft] s
+ * @property {number} [at]
+ * @property {number} [startRaw] the most left seen
+ * @property {?number} [doneRaw] travelled
+ */
+/** @typedef {(v: *) => void} SignalHandler */
+/**
+ * _setupVehicleData's extra signals: interface -> event -> handler
+ * ($pollMs: a poll interval).
+ * @typedef {Record<string, Record<string, SignalHandler | number>>} Signals
+ */
+
 const BOOST_SCALE = { factor: 0.01, offset: 0, invalid: 255 }; // see header comment
 // the widget types drawn as pixels (image layers, packed into sheets unless "own": true); the rest are shaders
+/** @type {Record<string, boolean>} */
 const IMAGE_TYPES = {
   text: true,
   scale: true,
@@ -269,6 +546,9 @@ const MIKU_POINT_C = 16.7; // critically damped: it rises and settles without bo
  * The Miku shader for a widget and the "Miku parts" setting: leaving the glances and dozing, or (bare) everything
  * but the lean out of the shader altogether, to find what a display can't take. The layout's "idle": false does the
  * same as noIdle.
+ * @param {Widget} w
+ * @param {string} parts the "Miku parts" setting
+ * @returns {string} the fragment shader
  */
 function mikuShader(w, parts) {
   const noIdle = w.idle === false || parts === "noIdle" || parts === "bare";
@@ -286,10 +566,15 @@ function mikuShader(w, parts) {
  * -1024 .. 1023.5 px in half px. Entries: 0-15 the lean frames' atlas x, y; 16-31 each lean frame's head shift x, y
  * (y: the forward/back lean's head drop; 0 sideways); 32-39 the glance frames' x, y; 40-47 each glance's head shift; 48-51 the doze frames' x, y; 52-55 each doze
  * frame's head shift x, y. Returns { px, rows, counts: { lean, look, doze } }.
+ * @param {MikuInfo} j atlas.json
+ * @param {number} aw the atlas width, px
+ * @returns {{ px: Buffer, rows: number, counts: MikuCounts }}
  */
 function mikuData(j, aw) {
+  /** @type {(v: *) => number[]} */
   const xy = (v) =>
       Array.isArray(v) ? [Number(v[0]) || 0, Number(v[1]) || 0] : [0, 0],
+    /** @type {(a: *, i: number) => number} */
     num = (a, i) => (Array.isArray(a) && isNum(a[i]) ? a[i] : 0);
   const lean =
     Array.isArray(j.lean) && j.lean.length >= 3
@@ -315,6 +600,7 @@ function mikuData(j, aw) {
   const per = Math.floor(aw / 3),
     rows = Math.ceil(e.length / per) * 3,
     px = Buffer.alloc(aw * rows * 4, 0);
+  /** @type {(v: number) => number} */
   const q = (v) => Math.max(0, Math.min(4095, Math.round((v + 1024) * 2)));
   e.forEach((v, i) => {
     const a = q(v[0]),
@@ -341,22 +627,33 @@ const REGAL_NEEDLE_TAU_MS = 170; // Regal's fuel and pod needles ease toward a r
 const REGAL_SPEED_TAU_MS = 50; // its speed needle: about 0.15 s, so it keeps up with the digits
 const TEXT_MS = 200; // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
+/** @type {Record<string, number[]>} */
 const TARGET_SIZES = { hud: [800, 480], panel: [1920, 720] };
+/** @type {Record<string, string>} */
 const MODE_KEY = { comfort: "inComfort", sport: "inSport", eco: "inEco" };
 const TYRE_CORNERS = ["FL", "FR", "RL", "RR"];
 // the car's display units (Vehicle statusNewCurrentUnitsStatusExt, as BMW's own x_call reads them; car_vitals, MIT)
 const PRESS_UNITS = { 1: "BAR", 2: "KPA", 3: "PSI" },
   TEMP_UNITS = { 1: "C", 2: "F" };
+/** @type {Record<string, number>} */
 const PRESS_TO_BAR = { BAR: 1, KPA: 0.01, PSI: 1 / 14.5038 };
+/**
+ * A unit by wire number (map) or by name, else null.
+ * @param {Record<string, string>} map
+ * @param {*} v
+ * @returns {?string}
+ */
 const unitName = (map, v) =>
   map[v] || (Object.values(map).indexOf(v) >= 0 ? v : null);
 // MDrive dataDisplayGearbox.displayProgramGearbox: the programme the cluster shows next to the gear (car_vitals, MIT)
+/** @type {Record<string, string>} */
 const PROGRAMS = {
   S_MINUS_PROGRAMM: "S",
   M_MINUS_PROGRAMM: "M",
   1: "S",
   2: "M",
 };
+/** @type {Record<string, string>} */
 const MODE_NAME = { comfort: "Comfort", sport: "Sport", eco: "Eco Pro" };
 // BMW's route guidance (oap-sdk navigation/guiding: ACTIVE, INACTIVE, CALCULATING_ROUTE)
 const GUIDANCE = {
@@ -467,6 +764,7 @@ const HAND_BRAKE = {
   HANDBREMSE_ANGEZOGEN: 2,
   SIGNAL_UNGUELTIG: 3,
 };
+/** @type {Record<string, number>} */
 const REGAL_GEARS = { P: 0, R: 1, N: 2, D: 3, S: 3, M: 5 };
 const PEDAL_OK = {
   SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1,
@@ -476,12 +774,18 @@ const PEDAL_MS = 250; // the OBD pedal reading's interval
 const BRAKE_G0 = 0.05,
   BRAKE_GMAX = 1.0; // the brake bar's log scale: deceleration in g where it bends, and where it is full
 const BRAKE_TAU_MS = 150; // the deceleration's smoothing for the brake bar
+/** @type {Record<string, string>} */
 const MODE_TEXT = {
   cruise: "BMW's driver assistance",
   nav: "BMW's guidance",
   cruiseNav: "BMW's guidance and driver assistance",
 };
-/** An enum field as a number: its wire number, or its name looked up in items (unknown names: null). */
+/**
+ * An enum field as a number: its wire number, or its name looked up in items (unknown names: null).
+ * @param {*} v
+ * @param {Record<string, number>} items
+ * @returns {?number}
+ */
 function enumNum(v, items) {
   if (typeof v === "number") return v;
   if (typeof v !== "string") return null;
@@ -490,11 +794,17 @@ function enumNum(v, items) {
 }
 const FRESH_MS = 3000;
 // BMW's speed scale: even steps to 120 mph (180 km/h), then wider ones to 200 mph (320 km/h)
+/** @type {Record<string, number[]>} */
 const SPEED_SCALE = {
   us: [0, 20, 40, 60, 80, 100, 120, 160, 200],
   metric: [0, 30, 60, 90, 120, 150, 180, 250, 320],
 };
-/** speed (display unit) -> 0..1 along a scale of evenly spaced labels */
+/**
+ * speed (display unit) -> 0..1 along a scale of evenly spaced labels
+ * @param {number} v
+ * @param {number[]} marks
+ * @returns {number}
+ */
 function scaleFrac(v, marks) {
   if (!(v > 0)) return 0;
   for (let i = 1; i < marks.length; i++)
@@ -512,7 +822,10 @@ function scaleFrac(v, marks) {
  * 4 Comfort, 5 Comfort+, 6 Comfort individual, 7 Eco Pro, 8 Eco Pro+, 9 Eco Pro individual, 10 Adaptive.
  */
 /** The mode's variant: 'plus' (Sport+ / Comfort+ / Eco Pro+: wire 2, 5, 8, or PLUS / EXPERT in the name), 'individual'
- *  (wire 3, 6, 9, or INDIVID in the name), else null. */
+ *  (wire 3, 6, 9, or INDIVID in the name), else null.
+ * @param {*} raw
+ * @returns {?string}
+ */
 function driveVariantOf(raw) {
   const v =
     typeof raw === "string" && /^\d+$/.test(raw.trim())
@@ -533,6 +846,7 @@ function driveVariantOf(raw) {
 }
 
 /** The M theme's setup rows: what each part is set to in a drive mode (they follow the mode buttons). */
+/** @type {Record<string, SetupRows>} */
 const SETUP = {
   eco: {
     engine: "EFFICIENT",
@@ -566,6 +880,7 @@ const SETUP = {
     gearbox: "INDIVIDUAL",
   },
 };
+/** @type {Record<string, number>} */
 const SETUP_LEVEL = {
   EFFICIENT: 1,
   COMFORT: 1,
@@ -574,6 +889,11 @@ const SETUP_LEVEL = {
   INDIVIDUAL: 0,
 };
 
+/**
+ * The drive mode: 'sport', 'comfort' or 'eco' (above), else null.
+ * @param {*} raw
+ * @returns {?string}
+ */
 function driveModeOf(raw) {
   let v = raw;
   if (typeof v === "string" && /^\d+$/.test(v.trim())) v = Number(v.trim());
@@ -592,6 +912,11 @@ function driveModeOf(raw) {
   return null;
 }
 
+/**
+ * A 0..255 colour as 0..1 RGB.
+ * @param {number[]} c
+ * @returns {number[]}
+ */
 function rgb(c) {
   return [c[0] / 255, c[1] / 255, c[2] / 255];
 }
@@ -600,11 +925,18 @@ function rgb(c) {
  * The one rectangle around what differs between two RGBA images of the same size, with its pixels, or null
  * when they are the same (after idrive7-EVAHUD's eva_canvas.js, MIT). The link is what is short, not the CPU:
  * comparing a widget costs about a tenth of painting it.
+ * @param {Buffer} was
+ * @param {Buffer} now
+ * @param {number} w
+ * @param {number} h
+ * @returns {?{ rect: Rect, px: Buffer }}
  */
 function changes(was, now, w, h) {
   const row = w * 4;
+  /** @type {(y: number) => boolean} */
   const sameRow = (y) =>
     now.compare(was, y * row, (y + 1) * row, y * row, (y + 1) * row) === 0;
+  /** @type {(o: number) => boolean} */
   const samePx = (o) =>
     now[o] === was[o] &&
     now[o + 1] === was[o + 1] &&
@@ -642,6 +974,11 @@ function changes(was, now, w, h) {
     );
   return { rect, px };
 }
+/**
+ * A 0..255 colour (alpha optional) as 0..1 RGBA.
+ * @param {number[]} c
+ * @returns {number[]}
+ */
 function rgba(c) {
   return [
     c[0] / 255,
@@ -650,89 +987,144 @@ function rgba(c) {
     (c[3] === undefined ? 255 : c[3]) / 255,
   ];
 }
+/**
+ * A finite number.
+ * @param {*} v
+ * @returns {v is number}
+ */
 function isNum(v) {
   return typeof v === "number" && isFinite(v);
 }
 
 class HudApp {
+  /**
+   * @param {HudCtx} ctx
+   */
   constructor(ctx) {
     this.ctx = ctx;
     this.log = ctx.log;
+    /** @type {HudConfig} */
     this.config = (ctx.spec && ctx.spec.config) || {};
     this.location = this.config.location || DEFAULT_LOCATION;
     // HUD_CLUSTER_SOCKET: the Mac bench's fake cluster-render; never set on the car
     this.socketPath =
       process.env.HUD_CLUSTER_SOCKET || this.config.socketPath || DEFAULT_PATH;
+    /** @type {Client[]} */
     this.clients = []; // the connections to cluster-render: [0] the app's own, more for "conn" widgets
     this.started = false;
+    /** @type {Map<string, LayerState>} */
     this.layerStates = new Map(); // "<conn>:<ref>" -> { state, reason } from cluster-render
     this.client = this._clientAt(0);
     this.target = TARGET_SIZES[this.config.target] ? this.config.target : "hud";
     this.size = TARGET_SIZES[this.target];
     this.label = this.config.statusName || "HUD";
+    /** @type {?string} */
     this.layoutTheme = null; // the active layout's own theme, if it has one
     this.layouts = new Layouts(ctx.dataDir, this.log, this.size);
+    /** @type {Map<string, WidgetState>} */
     this.widgets = new Map(); // widget.id -> { w, ref, sheet | null, last, lastPaint }
+    /** @type {Sheet[]} */
     this.sheets = []; // the packed image layers: { ref, klass, z, x, y, w, h, members, buf }
+    /** @type {?number} */
     this.boostFes = null;
     this.boostFesAt = 0; // bar, from the sport display signal
+    /** @type {?number} */
     this.boostDme = null;
     this.boostDmeAt = 0; // bar, from the engine unit (fallback)
     this.needsBoost = false; // a shown widget uses boost (the engine unit is only asked then)
+    /** @type {?string} */
     this.driveMode = null; // 'comfort' | 'sport' | 'eco', once the car has said
+    /** @type {?string} */
     this.driveVariant = null; // 'plus' (Sport+ / Comfort+ / Eco Pro+), 'individual', or null
     this.navActive = false; // BMW's route guidance is on (the HUD shows its own guidance then)
+    /** @type {*} */
     this.navRaw = undefined; // the last guidanceState as the car sent it, for the log
     this.assistActive = false; // BMW's HUD shows its driver assistance block (ACC, DCC, STA)
+    /** @type {string | undefined} */
     this.assistRaw = undefined; // the last summary of it, for the log
     this.activeMode = "normal"; // the HUD mode the layers were built for
+    /** @type {?Ahead} */
     this.ahead = null; // the car ahead, raw: { gapX, gapY, speedX, speedY, q, at } (DataFrontVehicle)
+    /** @type {?Ahead2} */
     this.ahead2 = null; // { gap, q, measured, at } (GapVehicleDrivingAhead)
+    /** @type {?{ v: ?number, gapM: number, at: number }} */
     this.relFromGap = null; // km/h, the gap's smoothed rate of change ({ v, gapM, at })
+    /** @type {?{ raw: number, at: number }} */
     this.pedal = null; // { raw, at }: the accelerator pedal as sent, while valid
+    /** @type {?boolean} */
     this.brakeOn = null; // the brake lights (true / false), null until the car says
+    /** @type {?string} */
     this.turn = null; // the indicators: 'L', 'R', 'LR' (hazards) or '' (body.Light StatusFunctionsIndicators)
     this.accOn = false; // BMW's HUD has the ACC car or distance bars up (the Regal CRUISE lamp)
+    /** @type {?number} */
     this.mileage = null; // the odometer as sent (MileageSupreme, taken as km)
+    /** @type {?boolean} */
     this.parkBrake = null; // the parking brake set (true / false), null until the car says
+    /** @type {?boolean} */
     this.parkBrakeCds = null; // the same from CDS statusHandBrake (a fallback)
+    /** @type {?string} */
     this.autoHold = null; // Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
+    /** @type {?number} */
     this.volt12 = null;
     this.volt12At = 0; // V, the 12 V system from the engine unit
     this.needsVolt = false; // a shown widget uses volt12 (the engine unit is only asked then)
     this.pedalLogged = 0;
+    /** @type {?number} */
     this.pedalObd = null;
     this.pedalObdAt = 0;
+    /** @type {?number} */
     this.pedalObdLogged = null; // %, the pedal from the engine unit (OBD PID 0x49)
     this.needsPedal = false; // a shown widget uses the throttle (the engine unit is only asked then)
+    /** @type {?number} */
     this.decelF = null;
     this.decelAt = 0; // g, the smoothed deceleration for the brake bar
+    /** @type {?number} */
     this.carOffsetMin = null; // the car's time zone, minutes from UTC, from the time the cluster shows
+    /** @type {?number} */
     this.battRaw = null;
     this.battAt = 0; // the 12 V battery's charge condition as sent
+    /** @type {Record<string, string>} */
     this.aheadLogged = {};
+    /** @type {?number} */
     this.accSetRaw = null; // cruiseCtrlSpeedHUD as sent
+    /** @type {Record<string, number>} */
     this.aheadLogAt = {};
+    /** @type {{ press: ?string, temp: ?string, psiSeen: boolean }} */
     this.carUnits = { press: null, temp: null, psiSeen: false }; // the car's display units, for the TPMS values
+    /** @type {?string} */
     this.program = null; // 'S' / 'M' from the MDrive gearbox display, else null (D)
+    /** @type {?number} */
     this.fuelL = null;
+    /** @type {?number} */
     this.rangeKm = null;
+    /** @type {?number} */
     this.ambient = null; // KombiIF tank / range, outside temperature
+    /** @type {?number} */
     this.odoKm = null;
     this.odoAcc = 0;
     this.odoAt = 0; // KombiIF odometer (whole km) and the distance since its last km
+    /** @type {{ p: Record<string, ?number>, t: Record<string, ?number> }} */
     this.tyres = { p: {}, t: {} }; // TPMS pressure (bar) and temperature (C) per corner FL FR RL RR
+    /** @type {?string} */
     this.activeName = null; // the layout shown now ('off' = nothing)
     this.pixelBytes = 0; // what the layout's image layers and glyph atlases cost of cluster-render's pixel memory
+    /** @type {Map<string, GlyphAtlas | SpriteAtlas>} */
     this.atlases = new Map(); // "<conn>:<font>" -> glyph atlas { ref, c, ci, cols, rows, cellW, cellH, chars, bytes } (R8), "sprite:..." -> the Miku frames (_sprite); assets kept across rebuilds
+    /** @type {?TargetState} */
     this.targetState = null; // { state, holder, reason } of our target
+    /** @type {?number} */
     this.rpmF = null;
+    /** @type {?number} */
     this.rpmShown = null;
     this.lastTickT = 0;
+    /** @type {?string} */
     this.themeName = null;
     this.flash = false;
+    /** @type {?string} */
     this.problem = null; // why nothing shows (a bad layout), for the status line
+    /** @type {Array<(text: string, detail: string) => void>} */
     this.statusListeners = [];
+    /** @type {?string} */
     this.lastStatus = null;
 
     this._setupVehicleData();
@@ -743,7 +1135,11 @@ class HudApp {
     });
   }
 
-  /** A setting's value, or its default when the saved value isn't one the schema allows. */
+  /**
+   * A setting's value, or its default when the saved value isn't one the schema allows.
+   * @param {string} key
+   * @returns {*}
+   */
   setting(key) {
     // while the "navLayout" switch is in force the map window is open, whatever "mapWindow" says
     if (key === "mapWindow" && this._navSwitch()) return true;
@@ -767,7 +1163,13 @@ class HudApp {
     return ok ? v : s.default;
   }
 
+  /**
+   * The kit Car with hud's extra signals (by app.json config), and the
+   * shift scorer.
+   * @returns {void}
+   */
   _setupVehicleData() {
+    /** @type {Signals} */
     const extra = {
       // fuel and range (cauliflowermossgrape's live_data, MIT): litres (255 = none) and km (4095 = none)
       "de.bmw.infotainment.KombiIF": {
@@ -886,6 +1288,7 @@ class HudApp {
           if (!v) return;
           // 4093..4095 are "no object / not available" codes (with no car ahead an X3 sends 4093 in every field and
           // object id 253, Nov 8 2026), as 253..255 are for the object id
+          /** @type {(x: *) => ?number} */
           const num = (x) => (isNum(x) && x < 4093 ? x : null);
           const id = v.frontVehicleObjectID,
             none = !isNum(id) || id >= 253;
@@ -1126,6 +1529,8 @@ class HudApp {
    * Connection i to cluster-render, made on first use: 0 is the app's own (named after the app); a widget's
    * "conn" asks for 1..3, named <app id>_2 .. _4, each with its own 64 layers. Layers made before a connection
    * is up are replayed by the client when it connects.
+   * @param {number} i
+   * @returns {Client}
    */
   _clientAt(i) {
     while (this.clients.length <= i) {
@@ -1144,6 +1549,12 @@ class HudApp {
     return this.clients[i];
   }
 
+  /**
+   * Logs a connection's events and updates the status from them.
+   * @param {Client} c
+   * @param {number} ci connection index
+   * @returns {void}
+   */
   _wireClientEvents(c, ci) {
     const tag = ci ? " [connection " + (ci + 1) + "]" : "";
     c.on("ready", () => {
@@ -1221,6 +1632,10 @@ class HudApp {
     c.on("status", (text) => this.log.info("cluster-render status: " + text));
   }
 
+  /**
+   * Connects and starts the timers and signal watches.
+   * @returns {void}
+   */
   start() {
     this.log.info("connecting to cluster-render at " + this.socketPath);
     this.started = true;
@@ -1248,12 +1663,18 @@ class HudApp {
     this._startMedia();
   }
 
-  /** HUD modes only on the HUD, in apps that have the "makeRoom" setting. */
+  /**
+   * HUD modes only on the HUD, in apps that have the "makeRoom" setting.
+   * @returns {boolean}
+   */
   _modesOn() {
     return this.target === "hud" && !!this.ctx.settings.item("makeRoom");
   }
 
-  /** BMW's route guidance on / off, for the HUD modes. */
+  /**
+   * BMW's route guidance on / off, for the HUD modes.
+   * @returns {void}
+   */
   _startNav() {
     if (!this._modesOn() && !this.ctx.settings.item("navLayout")) return;
     const h = {
@@ -1284,10 +1705,14 @@ class HudApp {
       );
   }
 
-  /** The song title BMW's player shows (app.json config.music), for {{musicTitle}}. */
+  /**
+   * The song title BMW's player shows (app.json config.music), for {{musicTitle}}.
+   * @returns {void}
+   */
   _startMedia() {
     if (!this.config.music) return;
     this.media = { pm: null, mm: null, tracks: null, sel: null };
+    /** @type {(k: string) => (v: *) => void} */
     const on = (k) => (v) =>
       this._guard("media", () => {
         this.media[k] = v && typeof v === "object" ? v : null;
@@ -1329,14 +1754,19 @@ class HudApp {
   /** The title, from HmiMediaState: playerMetadata's line typed TITLE; else (the car's player sends only ARTIST and
    *  ALBUM there, "Aimer" / "Sleepless Nights", Nov 9 2026) the playing track's entry in the track list (by trackId,
    *  its first line), or mainMenuMetadata's first line that isn't the artist or album; else an untyped playerMetadata
-   *  line (the second first); else the artist. Each source's raw text is logged when it changes, to confirm on the car. */
+   *  line (the second first); else the artist. Each source's raw text is logged when it changes, to confirm on the car.
+   * @param {string} changed the source that changed: pm, mm, tracks, sel
+   * @returns {void}
+   */
   _pickTitle(changed) {
     const m = this.media,
       pm = m.pm || {};
+    /** @type {(x: *) => string} */
     const clean = (x) =>
       String(x || "")
         .replace(/\s+/g, " ")
         .trim();
+    /** @type {(ty: *) => number} a MEDIA_ITEM */
     const kind = (ty) => {
       const n = enumNum(ty, MEDIA_ITEM);
       if (n >= 0 && n !== null) return n;
@@ -1359,6 +1789,7 @@ class HudApp {
           l[0] && (l[1] === MEDIA_ITEM.ARTIST || l[1] === MEDIA_ITEM.ALBUM),
       )
       .map((l) => l[0]);
+    /** @type {(x: string) => boolean | string} */
     const fresh = (x) => x && other.indexOf(x) < 0;
     // the raw sources, logged once per change
     const id =
@@ -1438,7 +1869,9 @@ class HudApp {
   }
 
   /** The car's own font for text in any script (app.json config.music.fonts: paths tried in order, a fallback chain);
-   *  null when none of them loads. */
+   *  null when none of them loads.
+   * @returns {*} a sysfont.js font (mask()), or null
+   */
   _sysFont() {
     if (this.sysFontTried) return this.sysFont;
     this.sysFontTried = true;
@@ -1471,7 +1904,11 @@ class HudApp {
     return this.sysFont;
   }
 
-  /** finalDestinationInfo: distance left (formattedDistance: BMW's text, its unit, rawDistance), time left (travelTime, s). */
+  /**
+   * finalDestinationInfo: distance left (formattedDistance: BMW's text, its unit, rawDistance), time left (travelTime, s).
+   * @param {*} v
+   * @returns {void}
+   */
   _onRouteInfo(v) {
     if (!v || typeof v !== "object") return;
     const fd = v.formattedDistance || {};
@@ -1503,7 +1940,11 @@ class HudApp {
     });
   }
 
-  /** travelledDistance (FormattedDistance): how far along the route we are, for the bar's total (travelled + left). */
+  /**
+   * travelledDistance (FormattedDistance): how far along the route we are, for the bar's total (travelled + left).
+   * @param {*} v
+   * @returns {void}
+   */
   _onTravelled(v) {
     if (!v || typeof v !== "object") return;
     this.route = Object.assign(this.route || {}, {
@@ -1512,7 +1953,12 @@ class HudApp {
     this._logRoute("travelled", v);
   }
 
-  /** Route messages as sent, each when it changes, at most every 10 s (to confirm the units on the car). */
+  /**
+   * Route messages as sent, each when it changes, at most every 10 s (to confirm the units on the car).
+   * @param {string} kind
+   * @param {*} v
+   * @returns {void}
+   */
   _logRoute(kind, v) {
     const now = Date.now(),
       line = JSON.stringify(v);
@@ -1529,7 +1975,9 @@ class HudApp {
   }
 
   /** The route's progress 0..1 (travelled / (travelled + left), else 1 - left / the most left seen), null when not guiding
-   *  or not known. */
+   *  or not known.
+   * @returns {?number}
+   */
   _routeProgress() {
     const r = this.route;
     if (!this.navActive || !r || !isNum(r.leftRaw)) return null;
@@ -1540,7 +1988,11 @@ class HudApp {
       : null;
   }
 
-  /** guidanceState: INACTIVE 0, CALCULATING_ROUTE 1, ACTIVE 2 (the car's catalog), by name or number; anything else reads as off. */
+  /**
+   * guidanceState: INACTIVE 0, CALCULATING_ROUTE 1, ACTIVE 2 (the car's catalog), by name or number; anything else reads as off.
+   * @param {*} raw
+   * @returns {void}
+   */
   _onGuidance(raw) {
     const v = raw && typeof raw === "object" ? raw.guidanceState : raw;
     if (String(v) !== String(this.navRaw)) {
@@ -1572,6 +2024,8 @@ class HudApp {
   /**
    * functionalLibraryData: BMW's HUD shows its driver assistance block while it has the assist symbol (ldmSym
    * with a colour), the ACC car or distance bars, or a lit (not grey) lane-assist wheel.
+   * @param {*} v
+   * @returns {void}
    */
   _onAssist(v) {
     if (!v || typeof v !== "object") return;
@@ -1617,7 +2071,11 @@ class HudApp {
   }
 
   /** The car-ahead messages as sent, when they change (an X3 repeats the same one every second), at most once a second,
-   *  for calibrating config.acc against what BMW's HUD shows. */
+   *  for calibrating config.acc against what BMW's HUD shows.
+   * @param {string} kind
+   * @param {*} v
+   * @returns {void}
+   */
   _logAhead(kind, v) {
     const now = Date.now(),
       line = JSON.stringify(v);
@@ -1641,7 +2099,12 @@ class HudApp {
     );
   }
 
-  /** raw * factor + offset from config.acc[key]. */
+  /**
+   * raw * factor + offset from config.acc[key].
+   * @param {string} key gap, rel or set
+   * @param {number} raw
+   * @returns {number}
+   */
   _accScale(key, raw) {
     const c = (this.config.acc && this.config.acc[key]) || {};
     return (
@@ -1649,7 +2112,10 @@ class HudApp {
     );
   }
 
-  /** The gap in m: DataFrontVehicle's while it is fresh and available, else GapVehicleDrivingAhead's while a car is measured. */
+  /**
+   * The gap in m: DataFrontVehicle's while it is fresh and available, else GapVehicleDrivingAhead's while a car is measured.
+   * @returns {?number}
+   */
   _gapM() {
     const now = Date.now(),
       a = this.ahead,
@@ -1672,7 +2138,10 @@ class HudApp {
     return null;
   }
 
-  /** The relative speed from the gap's rate of change (km/h, minus = closing), smoothed over REL_TAU_MS; reset without a gap. */
+  /**
+   * The relative speed from the gap's rate of change (km/h, minus = closing), smoothed over REL_TAU_MS; reset without a gap.
+   * @returns {void}
+   */
   _gapRate() {
     const now = Date.now(),
       g = this._gapM(),
@@ -1696,7 +2165,11 @@ class HudApp {
     };
   }
 
-  /** An ACC value: 'gap' m, 'rel' km/h (DataFrontVehicle's speed when sent, else the gap's rate), 'set'; null when missing or stale. */
+  /**
+   * An ACC value: 'gap' m, 'rel' km/h (DataFrontVehicle's speed when sent, else the gap's rate), 'set'; null when missing or stale.
+   * @param {string} key gap, rel or set
+   * @returns {?number}
+   */
   _acc(key) {
     const now = Date.now(),
       a = this.ahead;
@@ -1731,7 +2204,9 @@ class HudApp {
 
   /** Average consumption for the period picked on the center screen, in the car's unit; null before the car sends it.
    *  The last value stands until the next: the car notifies it only when it changes (a 2-minute timeout here showed
-   *  "--" on the car, Nov 9 2026). */
+   *  "--" on the car, Nov 9 2026).
+   * @returns {?number}
+   */
   _consumption() {
     let v = null;
     if (isNum(this.consAvg)) v = this.consAvg;
@@ -1764,11 +2239,20 @@ class HudApp {
     return this.setting("units") === "us" ? 235.215 / l100 : l100;
   }
 
-  /** The consumption's unit label, by the units setting: mpg (US) or l/100km. */
+  /**
+   * The consumption's unit label, by the units setting: mpg (US) or l/100km.
+   * @returns {string}
+   */
   _consUnit() {
     return this.setting("units") === "us" ? "mpg" : "l/100km";
   }
 
+  /**
+   * A consumption message as sent, logged when it changes.
+   * @param {string} kind
+   * @param {*} v
+   * @returns {void}
+   */
   _logCons(kind, v) {
     const line = JSON.stringify(v);
     this.consLines = this.consLines || {};
@@ -1777,7 +2261,10 @@ class HudApp {
     this.log.info("consumption " + kind + " raw " + line);
   }
 
-  /** The car ahead getting closer faster than config.acc.closingKmh (10 km/h). */
+  /**
+   * The car ahead getting closer faster than config.acc.closingKmh (10 km/h).
+   * @returns {boolean}
+   */
   _closing() {
     const r = this._acc("rel"),
       lim =
@@ -1787,7 +2274,10 @@ class HudApp {
     return isNum(r) && r < -lim;
   }
 
-  /** The HUD mode now: normal, cruise, nav or cruiseNav (see the header). */
+  /**
+   * The HUD mode now: normal, cruise, nav or cruiseNav (see the header).
+   * @returns {string}
+   */
   _mode() {
     if (!this._modesOn() || this.setting("makeRoom") !== true) return "normal";
     return this.navActive
@@ -1799,6 +2289,10 @@ class HudApp {
         : "normal";
   }
 
+  /**
+   * Rebuilds when the HUD mode changed.
+   * @returns {void}
+   */
   _modeChanged() {
     const m = this._mode();
     if (m === this.activeMode) return;
@@ -1806,14 +2300,22 @@ class HudApp {
     this._rebuild();
   }
 
-  /** A widget as it is in a mode: its "in"[mode] fields over its own, or null when that is false. */
+  /**
+   * A widget as it is in a mode: its "in"[mode] fields over its own, or null when that is false.
+   * @param {Widget} w
+   * @param {string} mode
+   * @returns {?Widget}
+   */
   _inMode(w, mode) {
     if (!w.in || !Object.prototype.hasOwnProperty.call(w.in, mode)) return w;
     const o = w.in[mode];
     return o === false ? null : Object.assign({}, w, o);
   }
 
-  /** Boost from the engine unit when the sport display's value isn't there (config.dme, read-only UDS). */
+  /**
+   * Boost from the engine unit when the sport display's value isn't there (config.dme, read-only UDS).
+   * @returns {void}
+   */
   _startDme() {
     const dme = this.config.dme;
     if (
@@ -1915,6 +2417,10 @@ class HudApp {
     );
   }
 
+  /**
+   * Stops the timers and watches and closes the connections.
+   * @returns {void}
+   */
   stop() {
     clearInterval(this.tickTimer);
     clearInterval(this.themeTimer);
@@ -1935,6 +2441,9 @@ class HudApp {
    * The glyph atlas of a font on a connection: an R8 asset of the font's characters in equal cells (cols x
    * rows), made on first use and kept while the connection lives (the client re-sends it by itself after a
    * reconnect). A widget's effect layer samples it; nothing is drawn by the asset itself.
+   * @param {string} fontName
+   * @param {number} ci connection index
+   * @returns {GlyphAtlas}
    */
   _atlas(fontName, ci) {
     const key = ci + ":" + fontName;
@@ -2018,6 +2527,9 @@ class HudApp {
    * scripts/deploy.sh --miku. They are not in the app: the character's art stays with its owner. Uploaded once as an
    * RGBA asset per connection and kept in this.atlases (so the pixel memory counts it); new files (a later bake)
    * drop the old asset. Null, with this.problem set, when the files are missing or bad.
+   * @param {Widget} w
+   * @param {number} ci connection index
+   * @returns {?SpriteAtlas}
    */
   _sprite(w, ci) {
     // the HUD's Miku from miku/ (a forward/back lean bake, lean.axis "fb", works there too: its leanAxis turns
@@ -2147,6 +2659,10 @@ class HudApp {
     }
   }
 
+  /**
+   * The pixel memory of every atlas kept.
+   * @returns {number}
+   */
   _atlasBytes() {
     let n = 0;
     this.atlases.forEach((a) => {
@@ -2155,7 +2671,12 @@ class HudApp {
     return n;
   }
 
-  /** The glyph codes of a text in an atlas widget's cells, aligned; -1 is an empty cell. */
+  /**
+   * The glyph codes of a text in an atlas widget's cells, aligned; -1 is an empty cell.
+   * @param {WidgetState} x
+   * @param {*} s
+   * @returns {number[]} 32 codes
+   */
   _atlasCodes(x, s) {
     const a = x.atlas,
       n = x.cells,
@@ -2180,6 +2701,12 @@ class HudApp {
     return codes;
   }
 
+  /**
+   * Runs fn, logging what it throws instead (see the header).
+   * @param {string} what
+   * @param {() => void} fn
+   * @returns {void}
+   */
   _guard(what, fn) {
     try {
       fn();
@@ -2190,13 +2717,20 @@ class HudApp {
 
   /* ---------------- status line (the center screen's first row) ---------------- */
 
-  /** fn(text) whenever the status line changes. */
+  /**
+   * fn(text) whenever the status line changes.
+   * @param {(text: string, detail: string) => void} fn
+   * @returns {void}
+   */
   onStatus(fn) {
     this.statusListeners.push(fn);
     if (this.lastStatus) fn(this.lastStatus, this.lastDetail || "");
   }
 
-  /** The "navLayout" switch is in force: the app has that setting (the cluster), it names a layout, and BMW is guiding. */
+  /**
+   * The "navLayout" switch is in force: the app has that setting (the cluster), it names a layout, and BMW is guiding.
+   * @returns {boolean}
+   */
   _navSwitch() {
     if (!this.navActive || !this.ctx.settings.item("navLayout")) return false;
     const v = this.setting("navLayout");
@@ -2204,7 +2738,9 @@ class HudApp {
   }
 
   /** The layout name to show now: the "navLayout" one while guiding, else per drive mode when that's on and known (apps
-   *  with "byMode"), else the plain setting. */
+   *  with "byMode"), else the plain setting.
+   * @returns {string}
+   */
   _layoutName() {
     if (this._navSwitch()) return this.setting("navLayout");
     if (
@@ -2218,13 +2754,23 @@ class HudApp {
     return this.setting("hudLayout");
   }
 
+  /**
+   * A layout's name as the "hudLayout" setting shows it.
+   * @param {string} name
+   * @returns {string}
+   */
   _layoutLabel(name) {
     const lay = this.ctx.settings.item("hudLayout");
     const o = lay && (lay.options || []).find((x) => x[0] === name);
     return o ? o[1] : name;
   }
 
-  /** The first widget on that layer, for the logs; a sheet is named by its first member plus how many more it holds. */
+  /**
+   * The first widget on that layer, for the logs; a sheet is named by its first member plus how many more it holds.
+   * @param {number} ci
+   * @param {number} ref
+   * @returns {?string}
+   */
   _widgetOf(ci, ref) {
     let id = null,
       n = 0;
@@ -2237,7 +2783,10 @@ class HudApp {
     return n > 1 ? id + " +" + (n - 1) : id;
   }
 
-  /** Every layer of the layout now (effects, sheets and own image layers), each once: { c, ci, ref, key }. */
+  /**
+   * Every layer of the layout now (effects, sheets and own image layers), each once: { c, ci, ref, key }.
+   * @returns {LayerRef[]}
+   */
   _layerRefs() {
     const refs = [],
       seen = {};
@@ -2251,7 +2800,10 @@ class HudApp {
     return refs;
   }
 
-  /** How many connections the layout now uses. */
+  /**
+   * How many connections the layout now uses.
+   * @returns {number}
+   */
   _connCount() {
     const seen = {};
     this.widgets.forEach((x) => {
@@ -2260,13 +2812,21 @@ class HudApp {
     return Object.keys(seen).length;
   }
 
-  /** The connection a widget asks for ("conn", 0..3; 0 the app's own). */
+  /**
+   * The connection a widget asks for ("conn", 0..3; 0 the app's own).
+   * @param {Widget} w
+   * @returns {number}
+   */
   _connOf(w) {
     const n = isNum(w.conn) ? Math.floor(w.conn) : 0;
     return Math.max(0, Math.min(MAX_CONN - 1, n));
   }
 
-  /** Layers per connection in a plan: [n on connection 1, n on 2, ...]. */
+  /**
+   * Layers per connection in a plan: [n on connection 1, n on 2, ...].
+   * @param {PlanEntry[]} plan
+   * @returns {number[]}
+   */
   _connCounts(plan) {
     const counts = [];
     plan.forEach((e) => {
@@ -2276,10 +2836,19 @@ class HudApp {
     return counts;
   }
 
+  /**
+   * "1 layer" or "n layers".
+   * @param {number} n
+   * @returns {string}
+   */
   _layerCount(n) {
     return n === 1 ? "1 layer" : n + " layers";
   }
 
+  /**
+   * The status update in half a second (one for a burst of events).
+   * @returns {void}
+   */
   _statusSoon() {
     if (this._statusT) return;
     this._statusT = setTimeout(() => {
@@ -2288,7 +2857,10 @@ class HudApp {
     }, 500);
   }
 
-  /** ", 3 of 5 layers drawn (2 waiting: <reason>)" while some layers aren't shown; "" when all are. Counts layers, not widgets. */
+  /**
+   * ", 3 of 5 layers drawn (2 waiting: <reason>)" while some layers aren't shown; "" when all are. Counts layers, not widgets.
+   * @returns {string}
+   */
   _drawnNote() {
     const ts = this.targetState;
     // cluster-render's mapping guard turned this target off (two display restarts right after its mappings); it stays
@@ -2338,6 +2910,10 @@ class HudApp {
     );
   }
 
+  /**
+   * The status line: what is drawn now, or why nothing is.
+   * @returns {string}
+   */
   statusText() {
     if (!this.client.ready) {
       let there = false;
@@ -2404,7 +2980,9 @@ class HudApp {
   }
 
   /** The status page's second row: why layers aren't drawn ("Waiting: BMW is using this display", "3 of 5 drawn (...)",
-   *  "Refused ..."), "" when all is drawn or nothing shows. */
+   *  "Refused ..."), "" when all is drawn or nothing shows.
+   * @returns {string}
+   */
   statusDetail() {
     if (!this.client.ready || this.problem || this.activeName === "off")
       return "";
@@ -2412,6 +2990,10 @@ class HudApp {
     return n ? n.charAt(0).toUpperCase() + n.slice(1) : "";
   }
 
+  /**
+   * Tells the status listeners when the status changed.
+   * @returns {void}
+   */
   _status() {
     const s = this.statusText(),
       d = this.statusDetail();
@@ -2429,6 +3011,11 @@ class HudApp {
 
   /* ---------------- theme, units, values ---------------- */
 
+  /**
+   * The theme now: the layout's own, else "hudTheme" (Auto: Night after
+   * sunset).
+   * @returns {string}
+   */
   _themeName() {
     if (this.layoutTheme) return this.layoutTheme;
     const t = this.setting("hudTheme");
@@ -2438,13 +3025,21 @@ class HudApp {
       : this.setting("dayTheme");
   }
 
+  /**
+   * The rev scale's top: the redline rounded up to 1000 rpm, plus "over".
+   * @param {Widget} [w]
+   * @returns {number}
+   */
   _barMax(w) {
     return (
       Math.ceil(this.setting("redline") / 1000) * 1000 + ((w && w.over) || 0)
     );
   }
 
-  /** The shift point now ({ rpm, cold }) and whether the rpm is at or past it. */
+  /**
+   * The shift point now ({ rpm, cold }) and whether the rpm is at or past it.
+   * @returns {ShiftPoint}
+   */
   _shift() {
     const d = this.car.data();
     const sp = this.score.shiftPoint(d.oil);
@@ -2454,7 +3049,10 @@ class HudApp {
     return sp;
   }
 
-  /** Boost in bar: the sport display's value while fresh, else the engine unit's, else null. */
+  /**
+   * Boost in bar: the sport display's value while fresh, else the engine unit's, else null.
+   * @returns {?number}
+   */
   _boost() {
     const now = Date.now();
     if (isNum(this.boostFes) && now - this.boostFesAt < FRESH_MS)
@@ -2474,7 +3072,10 @@ class HudApp {
 
   /** A tyre's pressure ('p', bar) or temperature ('t', C) at corner FL FR RL RR; steady made-up values on the demo drive. */
   /** A TPMS pressure raw (0.1 x the car's unit, 65532 and up = none) in bar: by the car's unit when known, else by the
-   *  unit whose plausible tyre pressures the value falls in (bar 0.5-6, psi 7-60, kPa 60-600; psi also means F). */
+   *  unit whose plausible tyre pressures the value falls in (bar 0.5-6, psi 7-60, kPa 60-600; psi also means F).
+   * @param {*} raw
+   * @returns {?number}
+   */
   _tyreBar(raw) {
     if (!isNum(raw) || raw < 0 || raw >= 65532) return null;
     const v = raw / 10,
@@ -2489,7 +3090,11 @@ class HudApp {
     return v;
   }
 
-  /** A TPMS temperature raw (the car's degrees + 40, 65535 = none) in C (the car sends F when set to F). */
+  /**
+   * A TPMS temperature raw (the car's degrees + 40, 65535 = none) in C (the car sends F when set to F).
+   * @param {*} raw
+   * @returns {?number}
+   */
   _tyreC(raw) {
     if (!isNum(raw) || raw < 0 || raw >= 65535) return null;
     const v = raw - 40,
@@ -2499,12 +3104,23 @@ class HudApp {
     return f ? ((v - 32) * 5) / 9 : v;
   }
 
-  /** The shifter programme letter next to the gear: S or M from the M drive display, else from the gearbox status, else D. */
+  /**
+   * The shifter programme letter next to the gear: S or M from the M drive display, else from the gearbox status, else D.
+   * @param {CarData & { program?: string }} d
+   * @returns {string}
+   */
   _program(d) {
     const p = this.program || d.program;
     return p === "S" || p === "M" ? p : "D";
   }
 
+  /**
+   * A tyre's pressure ('p', bar) or temperature ('t', C) at a corner; steady
+   * made-up values on the demo drive.
+   * @param {string} kind 'p' or 't'
+   * @param {string} corner FL FR RL RR
+   * @returns {?number}
+   */
   _tyre(kind, corner) {
     const v = this.tyres[kind][corner];
     if (isNum(v)) return v;
@@ -2517,6 +3133,8 @@ class HudApp {
    * The odometer in km, between the car's whole-km readings too: the distance driven since its last km comes from the
    * speed (kept under the next km, so the drums never pass the car's own reading). Time-based, so any number of
    * widgets may ask each tick. Null without a reading; the demo drive starts at 23817 km.
+   * @param {number} [now] ms
+   * @returns {?number} km
    */
   _odometer(now) {
     if (!isNum(now)) now = Date.now();
@@ -2533,6 +3151,12 @@ class HudApp {
     return this.car.data().demo ? 23817 + this.odoAcc : null;
   }
 
+  /**
+   * A signal's value by name: hud's own (boost, fuel, throttle10,
+   * setupLevel:<part>, ...) or the car data's.
+   * @param {string} name
+   * @returns {*}
+   */
   _raw(name) {
     if (name === "boost") return this._boost();
     if (name === "rpm" && isNum(this.rpmF)) return this.rpmF;
@@ -2581,7 +3205,9 @@ class HudApp {
   }
 
   /** The accelerator pedal 0..100 % (raw * config.pedal.factor), null when not valid or older than 3 s; the demo drive's
-   *  own (sim.js throttle 0..1). */
+   *  own (sim.js throttle 0..1).
+   * @returns {?number}
+   */
   _throttle() {
     const c0 = this.config.pedal || {};
     if (c0.source === "obd") {
@@ -2622,7 +3248,9 @@ class HudApp {
   }
 
   /** The pedal in kickdown: the OBD pedal at or past config.pedal.kickdown (87 %: an X3 M40i reads 82 flat out and 91 in
-   *  kickdown); the demo drive's at full throttle. */
+   *  kickdown); the demo drive's at full throttle.
+   * @returns {boolean}
+   */
   _kickdown() {
     const c = this.config.pedal || {};
     if (
@@ -2635,7 +3263,10 @@ class HudApp {
     return !!d.demo && isNum(d.throttle) && d.throttle >= 1;
   }
 
-  /** The brake lights on; the demo drive's while it slows down. */
+  /**
+   * The brake lights on; the demo drive's while it slows down.
+   * @returns {boolean}
+   */
   _brake() {
     if (this.brakeOn !== null) return this.brakeOn;
     const d = this.car.data();
@@ -2643,7 +3274,9 @@ class HudApp {
   }
 
   /** The brake bar 0..10: 0 off; while braking the deceleration on a log scale (BRAKE_G0, BRAKE_GMAX), at least 1; 10
-   *  without a deceleration reading. The deceleration is smoothed over BRAKE_TAU_MS so the bar does not flicker. */
+   *  without a deceleration reading. The deceleration is smoothed over BRAKE_TAU_MS so the bar does not flicker.
+   * @returns {number}
+   */
   _brakeLevel() {
     const now = Date.now(),
       gl = this.car.data().gLong;
@@ -2663,7 +3296,10 @@ class HudApp {
     return Math.max(1, Math.min(10, v));
   }
 
-  /** The 12 V battery's charge 0..100 % (raw * config.battery.factor), null when not sent; the demo drive's made up. */
+  /**
+   * The 12 V battery's charge 0..100 % (raw * config.battery.factor), null when not sent; the demo drive's made up.
+   * @returns {?number}
+   */
   _batt12() {
     if (isNum(this.battRaw)) {
       const c = this.config.battery || {};
@@ -2679,7 +3315,10 @@ class HudApp {
     return this.car.data().demo ? 82 : null;
   }
 
-  /** The 12 V system in V, null when the engine unit has not answered lately; the demo drive's made up. */
+  /**
+   * The 12 V system in V, null when the engine unit has not answered lately; the demo drive's made up.
+   * @returns {?number}
+   */
   _volt12() {
     if (isNum(this.volt12) && Date.now() - this.volt12At < VOLT_MS * 3)
       return this.volt12;
@@ -2690,8 +3329,11 @@ class HudApp {
   /** The Regal lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
    *  that side (hazards: both); the demo drive blinks left now and then. Cruise: BMW's ACC car or bars up. */
   /** The Regal left lamp: 'park' (the parking brake set: red PARK BRAKE), 'hold' (Auto Hold holding the car: green AUTO
-   *  HOLD) or null. The demo drive: parked in P, holding at a standstill otherwise. */
+   *  HOLD) or null. The demo drive: parked in P, holding at a standstill otherwise.
+   * @returns {?string}
+   */
   _brakeLamp() {
+    /** @type {(x: *) => boolean} */
     const known = (x) => x === true || x === false;
     const pb = known(this.parkBrake)
       ? this.parkBrake
@@ -2715,7 +3357,9 @@ class HudApp {
   }
 
   /** Which way the indicator points, held while it is on (not blinking): -1 left, 1 right, 0 none or hazards. Always 0
-   *  unless config.indicators (the Miku character points that way only then). */
+   *  unless config.indicators (the Miku character points that way only then).
+   * @returns {number}
+   */
   _turnSide() {
     if (this.config.indicators !== true) return 0;
     const now = Date.now();
@@ -2731,6 +3375,11 @@ class HudApp {
     return t === "L" ? -1 : t === "R" ? 1 : 0;
   }
 
+  /**
+   * A Regal turn lamp lit now (blinking at 1.25 Hz).
+   * @param {string} side 'L' or 'R'
+   * @returns {boolean}
+   */
   _turnLit(side) {
     const now = Date.now();
     let t =
@@ -2740,6 +3389,10 @@ class HudApp {
     return !!t && t.indexOf(side) >= 0 && Math.floor(now / 400) % 2 === 0;
   }
 
+  /**
+   * The Regal CRUISE lamp lit: BMW's ACC car or bars up.
+   * @returns {boolean}
+   */
   _cruiseLit() {
     return (
       this.accOn ||
@@ -2749,19 +3402,30 @@ class HudApp {
 
   /** Where the red and orange marks start on a rev scale that ends at `max` rpm, as fractions 0..1: red from the
    *  redline, but always covering at least the last 500 rpm (the M40i's scale ends right at its 7000 redline),
-   *  orange over the 700 rpm before the red. */
+   *  orange over the 700 rpm before the red.
+   * @param {number} max rpm
+   * @returns {number[]} [red, orange]
+   */
   _redMarks(max) {
     const redFrom = Math.min(this.setting("redline"), max - 500) / max;
     return [redFrom, redFrom - 700 / max];
   }
 
-  /** The scale label nearest the value now: 'speed' (SPEED_SCALE index) or 'rpm' (thousands); null without data. */
+  /**
+   * The scale label nearest the value now: 'speed' (SPEED_SCALE index) or 'rpm' (thousands); null without data.
+   * @param {string} kind 'speed' or 'rpm'
+   * @returns {?number}
+   */
   _nearMark(kind) {
     const p = this._nearPos(kind);
     return isNum(p) ? Math.round(p) : null;
   }
 
-  /** Where the value sits on a scale, in label steps (2.5 = halfway between labels 2 and 3); null without one. */
+  /**
+   * Where the value sits on a scale, in label steps (2.5 = halfway between labels 2 and 3); null without one.
+   * @param {string} kind 'speed' or 'rpm'
+   * @returns {?number}
+   */
   _nearPos(kind) {
     if (kind === "rpm") {
       const r = this._raw("rpm");
@@ -2775,7 +3439,10 @@ class HudApp {
     );
   }
 
-  /** The setup rows for the drive mode now, or null before the car has said. */
+  /**
+   * The setup rows for the drive mode now, or null before the car has said.
+   * @returns {?SetupRows}
+   */
   _setup() {
     if (!this.driveMode) return null;
     if (this.driveVariant === "individual") return SETUP.individual;
@@ -2788,7 +3455,12 @@ class HudApp {
 
   /** {{token}} -> display text. */
   /** Collects a big shader's set-once uniforms (shaders.js CFG) into its one u_cfg vec4 array, sent by flush(); any
-   *  other uniform goes straight through. cluster-render keeps at most 32 uniform names a layer. */
+   *  other uniform goes straight through. cluster-render keeps at most 32 uniform names a layer.
+   * @param {Client} c
+   * @param {number} ref
+   * @param {string} type the widget type
+   * @returns {CfgPacker}
+   */
   _cfgPacker(c, ref, type) {
     const names = shaders.CFG[type] || [],
       vals = {};
@@ -2809,7 +3481,10 @@ class HudApp {
     };
   }
 
-  /** The Regal gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D and S 3, M 5 the gear number), -1 for none. */
+  /**
+   * The Regal gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D and S 3, M 5 the gear number), -1 for none.
+   * @returns {number}
+   */
   _regalGear() {
     const stage = this._token("stage");
     return Object.prototype.hasOwnProperty.call(REGAL_GEARS, stage)
@@ -2817,8 +3492,14 @@ class HudApp {
       : -1;
   }
 
+  /**
+   * {{tok}} as display text (the tokens are in the header).
+   * @param {string} tok
+   * @returns {string}
+   */
   _token(tok) {
     const us = this.setting("units") === "us";
+    /** @type {(v: *, n: number) => string} */
     const fix = (v, n) => (isNum(v) ? v.toFixed(n) : "--");
     if (tok.indexOf("tyreP:") === 0) {
       const v = this._tyre("p", tok.slice(6));
@@ -3102,7 +3783,10 @@ class HudApp {
   }
 
   /** KombiIF statusShowTimeDate: the cluster's displayed local time against UTC now, to the nearest 15 min within
-   *  -12..+14 h, is the car's time zone. 255 = not sent. */
+   *  -12..+14 h, is the car's time zone. 255 = not sent.
+   * @param {*} v
+   * @returns {void}
+   */
   _onCarClock(v) {
     const h = v && v.displayHour,
       m = v && v.displayMinute;
@@ -3128,7 +3812,9 @@ class HudApp {
   }
 
   /** Local time: config.utcOffsetMinutes when set, else the car's time zone once the cluster's clock has been seen, else
-   *  the unit's own (UTC on the car). */
+   *  the unit's own (UTC on the car).
+   * @returns {{ getHours: () => number, getMinutes: () => number }}
+   */
   _now() {
     const cfg = this.config.utcOffsetMinutes;
     const off = isNum(cfg) ? cfg : this.carOffsetMin;
@@ -3140,6 +3826,11 @@ class HudApp {
     };
   }
 
+  /**
+   * A text template with its {{tokens}} filled in.
+   * @param {*} template
+   * @returns {string}
+   */
   _resolve(template) {
     return String(template).replace(/\{\{([a-zA-Z0-9:]+)\}\}/g, (_, t) =>
       this._token(t),
@@ -3148,11 +3839,19 @@ class HudApp {
 
   /* ---------------- layers ---------------- */
 
+  /**
+   * Drops the layers and builds the layout for now again (never throws).
+   * @returns {void}
+   */
   _rebuild() {
     this._guard("rebuild", () => this._rebuildInner());
     this._status();
   }
 
+  /**
+   * _rebuild's work.
+   * @returns {void}
+   */
   _rebuildInner() {
     if (!this.client.ready) return; // the 'ready' handler calls us again
     this._layerRefs().forEach((r) => r.c.drop(r.ref));
@@ -3242,6 +3941,7 @@ class HudApp {
     // in that order: within a class and z, cluster-render puts the newer layer on top. Small sheets
     // first; a bigger limit only when the layer budget needs it (see the header).
     const area = this.size[0] * this.size[1];
+    /** @type {(p: PlanEntry[]) => boolean} */
     const over = (p) => this._connCounts(p).some((k) => k > LAYER_BUDGET);
     let maxPx = Math.floor(area / SHEET_AREA_FRAC),
       plan = this._plan(shown, maxPx);
@@ -3342,11 +4042,16 @@ class HudApp {
    * after every earlier entry of that group its rect intersects (so what overlaps it stays under it, as
    * file order says) and whose union box with it stays within maxPx pixels, else a new sheet is opened
    * at the end.
+   * @param {Widget[]} widgets
+   * @param {number} maxPx the sheet size limit
+   * @returns {PlanEntry[]}
    */
   _plan(widgets, maxPx) {
     const plan = [];
+    /** @type {(a: Rect, b: Rect) => boolean} */
     const hit = (a, b) =>
       a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    /** @type {(s: Rect, w: Rect) => Rect} */
     const union = (s, w) => {
       const x = Math.min(s.x, w.x),
         y = Math.min(s.y, w.y);
@@ -3416,7 +4121,11 @@ class HudApp {
     return plan;
   }
 
-  /** One image layer for a sheet: every member painted into a local buffer, then sent whole once. */
+  /**
+   * One image layer for a sheet: every member painted into a local buffer, then sent whole once.
+   * @param {Sheet} s
+   * @returns {void}
+   */
   _createSheet(s) {
     const c = this._clientAt(s.conn);
     const ref = c.image({
@@ -3465,6 +4174,10 @@ class HudApp {
    * Every pixel painter goes through here: the widget's pixels (rects in the widget's own px, or null for
    * the whole widget) to its own layer, or into its sheet: the local buffer while the sheet is being
    * filled on create, else dirty rects translated by the sheet's offset.
+   * @param {WidgetState} x
+   * @param {?Rect[]} rects
+   * @param {Buffer} buf
+   * @returns {void}
    */
   _blit(x, rects, buf) {
     const w = x.w,
@@ -3493,6 +4206,9 @@ class HudApp {
   /**
    * A whole repaint of an image widget: the first time (or while its sheet is being filled) the whole widget
    * goes up; after that only the one rectangle around the pixels that changed, or nothing at all.
+   * @param {WidgetState} x
+   * @param {Buffer} buf
+   * @returns {void}
    */
   _blitDiff(x, buf) {
     const w = x.w,
@@ -3506,7 +4222,11 @@ class HudApp {
     if (c) this._blit(x, [c.rect], c.px);
   }
 
-  /** "key" is on while that bool setting is on; "!key" while it is off. */
+  /**
+   * "key" is on while that bool setting is on; "!key" while it is off.
+   * @param {string} t
+   * @returns {boolean}
+   */
   _toggleOn(t) {
     const not = t.charAt(0) === "!";
     const k = not ? t.slice(1) : t,
@@ -3518,7 +4238,12 @@ class HudApp {
     return not ? !on : on;
   }
 
-  /** A widget: on its own layer (sheet null: an effect, or an image widget with "own": true), or a member of a sheet. */
+  /**
+   * A widget: on its own layer (sheet null: an effect, or an image widget with "own": true), or a member of a sheet.
+   * @param {Widget} w
+   * @param {?Sheet} sheet
+   * @returns {void}
+   */
   _create(w, sheet) {
     let ref, c;
     if (sheet) {
@@ -3653,6 +4378,7 @@ class HudApp {
           ? w.holeCut
           : [0, 0, 0, 0],
       );
+      /** @type {(r: *) => number[]} */
       const rel = (r) =>
         Array.isArray(r) && r.length === 4
           ? [r[0] - w.x, r[1] - w.y, r[2], r[3]]
@@ -3699,6 +4425,7 @@ class HudApp {
       pk.flush();
     } else if (w.type === "rdash") {
       const pk = this._cfgPacker(c, ref, "rdash");
+      /** @type {(r: *) => number[]} */
       const o4 = (r) =>
         Array.isArray(r) && r.length === 4
           ? [r[0] - w.x, r[1] - w.y, r[2], r[3]]
@@ -3883,7 +4610,9 @@ class HudApp {
       const sp = this._sprite(w, x.ci),
         j = sp.info,
         ft = Array.isArray(w.feet) && w.feet.length === 2 ? w.feet : [480, 377];
+      /** @type {(k: string) => number[]} */
       const fr = (k) => (j.frames && j.frames[k]) || j.frames.idle;
+      /** @type {(o: *) => number[]} */
       const rect = (o) => (o && Array.isArray(o.rect) ? o.rect : [0, 0, 0, 0]);
       c.bind(ref, "u_atlas", sp.ref);
       c.uniform(ref, "u_size", [w.w, w.h]);
@@ -3899,6 +4628,7 @@ class HudApp {
       // uniforms: the cluster's GPU restarted on the 0.1.9 .. 0.1.12 shader's 55 uniform vectors (or its size)
       const spr = fr("idle").concat(fr("half"), fr("shut"), fr("talk"));
       const am = Array.isArray(j.arms) ? j.arms.slice(0, 2) : [],
+        /** @type {(o: *) => number[]} */
         v3 = (o) =>
           Array.isArray(o)
             ? [o[0] || 0, o[1] || 0, o[2] || 0, 0]
@@ -4010,7 +4740,11 @@ class HudApp {
     this._update(x, Date.now(), true);
   }
 
-  /** A widget's map hole in layer px, inset by "holeInset" (6) a side, while "holeWhen" is on; else no hole. */
+  /**
+   * A widget's map hole in layer px, inset by "holeInset" (6) a side, while "holeWhen" is on; else no hole.
+   * @param {Widget} w
+   * @returns {number[]} [x, y, w, h]
+   */
   _hole(w) {
     const h =
       w.hole && w.holeWhen && this.setting(w.holeWhen) === true ? w.hole : null;
@@ -4024,10 +4758,20 @@ class HudApp {
     ];
   }
 
+  /**
+   * A widget's map hole corner radius, px ("holeRadius", 28).
+   * @param {Widget} w
+   * @returns {number}
+   */
   _holeRadius(w) {
     return isNum(w.holeRadius) ? w.holeRadius : 28;
   }
 
+  /**
+   * The 20 Hz tick: the rpm, the shift flash, and every widget without its
+   * own timer.
+   * @returns {void}
+   */
   _tick() {
     const now = Date.now();
     this._smoothRpm(now);
@@ -4042,7 +4786,11 @@ class HudApp {
     });
   }
 
-  /** BMW-like tach: a 120 ms filter, and a readout that moves in 50 rpm steps, only by 40 rpm or more. */
+  /**
+   * BMW-like tach: a 120 ms filter, and a readout that moves in 50 rpm steps, only by 40 rpm or more.
+   * @param {number} now
+   * @returns {void}
+   */
   _smoothRpm(now) {
     const raw = this.car.data().rpm;
     const dt = this.lastTickT ? Math.min(500, now - this.lastTickT) : 0;
@@ -4059,6 +4807,14 @@ class HudApp {
       this.rpmShown = Math.max(0, Math.round(this.rpmF / 50) * 50);
   }
 
+  /**
+   * Sends a widget's new values (uniforms or pixels) when they changed;
+   * force: always.
+   * @param {WidgetState} x
+   * @param {number} now
+   * @param {boolean} force
+   * @returns {void}
+   */
   _update(x, now, force) {
     const w = x.w;
     if (w.type === "atext") {
@@ -4217,6 +4973,7 @@ class HudApp {
         rpm = this._raw("rpm"),
         fuel = this._raw("fuel"),
         oil = this._raw("oil");
+      /** @type {(v: number) => number} */
       const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 500) / 500;
       const vals = [
         q(
@@ -4294,6 +5051,7 @@ class HudApp {
       x.c.uniform(x.ref, "u_fuel", [vals[2]]);
       x.c.uniform(x.ref, "u_oil", [vals[3]]);
     } else if (w.type === "rdash") {
+      /** @type {(v: number) => number} */
       const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 500) / 500;
       const sp = this._raw("speed"),
         rpm = this._raw("rpm"),
@@ -4355,6 +5113,7 @@ class HudApp {
       // they sweep instead of jumping, down to their rest when a reading goes (the car off) and up from it at the start
       const dt = x.at ? Math.min(500, now - x.at) : 0;
       x.at = now;
+      /** @type {(prev: ?number, to: number, tau: number) => number} */
       const ease = (prev, to, tau) =>
         isNum(prev) ? prev + (to - prev) * (1 - Math.exp(-dt / tau)) : to;
       const fTo = Math.min(1, Math.max(-0.5, f)),
@@ -4366,6 +5125,7 @@ class HudApp {
         ease(x.ez.pods[i], v, REGAL_NEEDLE_TAU_MS),
       );
       // within half a step of the reading: there (so the messages stop once a needle settles)
+      /** @type {(e: number, to: number) => number} */
       const snap = (e, to) => (Math.abs(e - to) < 0.001 ? to : e);
       x.ez.f = snap(x.ez.f, fTo);
       x.ez.fuel = snap(x.ez.fuel, fuelTo);
@@ -4495,6 +5255,7 @@ class HudApp {
       }
       const v = this._raw("speed"),
         sv = isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0,
+        /** @type {(f: number) => number} */
         step = (f) => Math.round(f * 500) / 500;
       this._mikuIdle(x, now, dt, d.gLong, v);
       x.spd = isNum(x.spd)
@@ -4544,6 +5305,12 @@ class HudApp {
    * glancing), dozes again, and so on; x.doze rides a critically damped spring so neither the droop nor the waking
    * snaps. Any g past the deadzone or
    * pulling away ends both smoothly; the lean itself is never gated.
+   * @param {WidgetState} x
+   * @param {number} now
+   * @param {number} dt ms
+   * @param {?number} gLong
+   * @param {?number} speed
+   * @returns {void}
    */
   _mikuIdle(x, now, dt, gLong, speed) {
     const idle = !isNum(gLong) || Math.abs(gLong) < MIKU_IDLE_G,
@@ -4565,6 +5332,7 @@ class HudApp {
       Math.floor((x.stillMs - MIKU_DOZE_AFTER_MS) / MIKU_DOZE_PHASE_MS) % 2 ===
         0;
     if (dozing) x.wokeUp = true;
+    /** @type {(a: number, b: number) => number} */
     const rnd = (a, b) => a + Math.random() * (b - a);
     // the glance's target: none unless idle (and not dozing); otherwise turn, hold, return, pause, at random
     if (!idle || dozing || x.lookN < 3) {
@@ -4616,7 +5384,14 @@ class HudApp {
     }
   }
 
-  /** A rounded tag: fill in the tone colour (bright for a fresh grade), text centred on it. Empty text: nothing. */
+  /**
+   * A rounded tag: fill in the tone colour (bright for a fresh grade), text centred on it. Empty text: nothing.
+   * @param {Widget} w
+   * @param {string} s
+   * @param {number[]} tone RGBA
+   * @param {boolean} fresh
+   * @returns {Buffer}
+   */
   _paintBadge(w, s, tone, fresh) {
     const W = w.w,
       H = w.h,
@@ -4663,7 +5438,11 @@ class HudApp {
     return buf;
   }
 
-  /** "x/y" at every step, uploaded as small rects (not the whole, mostly empty, image). */
+  /**
+   * "x/y" at every step, uploaded as small rects (not the whole, mostly empty, image).
+   * @param {WidgetState} x
+   * @returns {void}
+   */
   _paintGridLabels(x) {
     const w = x.w,
       W = w.w,
@@ -4690,6 +5469,11 @@ class HudApp {
     this._blit(x, rects, Buffer.concat(parts));
   }
 
+  /**
+   * Paints the M tricolour stripe.
+   * @param {WidgetState} x
+   * @returns {void}
+   */
   _paintStripe(x) {
     const w = x.w,
       buf = Buffer.alloc(w.w * w.h * 4, 0);
@@ -4703,6 +5487,11 @@ class HudApp {
     this._blit(x, null, buf);
   }
 
+  /**
+   * Paints the rpm numbers (red from the redline with "redFrom").
+   * @param {WidgetState} x
+   * @returns {void}
+   */
   _paintScale(x) {
     const w = x.w,
       n = this._barMax(w) / 1000 + 1,
@@ -4734,9 +5523,17 @@ class HudApp {
   }
 }
 
+/**
+ * @param {number} n
+ * @returns {string}
+ */
 function pad2(n) {
   return n < 10 ? "0" + n : String(n);
 }
+/**
+ * @param {number} bytes
+ * @returns {string}
+ */
 function mib(bytes) {
   return (bytes / 1048576).toFixed(1) + " MiB";
 }

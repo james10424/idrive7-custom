@@ -13,14 +13,38 @@
  * collection uses its first face. No shaping: scripts that need it (Arabic joining, Indic) draw letter by letter.
  */
 const fs = require("fs");
+/**
+ * An opentype.js Font (the vendored ./opentype), as used here.
+ * @typedef {any} OtFont
+ */
+/**
+ * One loaded font file.
+ * @typedef {{ path: string, font: OtFont }} FontFile
+ */
+/**
+ * The font and glyph a character is drawn with; glyph null when no font has it.
+ * @typedef {{ font: OtFont, glyph: any }} GlyphHit
+ */
+/**
+ * @typedef {object} MaskOpts
+ * @property {number} [size] px, default 0.75 x box height
+ * @property {number} [baseline] px from the top, default 0.8 x size
+ * @property {"left"|"center"|"right"} [align]
+ */
+/** @type {any} the opentype.js module, loaded on first use */
 let opentype = null;
 
+/** @returns {any} the opentype.js module */
 function lib() {
   if (!opentype) opentype = require("./opentype");
   return opentype;
 }
 
 /** An ArrayBuffer of the first face of a font file (a collection's first face, its directory moved to the front). */
+/**
+ * @param {Buffer} buf
+ * @returns {ArrayBuffer}
+ */
 function faceBuffer(buf) {
   const ab = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length);
   if (buf.toString("latin1", 0, 4) !== "ttcf") return ab;
@@ -34,6 +58,12 @@ function faceBuffer(buf) {
   return out.buffer.slice(out.byteOffset, out.byteOffset + out.length);
 }
 
+/**
+ * Opens font files as one fallback chain.
+ * @param {string|string[]} paths
+ * @param {import("./shift_score").Log} [log]
+ * @returns {SysFont|null} null when none loads
+ */
 function open(paths, log) {
   const fonts = [];
   (Array.isArray(paths) ? paths : [paths]).forEach((p) => {
@@ -65,12 +95,18 @@ function open(paths, log) {
 }
 
 class SysFont {
+  /** @param {FontFile[]} fonts the fallback chain, first wins */
   constructor(fonts) {
     this.fonts = fonts;
+    /** @type {Map<string, GlyphHit>} */
     this.cache = new Map();
   }
 
-  /** The font and glyph for one character: the first font that has it, else the first font's .notdef. */
+  /**
+   * The font and glyph for one character: the first font that has it, else the first font's .notdef.
+   * @param {string} ch
+   * @returns {GlyphHit}
+   */
   _glyph(ch) {
     let hit = this.cache.get(ch);
     if (hit) return hit;
@@ -90,13 +126,23 @@ class SysFont {
     return hit;
   }
 
+  /**
+   * @param {GlyphHit} g
+   * @param {number} size px
+   * @returns {number} px
+   */
   _advance(g, size) {
     return g.glyph
       ? (g.glyph.advanceWidth * size) / g.font.unitsPerEm
       : size * 0.5;
   }
 
-  /** Characters laid out at `size` px: [{ g, x }], total width. Control characters are dropped. */
+  /**
+   * Characters laid out at `size` px: [{ g, x }], total width. Control characters are dropped.
+   * @param {string} text
+   * @param {number} size px
+   * @returns {{ items: Array<{ g: GlyphHit, x: number }>, width: number }}
+   */
   _layout(text, size) {
     const out = [];
     let x = 0;
@@ -108,12 +154,23 @@ class SysFont {
     return { items: out, width: x };
   }
 
+  /**
+   * @param {string} text
+   * @param {number} size px
+   * @returns {number} width, px
+   */
   measure(text, size) {
     return this._layout(text, size).width;
   }
 
   /** Coverage of `text` in a boxW x boxH box: size px, baseline px from the top (0.8 x size), align left|center|right;
-   *  cut with "…" to fit. */
+   *  cut with "…" to fit.
+   * @param {number} boxW
+   * @param {number} boxH
+   * @param {string} text
+   * @param {MaskOpts} opts
+   * @returns {Buffer} boxW*boxH coverage bytes
+   */
   mask(boxW, boxH, text, opts) {
     const size = opts.size || boxH * 0.75,
       base = opts.baseline || Math.round(size * 0.8);
@@ -147,6 +204,10 @@ class SysFont {
 
 /** Exact-area coverage accumulation (font-rs): lines add signed area, a running sum per row gives coverage. */
 class Raster {
+  /**
+   * @param {number} w
+   * @param {number} h
+   */
   constructor(w, h) {
     this.w = w;
     this.h = h;
@@ -154,6 +215,13 @@ class Raster {
     this.a = new Float32Array(this.stride * h + 2);
   }
 
+  /**
+   * Adds one edge.
+   * @param {number} x0
+   * @param {number} y0
+   * @param {number} x1
+   * @param {number} y1
+   */
   line(x0, y0, x1, y1) {
     if (y0 === y1) return;
     let dir = 1;
@@ -208,6 +276,10 @@ class Raster {
     }
   }
 
+  /**
+   * Fills an opentype.js path (M, L, Q, C, Z commands).
+   * @param {Array<{ type: string, x?: number, y?: number, x1?: number, y1?: number, x2?: number, y2?: number }>} cmds
+   */
   path(cmds) {
     let sx = 0,
       sy = 0,
@@ -267,6 +339,7 @@ class Raster {
     if (px !== sx || py !== sy) this.line(px, py, sx, sy);
   }
 
+  /** @returns {Buffer} w*h coverage bytes */
   coverage() {
     const out = Buffer.alloc(this.w * this.h);
     for (let y = 0; y < this.h; y++) {
@@ -305,6 +378,11 @@ const PROBES = [
  * entries; LastResort-style fallback fonts, emoji and styled weights left out), then picked by coverage: the font
  * with the most of PROBES first, then whichever adds the most of the rest, up to `max` fonts and `maxBytes` read.
  * Returns { all: [{ path, size }], fonts: SysFont | null, chosen: [paths] }.
+ * @param {string[]} roots
+ * @param {number} [max] fonts, default 4
+ * @param {number} [maxBytes] default 120e6
+ * @param {import("./shift_score").Log} [log]
+ * @returns {{ all: Array<{ path: string, size: number }>, chosen: string[], fonts: SysFont|null }}
  */
 function find(roots, max, maxBytes, log) {
   const found = [],

@@ -18,6 +18,12 @@ const http = require("http");
 const fs = require("fs");
 const path = require("path");
 
+/**
+ * The value after --name on the command line, else def.
+ * @param {string} name
+ * @param {string} [def]
+ * @returns {string | undefined}
+ */
 function arg(name, def) {
   const i = process.argv.indexOf("--" + name);
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
@@ -34,6 +40,7 @@ if (!model || !core || !out) {
   process.exit(1);
 }
 const modelDir = path.dirname(path.resolve(model));
+/** @type {Record<string, string>} extension to Content-Type */
 const TYPES = {
   ".html": "text/html",
   ".js": "text/javascript",
@@ -42,6 +49,11 @@ const TYPES = {
   ".moc3": "application/octet-stream",
 };
 
+/**
+ * Serves a file, or 404.
+ * @param {http.ServerResponse} res
+ * @param {string} file
+ */
 function send(res, file) {
   fs.readFile(file, (err, buf) => {
     if (err) {
@@ -72,6 +84,7 @@ http
         res.end("bad path");
         return;
       }
+      /** @type {Buffer[]} */
       const chunks = [];
       req.on("data", (c) => chunks.push(c));
       req.on("end", () => {

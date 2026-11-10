@@ -1466,6 +1466,7 @@ void main() {
  * shapes, colours) go up as one vec4 array, u_cfg, one slot each in this order; the shader keeps their old names through
  * #define (a float is .x, a vec2 .xy, a vec3 .xyz). The values that change while driving stay their own uniforms, so a
  * tick still sends only what changed. hud.js packs the values in the same order (CFG below). */
+/** @type {Record<"sdash"|"rdash", string[]>} */
 const CFG = {
   sdash: [
     "u_geo",
@@ -1512,6 +1513,12 @@ const CFG = {
     "u_batIcon",
   ],
 };
+/**
+ * Moves the named uniforms of a shader into the u_cfg vec4 array, keeping their names through #define.
+ * @param {string} src GLSL source
+ * @param {string[]} names uniforms, in slot order
+ * @returns {string} the packed source
+ */
 function packCfg(src, names) {
   const SW = { float: ".x", vec2: ".xy", vec3: ".xyz", vec4: "" };
   let defs =
