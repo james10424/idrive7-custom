@@ -87,7 +87,7 @@ module.exports = {
       ft[1] - w.y - j.anchor[1],
     ]);
     // the fixed sprite values go up as three vec4 arrays (u_spr: the eye frames, the tails, the crop and the
-    // tables' counts; u_arm), which shaders.js miku names back with #define; the per-frame tables (lean,
+    // tables' counts; u_arm), which shader.js names back with #define; the per-frame tables (lean,
     // glance and doze frames, head and hip shifts) are pixel rows under the atlas (_sprite, mikuData). Few
     // uniforms: the cluster's GPU restarted on the 0.1.9 .. 0.1.12 shader's 55 uniform vectors (or its size)
     const spr = fr("idle").concat(fr("half"), fr("shut"), fr("talk"));

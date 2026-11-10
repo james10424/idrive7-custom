@@ -224,13 +224,12 @@
 const fs = require("fs");
 const { ClusterRender, DEFAULT_PATH } = require("./cluster_render_client.js");
 const Layouts = require("./layouts");
-const { THEMES, color } = require("./hud_themes");
+const { THEMES } = require("./hud_themes");
 const ShiftScore = require("./shift_score");
 const sun = require("./sun");
 const textRaster = require("./hud_text");
-const shaders = require("./shaders");
 const widgetTypes = require("./widgets");
-const { isNum, rgb, rgba, pad2, mib } = require("./engine/util");
+const { isNum, pad2, mib } = require("./engine/util");
 const Car = require("./kit/car");
 
 /** @typedef {import("./cluster_render_client.js").ClusterRender} Client */
@@ -486,9 +485,6 @@ const MAX_CONN = 4; // connections a layout may ask for ("conn"); 96 layers serv
 const PIXEL_BYTES = 16 * 1024 * 1024; // cluster-render's pixel memory for every app's images together (CompositorLimits.pixel_bytes)
 const SHEET_AREA_FRAC = 4; // the first sheet size limit: 1/4 of the target area (see the header)
 const TICK_MS = 50; // 20 Hz: shift bar and gauges
-const REGAL_NEEDLE_TAU_MS = 170; // Regal's fuel and pod needles ease toward a reading: settled in about 0.5 s
-const REGAL_SPEED_TAU_MS = 50; // its speed needle: about 0.15 s, so it keeps up with the digits
-const TEXT_MS = 200; // text re-draws at most 5 times a second (what BMW's own readouts do)
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset
 /** @type {Record<string, number[]>} */
 const TARGET_SIZES = { hud: [800, 480], panel: [1920, 720] };
@@ -2367,36 +2363,6 @@ class HudApp {
   }
 
   /**
-   * The glyph codes of a text in an atlas widget's cells, aligned; -1 is an empty cell.
-   * @param {WidgetState} x
-   * @param {*} s
-   * @returns {number[]} 32 codes
-   */
-  _atlasCodes(x, s) {
-    const a = x.atlas,
-      n = x.cells,
-      text = String(s).slice(0, n);
-    const pad = n - text.length,
-      w = x.w;
-    const lead =
-      w.align === "right"
-        ? pad
-        : w.align === "center"
-          ? Math.floor(pad / 2)
-          : 0;
-    const codes = [];
-    for (let i = 0; i < 32; i++) {
-      const j = i - lead;
-      const ch = j >= 0 && j < text.length ? text[j] : null;
-      const k = ch === null ? -1 : a.chars.indexOf(ch);
-      codes.push(
-        i < n && ch !== null ? (k < 0 ? a.chars.indexOf(" ") : k) : -1,
-      );
-    }
-    return codes;
-  }
-
-  /**
    * Runs fn, logging what it throws instead (see the header).
    * @param {string} what
    * @param {() => void} fn
@@ -3157,7 +3123,7 @@ class HudApp {
    * @returns {CfgPacker}
    */
   _cfgPacker(c, ref, type) {
-    const names = shaders.CFG[type] || [],
+    const names = (widgetTypes[type] && widgetTypes[type].cfg) || [],
       vals = {};
     return {
       u: (name, v, opts) => {
@@ -3960,17 +3926,13 @@ class HudApp {
         ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
       else {
         // a widget module's shader; null: it can't draw now (it said why)
-        const fs = mod
-          ? mod.shader(this, w, this._connOf(w))
-          : w.type === "rdash" && w.needleOnly
-            ? shaders.rdashNeedle
-            : shaders[w.type];
+        const fs = mod.shader(this, w, this._connOf(w));
         if (fs === null) return;
         ref = c.effect(
           Object.assign(
             {
               fs,
-              time: (mod && mod.time) || undefined,
+              time: mod.time || undefined,
             },
             base,
           ),
@@ -3992,232 +3954,7 @@ class HudApp {
       px: null,
     };
     this.widgets.set(w.id, x);
-    const t = this.theme;
-    if (mod) mod.create(this, w, x);
-    else if (w.type === "atext") {
-      const a = this._atlas(w.font, x.ci);
-      x.atlas = a;
-      x.cells = Math.max(
-        1,
-        Math.min(
-          32,
-          isNum(w.cells) ? Math.floor(w.cells) : Math.floor(w.w / a.cellW),
-        ),
-      );
-      c.bind(ref, "u_font", a.ref);
-      c.uniform(ref, "u_cells", [x.cells]);
-      c.uniform(ref, "u_grid", [a.cols, a.rows]);
-      c.uniform(ref, "u_color", rgba(color(t, w.color || "fg")));
-      c.uniform(ref, "u_text", this._atlasCodes(x, ""), { type: "vec4" });
-      if (w.w !== x.cells * a.cellW || w.h !== a.cellH) {
-        this.log.info(
-          'widget "' +
-            w.id +
-            '": ' +
-            x.cells +
-            " cells of " +
-            (w.w / x.cells).toFixed(1) +
-            "x" +
-            w.h +
-            " px; the glyphs keep their shape at w " +
-            x.cells * a.cellW +
-            ", h " +
-            a.cellH,
-        );
-      }
-    } else if (w.type === "odo") {
-      const a = this._atlas(w.font || "r_gl", x.ci);
-      x.atlas = a;
-      const dig = "0123456789"
-        .split("")
-        .map((ch) => Math.max(0, a.chars.indexOf(ch)))
-        .concat([0, 0]);
-      x.drums = Math.max(1, Math.min(8, w.drums || 6));
-      c.bind(ref, "u_font", a.ref);
-      c.uniform(ref, "u_grid", [a.cols, a.rows]);
-      c.uniform(ref, "u_dig", dig, { type: "vec4" });
-      c.uniform(ref, "u_color", rgba(color(t, w.color || "fg")));
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_odo", [
-        x.drums,
-        isNum(w.gap) ? w.gap : 2,
-        0,
-        isNum(w.frame) ? w.frame : 1,
-      ]);
-      c.uniform(ref, "u_drum", [0, 0, 0, 0, 0, 0, 0, 0], { type: "vec4" });
-    } else if (w.type === "sdash") {
-      const pk = this._cfgPacker(c, ref, "sdash");
-      pk.u("u_size", [w.w, w.h]);
-      pk.u("u_geo", w.geo);
-      pk.u("u_k", w.k);
-      pk.u("u_w", [w.band]);
-      pk.u("u_inner", [w.inner || w.band + 18]);
-      pk.u("u_scale", w.scale || [w.geo[2], w.geo[0]]);
-      pk.u("u_ticks", w.ticks);
-      const [redFrom, orange] = this._redMarks(w.rpmMax || 8000);
-      pk.u("u_redFrom", [redFrom]);
-      pk.u("u_orange", [orange]);
-      pk.u("u_fuelSeg", w.fuelSeg);
-      pk.u("u_oilSeg", w.oilSeg);
-      pk.u("u_hole", this._hole(w));
-      pk.u("u_holeR", [this._holeRadius(w)]);
-      pk.u(
-        "u_holeCut",
-        Array.isArray(w.holeCut) && w.holeCut.length === 4
-          ? w.holeCut
-          : [0, 0, 0, 0],
-      );
-      /** @type {(r: *) => number[]} */
-      const rel = (r) =>
-        Array.isArray(r) && r.length === 4
-          ? [r[0] - w.x, r[1] - w.y, r[2], r[3]]
-          : [0, 0, 0, 0];
-      pk.u("u_holeMask", rel(w.holeMask).concat(rel(w.holeOpen)), {
-        type: "vec4",
-      });
-      const hf =
-        Array.isArray(w.holeFade) && w.holeFade.length >= 4 ? w.holeFade : null;
-      pk.u(
-        "u_holeFade",
-        hf ? [hf[0] - w.x, hf[1] - w.y, hf[2], hf[3]] : [0, 0, 0, 0],
-      );
-      pk.u("u_holeFadeK", [
-        hf && isNum(hf[4]) ? hf[4] : 30,
-        hf && isNum(hf[5]) ? hf[5] : 0.85,
-      ]);
-      pk.u("u_strip", w.strip);
-      const gg =
-        w.gapGauge && Array.isArray(w.gapGauge.box) ? w.gapGauge.box : null;
-      pk.u(
-        "u_gapRail",
-        gg ? [gg[0] - w.x, gg[1] - w.y, gg[2], gg[3]] : [0, 0, 0, 0],
-      );
-      pk.u("u_gapG", [-1, 0]);
-      const vb = Array.isArray(w.vbars) ? w.vbars.slice(0, 2) : [];
-      [0, 1].forEach((i) => {
-        const b = vb[i] && Array.isArray(vb[i].box) ? vb[i] : null;
-        pk.u(
-          "u_vbar" + i,
-          b
-            ? [b.box[0] - w.x, b.box[1] - w.y, b.box[2], b.box[3]]
-            : [0, 0, 0, 0],
-        );
-        pk.u("u_vbarC" + i, rgb(color(t, (b && b.color) || "fg")));
-      });
-      pk.u("u_vbarV", [-1, -1]);
-      pk.u(
-        "u_stripFill",
-        Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0],
-      );
-      pk.u("u_stripRoute", [-1]);
-      pk.u("u_topEnd", [w.topEnd]);
-      pk.flush();
-    } else if (w.type === "rdash") {
-      const pk = this._cfgPacker(c, ref, "rdash");
-      /** @type {(r: *) => number[]} */
-      const o4 = (r) =>
-        Array.isArray(r) && r.length === 4
-          ? [r[0] - w.x, r[1] - w.y, r[2], r[3]]
-          : [0, 0, 0, 0];
-      const sp = w.spd || [0, 0, 0, 0],
-        sv = w.spdVirt || [300, 45];
-      pk.u("u_size", [w.w, w.h]);
-      [
-        "podL",
-        "podWin",
-        "ctr",
-        "win1",
-        "win2",
-        "vfdL",
-        "vfdR",
-        "led",
-        "led2",
-        "gearBox",
-        "lampB",
-      ].forEach((k) => {
-        pk.u("u_" + k, o4(w[k]));
-      });
-      pk.u("u_spd", [sp[0] - w.x, sp[1] - w.y, sp[2] - w.y, sp[3] - w.y]);
-      pk.u("u_spdVirt", [sv[0], (sv[1] * Math.PI) / 180]);
-      pk.u("u_spdK", [w.spdMid || 55, w.spdMax || 85, w.spdStep || 5]);
-      const fg = w.fuelG || [0, 0, 0, 0],
-        pg = w.podG || [0, 0, 0, 0],
-        ar = w.arrow || [0, 0, 0],
-        bi = w.batIcon || [-99, -99];
-      pk.u("u_fuelG", [fg[0] - w.x, fg[1] - w.y, fg[2], fg[3]]);
-      pk.u("u_podG", [pg[0] - w.x, pg[1] - w.y, pg[2], pg[3]]);
-      pk.u("u_arrow", [ar[0] - w.x, ar[1] - w.y, ar[2]]);
-      pk.u("u_batIcon", [bi[0] - w.x, bi[1] - w.y]);
-      if (w.needleOnly)
-        pk.u("u_speedV", [0]); // the needle's own layer: only the speed changes
-      else {
-        pk.u("u_gearV", [w.gearPitch || 0, -1]);
-        pk.u("u_lamps", [0, 0, 0, 0]);
-      }
-      pk.flush();
-    } else if (w.type === "mdash") {
-      const ty = w.tyres || [0, 0, 0],
-        L = w.gaugeL || {},
-        R = w.gaugeR || {},
-        b = w.blade || {};
-      const bars = Array.isArray(w.segbars) ? w.segbars.slice(0, 4) : [];
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_card", w.card || [0, 0, 0, 0]);
-      c.uniform(ref, "u_cardTop", w.cardTop || [0, 0, -99999]);
-      c.uniform(ref, "u_cardCutR", w.cardCutR || [0, 0, 0]);
-      c.uniform(ref, "u_cardFill", [isNum(w.cardFill) ? w.cardFill : 0]);
-      c.uniform(ref, "u_blade", [
-        isNum(b.xm) ? b.xm - w.x : 99999,
-        (b.ym || 0) - w.y,
-        b.kTop || 0,
-        b.kBot || 0,
-      ]);
-      c.uniform(ref, "u_bladeB", [
-        b.round || 40,
-        isNum(w.bladeGap) ? w.bladeGap : 14,
-      ]);
-      c.uniform(ref, "u_line", w.line || [0, -99, 0, 1]);
-      c.uniform(ref, "u_tyre", [ty[0] - w.x, ty[1] - w.y, ty[2] || 0]);
-      c.uniform(ref, "u_mark", w.mark || [0, 0, 0]);
-      c.uniform(ref, "u_red", rgb(t.hot));
-      [0, 1, 2, 3].forEach((i) => {
-        const s = bars[i];
-        c.uniform(
-          ref,
-          "u_seg" + i,
-          s ? [s.x - w.x, s.y - w.y, s.w, s.h] : [0, 0, 0, 0],
-        );
-      });
-      c.uniform(
-        ref,
-        "u_segMax",
-        [0, 1, 2, 3].map((i) => (bars[i] && bars[i].max) || 1),
-      );
-      c.uniform(ref, "u_segSlant", [isNum(w.segSlant) ? w.segSlant : 9]);
-      x.gauges = [
-        ["u_gaugeL", L],
-        ["u_gaugeR", R],
-      ];
-      x.bars = bars;
-    } else if (w.type === "mtach") {
-      const max = w.max || 8000,
-        [redFrom, orange] = this._redMarks(max);
-      const right = w.side === "right";
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_side", [right ? 1 : -1]);
-      c.uniform(ref, "u_geoA", [
-        w.y0 - w.y,
-        w.y8 - w.y,
-        w.ym - w.y,
-        right ? w.x + w.w - w.xm : w.xm - w.x,
-      ]);
-      c.uniform(ref, "u_geoB", [w.kTop, w.kBot, w.round || 40]);
-      c.uniform(ref, "u_wid", [w.wBot, w.wTop, w.wBend || 0]);
-      c.uniform(ref, "u_ticks", [max / 1000]);
-      c.uniform(ref, "u_orange", [orange]);
-      c.uniform(ref, "u_redFrom", [redFrom]);
-      c.uniform(ref, "u_red", rgb(t.hot));
-    }
+    mod.create(this, w, x);
     this._update(x, Date.now(), true);
   }
 
@@ -4297,278 +4034,7 @@ class HudApp {
    * @returns {void}
    */
   _update(x, now, force) {
-    const w = x.w;
-    const mod = widgetTypes[w.type];
-    if (mod) mod.update(this, x, now, force);
-    else if (w.type === "atext") {
-      if (!force && now - x.lastPaint < (w.rate || TEXT_MS)) return;
-      const s = this._resolve(w.text);
-      if (!force && s === x.last) return;
-      x.last = s;
-      x.lastPaint = now;
-      x.c.uniform(x.ref, "u_text", this._atlasCodes(x, s), { type: "vec4" });
-    } else if (w.type === "odo") {
-      // the drums of a mechanical odometer in the units setting's unit: the last turns with the distance, each other
-      // rolls over only through its lower neighbours' last unit (9 -> 0), as the gears of a real one
-      const km = this._odometer(now),
-        us = this.setting("units") === "us";
-      const n = x.drums,
-        drums = [0, 0, 0, 0, 0, 0, 0, 0];
-      if (isNum(km)) {
-        const v = (us ? km * 0.621371 : km) % Math.pow(10, n);
-        for (let k = 0; k < n; k++) {
-          const p = Math.pow(10, k),
-            lower = v % p;
-          const roll = k === 0 ? v % 1 : Math.max(0, lower - (p - 1));
-          drums[n - 1 - k] =
-            Math.round(((Math.floor(v / p) % 10) + roll) * 50) / 50;
-        }
-      }
-      const key = isNum(km) + "|" + drums.join(",");
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.c.uniform(x.ref, "u_odo", [
-        n,
-        isNum(w.gap) ? w.gap : 2,
-        isNum(km) ? 1 : 0,
-        isNum(w.frame) ? w.frame : 1,
-      ]);
-      x.c.uniform(x.ref, "u_drum", drums, { type: "vec4" });
-    } else if (w.type === "sdash") {
-      const us = this.setting("units") === "us";
-      const sp = this._raw("speed"),
-        rpm = this._raw("rpm"),
-        fuel = this._raw("fuel"),
-        oil = this._raw("oil");
-      /** @type {(v: number) => number} */
-      const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 500) / 500;
-      const vals = [
-        q(
-          isNum(sp)
-            ? scaleFrac(
-                us ? sp * 0.621371 : sp,
-                SPEED_SCALE[us ? "us" : "metric"],
-              )
-            : 0,
-        ),
-        q(isNum(rpm) ? rpm / (w.rpmMax || 8000) : 0),
-        q(isNum(fuel) ? fuel : 0),
-        // oil: 50..150 C with 110 (the B58's running temperature) at the bar's middle, each half linear
-        q(
-          isNum(oil)
-            ? oil <= 110
-              ? (0.5 * (oil - 50)) / 60
-              : 0.5 + (0.5 * (oil - 110)) / 40
-            : 0,
-        ),
-      ];
-      // the strip's two bars: each signal over its "stripMax", in 50 steps
-      const ss = Array.isArray(w.stripSignals) ? w.stripSignals : null,
-        sm = Array.isArray(w.stripMax) ? w.stripMax : [100, 10];
-      const strip = ss
-        ? [0, 1].map((i) => {
-            const v = ss[i] ? this._raw(ss[i]) : null;
-            return isNum(v)
-              ? Math.round(Math.min(1, Math.max(0, v / (sm[i] || 1))) * 50) / 50
-              : 0;
-          })
-        : null;
-      const hot = !!ss && w.stripHotWhen === "kickdown" && this._kickdown();
-      // the car-ahead gauge: the gap over its "max" m, in 300 steps; red while closing fast
-      const gm = w.gapGauge ? this._acc("gap") : null;
-      const gv = isNum(gm)
-        ? Math.round(
-            Math.min(1, Math.max(0, gm / (w.gapGauge.max || 150))) * 300,
-          ) / 300
-        : -1;
-      const gHot = gv >= 0 && this._closing();
-      // boost and battery boxes: each signal over its "range" [lo, hi], in 100 steps
-      const vbv =
-        Array.isArray(w.vbars) && w.vbars.length
-          ? [0, 1].map((i) => {
-              const b = w.vbars[i],
-                v = b && b.signal ? this._raw(b.signal) : null,
-                r = (b && b.range) || [0, 1];
-              return isNum(v)
-                ? Math.round(
-                    Math.min(1, Math.max(0, (v - r[0]) / (r[1] - r[0]))) * 100,
-                  ) / 100
-                : -1;
-            })
-          : null;
-      // while guiding, "routeStrip" turns the strip into the route's progress (filled from the right), in 400 steps
-      const rp = w.routeStrip ? this._routeProgress() : null;
-      const route = isNum(rp) ? Math.round(rp * 400) / 400 : -1;
-      const key =
-        vals.join("|") +
-        (strip ? "|" + strip.join("|") + (hot ? "h" : "") : "") +
-        (w.gapGauge ? "|" + gv + (gHot ? "c" : "") : "") +
-        (vbv ? "|" + vbv.join("|") : "") +
-        "|" +
-        route;
-      if (!force && key === x.last) return;
-      x.last = key;
-      if (w.gapGauge) x.c.uniform(x.ref, "u_gapG", [gv, gHot ? 1 : 0]);
-      if (vbv) x.c.uniform(x.ref, "u_vbarV", vbv);
-      if (strip)
-        x.c.uniform(x.ref, "u_stripFill", [strip[0], strip[1], hot ? 1 : 0]);
-      x.c.uniform(x.ref, "u_stripRoute", [route]);
-      x.c.uniform(x.ref, "u_speed", [vals[0]]);
-      x.c.uniform(x.ref, "u_rpm", [vals[1]]);
-      x.c.uniform(x.ref, "u_fuel", [vals[2]]);
-      x.c.uniform(x.ref, "u_oil", [vals[3]]);
-    } else if (w.type === "rdash") {
-      /** @type {(v: number) => number} */
-      const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 500) / 500;
-      const sp = this._raw("speed"),
-        rpm = this._raw("rpm"),
-        fuel = this._raw("fuel"),
-        max = w.rpmMax || 8000;
-      // the pods' gauges: each "podSignals" entry's signal over its range, bottom to top
-      const pods = [0, 1].map((i) => {
-        const g = (w.podSignals || [])[i],
-          v = g && g.signal ? this._raw(g.signal) : null,
-          r = (g && g.range) || [0, 1];
-        if (!isNum(v)) return 0; // no reading (the car off): the needle sweeps down to the bottom
-        // "mid": the value at the scale's middle mark (each half linear), e.g. the coolant's 110 C
-        const m = g && isNum(g.mid) ? g.mid : null;
-        if (m !== null)
-          return q(
-            v <= m
-              ? (0.5 * (v - r[0])) / (m - r[0])
-              : 0.5 + (0.5 * (v - m)) / (r[1] - m),
-          );
-        return q((v - r[0]) / (r[1] - r[0]));
-      });
-      const n = w.ledN || 16;
-      const led = isNum(rpm)
-        ? Math.floor((Math.max(0, rpm) / max) * n + 0.5) / n
-        : 0;
-      const shiftAt = Math.floor((this._shift().rpm / max) * n) / n;
-      // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
-      const n2 = w.led2N || 15,
-        r2 = w.led2Range || [0, 1.5],
-        b2 = this._raw(w.led2Signal || "boost");
-      const led2 = isNum(b2)
-        ? Math.floor(
-            Math.min(1, Math.max(0, (b2 - r2[0]) / (r2[1] - r2[0]))) * n2 + 0.5,
-          ) / n2
-        : 0;
-      const gi = this._regalGear();
-      const bl = this._brakeLamp(),
-        lamps = [
-          bl === "park" ? 1 : bl === "hold" ? 2 : 0,
-          this._turnLit("L") ? 1 : 0,
-          this._turnLit("R") ? 1 : 0,
-          this._cruiseLit() ? 1 : 0,
-        ];
-      // speed on the 0..spdMax mph scale with spdMid at its middle, each half linear
-      const mid = w.spdMid || 55,
-        top = w.spdMax || 85,
-        mph = isNum(sp) ? Math.max(0, sp * 0.621371) : 0;
-      // below the first mark ("spdStep", 5 mph) the needle drops to its rest under the row ("spdRest" deg past the 0, 12)
-      const st = w.spdStep || 5,
-        half = (w.spdVirt || [300, 45])[1],
-        rest = -(isNum(w.spdRest) ? w.spdRest : 12) / (2 * half);
-      const f5 = (0.5 * st) / mid;
-      let f =
-        mph <= mid
-          ? (0.5 * mph) / mid
-          : 0.5 + (0.5 * (mph - mid)) / (top - mid);
-      if (mph < st) f = rest + ((f5 - rest) * mph) / st;
-      // the needles ease toward their readings (as Miku's lean: 1 - exp(-dt / tau), the same at any tick rate), so
-      // they sweep instead of jumping, down to their rest when a reading goes (the car off) and up from it at the start
-      const dt = x.at ? Math.min(500, now - x.at) : 0;
-      x.at = now;
-      /** @type {(prev: ?number, to: number, tau: number) => number} */
-      const ease = (prev, to, tau) =>
-        isNum(prev) ? prev + (to - prev) * (1 - Math.exp(-dt / tau)) : to;
-      const fTo = Math.min(1, Math.max(-0.5, f)),
-        fuelTo = Math.min(1, Math.max(0, isNum(fuel) ? fuel : 0));
-      if (!x.ez) x.ez = { f: rest, fuel: 0, pods: [0, 0] }; // from rest, as a gauge powering up
-      x.ez.f = ease(x.ez.f, fTo, REGAL_SPEED_TAU_MS);
-      x.ez.fuel = ease(x.ez.fuel, fuelTo, REGAL_NEEDLE_TAU_MS);
-      x.ez.pods = pods.map((v, i) =>
-        ease(x.ez.pods[i], v, REGAL_NEEDLE_TAU_MS),
-      );
-      // within half a step of the reading: there (so the messages stop once a needle settles)
-      /** @type {(e: number, to: number) => number} */
-      const snap = (e, to) => (Math.abs(e - to) < 0.001 ? to : e);
-      x.ez.f = snap(x.ez.f, fTo);
-      x.ez.fuel = snap(x.ez.fuel, fuelTo);
-      x.ez.pods = x.ez.pods.map((e, i) => snap(e, pods[i]));
-      pods.splice(0, 2, q(x.ez.pods[0]), q(x.ez.pods[1]));
-      const vals = [Math.round(x.ez.f * 500) / 500, q(x.ez.fuel)];
-      if (w.needleOnly) {
-        // the speed needle's own layer (over the text): only its speed
-        if (!force && vals[0] === x.last) return;
-        x.last = vals[0];
-        x.c.uniform(x.ref, "u_speedV", [vals[0]]);
-        return;
-      }
-      const key =
-        vals.join("|") +
-        "|" +
-        pods.join("|") +
-        "|" +
-        led +
-        "|" +
-        shiftAt +
-        "|" +
-        led2 +
-        "|" +
-        gi +
-        "|" +
-        lamps.join("");
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.c.uniform(x.ref, "u_speedV", [vals[0]]);
-      x.c.uniform(x.ref, "u_fuelV", [vals[1]]);
-      x.c.uniform(x.ref, "u_podV", pods);
-      x.c.uniform(x.ref, "u_ledV", [n, led, shiftAt]);
-      x.c.uniform(x.ref, "u_led2V", [n2, led2]);
-      x.c.uniform(x.ref, "u_gearV", [w.gearPitch || 0, gi]);
-      x.c.uniform(x.ref, "u_lamps", lamps);
-    } else if (w.type === "mdash") {
-      const vals = x.gauges.map(([u, G]) => {
-        const v = G.signal ? this._raw(G.signal) : null;
-        return [
-          u,
-          G,
-          isNum(v)
-            ? Math.round(
-                Math.min(1, Math.max(0, (v - G.min) / (G.max - G.min))) * 200,
-              ) / 200
-            : 0,
-        ];
-      });
-      // the setup level bars: the segment at round(signal) is lit (1-based; 0 = none)
-      const lit = [0, 1, 2, 3].map((i) => {
-        const s = x.bars[i],
-          v = s && s.signal ? this._raw(s.signal) : null;
-        return s && isNum(v)
-          ? Math.max(0, Math.min(s.max || 1, Math.round(v)))
-          : 0;
-      });
-      const key = vals.map((v) => v[2]).join("|") + "|" + lit.join("|");
-      if (!force && key === x.last) return;
-      x.last = key;
-      vals.forEach(([u, G, v]) =>
-        x.c.uniform(x.ref, u, [G.cx || 0, G.cy || 0, G.r || 0, v]),
-      );
-      x.c.uniform(x.ref, "u_segLit", lit);
-    } else if (w.type === "mtach") {
-      const rpm = this._raw("rpm"),
-        sp = this._shift();
-      const v = isNum(rpm)
-        ? Math.min(1, Math.max(0, rpm / (w.max || 8000)))
-        : 0;
-      const key = Math.round(v * 600) + "|" + sp.now;
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.c.uniform(x.ref, "u_value", [v]);
-      x.c.uniform(x.ref, "u_shiftNow", [sp.now ? 1 : 0]);
-    }
+    widgetTypes[x.w.type].update(this, x, now, force);
   }
 }
 

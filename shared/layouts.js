@@ -22,38 +22,13 @@ const visible = require("./visible");
  * @property {import("./hud").Widget[]} widgets
  */
 
+const widgetTypes = require("./widgets");
+
 /**
- * The widget types and the fields each must have.
+ * The widget types and the fields each must have (each module's "fields", shared/widgets).
  * @type {Record<string, string[]>}
  */
-const LEGACY_TYPES = {
-  text: ["text", "font"],
-  scale: ["font"],
-  stripe: [],
-  shiftbar: [],
-  arc: ["signal", "min", "max"],
-  revbar: ["barH"],
-  lights: [],
-  badge: ["text", "font", "tone"],
-  fill: [],
-  box: [],
-  grid: [],
-  gridlabels: ["font"],
-  segbar: ["signal", "max"],
-  mdash: [],
-  sdash: ["geo", "k", "band", "ticks", "fuelSeg", "oilSeg", "strip", "topEnd"],
-  rdash: ["spd", "podL", "ctr"],
-  mtach: ["side", "y0", "y8", "ym", "xm", "kTop", "kBot", "wBot", "wTop"],
-  icon: ["icon"],
-  swatch: [],
-  swatchimg: [],
-  boxes: ["boxes"],
-  atext: ["text", "font"],
-  odo: [],
-};
-const widgetTypes = require("./widgets");
-/** @type {Record<string, string[]>} */
-const TYPES = Object.assign({}, LEGACY_TYPES);
+const TYPES = {};
 Object.keys(widgetTypes).forEach((t) => {
   TYPES[t] = widgetTypes[t].fields;
 });

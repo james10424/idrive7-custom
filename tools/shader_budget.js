@@ -192,9 +192,8 @@ if (require.main === module) {
     return resolve.call(this, req, parent, ...rest);
   };
   const widgets = require("../shared/widgets");
-  const shaders = require("../shared/shaders");
-  /** @type {Record<string, string>} every widget type's shaders (its "shaders"), its own first */
-  const all = Object.assign({}, shaders, { rdashNeedle: shaders.rdashNeedle });
+  /** @type {Record<string, string>} every widget type's shaders (its module's "shaders") */
+  const all = {};
   Object.keys(widgets).forEach((t) =>
     Object.assign(all, widgets[t].shaders || {}),
   );

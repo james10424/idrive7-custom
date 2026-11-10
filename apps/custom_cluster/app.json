@@ -12,7 +12,6 @@
     "hud_data.js",
     "hud_themes.js",
     "layouts.js",
-    "shaders.js",
     "shift_score.js",
     "sun.js",
     "cluster_render_client.js",
