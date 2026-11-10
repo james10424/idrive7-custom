@@ -224,7 +224,7 @@
 const fs = require("fs");
 const { ClusterRender, DEFAULT_PATH } = require("./cluster_render_client.js");
 const Layouts = require("./layouts");
-const { THEMES, LIGHTS, color } = require("./hud_themes");
+const { THEMES, color } = require("./hud_themes");
 const ShiftScore = require("./shift_score");
 const sun = require("./sun");
 const textRaster = require("./hud_text");
@@ -4217,116 +4217,6 @@ class HudApp {
       c.uniform(ref, "u_orange", [orange]);
       c.uniform(ref, "u_redFrom", [redFrom]);
       c.uniform(ref, "u_red", rgb(t.hot));
-    } else if (w.type === "shiftbar") {
-      const max = this._barMax(),
-        red = this.setting("redline");
-      const midAt = t.bar.midAt === "shift" ? (red - 1500) / max : t.bar.midAt;
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_segs", [w.segments || 40]);
-      c.uniform(ref, "u_low", rgb(t.bar.low));
-      c.uniform(ref, "u_mid", rgb(t.bar.mid));
-      c.uniform(ref, "u_high", rgb(t.bar.high));
-      c.uniform(ref, "u_midAt", [midAt]);
-      c.uniform(ref, "u_highAt", [(red - 500) / max]);
-      c.uniform(ref, "u_track", rgba(t.track));
-      c.uniform(ref, "u_flash", [0]);
-    } else if (w.type === "arc") {
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_color", rgb(color(t, w.color || "arc")));
-      c.uniform(ref, "u_track", rgba(t.track));
-      c.uniform(ref, "u_width", [w.width || 7]);
-      c.uniform(ref, "u_start", [
-        ((w.start === undefined ? 225 : w.start) * Math.PI) / 180,
-      ]);
-      c.uniform(ref, "u_sweep", [
-        ((w.sweep === undefined ? 270 : w.sweep) * Math.PI) / 180,
-      ]);
-    } else if (w.type === "segbar") {
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_segs", [w.max]);
-      c.uniform(ref, "u_on", rgba(color(t, w.color || "hot")));
-      c.uniform(ref, "u_offC", rgba(color(t, "track")));
-      c.uniform(ref, "u_slant", [w.slant || 0]);
-      c.uniform(ref, "u_gap", [isNum(w.gap) ? w.gap : 8]);
-      c.uniform(ref, "u_hotSeg", [-1]);
-      c.uniform(ref, "u_hotC", rgba(color(t, w.hotColor || "hot")));
-    } else if (w.type === "revbar") {
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_top", [w.top || 8]);
-      c.uniform(ref, "u_barH", [w.barH]);
-      c.uniform(ref, "u_slant", [w.slant || 12]);
-      c.uniform(ref, "u_max", [this._barMax(w)]);
-      c.uniform(ref, "u_red", [this.setting("redline")]);
-      c.uniform(ref, "u_from", rgb(t.rev.from));
-      c.uniform(ref, "u_to", rgb(t.rev.to));
-      c.uniform(ref, "u_hot", rgb(t.hot));
-      c.uniform(ref, "u_track", rgba(t.track));
-      c.uniform(ref, "u_tick", rgba(t.dim));
-      c.uniform(ref, "u_fg", rgba(t.fg));
-    } else if (w.type === "lights") {
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_n", [w.count || 12]);
-      c.uniform(ref, "u_tail", [w.tail || 0]);
-      c.uniform(ref, "u_round", [w.round ? 1 : 0]);
-      c.uniform(ref, "u_green", rgb(LIGHTS.green));
-      c.uniform(ref, "u_yellow", rgb(LIGHTS.yellow));
-      c.uniform(ref, "u_red", rgb(LIGHTS.red));
-      c.uniform(ref, "u_blue", rgb(LIGHTS.blue));
-      c.uniform(ref, "u_off", [w.off === undefined ? 0.14 : w.off]);
-    } else if (w.type === "fill") {
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_color", rgba(color(t, w.color || "bg")));
-      c.uniform(ref, "u_hole", this._hole(w));
-      c.uniform(ref, "u_holeR", [this._holeRadius(w)]);
-    } else if (w.type === "box") {
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_fill", rgba(color(t, w.fill || "panel")));
-      c.uniform(ref, "u_line", rgba(color(t, w.line || "line")));
-      c.uniform(ref, "u_head", rgba(color(t, w.headColor || "head")));
-      c.uniform(ref, "u_headH", [w.head || 0]);
-      c.uniform(ref, "u_border", [w.border === undefined ? 2 : w.border]);
-      c.uniform(ref, "u_radius", [w.radius || 0]);
-    } else if (w.type === "boxes") {
-      // the box list goes up as two vec4 arrays (x, y, w, h and headH, border, radius, headKind), 12 slots
-      const list = (Array.isArray(w.boxes) ? w.boxes : [])
-        .filter(
-          (b) =>
-            b &&
-            isNum(b.x) &&
-            isNum(b.y) &&
-            isNum(b.w) &&
-            isNum(b.h) &&
-            !(b.toggle && !this._toggleOn(b.toggle)),
-        )
-        .slice(0, 12);
-      const rects = [],
-        styles = [];
-      for (let i = 0; i < 12; i++) {
-        const b = list[i];
-        rects.push(
-          b ? b.x - w.x : 0,
-          b ? b.y - w.y : 0,
-          b ? b.w : 0,
-          b ? b.h : 0,
-        );
-        styles.push(
-          b ? b.head || 0 : 0,
-          b ? (b.border === undefined ? 2 : b.border) : 0,
-          b ? b.radius || 0 : 0,
-          b && b.headColor === "accent" ? 1 : 0,
-        );
-      }
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_bg", rgba(color(t, w.color || "bg")));
-      c.uniform(ref, "u_hole", this._hole(w));
-      c.uniform(ref, "u_holeR", [this._holeRadius(w)]);
-      c.uniform(ref, "u_n", [list.length]);
-      c.uniform(ref, "u_box", rects, { type: "vec4" });
-      c.uniform(ref, "u_boxStyle", styles, { type: "vec4" });
-      c.uniform(ref, "u_fill", rgba(color(t, w.fill || "panel")));
-      c.uniform(ref, "u_line", rgba(color(t, w.line || "line")));
-      c.uniform(ref, "u_head", rgba(color(t, w.head || "head")));
-      c.uniform(ref, "u_accent", rgba(color(t, w.accent || "accent")));
     }
     this._update(x, Date.now(), true);
   }
@@ -4444,25 +4334,6 @@ class HudApp {
         isNum(w.frame) ? w.frame : 1,
       ]);
       x.c.uniform(x.ref, "u_drum", drums, { type: "vec4" });
-    } else if (w.type === "shiftbar") {
-      const rpm = this._raw("rpm");
-      const segs = w.segments || 40;
-      const v = isNum(rpm) ? Math.min(1, Math.max(0, rpm / this._barMax())) : 0;
-      const q = Math.round(v * segs * 2) / (segs * 2); // only resend on half-segment steps
-      const key = q + (this.flash ? "f" : "");
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.c.uniform(x.ref, "u_value", [q]);
-      x.c.uniform(x.ref, "u_flash", [this.flash ? 1 : 0]);
-    } else if (w.type === "arc") {
-      const raw = this._raw(w.signal);
-      const v = isNum(raw)
-        ? Math.min(1, Math.max(0, (raw - w.min) / (w.max - w.min)))
-        : 0;
-      const q = Math.round(v * 200) / 200;
-      if (!force && q === x.last) return;
-      x.last = q;
-      x.c.uniform(x.ref, "u_value", [q]);
     } else if (w.type === "sdash") {
       const us = this.setting("units") === "us";
       const sp = this._raw("speed"),
@@ -4697,45 +4568,6 @@ class HudApp {
       x.last = key;
       x.c.uniform(x.ref, "u_value", [v]);
       x.c.uniform(x.ref, "u_shiftNow", [sp.now ? 1 : 0]);
-    } else if (w.type === "segbar") {
-      let v = this._raw(w.signal);
-      if (isNum(v) && Array.isArray(w.range) && w.range.length === 2)
-        v = ((v - w.range[0]) / (w.range[1] - w.range[0])) * w.max;
-      const lit = isNum(v) ? Math.max(0, Math.min(w.max, Math.round(v))) : 0;
-      const hot = w.hotWhen === "kickdown" && this._kickdown() && lit === w.max; // the last segment in "hotColor"
-      const key = lit + (hot ? "h" : "");
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.c.uniform(x.ref, "u_lit", [lit]);
-      x.c.uniform(x.ref, "u_hotSeg", [hot ? w.max - 1 : -1]);
-    } else if (w.type === "revbar") {
-      const rpm = this._raw("rpm"),
-        sp = this._shift();
-      const v = isNum(rpm) ? Math.round(Math.max(0, rpm) / 10) * 10 : 0;
-      const peak = Math.round(this.score.peak / 10) * 10;
-      const key = v + "|" + sp.rpm + "|" + peak + "|" + sp.now;
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.c.uniform(x.ref, "u_value", [v]);
-      x.c.uniform(x.ref, "u_shift", [sp.rpm]);
-      x.c.uniform(x.ref, "u_peak", [peak]);
-      x.c.uniform(x.ref, "u_shiftNow", [sp.now ? 1 : 0]);
-    } else if (w.type === "lights") {
-      const rpm = this._raw("rpm"),
-        sp = this._shift(),
-        n = w.count || 12;
-      // the lights fill from "from" rpm (3000) up to the shift point; a "from" at or past it means the last 500 rpm
-      const from = Math.min(isNum(w.from) ? w.from : 3000, sp.rpm - 500);
-      const lit = isNum(rpm)
-        ? Math.floor(
-            Math.min(1, Math.max(0, (rpm - from) / (sp.rpm - from))) * n,
-          )
-        : 0;
-      const key = lit + "|" + sp.now;
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.c.uniform(x.ref, "u_lit", [lit]);
-      x.c.uniform(x.ref, "u_strobe", [sp.now ? 1 : 0]);
     }
   }
 }

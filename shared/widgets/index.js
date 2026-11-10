@@ -25,6 +25,14 @@ const TYPES = {
   gridlabels: require("./grid/labels"),
   swatch: require("./swatch"),
   swatchimg: require("./swatch/image"),
+  shiftbar: require("./shiftbar"),
+  arc: require("./arc"),
+  revbar: require("./revbar"),
+  lights: require("./lights"),
+  segbar: require("./segbar"),
+  fill: require("./fill"),
+  box: require("./box"),
+  boxes: require("./boxes"),
   miku: require("./miku"),
 };
 
