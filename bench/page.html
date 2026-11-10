@@ -292,27 +292,22 @@
   const bmwState = { nav: null, assist: null };   // route guidance and the ACC block, as the server last sent them
   function drawBmwHud() {
     const kmh = lastValues.speed, useMiles = units === 'us';
-    if (hudNavPhoto() && document.getElementById('road').checked) {   // the photo shows BMW's guidance, speed and sign
-      if (bmwState.assist === 'acc') drawBmwAcc(useMiles);
-      if (document.getElementById('outlines').checked) labelBox("BMW's HUD (photo)", 150, 296, '#ff8c1a');
-      return;
-    }
     const speed = typeof kmh === 'number' && isFinite(kmh) ? Math.round(useMiles ? kmh * 0.621371 : kmh) : null;
     const limit = useMiles ? (speed !== null && speed > 45 ? 65 : 35) : (speed !== null && speed > 70 ? 100 : 50);
-    // the sign: a light rounded square with the limit, the unit under it
+    // the sign: a light rounded rectangle with the limit, the unit under it (HUD photo, Nov 9 2026: x 155..201, y 316..378)
     ctx.fillStyle = 'rgba(236,230,200,.92)';
-    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(152, 320, 50, 54, 5) : ctx.rect(152, 320, 50, 54); ctx.fill();
-    ctx.strokeStyle = 'rgba(40,40,40,.6)'; ctx.lineWidth = 2; ctx.strokeRect(156, 324, 42, 46);
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(155, 316, 46, 62, 5) : ctx.rect(155, 316, 46, 62); ctx.fill();
+    ctx.strokeStyle = 'rgba(40,40,40,.6)'; ctx.lineWidth = 2; ctx.strokeRect(159, 320, 38, 54);
     ctx.fillStyle = '#222'; ctx.textAlign = 'center';
-    ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText(String(limit), 177, 352);
-    ctx.font = '10px -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 177, 365);
-    // the speed: white digits right-aligned under the unit, a line from the sign to the unit (HUD photo, Nov 9 2026:
-    // unit and digits end at x ~308, the line runs x 212..268 at y 330)
+    ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText(String(limit), 178, 350);
+    ctx.font = '10px -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 178, 366);
+    // the speed: white digits right-aligned under the unit, a line from the sign toward the unit (HUD photo, Nov 9 2026:
+    // the unit ends at x 309 with its baseline at 341, the digits at 307 / 377, the line runs x 212..271 at y 330)
     ctx.textAlign = 'right'; ctx.fillStyle = '#f4f4f0';
-    ctx.font = 'bold 38px -apple-system, Helvetica, sans-serif'; ctx.fillText(speed === null ? '--' : String(speed), 308, 376);
-    ctx.font = 'bold 13px -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 308, 334);
-    ctx.strokeStyle = 'rgba(244,244,240,.8)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(212, 330); ctx.lineTo(268, 330); ctx.stroke();
+    ctx.font = 'bold 34px "Arial Narrow", -apple-system, Helvetica, sans-serif'; ctx.fillText(speed === null ? '--' : String(speed), 307, 377);
+    ctx.font = 'bold 16px "Arial Narrow", -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 309, 341);
+    ctx.strokeStyle = 'rgba(244,244,240,.85)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(212, 330); ctx.lineTo(271, 330); ctx.stroke();
     ctx.textAlign = 'left';
     const acc = bmwState.assist === 'acc', nav = bmwState.nav === 'ACTIVE';
     if (acc) drawBmwAcc(useMiles);
@@ -338,26 +333,37 @@
     ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(283, 286, 14, 0, 7); ctx.stroke();      // the steering wheel
     ctx.beginPath(); ctx.moveTo(269, 286); ctx.lineTo(297, 286); ctx.moveTo(283, 286); ctx.lineTo(283, 300); ctx.stroke();
   }
-  // BMW's route guidance (HUD photos, Nov 7 2026): a line across the window at y ~160 with the street name above its right
-  // end, the turn map below it from x0 (~312; ~385 when the ACC block is up) to the window's right edge, the distance in
-  // its bottom right
+  // BMW's route guidance as its HUD draws it (HUD photo at Ellesmere Rd, Nov 9 2026, warped to HUD px): a line across the
+  // window at y ~160 with the street name above its right end, the turn map below it from x0 (~312; ~385 when the ACC
+  // block is up) to the window's right edge, the route in thick white with the turn's arrowhead, the car in orange, and the
+  // distance in the bottom right
+  const GUIDE_ROADS = [   // the main roads round the turn, HUD px
+    [451, 230, 600, 200], [440, 167, 446, 226], [540, 214, 562, 345], [459, 329, 586, 306], [315, 275, 435, 259],
+    [337, 275, 348, 380], [315, 237, 357, 230], [315, 302, 337, 299], [315, 325, 338, 321], [315, 346, 339, 342], [316, 367, 340, 365]];
+  const GUIDE_STREETS = [   // the side streets, thinner and dimmer
+    [499, 186, 512, 255], [414, 198, 418, 246], [507, 233, 516, 279], [524, 213, 529, 258], [466, 176, 470, 216], [575, 176, 582, 222],
+    [509, 280, 552, 269], [416, 264, 469, 263], [411, 359, 460, 351], [415, 366, 462, 372], [545, 367, 598, 364], [470, 247, 532, 236],
+    [372, 268, 381, 330], [400, 266, 404, 322], [372, 300, 438, 296]];
   function drawBmwGuidance(x0) {
     const fgColor = '#efece0', x1 = 599;
-    ctx.strokeStyle = fgColor; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(126, 160); ctx.lineTo(x1, 160); ctx.stroke();
-    ctx.fillStyle = fgColor; ctx.textAlign = 'right'; ctx.font = 'bold 17px -apple-system, Helvetica, sans-serif';
-    ctx.fillText('Ellesmere Rd', x1, 152);
-    ctx.save(); ctx.beginPath(); ctx.rect(x0, 166, x1 - x0, 210); ctx.clip();
-    ctx.strokeStyle = 'rgba(239,236,224,.55)'; ctx.lineWidth = 1.5;                    // side streets
-    for (let i = 0; i < 9; i++) { ctx.beginPath(); ctx.moveTo(x0 + i * 34, 166); ctx.lineTo(x0 + i * 34 + 18, 376); ctx.stroke(); }
-    for (let j = 0; j < 5; j++) { ctx.beginPath(); ctx.moveTo(x0, 190 + j * 40); ctx.lineTo(x1, 182 + j * 40); ctx.stroke(); }
-    const midX = Math.round((x0 + x1) / 2);
-    ctx.strokeStyle = fgColor; ctx.lineWidth = 6;                                             // the route and the turn
-    ctx.beginPath(); ctx.moveTo(midX, 376); ctx.lineTo(midX, 236); ctx.lineTo(x0 + 6, 236); ctx.stroke();
-    ctx.fillStyle = fgColor; ctx.beginPath(); ctx.moveTo(x0 + 2, 236); ctx.lineTo(x0 + 18, 226); ctx.lineTo(x0 + 18, 246); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#ff8a1a'; ctx.beginPath(); ctx.moveTo(midX, 228); ctx.lineTo(midX - 8, 246); ctx.lineTo(midX + 8, 246); ctx.closePath(); ctx.fill();   // the car
-    ctx.restore();
-    ctx.fillStyle = fgColor; ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText('20 m', x1, 372);
+    ctx.strokeStyle = fgColor; ctx.lineWidth = 3; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(125, 161); ctx.lineTo(x1, 160); ctx.stroke();
+    ctx.fillStyle = fgColor; ctx.textAlign = 'right'; ctx.font = 'bold 30px "Arial Narrow", -apple-system, Helvetica, sans-serif';
+    ctx.fillText('Ellesmere Rd', 590, 146);
+    ctx.save(); ctx.beginPath(); ctx.rect(x0, 166, x1 + 1 - x0, 214); ctx.clip();
+    const segs = (list, width, color) => {
+      ctx.strokeStyle = color; ctx.lineWidth = width;
+      list.forEach(([ax, ay, bx, by]) => { ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); });
+    };
+    segs(GUIDE_STREETS, 1.2, 'rgba(239,236,224,.5)');
+    segs(GUIDE_ROADS, 2.5, 'rgba(239,236,224,.9)');
+    // the route: up from the bottom to the turn, then left; its arrowhead points the way
+    ctx.strokeStyle = fgColor; ctx.lineWidth = 7; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(456, 380); ctx.lineTo(444, 236); ctx.lineTo(314, 259); ctx.stroke();
+    ctx.fillStyle = fgColor; ctx.beginPath(); ctx.moveTo(402, 240); ctx.lineTo(421, 229); ctx.lineTo(423, 248); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff8a1a'; ctx.beginPath(); ctx.moveTo(443, 241); ctx.lineTo(434, 262); ctx.lineTo(452, 262); ctx.closePath(); ctx.fill();   // the car
+    ctx.restore(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+    ctx.fillStyle = fgColor; ctx.font = 'bold 36px "Arial Narrow", -apple-system, Helvetica, sans-serif'; ctx.fillText('20m', x1, 374);
     ctx.textAlign = 'left';
   }
   /** A display per app ({ id, view } from the server's hello), in the server's order; the first reuses canvas#hud. */
@@ -385,12 +391,7 @@
     dirty = true;
   }
   const appBlock = (id) => document.querySelector('#screens .appblock[data-app="' + id + '"]') || document.querySelector('#screens .appblock');
-  // the HUD in route guidance: a photo through the windshield warped to the HUD's 800x480 (bench/.data/backdrops/hud-nav.jpg,
-  // car photo, Nov 9 2026); it holds BMW's own guidance, speed and sign, so drawBmwHud leaves those out over it
-  const hudNavPhoto = () => bmwState.nav === 'ACTIVE' && stockPhotos['hud-nav'];
   function drawRoad() {
-    const photo = hudNavPhoto();
-    if (photo) { ctx.drawImage(photo, 0, 0, 800, 480); return; }
     const gradient = ctx.createLinearGradient(0, 0, 0, 480);
     gradient.addColorStop(0, '#2a3340'); gradient.addColorStop(0.45, '#56606b'); gradient.addColorStop(0.46, '#2b2d30'); gradient.addColorStop(1, '#151618');
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, 800, 480);
@@ -440,7 +441,7 @@
   // (the M340i badge; no trip computer text either way: car photos Nov 9 2026); stock-map.jpg, BMW's ordinary view,
   // when those are missing; then the drawn stand-in below
   const stockPhotos = {};
-  ['stock-map', 'stock-sport', 'stock-nav', 'stock-acc', 'hud-nav'].forEach((name) => {
+  ['stock-map', 'stock-sport', 'stock-nav', 'stock-acc'].forEach((name) => {
     const img = new Image();
     img.onload = () => { stockPhotos[name] = img; dirty = true; };
     img.src = '/backdrop/' + name + '.jpg';
