@@ -224,13 +224,11 @@
 const fs = require("fs");
 const { ClusterRender, DEFAULT_PATH } = require("./cluster_render_client.js");
 const Layouts = require("./layouts");
-const { THEMES, M_STRIPE, LIGHTS, VERDICT, color } = require("./hud_themes");
+const { THEMES, LIGHTS, color } = require("./hud_themes");
 const ShiftScore = require("./shift_score");
 const sun = require("./sun");
 const textRaster = require("./hud_text");
-const { paintIcon } = require("./icons");
 const shaders = require("./shaders");
-const calibration = require("./calibration");
 const widgetTypes = require("./widgets");
 const { isNum, rgb, rgba, pad2, mib } = require("./engine/util");
 const Car = require("./kit/car");
@@ -476,17 +474,12 @@ const Car = require("./kit/car");
  */
 
 const BOOST_SCALE = { factor: 0.01, offset: 0, invalid: 255 }; // see header comment
-// the widget types drawn as pixels (image layers, packed into sheets unless "own": true); the rest are shaders
-/** @type {Record<string, boolean>} */
-const IMAGE_TYPES = {
-  text: true,
-  scale: true,
-  stripe: true,
-  badge: true,
-  gridlabels: true,
-  icon: true,
-  swatchimg: true,
-};
+/**
+ * Drawn as pixels (an image layer), not a shader.
+ * @param {string} type
+ * @returns {boolean}
+ */
+const isImage = (type) => !!(widgetTypes[type] && widgetTypes[type].image);
 const STATUS_ASK_MS = 2000; // after a rebuild: ask cluster-render for its own status text
 const LAYER_BUDGET = 64; // cluster-render's limit per client connection (CompositorLimits.per_client: 8 until 0.4.2, 64 since)
 const MAX_CONN = 4; // connections a layout may ask for ("conn"); 96 layers service-wide, 64 per connection
@@ -3663,7 +3656,7 @@ class HudApp {
         px += e.w * e.h * 8;
         this._guard("sheet " + e.members[0].id, () => this._createSheet(e));
       } else {
-        if (IMAGE_TYPES[e.w.type]) {
+        if (isImage(e.w.type)) {
           own++;
           px += e.w.w * e.w.h * 8;
         } else effects++;
@@ -3768,7 +3761,7 @@ class HudApp {
       const klass = w.class || "content",
         z = w.z || 0,
         conn = this._connOf(w);
-      if (!IMAGE_TYPES[w.type] || w.own === true) {
+      if (!isImage(w.type) || w.own === true) {
         plan.push({ kind: "layer", w, klass, z, conn });
         return;
       }
@@ -3963,17 +3956,15 @@ class HudApp {
         w: w.w,
         h: w.h,
       };
-      if (IMAGE_TYPES[w.type])
+      if (isImage(w.type))
         ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
       else {
         // a widget module's shader; null: it can't draw now (it said why)
         const fs = mod
           ? mod.shader(this, w, this._connOf(w))
-          : w.type === "swatch"
-            ? calibration.SWATCH
-            : w.type === "rdash" && w.needleOnly
-              ? shaders.rdashNeedle
-              : shaders[w.type];
+          : w.type === "rdash" && w.needleOnly
+            ? shaders.rdashNeedle
+            : shaders[w.type];
         if (fs === null) return;
         ref = c.effect(
           Object.assign(
@@ -4054,14 +4045,7 @@ class HudApp {
         isNum(w.frame) ? w.frame : 1,
       ]);
       c.uniform(ref, "u_drum", [0, 0, 0, 0, 0, 0, 0, 0], { type: "vec4" });
-    } else if (w.type === "gridlabels") this._paintGridLabels(x);
-    else if (w.type === "icon")
-      this._blit(
-        x,
-        null,
-        paintIcon(w.icon, w.w, w.h, color(t, w.color || "fg")),
-      );
-    else if (w.type === "sdash") {
+    } else if (w.type === "sdash") {
       const pk = this._cfgPacker(c, ref, "sdash");
       pk.u("u_size", [w.w, w.h]);
       pk.u("u_geo", w.geo);
@@ -4233,15 +4217,7 @@ class HudApp {
       c.uniform(ref, "u_orange", [orange]);
       c.uniform(ref, "u_redFrom", [redFrom]);
       c.uniform(ref, "u_red", rgb(t.hot));
-    } else if (w.type === "grid") {
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_step", [w.step || 50]);
-      c.uniform(ref, "u_major", [w.major || 2]);
-      c.uniform(ref, "u_minor", rgba([255, 255, 255, 90]));
-      c.uniform(ref, "u_majorC", rgba([0, 255, 140, 255]));
-    } else if (w.type === "stripe") this._paintStripe(x);
-    else if (w.type === "scale") this._paintScale(x);
-    else if (w.type === "shiftbar") {
+    } else if (w.type === "shiftbar") {
       const max = this._barMax(),
         red = this.setting("redline");
       const midAt = t.bar.midAt === "shift" ? (red - 1500) / max : t.bar.midAt;
@@ -4310,12 +4286,7 @@ class HudApp {
       c.uniform(ref, "u_headH", [w.head || 0]);
       c.uniform(ref, "u_border", [w.border === undefined ? 2 : w.border]);
       c.uniform(ref, "u_radius", [w.radius || 0]);
-    } else if (w.type === "swatch") {
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_n", [w.steps || 11]);
-    } else if (w.type === "swatchimg")
-      this._blit(x, null, calibration.swatchImage(w.w, w.h, w.steps || 11));
-    else if (w.type === "boxes") {
+    } else if (w.type === "boxes") {
       // the box list goes up as two vec4 arrays (x, y, w, h and headH, border, radius, headKind), 12 slots
       const list = (Array.isArray(w.boxes) ? w.boxes : [])
         .filter(
@@ -4473,103 +4444,6 @@ class HudApp {
         isNum(w.frame) ? w.frame : 1,
       ]);
       x.c.uniform(x.ref, "u_drum", drums, { type: "vec4" });
-    } else if (w.type === "text") {
-      if (!force && now - x.lastPaint < (w.rate || TEXT_MS)) return;
-      const s =
-        w.needs && this._token(w.needs) === "--" ? "" : this._resolve(w.text);
-      let role = w.color || "fg";
-      if (w.colorBy === "verdict" && this.score.last)
-        role = VERDICT[this.score.last.verdict] || role;
-      if (w.near && isNum(w.nearFade)) {
-        // fade in as the value comes near (iDrive 8): full "nearColor" at the label, its own colour "nearFade"
-        // label steps away, in 8 steps so a label repaints only when its step changes
-        const pos = this._nearPos(w.near[0]);
-        const f = isNum(pos)
-          ? Math.round(
-              Math.max(0, 1 - Math.abs(pos - w.near[1]) / w.nearFade) * 8,
-            ) / 8
-          : 0;
-        if (f > 0) {
-          const a = color(this.theme, role),
-            b = color(this.theme, w.nearColor || "fg");
-          role = [0, 1, 2, 3].map((i) => Math.round(a[i] + (b[i] - a[i]) * f));
-        }
-      } else if (w.near && this._nearMark(w.near[0]) === w.near[1])
-        role = w.nearColor || "fg";
-      // "litGear": the Regal gear row's slot (P 0, R 1, N 2, D 3, the gear number 5): while the lit gear box sits
-      // behind it, the text turns "litColor" (fg: white on the box is 5.0:1, WCAG AA; the VFD orange was 1.9:1)
-      if (isNum(w.litGear) && this._regalGear() === w.litGear)
-        role = w.litColor || "fg";
-      if (w.hotWhen === "closing") {
-        if (this._closing()) role = "hot";
-      } else if (w.hotWhen || w.coldWhen) {
-        const sp = this._shift();
-        if (w.coldWhen && sp[w.coldWhen]) role = VERDICT.COLD;
-        if (w.hotWhen && sp[w.hotWhen]) role = "hot";
-      }
-      // "slide": the text rides up its box with a value (the car-ahead gauge's label), blank without one
-      let offY = 0,
-        text = s;
-      if (w.slide) {
-        const v =
-          w.slide.signal === "accGap"
-            ? this._acc("gap")
-            : this._raw(w.slide.signal);
-        if (!isNum(v)) text = "";
-        else {
-          const lo = w.slide.min || 0,
-            f = Math.min(
-              1,
-              Math.max(0, (v - lo) / ((w.slide.max || 150) - lo)),
-            );
-          const y = w.slide.yBottom - f * (w.slide.yBottom - w.slide.yTop);
-          offY = Math.round(
-            y - w.y - textRaster.loadFont(w.font).metrics.cellHeight / 2,
-          );
-        }
-      }
-      const key = text + "|" + role + "|" + offY;
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.lastPaint = now;
-      let buf;
-      if (w.font === "@sys") {
-        // the car's own font, any script ("size" px, default 80 % of the box)
-        const f = this._sysFont();
-        const m =
-          f && text
-            ? f.mask(w.w, w.h, text, {
-                size: w.size || Math.round(w.h * 0.8),
-                align: w.align,
-              })
-            : Buffer.alloc(w.w * w.h);
-        buf = textRaster.tint(m, w.w, w.h, { color: color(this.theme, role) });
-      } else
-        buf = textRaster.drawText(w.w, w.h, text, {
-          font: w.font,
-          color: color(this.theme, role),
-          align: w.align,
-          spacing: w.spacing,
-          offsetY: offY,
-          color2:
-            w.color2 && role !== "hot" ? color(this.theme, w.color2) : null,
-          glow: w.glow ? this.theme.glow : 0,
-        });
-      this._blitDiff(x, buf);
-    } else if (w.type === "badge") {
-      if (!force && now - x.lastPaint < TEXT_MS) return;
-      const s = this._resolve(w.text);
-      let tone = VERDICT.COLD,
-        fresh = false;
-      if (w.tone === "verdict" && this.score.last) {
-        tone = VERDICT[this.score.last.verdict] || this.theme.fg;
-        fresh = now - this.score.last.at < 2500;
-      }
-      const key = s + "|" + tone + "|" + fresh;
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.lastPaint = now;
-      this._blitDiff(x, this._paintBadge(w, s, tone, fresh));
     } else if (w.type === "shiftbar") {
       const rpm = this._raw("rpm");
       const segs = w.segments || 40;
@@ -4863,144 +4737,6 @@ class HudApp {
       x.c.uniform(x.ref, "u_lit", [lit]);
       x.c.uniform(x.ref, "u_strobe", [sp.now ? 1 : 0]);
     }
-  }
-
-  /**
-   * A rounded tag: fill in the tone colour (bright for a fresh grade), text centred on it. Empty text: nothing.
-   * @param {Widget} w
-   * @param {string} s
-   * @param {number[]} tone RGBA
-   * @param {boolean} fresh
-   * @returns {Buffer}
-   */
-  _paintBadge(w, s, tone, fresh) {
-    const W = w.w,
-      H = w.h,
-      buf = Buffer.alloc(W * H * 4, 0);
-    if (!s) return buf;
-    const r = Math.min(6, H / 2),
-      fillA = fresh ? 0.45 : 0.2;
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        // rounded-rect coverage, 1 px soft edge
-        const qx = Math.max(Math.abs(x + 0.5 - W / 2) - (W / 2 - r), 0),
-          qy = Math.max(Math.abs(y + 0.5 - H / 2) - (H / 2 - r), 0);
-        const cov = Math.min(
-          1,
-          Math.max(0, r + 0.5 - Math.sqrt(qx * qx + qy * qy)),
-        );
-        if (cov <= 0) continue;
-        const o = (y * W + x) * 4;
-        buf[o] = tone[0];
-        buf[o + 1] = tone[1];
-        buf[o + 2] = tone[2];
-        buf[o + 3] = Math.round(255 * fillA * cov);
-      }
-    }
-    const font = textRaster.loadFont(w.font);
-    const ty = Math.round((H - font.metrics.cellHeight) / 2);
-    const m = textRaster.mask(W, H, s, {
-      font: w.font,
-      align: "center",
-      spacing: w.spacing,
-      offsetY: ty,
-    });
-    const tc = fresh ? this.theme.fg : tone;
-    for (let i = 0; i < m.length; i++) {
-      if (!m[i]) continue;
-      const a = m[i] / 255,
-        o = i * 4,
-        ba = buf[o + 3] / 255;
-      const outA = a + ba * (1 - a);
-      for (let c = 0; c < 3; c++)
-        buf[o + c] = Math.round((tc[c] * a + buf[o + c] * ba * (1 - a)) / outA);
-      buf[o + 3] = Math.round(outA * 255);
-    }
-    return buf;
-  }
-
-  /**
-   * "x/y" at every step, uploaded as small rects (not the whole, mostly empty, image).
-   * @param {WidgetState} x
-   * @returns {void}
-   */
-  _paintGridLabels(x) {
-    const w = x.w,
-      W = w.w,
-      H = w.h,
-      step = w.step || 100,
-      font = w.font;
-    const cell = textRaster.loadFont(font).metrics.cellHeight;
-    const rects = [],
-      parts = [];
-    for (let gy = 0; gy < H; gy += step) {
-      for (let gx = 0; gx < W; gx += step) {
-        const label = w.x + gx + "/" + (w.y + gy);
-        const lw = Math.min(W - gx - 2, textRaster.measure(label, font, 0) + 2);
-        const lh = Math.min(H - gy - 2, cell);
-        if (lw <= 0 || lh <= 0) continue;
-        const buf = textRaster.drawText(lw, lh, label, {
-          font,
-          color: [255, 230, 0, 255],
-        });
-        rects.push({ x: gx + 2, y: gy + 2, w: lw, h: lh });
-        parts.push(buf);
-      }
-    }
-    this._blit(x, rects, Buffer.concat(parts));
-  }
-
-  /**
-   * Paints the M tricolour stripe.
-   * @param {WidgetState} x
-   * @returns {void}
-   */
-  _paintStripe(x) {
-    const w = x.w,
-      buf = Buffer.alloc(w.w * w.h * 4, 0);
-    for (let px = 0; px < w.w; px++) {
-      const c = M_STRIPE[Math.min(2, Math.floor((px * 3) / w.w))];
-      for (let py = 0; py < w.h; py++)
-        c.forEach((v, i) => {
-          buf[(py * w.w + px) * 4 + i] = v;
-        });
-    }
-    this._blit(x, null, buf);
-  }
-
-  /**
-   * Paints the rpm numbers (red from the redline with "redFrom").
-   * @param {WidgetState} x
-   * @returns {void}
-   */
-  _paintScale(x) {
-    const w = x.w,
-      n = this._barMax(w) / 1000 + 1,
-      red = this.setting("redline");
-    const m = Buffer.alloc(w.w * w.h, 0),
-      hot = Buffer.alloc(w.w * w.h, 0);
-    for (let i = 0; i < n; i++) {
-      const label = String(i);
-      const lw = textRaster.measure(label, w.font, 0);
-      const cx = (i / (n - 1)) * w.w;
-      const left = Math.round(Math.max(0, Math.min(w.w - lw, cx - lw / 2)));
-      const one = textRaster.mask(w.w, w.h, label, { font: w.font, x: left });
-      const into = w.redFrom && i * 1000 >= red ? hot : m;
-      for (let k = 0; k < m.length; k++) if (one[k] > into[k]) into[k] = one[k];
-    }
-    const buf = textRaster.tint(m, w.w, w.h, {
-      color: color(this.theme, w.color || "dim"),
-      font: w.font,
-    });
-    if (w.redFrom) {
-      const hb = textRaster.tint(hot, w.w, w.h, {
-        color: this.theme.hot,
-        font: w.font,
-      });
-      for (let k = 0; k < hot.length; k++)
-        if (hot[k]) hb.copy(buf, k * 4, k * 4, k * 4 + 4);
-    }
-    this._blit(x, null, buf);
   }
 }
 

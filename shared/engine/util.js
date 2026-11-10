@@ -3,6 +3,8 @@
  * Small helpers the engine, the car values and the widgets share.
  */
 
+const TEXT_MS = 200; // text re-draws at most 5 times a second (what BMW's own readouts do)
+
 /**
  * A finite number.
  * @param {*} v
@@ -51,4 +53,4 @@ function mib(bytes) {
   return (bytes / 1048576).toFixed(1) + " MiB";
 }
 
-module.exports = { isNum, rgb, rgba, pad2, mib };
+module.exports = { isNum, rgb, rgba, pad2, mib, TEXT_MS };

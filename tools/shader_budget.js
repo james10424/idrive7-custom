@@ -174,6 +174,23 @@ function check(src) {
 module.exports = { measure, check, READS_GOOD, READS_CRASH, TOKENS_GOOD };
 
 if (require.main === module) {
+  // the widget modules require "./kit/..." as they sit in an app's build (kit/tools/build.py copies kit/runtime there)
+  const path = require("path"),
+    Module = require("module"),
+    shared = path.join(__dirname, "..", "shared") + path.sep;
+  /** @type {*} */
+  const M = Module;
+  const resolve = M._resolveFilename;
+  M._resolveFilename = function (req, parent, ...rest) {
+    const p = parent && parent.filename ? parent.filename : "";
+    if (p.indexOf(shared) === 0 && /^(\.\/|(\.\.\/)+)kit\//.test(req)) {
+      const kit = path.resolve(path.dirname(p), req.replace(/^\.\//, ""));
+      const rel = path.relative(path.join(shared, "kit"), kit);
+      if (!rel.startsWith(".."))
+        req = path.join(__dirname, "..", "kit", "runtime", rel);
+    }
+    return resolve.call(this, req, parent, ...rest);
+  };
   const widgets = require("../shared/widgets");
   const shaders = require("../shared/shaders");
   /** @type {Record<string, string>} every widget type's shaders (its "shaders"), its own first */

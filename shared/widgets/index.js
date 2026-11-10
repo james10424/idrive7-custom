@@ -16,6 +16,15 @@
  */
 /** @type {Record<string, *>} */
 const TYPES = {
+  text: require("./text"),
+  badge: require("./badge"),
+  scale: require("./scale"),
+  stripe: require("./stripe"),
+  icon: require("./icon"),
+  grid: require("./grid"),
+  gridlabels: require("./grid/labels"),
+  swatch: require("./swatch"),
+  swatchimg: require("./swatch/image"),
   miku: require("./miku"),
 };
 
