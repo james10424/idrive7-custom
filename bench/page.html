@@ -304,7 +304,7 @@
     // the speed: white digits right-aligned under the unit, a line from the sign toward the unit (HUD photo, Nov 9 2026:
     // the unit ends at x 309 with its baseline at 341, the digits at 307 / 377, the line runs x 212..271 at y 330)
     ctx.textAlign = 'right'; ctx.fillStyle = '#f4f4f0';
-    ctx.font = 'bold 34px "Arial Narrow", -apple-system, Helvetica, sans-serif'; ctx.fillText(speed === null ? '--' : String(speed), 307, 377);
+    ctx.font = 'bold 42px "Arial Narrow", -apple-system, Helvetica, sans-serif'; ctx.fillText(speed === null ? '--' : String(speed), 307, 377);
     ctx.font = 'bold 16px "Arial Narrow", -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 309, 341);
     ctx.strokeStyle = 'rgba(244,244,240,.85)'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(212, 330); ctx.lineTo(271, 330); ctx.stroke();
@@ -314,24 +314,38 @@
     if (nav) drawBmwGuidance(acc ? 385 : 312);
     if (document.getElementById('outlines').checked) {
       labelBox("BMW's speed + limit", 150, 296, '#ff8c1a');
-      if (acc) labelBox("BMW's ACC", 240, 184, '#ff8c1a');
+      if (acc) labelBox("BMW's ACC", 212, 222, '#ff8c1a');
       if (nav) labelBox("BMW's guidance", acc ? 385 : 312, 142, '#ff8c1a');
     }
   }
-  // BMW's driver assistance block (HUD photo, Nov 7 2026: x ~240..345, y ~200..312, above its speed): the car ahead with
-  // the set speed beside it, the distance bars, the green lane lines and steering wheel
+  // BMW's driver assistance block as its HUD draws it (HUD photo on the 401 with ACC on, Nov 9 2026, measured into HUD px):
+  // the car ahead seen from behind, the set speed in green right of it under the speed-limit-assist arc, and below them
+  // the green steering wheel between two green lane lines, all above BMW's speed
   function drawBmwAcc(useMiles) {
-    const green = '#8fdc4a';
-    ctx.strokeStyle = '#e8e8e2'; ctx.lineWidth = 2;
-    ctx.strokeRect(266, 206, 34, 20); ctx.strokeRect(270, 200, 26, 8);                 // the car ahead
-    ctx.fillStyle = green; ctx.font = 'bold 15px -apple-system, Helvetica, sans-serif';
-    ctx.fillText(useMiles ? '95' : '152', 310, 224);
-    ctx.strokeStyle = green; ctx.beginPath(); ctx.arc(326, 210, 9, Math.PI, 0); ctx.stroke(); // the set-speed arc
-    [0, 1, 2].forEach((i) => { ctx.fillStyle = green; ctx.fillRect(262 - i * 3, 234 + i * 9, 42 + i * 6, 5); });   // distance bars
-    ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(252, 262); ctx.lineTo(244, 304); ctx.moveTo(314, 262); ctx.lineTo(322, 304); ctx.stroke();   // lane lines
-    ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(283, 286, 14, 0, 7); ctx.stroke();      // the steering wheel
-    ctx.beginPath(); ctx.moveTo(269, 286); ctx.lineTo(297, 286); ctx.moveTo(283, 286); ctx.lineTo(283, 300); ctx.stroke();
+    const green = '#8fdc4a', grey = '#dcdcd2';
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // the car ahead: body and rear window outlined, the tail lights below
+    ctx.strokeStyle = grey; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.roundRect ? ctx.roundRect(233, 238, 33, 24, 4) : ctx.rect(233, 238, 33, 24); ctx.stroke();
+    ctx.lineWidth = 1.5; ctx.strokeRect(237, 244, 25, 9);
+    ctx.fillStyle = grey;
+    [[236, 265], [264, 265]].forEach(([x, y]) => { ctx.beginPath(); ctx.ellipse(x, y, 3.5, 2.5, 0, 0, 7); ctx.fill(); });
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(240, 268); ctx.lineTo(260, 268); ctx.stroke();
+    // the set speed, and the speed limit assist's tick and arc above it
+    ctx.fillStyle = green; ctx.textAlign = 'right'; ctx.font = 'bold 24px "Arial Narrow", -apple-system, Helvetica, sans-serif';
+    ctx.fillText(useMiles ? '84' : '135', 307, 262);
+    ctx.textAlign = 'left';
+    ctx.strokeStyle = green; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(279, 226); ctx.lineTo(282, 235); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(279, 235); ctx.quadraticCurveTo(292, 229, 305, 238); ctx.stroke();
+    // the steering wheel: a bar over its rim, the hub filled
+    ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(229, 284); ctx.lineTo(273, 284); ctx.stroke();
+    ctx.lineWidth = 4.5; ctx.beginPath(); ctx.arc(251, 299, 14, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = green; ctx.beginPath(); ctx.arc(251, 301, 7, 0, Math.PI * 2); ctx.fill();
+    // the lane lines either side
+    ctx.lineWidth = 4.5;
+    ctx.beginPath(); ctx.moveTo(219, 277); ctx.lineTo(215, 296); ctx.moveTo(280, 278); ctx.lineTo(289, 297); ctx.stroke();
+    ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
   }
   // BMW's route guidance as its HUD draws it (HUD photo at Ellesmere Rd, Nov 9 2026, warped to HUD px): a line across the
   // window at y ~160 with the street name above its right end, the turn map below it from x0 (~312; ~385 when the ACC
