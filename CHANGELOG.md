@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 10 2026
+
+- **Custom Cluster 0.1.42 and Custom HUD 0.1.20:** a code refactor, nothing meant to change on the displays. shared/hud.js is split into shared/engine (the generic core) and shared/car (the car's data); each widget type is its own module under shared/widgets (Miku, the gauges, the frames, the images, the theme dashboards); shared/shaders.js is gone. Our JavaScript is formatted with Prettier, typed with JSDoc and uses descriptive names. Built output parses as ES2017 for the car's Node 8, and the shader budget shows no shader past the crash mark. Not yet run on the car.
+
 ## Nov 9 2026
 
 - **Custom Cluster 0.1.41:** the sitting Miku is gone for good: her widget type (mikuSit), shader, the bake's sitting pose and `deploy.sh --miku-sit`. She was never deployed to the car.
