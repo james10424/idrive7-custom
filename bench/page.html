@@ -16,6 +16,7 @@
   .pill { padding: 2px 8px; border-radius: 999px; background: var(--line); color: var(--dim); font-size: 12px; }
   .pill.ok { background: rgba(62,207,142,.15); color: var(--ok); }
   .pill.bad { background: rgba(255,107,107,.15); color: var(--err); }
+  .pill.warn { background: rgba(240,180,41,.15); color: var(--warn); }
   main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; padding: 16px; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
   .stage { background: #000; border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
@@ -61,6 +62,7 @@
   <span id="conn" class="pill">page: connecting</span>
   <span class="pill" id="target">target: ?</span>
   <span class="pill" id="pixels" title="cluster-render's pixel memory: 16 MiB for every image of every app together, each image counted twice">pixels: ?</span>
+  <span class="pill" id="shaders" title="The heaviest effect shader against what the cluster's GPU took on the car (tools/shader_budget.js): texture reads with every function inlined (32 held; 38 restarted the instrument cluster, and the bench refuses that) and its inlined size in tokens (Sport's held). Per layer in the layers table.">shaders: ?</span>
   <button id="restart">Restart apps</button>
   <label class="chk" title="A lower per-connection cap to try a layout under (cluster-render draws 64 a connection since 0.4.2, 8 before). Layers past the cap get state waiting and are not drawn; 0 = unlimited. Changing it restarts the app."><span>layer cap</span> <input type="number" id="cap" min="0" max="64" step="1" value="0"></label>
 </header>
@@ -95,7 +97,7 @@
     </section>
     <section>
       <h2>Layers</h2>
-      <table><thead><tr><th>app</th><th>target</th><th>conn:ref</th><th>kind</th><th>class/z</th><th>rect</th><th>car</th></tr></thead><tbody id="layers"></tbody></table>
+      <table><thead><tr><th>app</th><th>target</th><th>conn:ref</th><th>kind</th><th>class/z</th><th>shader</th><th>rect</th><th>car</th></tr></thead><tbody id="layers"></tbody></table>
       <div class="note">app and target: whose layer it is and where it draws (panel: the cluster, hud: the windshield). conn: that app's connection to cluster-render (1 is its own; a layout's "conn" widgets open more, each with its own 64 layers). Red: over the layer cap, state waiting, not drawn. The car column flags a layer the driver can't fully see (hood, BMW's gear box or belt light, outside the HUD window); hover for the reason.</div>
     </section>
   </aside>
@@ -520,6 +522,22 @@
   }
 
   const esc = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  // the shader budget's marks, from the server's hello (tools/shader_budget.js)
+  let budgetLimits = { readsGood: 32, readsCrash: 38, tokensGood: 7835 };
+  /** @param {{ reads: number, tokens: number }} b */
+  const budgetLevel = (b) => (b.reads >= budgetLimits.readsCrash ? 'bad' : b.reads > budgetLimits.readsGood || b.tokens > budgetLimits.tokensGood ? 'warn' : 'ok');
+  /** The header's shaders pill: the effect layer with the most texture reads (then the most tokens). */
+  function renderShaderPill() {
+    const el = document.getElementById('shaders');
+    const effects = scene.filter((layer) => layer.budget);
+    if (!effects.length) { el.textContent = 'shaders: none'; el.className = 'pill'; return; }
+    const worst = effects.reduce((a, b) => (b.budget.reads > a.budget.reads || (b.budget.reads === a.budget.reads && b.budget.tokens > a.budget.tokens) ? b : a));
+    const big = effects.reduce((a, b) => (b.budget.tokens > a.budget.tokens ? b : a));
+    el.textContent = 'shaders: ' + worst.budget.reads + ' of ' + budgetLimits.readsCrash + ' reads (' + worst.app + '), ' + big.budget.tokens + ' of ' + budgetLimits.tokensGood + ' tokens (' + big.app + ')';
+    const levels = effects.map((layer) => budgetLevel(layer.budget));
+    el.className = 'pill ' + (levels.indexOf('bad') >= 0 ? 'bad' : levels.indexOf('warn') >= 0 ? 'warn' : 'ok');
+  }
+
   function renderLayerTable() {
     // each app's own connection reads as 1, its layouts' extra connections ("conn") 2, 3 ...
     const firstConn = {};
@@ -529,7 +547,7 @@
       const flag = warns.length ? '<td class="flag" title="' + esc(warns.join('\n')) + '">' + (warns.some((warning) => /hood/.test(warning)) ? 'hood ' : '') + (warns.some((warning) => /gear box/.test(warning)) ? 'box ' : '') + (warns.some((warning) => /belt/.test(warning)) ? 'belt ' : '') + (warns.some((warning) => /camera/.test(warning)) ? 'camera ' : '') + (warns.some((warning) => /HUD window/.test(warning)) ? 'window' : '') + '</td>' : '<td></td>';
       const cls = layer.state === 'waiting' ? ' class="waiting" title="' + esc(layer.reason || 'waiting') + '"' : '';
       const what = layer.kind === 'asset' ? 'asset ' + layer.format : layer.kind, where = layer.kind === 'asset' ? layer.w + 'x' + layer.h + ' (not drawn)' : layer.x + ',' + layer.y + ' ' + layer.w + 'x' + layer.h;
-      return '<tr' + cls + '><td>' + esc(layer.app || '?') + '</td><td>' + esc(layer.target || '') + '</td><td>' + (layer.conn - firstConn[layer.app] + 1) + ':' + layer.ref + (layer.state === 'waiting' ? ' (waiting)' : '') + '</td><td>' + what + '</td><td>' + (layer.kind === 'asset' ? '' : layer.class + ' / ' + layer.z) + '</td><td>' + where + '</td>' + flag + '</tr>';
+      return '<tr' + cls + '><td>' + esc(layer.app || '?') + '</td><td>' + esc(layer.target || '') + '</td><td>' + (layer.conn - firstConn[layer.app] + 1) + ':' + layer.ref + (layer.state === 'waiting' ? ' (waiting)' : '') + '</td><td>' + what + '</td><td>' + (layer.kind === 'asset' ? '' : layer.class + ' / ' + layer.z) + '</td>' + (layer.budget ? '<td style="color:var(--' + { ok: 'dim', warn: 'warn', bad: 'err' }[budgetLevel(layer.budget)] + ')">' + layer.budget.reads + ' reads, ' + layer.budget.tokens + ' tok</td>' : '<td></td>') + '<td>' + where + '</td>' + flag + '</tr>';
     }).join('');
   }
 
@@ -570,6 +588,7 @@
     else if (msg.t === 'hello') {
       geo = msg.geometry || geo;
       pixelCap = msg.pixelCap === undefined ? pixelCap : msg.pixelCap;
+      budgetLimits = msg.shaderBudget || budgetLimits;
       if (document.activeElement !== capEl) capEl.value = msg.cap || 0;
       setViews(msg.apps || [{ id: msg.app, view: msg.view || 'hud' }], msg.targets); document.getElementById('title').textContent = 'Bench: ' + msg.app;
     }
@@ -578,6 +597,7 @@
       if (msg.pixels !== undefined) document.getElementById('pixels').textContent = 'pixels: ' + (msg.pixels / 1048576).toFixed(1) + ' of ' + (pixelCap ? (pixelCap / 1048576).toFixed(0) + ' MiB' : 'unlimited');
       const keys = new Set(scene.map((layer) => layer.key));
       Array.from(images.keys()).forEach((k) => { if (!keys.has(k)) images.delete(k); });
+      renderShaderPill();
       renderLayerTable(); dirty = true;
     } else if (msg.t === 'px') {
       // a rect of an image layer changed (the whole image, or a packed sheet's text update): fetch its bytes

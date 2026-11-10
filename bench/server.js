@@ -319,6 +319,7 @@ function sceneMeta() {
     format: layer.format,
     state: layer.state,
     reason: layer.reason,
+    budget: layer.budget,
     warnings: layer.kind === "asset" ? [] : layerWarnings(layer),
   }));
 }
@@ -328,6 +329,11 @@ function sceneMeta() {
  */
 function helloMsg() {
   return {
+    shaderBudget: {
+      readsGood: shaderBudget.READS_GOOD,
+      readsCrash: shaderBudget.READS_CRASH,
+      tokensGood: shaderBudget.TOKENS_GOOD,
+    },
     t: "hello",
     targets: TARGETS,
     apps: apps.map((app) => ({ id: app.id, view: appView(app) })),
@@ -684,6 +690,11 @@ const renderServer = net.createServer((sock) => {
           if (budget.level === "warn")
             log("warn", "layer " + msg.ref + ": shader " + budget.text);
           newLayer.fs = msg.fs;
+          newLayer.budget = {
+            reads: budget.reads,
+            tokens: budget.tokens,
+            level: budget.level,
+          };
           newLayer.time = !!msg.time;
           newLayer.binds = {};
         } else {
