@@ -124,94 +124,94 @@
   /* ---------- WebGL for effect layers: the app's real fragment shader ---------- */
   const glCanvas = document.createElement('canvas');
   const gl = glCanvas.getContext('webgl', { premultipliedAlpha: false, preserveDrawingBuffer: true, alpha: true });
-  const VS = 'attribute vec2 a_pos; varying vec2 v_uv; void main(){ v_uv = vec2(a_pos.x * 0.5 + 0.5, 0.5 - a_pos.y * 0.5);  /* top-left, as cluster-render */ gl_Position = vec4(a_pos, 0.0, 1.0); }';
+  const VERTEX_SRC = 'attribute vec2 a_pos; varying vec2 v_uv; void main(){ v_uv = vec2(a_pos.x * 0.5 + 0.5, 0.5 - a_pos.y * 0.5);  /* top-left, as cluster-render */ gl_Position = vec4(a_pos, 0.0, 1.0); }';
   const programs = new Map();   // fs source -> {prog, err}
   const shaderErrors = new Set();
   const quad = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, quad);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-  function compile(fs) {
-    if (programs.has(fs)) return programs.get(fs);
-    const mk = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
-    const v = mk(gl.VERTEX_SHADER, VS), f = mk(gl.FRAGMENT_SHADER, fs);
-    const p = gl.createProgram(); gl.attachShader(p, v); gl.attachShader(p, f); gl.linkProgram(p);
+  function compile(fragSrc) {
+    if (programs.has(fragSrc)) return programs.get(fragSrc);
+    const makeShader = (type, src) => { const shader = gl.createShader(type); gl.shaderSource(shader, src); gl.compileShader(shader); return shader; };
+    const vertShader = makeShader(gl.VERTEX_SHADER, VERTEX_SRC), fragShader = makeShader(gl.FRAGMENT_SHADER, fragSrc);
+    const program = gl.createProgram(); gl.attachShader(program, vertShader); gl.attachShader(program, fragShader); gl.linkProgram(program);
     let entry;
-    if (!gl.getShaderParameter(f, gl.COMPILE_STATUS)) entry = { err: 'fragment shader does not compile: ' + gl.getShaderInfoLog(f) };
-    else if (!gl.getProgramParameter(p, gl.LINK_STATUS)) entry = { err: 'shader does not link: ' + gl.getProgramInfoLog(p) };
-    else entry = { prog: p };
-    programs.set(fs, entry);
+    if (!gl.getShaderParameter(fragShader, gl.COMPILE_STATUS)) entry = { err: 'fragment shader does not compile: ' + gl.getShaderInfoLog(fragShader) };
+    else if (!gl.getProgramParameter(program, gl.LINK_STATUS)) entry = { err: 'shader does not link: ' + gl.getProgramInfoLog(program) };
+    else entry = { prog: program };
+    programs.set(fragSrc, entry);
     return entry;
   }
 
   // asset key -> { tex, stamp }: the WebGL texture of an asset's pixels, uploaded again when the canvas changed
   const textures = new Map();
-  function textureOf(key, c) {
-    let t = textures.get(key);
-    if (!t) { t = { tex: gl.createTexture(), stamp: -1 }; textures.set(key, t); }
-    gl.bindTexture(gl.TEXTURE_2D, t.tex);
-    if (t.stamp !== (c.stamp || 0)) {
-      t.stamp = c.stamp || 0;
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, c);
+  function textureOf(key, source) {
+    let texture = textures.get(key);
+    if (!texture) { texture = { tex: gl.createTexture(), stamp: -1 }; textures.set(key, texture); }
+    gl.bindTexture(gl.TEXTURE_2D, texture.tex);
+    if (texture.stamp !== (source.stamp || 0)) {
+      texture.stamp = source.stamp || 0;
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     }
-    return t.tex;
+    return texture.tex;
   }
   const uniformNotes = new Set();
-  function noteUniform(l, name, why) {
-    const k = l.key + ':' + name + ':' + why;
+  function noteUniform(layer, name, why) {
+    const k = layer.key + ':' + name + ':' + why;
     if (uniformNotes.has(k)) return;
-    uniformNotes.add(k); addLog({ level: 'warn', text: 'bench: layer ' + l.ref + ' uniform ' + name + ': ' + why });
+    uniformNotes.add(k); addLog({ level: 'warn', text: 'bench: layer ' + layer.ref + ' uniform ' + name + ': ' + why });
   }
-  function drawEffect(l, t) {
-    const e = compile(l.fs);
-    if (e.err) {
-      if (!shaderErrors.has(l.key)) { shaderErrors.add(l.key); addLog({ level: 'error', text: 'bench: layer ' + l.ref + ' ' + e.err }); }
+  function drawEffect(layer, t) {
+    const compiled = compile(layer.fs);
+    if (compiled.err) {
+      if (!shaderErrors.has(layer.key)) { shaderErrors.add(layer.key); addLog({ level: 'error', text: 'bench: layer ' + layer.ref + ' ' + compiled.err }); }
       return null;
     }
-    glCanvas.width = Math.max(1, l.w); glCanvas.height = Math.max(1, l.h);
+    glCanvas.width = Math.max(1, layer.w); glCanvas.height = Math.max(1, layer.h);
     gl.viewport(0, 0, glCanvas.width, glCanvas.height);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.useProgram(e.prog);
-    const loc = gl.getAttribLocation(e.prog, 'a_pos');
+    gl.useProgram(compiled.prog);
+    const loc = gl.getAttribLocation(compiled.prog, 'a_pos');
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
     gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    const n = gl.getProgramParameter(e.prog, gl.ACTIVE_UNIFORMS);
+    const uniformCount = gl.getProgramParameter(compiled.prog, gl.ACTIVE_UNIFORMS);
     let unit = 0;
-    for (let i = 0; i < n; i++) {
-      const info = gl.getActiveUniform(e.prog, i);
+    for (let i = 0; i < uniformCount; i++) {
+      const info = gl.getActiveUniform(compiled.prog, i);
       if (info.type === gl.SAMPLER_2D) {
         // a sampler reads the asset bound to it (the 'bind' op); its pixels came as an image, R in .r
-        const key = l.binds && l.binds[info.name], c = key && images.get(key);
-        const u = gl.getUniformLocation(e.prog, info.name);
-        if (!c || !u) { if (!c) noteUniform(l, info.name, 'no asset bound'); continue; }
+        const key = layer.binds && layer.binds[info.name], image = key && images.get(key);
+        const location = gl.getUniformLocation(compiled.prog, info.name);
+        if (!image || !location) { if (!image) noteUniform(layer, info.name, 'no asset bound'); continue; }
         gl.activeTexture(gl.TEXTURE0 + unit);
-        gl.bindTexture(gl.TEXTURE_2D, textureOf(key, c));
-        gl.uniform1i(u, unit++);
+        gl.bindTexture(gl.TEXTURE_2D, textureOf(key, image));
+        gl.uniform1i(location, unit++);
         continue;
       }
       // An array uniform is reported as "name[0]" with size > 1; the client sets it by its base name
       // (PROTOCOL.md "Uniforms": one 'uniform' message of type x size numbers). Either spelling is accepted.
       const base = info.name.replace(/\[0\]$/, '');
-      const u = gl.getUniformLocation(e.prog, info.name) || gl.getUniformLocation(e.prog, base);
-      let entry = l.uniforms[base] || l.uniforms[info.name];
-      let v = entry ? entry.v : null;
-      if (info.name === 'u_time' && l.time) v = [t / 1000];
-      if (!v || !u) continue;
+      const location = gl.getUniformLocation(compiled.prog, info.name) || gl.getUniformLocation(compiled.prog, base);
+      let entry = layer.uniforms[base] || layer.uniforms[info.name];
+      let value = entry ? entry.v : null;
+      if (info.name === 'u_time' && layer.time) value = [t / 1000];
+      if (!value || !location) continue;
       const width = { [gl.FLOAT]: 1, [gl.FLOAT_VEC2]: 2, [gl.FLOAT_VEC3]: 3, [gl.FLOAT_VEC4]: 4, [gl.FLOAT_MAT4]: 16 }[info.type];
       if (!width) continue;
-      const count = Math.min(info.size, Math.floor(v.length / width));   // whole elements only, up to the shader's array size
-      if (count < 1) { noteUniform(l, info.name, v.length + ' numbers do not fill one element of width ' + width); continue; }
-      if (entry && entry.v.length > width * info.size) noteUniform(l, info.name, entry.v.length + ' numbers sent, shader holds ' + info.size + ' x ' + width + '; extra ignored');
-      const vals = new Float32Array(v.slice(0, count * width));
-      if (info.type === gl.FLOAT) gl.uniform1fv(u, vals);
-      else if (info.type === gl.FLOAT_VEC2) gl.uniform2fv(u, vals);
-      else if (info.type === gl.FLOAT_VEC3) gl.uniform3fv(u, vals);
-      else if (info.type === gl.FLOAT_VEC4) gl.uniform4fv(u, vals);
-      else if (info.type === gl.FLOAT_MAT4) gl.uniformMatrix4fv(u, false, vals);
+      const count = Math.min(info.size, Math.floor(value.length / width));   // whole elements only, up to the shader's array size
+      if (count < 1) { noteUniform(layer, info.name, value.length + ' numbers do not fill one element of width ' + width); continue; }
+      if (entry && entry.v.length > width * info.size) noteUniform(layer, info.name, entry.v.length + ' numbers sent, shader holds ' + info.size + ' x ' + width + '; extra ignored');
+      const vals = new Float32Array(value.slice(0, count * width));
+      if (info.type === gl.FLOAT) gl.uniform1fv(location, vals);
+      else if (info.type === gl.FLOAT_VEC2) gl.uniform2fv(location, vals);
+      else if (info.type === gl.FLOAT_VEC3) gl.uniform3fv(location, vals);
+      else if (info.type === gl.FLOAT_VEC4) gl.uniform4fv(location, vals);
+      else if (info.type === gl.FLOAT_MAT4) gl.uniformMatrix4fv(location, false, vals);
     }
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     return glCanvas;
@@ -223,10 +223,10 @@
   // what the driver sees, from the server's hello (shared/visible.js, measured from car photos Nov 5 2026)
   let geo = null;
   function hoodY(x) {
-    const H = geo.HOOD;
-    if (x <= H[0][0]) return H[0][1];
-    for (let i = 1; i < H.length; i++) { const a = H[i - 1], b = H[i]; if (x <= b[0]) return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]); }
-    return H[H.length - 1][1];
+    const hood = geo.HOOD;
+    if (x <= hood[0][0]) return hood[0][1];
+    for (let i = 1; i < hood.length; i++) { const prev = hood[i - 1], next = hood[i]; if (x <= next[0]) return prev[1] + (next[1] - prev[1]) * (x - prev[0]) / (next[0] - prev[0]); }
+    return hood[hood.length - 1][1];
   }
   function labelBox(text, x, y, color) {
     ctx.font = '12px ui-monospace, Menlo, monospace';
@@ -276,12 +276,12 @@
       labelBox('belt light', sx0 - 10, sy0 - 18, '#ff8c1a');
     } else if (view === 'hud') {
       // only the window is visible through the windshield; mask the rest
-      const w = geo.HUD_WINDOW;
+      const hudWindow = geo.HUD_WINDOW;
       ctx.fillStyle = 'rgba(8,8,10,.78)';
-      ctx.fillRect(0, 0, VW, w.y); ctx.fillRect(0, w.y + w.h, VW, VH - w.y - w.h);
-      ctx.fillRect(0, w.y, w.x, w.h); ctx.fillRect(w.x + w.w, w.y, VW - w.x - w.w, w.h);
-      ctx.strokeStyle = '#ff8c1a'; ctx.lineWidth = 1.5; ctx.strokeRect(w.x + .5, w.y + .5, w.w - 1, w.h - 1);
-      labelBox('visible window ' + w.x + ',' + w.y + ' ' + w.w + 'x' + w.h, w.x + 2, w.y - 18, '#ff8c1a');   // above it: BMW's speed sits in its bottom-left
+      ctx.fillRect(0, 0, VW, hudWindow.y); ctx.fillRect(0, hudWindow.y + hudWindow.h, VW, VH - hudWindow.y - hudWindow.h);
+      ctx.fillRect(0, hudWindow.y, hudWindow.x, hudWindow.h); ctx.fillRect(hudWindow.x + hudWindow.w, hudWindow.y, VW - hudWindow.x - hudWindow.w, hudWindow.h);
+      ctx.strokeStyle = '#ff8c1a'; ctx.lineWidth = 1.5; ctx.strokeRect(hudWindow.x + .5, hudWindow.y + .5, hudWindow.w - 1, hudWindow.h - 1);
+      labelBox('visible window ' + hudWindow.x + ',' + hudWindow.y + ' ' + hudWindow.w + 'x' + hudWindow.h, hudWindow.x + 2, hudWindow.y - 18, '#ff8c1a');   // above it: BMW's speed sits in its bottom-left
     }
   }
   // BMW's own HUD content (the HUD only): its speed and the speed-limit sign in the bottom-left, which the car draws
@@ -289,25 +289,25 @@
   let units = 'us';
   const bmwState = { nav: null, assist: null };   // route guidance and the ACC block, as the server last sent them
   function drawBmwHud() {
-    const kmh = lastValues.speed, us = units === 'us';
-    const v = typeof kmh === 'number' && isFinite(kmh) ? Math.round(us ? kmh * 0.621371 : kmh) : null;
-    const limit = us ? (v !== null && v > 45 ? 65 : 35) : (v !== null && v > 70 ? 100 : 50);
+    const kmh = lastValues.speed, useMiles = units === 'us';
+    const speed = typeof kmh === 'number' && isFinite(kmh) ? Math.round(useMiles ? kmh * 0.621371 : kmh) : null;
+    const limit = useMiles ? (speed !== null && speed > 45 ? 65 : 35) : (speed !== null && speed > 70 ? 100 : 50);
     // the sign: a light rounded square with the limit, the unit under it
     ctx.fillStyle = 'rgba(236,230,200,.92)';
     ctx.beginPath(); ctx.roundRect ? ctx.roundRect(152, 320, 50, 54, 5) : ctx.rect(152, 320, 50, 54); ctx.fill();
     ctx.strokeStyle = 'rgba(40,40,40,.6)'; ctx.lineWidth = 2; ctx.strokeRect(156, 324, 42, 46);
     ctx.fillStyle = '#222'; ctx.textAlign = 'center';
     ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText(String(limit), 177, 352);
-    ctx.font = '10px -apple-system, Helvetica, sans-serif'; ctx.fillText(us ? 'mph' : 'km/h', 177, 365);
+    ctx.font = '10px -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 177, 365);
     // the speed: big white digits, the unit small above their right end, a line from the sign to the unit
     ctx.textAlign = 'right'; ctx.fillStyle = '#f4f4f0';
-    ctx.font = 'bold 46px -apple-system, Helvetica, sans-serif'; ctx.fillText(v === null ? '--' : String(v), 318, 374);
-    ctx.font = 'bold 13px -apple-system, Helvetica, sans-serif'; ctx.fillText(us ? 'mph' : 'km/h', 352, 334);
+    ctx.font = 'bold 46px -apple-system, Helvetica, sans-serif'; ctx.fillText(speed === null ? '--' : String(speed), 318, 374);
+    ctx.font = 'bold 13px -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 352, 334);
     ctx.strokeStyle = 'rgba(244,244,240,.8)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(212, 330); ctx.lineTo(318, 330); ctx.stroke();
     ctx.textAlign = 'left';
     const acc = bmwState.assist === 'acc', nav = bmwState.nav === 'ACTIVE';
-    if (acc) drawBmwAcc(us);
+    if (acc) drawBmwAcc(useMiles);
     if (nav) drawBmwGuidance(acc ? 385 : 312);
     if (document.getElementById('outlines').checked) {
       labelBox("BMW's speed + limit", 150, 296, '#ff8c1a');
@@ -317,14 +317,14 @@
   }
   // BMW's driver assistance block (HUD photo, Nov 7 2026: x ~240..345, y ~200..312, above its speed): the car ahead with
   // the set speed beside it, the distance bars, the green lane lines and steering wheel
-  function drawBmwAcc(us) {
-    const g = '#8fdc4a';
+  function drawBmwAcc(useMiles) {
+    const green = '#8fdc4a';
     ctx.strokeStyle = '#e8e8e2'; ctx.lineWidth = 2;
     ctx.strokeRect(266, 206, 34, 20); ctx.strokeRect(270, 200, 26, 8);                 // the car ahead
-    ctx.fillStyle = g; ctx.font = 'bold 15px -apple-system, Helvetica, sans-serif';
-    ctx.fillText(us ? '95' : '152', 310, 224);
-    ctx.strokeStyle = g; ctx.beginPath(); ctx.arc(326, 210, 9, Math.PI, 0); ctx.stroke(); // the set-speed arc
-    [0, 1, 2].forEach((i) => { ctx.fillStyle = g; ctx.fillRect(262 - i * 3, 234 + i * 9, 42 + i * 6, 5); });   // distance bars
+    ctx.fillStyle = green; ctx.font = 'bold 15px -apple-system, Helvetica, sans-serif';
+    ctx.fillText(useMiles ? '95' : '152', 310, 224);
+    ctx.strokeStyle = green; ctx.beginPath(); ctx.arc(326, 210, 9, Math.PI, 0); ctx.stroke(); // the set-speed arc
+    [0, 1, 2].forEach((i) => { ctx.fillStyle = green; ctx.fillRect(262 - i * 3, 234 + i * 9, 42 + i * 6, 5); });   // distance bars
     ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(252, 262); ctx.lineTo(244, 304); ctx.moveTo(314, 262); ctx.lineTo(322, 304); ctx.stroke();   // lane lines
     ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(283, 286, 14, 0, 7); ctx.stroke();      // the steering wheel
@@ -334,53 +334,53 @@
   // end, the turn map below it from x0 (~312; ~385 when the ACC block is up) to the window's right edge, the distance in
   // its bottom right
   function drawBmwGuidance(x0) {
-    const fg = '#efece0', x1 = 599;
-    ctx.strokeStyle = fg; ctx.lineWidth = 2;
+    const fgColor = '#efece0', x1 = 599;
+    ctx.strokeStyle = fgColor; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(126, 160); ctx.lineTo(x1, 160); ctx.stroke();
-    ctx.fillStyle = fg; ctx.textAlign = 'right'; ctx.font = 'bold 17px -apple-system, Helvetica, sans-serif';
+    ctx.fillStyle = fgColor; ctx.textAlign = 'right'; ctx.font = 'bold 17px -apple-system, Helvetica, sans-serif';
     ctx.fillText('Ellesmere Rd', x1, 152);
     ctx.save(); ctx.beginPath(); ctx.rect(x0, 166, x1 - x0, 210); ctx.clip();
     ctx.strokeStyle = 'rgba(239,236,224,.55)'; ctx.lineWidth = 1.5;                    // side streets
     for (let i = 0; i < 9; i++) { ctx.beginPath(); ctx.moveTo(x0 + i * 34, 166); ctx.lineTo(x0 + i * 34 + 18, 376); ctx.stroke(); }
     for (let j = 0; j < 5; j++) { ctx.beginPath(); ctx.moveTo(x0, 190 + j * 40); ctx.lineTo(x1, 182 + j * 40); ctx.stroke(); }
-    const mx = Math.round((x0 + x1) / 2);
-    ctx.strokeStyle = fg; ctx.lineWidth = 6;                                             // the route and the turn
-    ctx.beginPath(); ctx.moveTo(mx, 376); ctx.lineTo(mx, 236); ctx.lineTo(x0 + 6, 236); ctx.stroke();
-    ctx.fillStyle = fg; ctx.beginPath(); ctx.moveTo(x0 + 2, 236); ctx.lineTo(x0 + 18, 226); ctx.lineTo(x0 + 18, 246); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#ff8a1a'; ctx.beginPath(); ctx.moveTo(mx, 228); ctx.lineTo(mx - 8, 246); ctx.lineTo(mx + 8, 246); ctx.closePath(); ctx.fill();   // the car
+    const midX = Math.round((x0 + x1) / 2);
+    ctx.strokeStyle = fgColor; ctx.lineWidth = 6;                                             // the route and the turn
+    ctx.beginPath(); ctx.moveTo(midX, 376); ctx.lineTo(midX, 236); ctx.lineTo(x0 + 6, 236); ctx.stroke();
+    ctx.fillStyle = fgColor; ctx.beginPath(); ctx.moveTo(x0 + 2, 236); ctx.lineTo(x0 + 18, 226); ctx.lineTo(x0 + 18, 246); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff8a1a'; ctx.beginPath(); ctx.moveTo(midX, 228); ctx.lineTo(midX - 8, 246); ctx.lineTo(midX + 8, 246); ctx.closePath(); ctx.fill();   // the car
     ctx.restore();
-    ctx.fillStyle = fg; ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText('200 m', x1, 372);
+    ctx.fillStyle = fgColor; ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText('200 m', x1, 372);
     ctx.textAlign = 'left';
   }
   /** A display per app ({ id, view } from the server's hello), in the server's order; the first reuses canvas#hud. */
   function setViews(list, targets) {
     const box = document.getElementById('views'), first = document.getElementById('hud');
     box.innerHTML = '';
-    views = list.map((a, i) => {
-      const c = i === 0 ? first : document.createElement('canvas');
-      c.className = 'view' + (list.length > 1 && a.view === 'hud' ? ' small' : '');
-      const [w, h] = targets[a.view];
-      c.width = w; c.height = h;
-      if (list.length > 1) box.insertAdjacentHTML('beforeend', '<div class="vlabel">' + a.id + ': ' + a.view + ' ' + w + ' x ' + h + '</div>');
-      box.appendChild(c);
-      return { app: a.id, target: a.view, canvas: c, ctx: c.getContext('2d'), VW: w, VH: h };
+    views = list.map((app, i) => {
+      const viewCanvas = i === 0 ? first : document.createElement('canvas');
+      viewCanvas.className = 'view' + (list.length > 1 && app.view === 'hud' ? ' small' : '');
+      const [w, h] = targets[app.view];
+      viewCanvas.width = w; viewCanvas.height = h;
+      if (list.length > 1) box.insertAdjacentHTML('beforeend', '<div class="vlabel">' + app.id + ': ' + app.view + ' ' + w + ' x ' + h + '</div>');
+      box.appendChild(viewCanvas);
+      return { app: app.id, target: app.view, canvas: viewCanvas, ctx: viewCanvas.getContext('2d'), VW: w, VH: h };
     });
     primaryApp = list.length ? list[0].id : null;
-    document.getElementById('target').textContent = 'target: ' + views.map((v) => v.target + ' ' + v.VW + ' x ' + v.VH).join(', ');
-    const hasPanel = views.some((v) => v.target === 'panel'), hasHud = views.some((v) => v.target === 'hud');
+    document.getElementById('target').textContent = 'target: ' + views.map((pane) => pane.target + ' ' + pane.VW + ' x ' + pane.VH).join(', ');
+    const hasPanel = views.some((pane) => pane.target === 'panel'), hasHud = views.some((pane) => pane.target === 'hud');
     document.getElementById('backdropName').textContent = hasPanel && hasHud ? 'backdrops' : hasPanel ? 'stock cluster backdrop' : 'road backdrop';
     if (hasPanel) document.getElementById('stageNote').textContent = 'The instrument cluster' + (hasHud ? ' and the HUD, each app on its own connection to the one renderer, as on the car' : '') + '. The cluster backdrop stands in for BMW\'s own gauges and the map window under our layers. Anything the app draws opaque covers them, as it would on the car.';
     // a center-screen block per app: its status rows and settings
     const scr = document.getElementById('screens');
-    scr.innerHTML = list.map((a) => '<div class="appblock" data-app="' + a.id + '">' + (list.length > 1 ? '<h3>' + a.id + '</h3>' : '') +
+    scr.innerHTML = list.map((app) => '<div class="appblock" data-app="' + app.id + '">' + (list.length > 1 ? '<h3>' + app.id + '</h3>' : '') +
       '<div class="status">status: waiting for the app</div><div class="settings"></div></div>').join('');
     dirty = true;
   }
   const appBlock = (id) => document.querySelector('#screens .appblock[data-app="' + id + '"]') || document.querySelector('#screens .appblock');
   function drawRoad() {
-    const g = ctx.createLinearGradient(0, 0, 0, 480);
-    g.addColorStop(0, '#2a3340'); g.addColorStop(0.45, '#56606b'); g.addColorStop(0.46, '#2b2d30'); g.addColorStop(1, '#151618');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, 800, 480);
+    const gradient = ctx.createLinearGradient(0, 0, 0, 480);
+    gradient.addColorStop(0, '#2a3340'); gradient.addColorStop(0.45, '#56606b'); gradient.addColorStop(0.46, '#2b2d30'); gradient.addColorStop(1, '#151618');
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 800, 480);
     ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 4; ctx.setLineDash([30, 30]);
     ctx.beginPath(); ctx.moveTo(400, 222); ctx.lineTo(400, 480); ctx.stroke(); ctx.setLineDash([]);
   }
@@ -389,7 +389,7 @@
   // own), and in the corners its bracket ends and a gauge icon
   // (top) and hatched dial ends (bottom), which a layout's "holeCut" keeps black.
   function drawStockMapWindow() {
-    const fg = '#f2f2f0';
+    const fgColor = '#f2f2f0';
     ctx.strokeStyle = 'rgba(200,205,215,.8)'; ctx.lineWidth = 3;
     [[416, 1], [1504, -1]].forEach(([x0, side]) => {
       ctx.beginPath(); ctx.moveTo(x0, 284); ctx.lineTo(x0 + 178 * side, 120); ctx.stroke();            // bracket ends
@@ -404,12 +404,12 @@
     ctx.beginPath(); ctx.arc(505, 194, 11, Math.PI * 0.9, Math.PI * 2.1); ctx.stroke();                 // gauge icon
     // its speed, right-aligned to the unit at x 546: each digit about 58 px wide, so "04" starts at x ~430 and a hundreds
     // digit reaches left past the window's edge to ~372 (104 km/h read 04, car photo Nov 9 2026); drawn 1.7x wide
-    const v = lastValues.speed, kmhNow = typeof v === 'number' ? Math.round(units === 'us' ? v * 0.621371 : v) : 0;
+    const speed = lastValues.speed, kmhNow = typeof speed === 'number' ? Math.round(units === 'us' ? speed * 0.621371 : speed) : 0;
     ctx.save(); ctx.translate(546, 394); ctx.scale(1.7, 1);
-    ctx.fillStyle = fg; ctx.font = 'bold 62px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'right'; ctx.fillText(String(kmhNow), 0, 0);
+    ctx.fillStyle = fgColor; ctx.font = 'bold 62px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'right'; ctx.fillText(String(kmhNow), 0, 0);
     ctx.restore(); ctx.textAlign = 'left';
     ctx.font = 'bold 24px -apple-system, Helvetica, sans-serif'; ctx.fillText('km/h', 552, 394);
-    ctx.strokeStyle = fg; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(416, 414); ctx.lineTo(698, 414); ctx.stroke();
+    ctx.strokeStyle = fgColor; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(416, 414); ctx.lineTo(698, 414); ctx.stroke();
     // its speed-limit sign at the window's left edge, just above the fuel gauge (car photos, Nov 8 2026; a layout's "holeMask")
     ctx.fillStyle = '#f2f2f0'; ctx.beginPath(); ctx.arc(450, 426, 17, 0, 7); ctx.fill();
     ctx.strokeStyle = '#e8372c'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(450, 426, 15, 0, 7); ctx.stroke();
@@ -418,8 +418,8 @@
   }
   // BMW's gear as its cluster shows it, from the app's values: P parked (no gear or a standstill in gear 0), else D and the gear
   function bmwGear() {
-    const g = lastValues.gear;
-    return typeof g === 'number' && g > 0 ? 'D' + g : 'P';
+    const gear = lastValues.gear;
+    return typeof gear === 'number' && gear > 0 ? 'D' + gear : 'P';
   }
   // a rough stand-in for BMW's own cluster: two angular gauges and the map window (416,120 1088x480, from the car photo of Nov 4)
   function drawStockCluster() {
@@ -442,9 +442,9 @@
     ctx.fillStyle = '#000'; ctx.fillRect(box[0], box[1], box[2] - box[0], box[3] - box[1]);
     ctx.fillStyle = '#f2f2f0'; ctx.font = 'bold 54px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'center';
     ctx.fillText(bmwGear(), (box[0] + box[2]) / 2, box[3] - 14); ctx.textAlign = 'left';
-    const gb = geo && geo.GEAR ? geo.GEAR : [1404, 679, 1442, 713];   // its bottom-row gear letter (the Sport view)
+    const gearBox = geo && geo.GEAR ? geo.GEAR : [1404, 679, 1442, 713];   // its bottom-row gear letter (the Sport view)
     ctx.font = 'bold 34px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(bmwGear().charAt(0), (gb[0] + gb[2]) / 2, gb[3] - 4); ctx.textAlign = 'left';
+    ctx.fillText(bmwGear().charAt(0), (gearBox[0] + gearBox[2]) / 2, gearBox[3] - 4); ctx.textAlign = 'left';
   }
 
   // ?clean=1: no outlines, for screenshots
@@ -453,9 +453,9 @@
   // ?car=0: start with the car view (hood, gear box, belt light, HUD window) off
   // the view checkboxes are remembered per browser (a reload kept losing the backdrop); URL flags below still win
   ['outlines', 'road', 'bmwhud', 'carview'].forEach((id) => {
-    const el = document.getElementById(id), key = 'bench.' + id;
-    try { const v = localStorage.getItem(key); if (v !== null) el.checked = v === '1'; } catch (e) { /* storage blocked */ }
-    el.addEventListener('change', () => { try { localStorage.setItem(key, el.checked ? '1' : '0'); } catch (e) { /* storage blocked */ } });
+    const checkbox = document.getElementById(id), key = 'bench.' + id;
+    try { const stored = localStorage.getItem(key); if (stored !== null) checkbox.checked = stored === '1'; } catch (err) { /* storage blocked */ }
+    checkbox.addEventListener('change', () => { try { localStorage.setItem(key, checkbox.checked ? '1' : '0'); } catch (err) { /* storage blocked */ } });
   });
   if (/[?&](clean|only)=1/.test(location.search)) document.getElementById('outlines').checked = false;
   if (/[?&]only=1/.test(location.search)) document.body.classList.add('only');
@@ -466,33 +466,33 @@
   // at most 30 redraws a second, as cluster-render's tick (cluster-render.conf fps = 30); a faster screen skips frames
   const FRAME_MS = 1000 / 30;
   function frame(t) {
-    const animated = scene.some((l) => l.kind === 'effect' && l.time);
+    const animated = scene.some((layer) => layer.kind === 'effect' && layer.time);
     const redraw = document.getElementById('redraw').checked;
     if (redraw && (dirty || animated) && t - lastDraw >= FRAME_MS - 2) {
       lastDraw = t;
       dirty = false;
-      views.forEach((v) => {
-      canvas = v.canvas; ctx = v.ctx; view = v.target; VW = v.VW; VH = v.VH;
-      lastValues = valuesByApp[v.app] || {}; units = unitsByApp[v.app] || units;
+      views.forEach((pane) => {
+      canvas = pane.canvas; ctx = pane.ctx; view = pane.target; VW = pane.VW; VH = pane.VH;
+      lastValues = valuesByApp[pane.app] || {}; units = unitsByApp[pane.app] || units;
       ctx.clearRect(0, 0, VW, VH);
       if (document.getElementById('road').checked) (view === 'panel' ? drawStockCluster : drawRoad)();
       // a layer over the layer cap (state waiting) is never drawn, as on the car
-      const hud = scene.filter((l) => l.target === view && l.visible && l.state !== 'waiting' && l.kind !== 'asset')
+      const hud = scene.filter((layer) => layer.target === view && layer.visible && layer.state !== 'waiting' && layer.kind !== 'asset')
         .sort((a, b) => (CLASS_ORDER[a.class] - CLASS_ORDER[b.class]) || (a.z - b.z));
       let start = 0;
-      hud.forEach((l, i) => { if (l.exclusive) start = i; });
-      hud.slice(start).forEach((l) => {
-        ctx.globalAlpha = l.opacity === undefined ? 1 : l.opacity;
-        if (l.kind === 'image') { const c = images.get(l.key); if (c) ctx.drawImage(c, l.x, l.y, l.w, l.h); }
-        else if (l.kind === 'effect') { const c = drawEffect(l, t); if (c) ctx.drawImage(c, l.x, l.y, l.w, l.h); }
+      hud.forEach((layer, i) => { if (layer.exclusive) start = i; });
+      hud.slice(start).forEach((layer) => {
+        ctx.globalAlpha = layer.opacity === undefined ? 1 : layer.opacity;
+        if (layer.kind === 'image') { const image = images.get(layer.key); if (image) ctx.drawImage(image, layer.x, layer.y, layer.w, layer.h); }
+        else if (layer.kind === 'effect') { const image = drawEffect(layer, t); if (image) ctx.drawImage(image, layer.x, layer.y, layer.w, layer.h); }
         ctx.globalAlpha = 1;
       });
       if (view === 'hud' && document.getElementById('bmwhud').checked) drawBmwHud();
       if (document.getElementById('outlines').checked) {
         ctx.font = '11px ui-monospace, Menlo, monospace';
-        hud.forEach((l) => {
-          ctx.strokeStyle = 'rgba(79,163,255,.55)'; ctx.lineWidth = 1; ctx.strokeRect(l.x + .5, l.y + .5, l.w - 1, l.h - 1);
-          ctx.fillStyle = 'rgba(79,163,255,.8)'; ctx.fillText('#' + l.conn + ':' + l.ref + ' ' + l.kind, l.x + 2, l.y - 3 < 9 ? l.y + l.h + 11 : l.y - 3);
+        hud.forEach((layer) => {
+          ctx.strokeStyle = 'rgba(79,163,255,.55)'; ctx.lineWidth = 1; ctx.strokeRect(layer.x + .5, layer.y + .5, layer.w - 1, layer.h - 1);
+          ctx.fillStyle = 'rgba(79,163,255,.8)'; ctx.fillText('#' + layer.conn + ':' + layer.ref + ' ' + layer.kind, layer.x + 2, layer.y - 3 < 9 ? layer.y + layer.h + 11 : layer.y - 3);
         });
       }
       if (document.getElementById('carview').checked) drawCarView();
@@ -501,7 +501,7 @@
       if (primaryApp) lastValues = valuesByApp[primaryApp] || lastValues;
       frames++;
     }
-    if (t - lastFpsT > 1000) { { const f = document.getElementById('fps'); f.textContent = redraw ? frames + ' redraws/s' : 'redraw off'; f.style.color = redraw ? '' : 'var(--err)'; } frames = 0; lastFpsT = t; }
+    if (t - lastFpsT > 1000) { { const fpsEl = document.getElementById('fps'); fpsEl.textContent = redraw ? frames + ' redraws/s' : 'redraw off'; fpsEl.style.color = redraw ? '' : 'var(--err)'; } frames = 0; lastFpsT = t; }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
@@ -510,26 +510,26 @@
   capEl.addEventListener('change', () => fetch('/cap', { method: 'POST', body: JSON.stringify({ cap: Number(capEl.value) || 0 }) }));
 
   /* ---------- server events ---------- */
-  function addLog(e) {
+  function addLog(entry) {
     const div = document.createElement('div');
-    div.className = e.level; div.textContent = e.text;
+    div.className = entry.level; div.textContent = entry.text;
     const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 4;
     logEl.appendChild(div);
     while (logEl.childNodes.length > 500) logEl.removeChild(logEl.firstChild);
     if (atBottom) logEl.scrollTop = logEl.scrollHeight;
   }
 
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const esc = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   function renderLayerTable() {
     // each app's own connection reads as 1, its layouts' extra connections ("conn") 2, 3 ...
     const firstConn = {};
-    scene.forEach((l) => { firstConn[l.app] = Math.min(firstConn[l.app] === undefined ? Infinity : firstConn[l.app], l.conn); });
-    document.getElementById('layers').innerHTML = scene.map((l) => {
-      const warns = l.warnings || [];
-      const flag = warns.length ? '<td class="flag" title="' + esc(warns.join('\n')) + '">' + (warns.some((w) => /hood/.test(w)) ? 'hood ' : '') + (warns.some((w) => /gear box/.test(w)) ? 'box ' : '') + (warns.some((w) => /belt/.test(w)) ? 'belt ' : '') + (warns.some((w) => /camera/.test(w)) ? 'camera ' : '') + (warns.some((w) => /HUD window/.test(w)) ? 'window' : '') + '</td>' : '<td></td>';
-      const cls = l.state === 'waiting' ? ' class="waiting" title="' + esc(l.reason || 'waiting') + '"' : '';
-      const what = l.kind === 'asset' ? 'asset ' + l.format : l.kind, where = l.kind === 'asset' ? l.w + 'x' + l.h + ' (not drawn)' : l.x + ',' + l.y + ' ' + l.w + 'x' + l.h;
-      return '<tr' + cls + '><td>' + esc(l.app || '?') + '</td><td>' + esc(l.target || '') + '</td><td>' + (l.conn - firstConn[l.app] + 1) + ':' + l.ref + (l.state === 'waiting' ? ' (waiting)' : '') + '</td><td>' + what + '</td><td>' + (l.kind === 'asset' ? '' : l.class + ' / ' + l.z) + '</td><td>' + where + '</td>' + flag + '</tr>';
+    scene.forEach((layer) => { firstConn[layer.app] = Math.min(firstConn[layer.app] === undefined ? Infinity : firstConn[layer.app], layer.conn); });
+    document.getElementById('layers').innerHTML = scene.map((layer) => {
+      const warns = layer.warnings || [];
+      const flag = warns.length ? '<td class="flag" title="' + esc(warns.join('\n')) + '">' + (warns.some((warning) => /hood/.test(warning)) ? 'hood ' : '') + (warns.some((warning) => /gear box/.test(warning)) ? 'box ' : '') + (warns.some((warning) => /belt/.test(warning)) ? 'belt ' : '') + (warns.some((warning) => /camera/.test(warning)) ? 'camera ' : '') + (warns.some((warning) => /HUD window/.test(warning)) ? 'window' : '') + '</td>' : '<td></td>';
+      const cls = layer.state === 'waiting' ? ' class="waiting" title="' + esc(layer.reason || 'waiting') + '"' : '';
+      const what = layer.kind === 'asset' ? 'asset ' + layer.format : layer.kind, where = layer.kind === 'asset' ? layer.w + 'x' + layer.h + ' (not drawn)' : layer.x + ',' + layer.y + ' ' + layer.w + 'x' + layer.h;
+      return '<tr' + cls + '><td>' + esc(layer.app || '?') + '</td><td>' + esc(layer.target || '') + '</td><td>' + (layer.conn - firstConn[layer.app] + 1) + ':' + layer.ref + (layer.state === 'waiting' ? ' (waiting)' : '') + '</td><td>' + what + '</td><td>' + (layer.kind === 'asset' ? '' : layer.class + ' / ' + layer.z) + '</td><td>' + where + '</td>' + flag + '</tr>';
     }).join('');
   }
 
@@ -540,7 +540,7 @@
   const connEl = document.getElementById('conn');
   function setConn(text, cls) { connEl.textContent = 'page: ' + text; connEl.className = 'pill ' + cls; }
   function onData(data) {
-    try { onMessage(JSON.parse(data)); } catch (e) { addLog({ level: 'error', text: 'bench page: ' + (e && e.message || e) + ' (' + data.slice(0, 60) + ')' }); }
+    try { onMessage(JSON.parse(data)); } catch (err) { addLog({ level: 'error', text: 'bench page: ' + (err && err.message || err) + ' (' + data.slice(0, 60) + ')' }); }
   }
   (async function readEvents() {
     try {
@@ -560,65 +560,65 @@
           msg.split('\n').forEach((line) => { if (line.indexOf('data: ') === 0) onData(line.slice(6)); });
         }
       }
-    } catch (e) { addLog({ level: 'error', text: 'bench page: event stream: ' + (e && e.message || e) }); dbgErr = String(e && e.message || e); dirty = true; }
+    } catch (err) { addLog({ level: 'error', text: 'bench page: event stream: ' + (err && err.message || err) }); dbgErr = String(err && err.message || err); dirty = true; }
     setConn('bench server gone', 'bad');
   })();
   let dbgN = 0, dbgLast = '', dbgReads = 0, dbgBuf = 0, dbgErr = '', dbgPx = 0, pixelCap = 16 * 1048576;
-  function onMessage(m) {
-    dbgN++; dbgLast = m.t + ':' + (m.key || '') + ':' + (m.w === undefined ? 'whole' : 'rect'); dirty = true;
-    if (m.t === 'log') addLog(m);
-    else if (m.t === 'hello') {
-      geo = m.geometry || geo;
-      pixelCap = m.pixelCap === undefined ? pixelCap : m.pixelCap;
-      if (document.activeElement !== capEl) capEl.value = m.cap || 0;
-      setViews(m.apps || [{ id: m.app, view: m.view || 'hud' }], m.targets); document.getElementById('title').textContent = 'Bench: ' + m.app;
+  function onMessage(msg) {
+    dbgN++; dbgLast = msg.t + ':' + (msg.key || '') + ':' + (msg.w === undefined ? 'whole' : 'rect'); dirty = true;
+    if (msg.t === 'log') addLog(msg);
+    else if (msg.t === 'hello') {
+      geo = msg.geometry || geo;
+      pixelCap = msg.pixelCap === undefined ? pixelCap : msg.pixelCap;
+      if (document.activeElement !== capEl) capEl.value = msg.cap || 0;
+      setViews(msg.apps || [{ id: msg.app, view: msg.view || 'hud' }], msg.targets); document.getElementById('title').textContent = 'Bench: ' + msg.app;
     }
-    else if (m.t === 'scene') {
-      scene = m.layers;
-      if (m.pixels !== undefined) document.getElementById('pixels').textContent = 'pixels: ' + (m.pixels / 1048576).toFixed(1) + ' of ' + (pixelCap ? (pixelCap / 1048576).toFixed(0) + ' MiB' : 'unlimited');
-      const keys = new Set(scene.map((l) => l.key));
+    else if (msg.t === 'scene') {
+      scene = msg.layers;
+      if (msg.pixels !== undefined) document.getElementById('pixels').textContent = 'pixels: ' + (msg.pixels / 1048576).toFixed(1) + ' of ' + (pixelCap ? (pixelCap / 1048576).toFixed(0) + ' MiB' : 'unlimited');
+      const keys = new Set(scene.map((layer) => layer.key));
       Array.from(images.keys()).forEach((k) => { if (!keys.has(k)) images.delete(k); });
       renderLayerTable(); dirty = true;
-    } else if (m.t === 'px') {
+    } else if (msg.t === 'px') {
       // a rect of an image layer changed (the whole image, or a packed sheet's text update): fetch its bytes
-      let c = images.get(m.key);
-      if (!c) { c = document.createElement('canvas'); images.set(m.key, c); }
-      if (c.width !== m.iw || c.height !== m.ih) { c.width = m.iw; c.height = m.ih; }
-      fetch('/px?key=' + encodeURIComponent(m.key) + '&x=' + m.x + '&y=' + m.y + '&w=' + m.w + '&h=' + m.h, { cache: 'no-store' })
-        .then((r) => (r.ok ? r.arrayBuffer() : null))
+      let image = images.get(msg.key);
+      if (!image) { image = document.createElement('canvas'); images.set(msg.key, image); }
+      if (image.width !== msg.iw || image.height !== msg.ih) { image.width = msg.iw; image.height = msg.ih; }
+      fetch('/px?key=' + encodeURIComponent(msg.key) + '&x=' + msg.x + '&y=' + msg.y + '&w=' + msg.w + '&h=' + msg.h, { cache: 'no-store' })
+        .then((response) => (response.ok ? response.arrayBuffer() : null))
         .then((buf) => {
-          if (!buf || images.get(m.key) !== c) return;
-          c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), m.w, m.h), m.x, m.y);
-          c.stamp = (c.stamp || 0) + 1;
+          if (!buf || images.get(msg.key) !== image) return;
+          image.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), msg.w, msg.h), msg.x, msg.y);
+          image.stamp = (image.stamp || 0) + 1;
           dbgPx++; dirty = true;
         }).catch(() => {});
-    } else if (m.t === 'nav' || m.t === 'assist') {
-      bmwState[m.t] = m.value; dirty = true;
-      document.querySelectorAll('#' + m.t + ' button').forEach((x) => x.classList.toggle('on', x.dataset.v === (m.value === null ? '' : m.value)));
-    } else if (m.t === 'car') {
-      carSw = m.values || {};
-      document.querySelectorAll('#carsw .seg').forEach((g) => g.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x.dataset.v === (carSw[g.dataset.k] || ''))));
-    } else if (m.t === 'settings') {
-      if (m.values && m.values.units) { unitsByApp[m.app] = m.values.units; dirty = true; }
-      renderSettings(m);
-    } else if (m.t === 'status') {
-      const b = appBlock(m.app);
-      if (b) b.querySelector('.status').textContent = m.s + (m.d ? '\n' + m.d : '');
-    } else if (m.t === 'app') {
-      appStates[m.app || '?'] = m.state;
-      const ids = Object.keys(appStates), a = document.getElementById('appState'), ok = ids.every((k) => appStates[k] === 'running');
-      a.textContent = ids.length > 1 ? ids.map((k) => k.replace(/^custom_/, '') + ': ' + appStates[k]).join(', ') : 'app: ' + m.state;
-      a.className = 'pill ' + (ok ? 'ok' : 'bad');
-    } else if (m.t === 'values') {
-      valuesByApp[m.app] = m.values;
+    } else if (msg.t === 'nav' || msg.t === 'assist') {
+      bmwState[msg.t] = msg.value; dirty = true;
+      document.querySelectorAll('#' + msg.t + ' button').forEach((button) => button.classList.toggle('on', button.dataset.v === (msg.value === null ? '' : msg.value)));
+    } else if (msg.t === 'car') {
+      carSw = msg.values || {};
+      document.querySelectorAll('#carsw .seg').forEach((group) => group.querySelectorAll('button').forEach((button) => button.classList.toggle('on', button.dataset.v === (carSw[group.dataset.k] || ''))));
+    } else if (msg.t === 'settings') {
+      if (msg.values && msg.values.units) { unitsByApp[msg.app] = msg.values.units; dirty = true; }
+      renderSettings(msg);
+    } else if (msg.t === 'status') {
+      const block = appBlock(msg.app);
+      if (block) block.querySelector('.status').textContent = msg.s + (msg.d ? '\n' + msg.d : '');
+    } else if (msg.t === 'app') {
+      appStates[msg.app || '?'] = msg.state;
+      const ids = Object.keys(appStates), stateEl = document.getElementById('appState'), allRunning = ids.every((k) => appStates[k] === 'running');
+      stateEl.textContent = ids.length > 1 ? ids.map((k) => k.replace(/^custom_/, '') + ': ' + appStates[k]).join(', ') : 'app: ' + msg.state;
+      stateEl.className = 'pill ' + (allRunning ? 'ok' : 'bad');
+    } else if (msg.t === 'values') {
+      valuesByApp[msg.app] = msg.values;
       dirty = true;   // BMW's speed (HUD) and gear (cluster) stand-ins follow each app's values
-      if (m.app && primaryApp && m.app !== primaryApp) return;   // the sliders follow the first app
-      lastValues = m.values;
-      if (m.mode !== mode) setMode(m.mode, true);
+      if (msg.app && primaryApp && msg.app !== primaryApp) return;   // the sliders follow the first app
+      lastValues = msg.values;
+      if (msg.mode !== mode) setMode(msg.mode, true);
       if (mode === 'demo') SIGNALS.forEach(([k]) => {
-        const v = m.values[k];
-        document.getElementById('o_' + k).textContent = v === null || v === undefined ? '--' : (Math.round(v * 10) / 10);
-        if (v !== null && v !== undefined) document.getElementById('s_' + k).value = v;
+        const value = msg.values[k];
+        document.getElementById('o_' + k).textContent = value === null || value === undefined ? '--' : (Math.round(value * 10) / 10);
+        if (value !== null && value !== undefined) document.getElementById('s_' + k).value = value;
       });
     }
   }
@@ -637,64 +637,64 @@
   const csw = document.getElementById('carsw');
   CAR_SW.forEach(([k, title, opts]) => {
     csw.insertAdjacentHTML('beforeend', '<div class="seg" data-k="' + k + '" title="' + title + '">' +
-      opts.map(([v, t]) => '<button data-v="' + v + '"' + (v === '' ? ' class="on"' : '') + '>' + t + '</button>').join('') + '</div>');
+      opts.map(([value, label]) => '<button data-v="' + value + '"' + (value === '' ? ' class="on"' : '') + '>' + label + '</button>').join('') + '</div>');
   });
-  csw.querySelectorAll('.seg').forEach((g) => g.querySelectorAll('button').forEach((b) => b.onclick = () => {
-    g.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
-    fetch('/car', { method: 'POST', body: JSON.stringify({ key: g.dataset.k, value: b.dataset.v }) });
+  csw.querySelectorAll('.seg').forEach((group) => group.querySelectorAll('button').forEach((button) => button.onclick = () => {
+    group.querySelectorAll('button').forEach((other) => other.classList.toggle('on', other === button));
+    fetch('/car', { method: 'POST', body: JSON.stringify({ key: group.dataset.k, value: button.dataset.v }) });
   }));
-  const sl = document.getElementById('sliders');
+  const sliders = document.getElementById('sliders');
   SIGNALS.forEach(([k, min, max, step, def]) => {
-    sl.insertAdjacentHTML('beforeend', '<div class="row"><span>' + k + '</span><input type="range" id="s_' + k + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + def + '" disabled><output id="o_' + k + '">--</output></div>');
+    sliders.insertAdjacentHTML('beforeend', '<div class="row"><span>' + k + '</span><input type="range" id="s_' + k + '" min="' + min + '" max="' + max + '" step="' + step + '" value="' + def + '" disabled><output id="o_' + k + '">--</output></div>');
   });
-  function values() { const o = {}; SIGNALS.forEach(([k]) => { o[k] = Number(document.getElementById('s_' + k).value); }); return o; }
+  function values() { const out = {}; SIGNALS.forEach(([k]) => { out[k] = Number(document.getElementById('s_' + k).value); }); return out; }
   function pushSignals() { fetch('/signals', { method: 'POST', body: JSON.stringify({ mode, values: values() }) }); }
-  SIGNALS.forEach(([k]) => document.getElementById('s_' + k).addEventListener('input', (e) => {
-    document.getElementById('o_' + k).textContent = e.target.value; pushSignals();
+  SIGNALS.forEach(([k]) => document.getElementById('s_' + k).addEventListener('input', (event) => {
+    document.getElementById('o_' + k).textContent = event.target.value; pushSignals();
   }));
-  function setMode(m, fromServer) {
-    mode = m;
-    document.getElementById('mDemo').classList.toggle('on', m === 'demo');
-    document.getElementById('mManual').classList.toggle('on', m === 'manual');
+  function setMode(newMode, fromServer) {
+    mode = newMode;
+    document.getElementById('mDemo').classList.toggle('on', newMode === 'demo');
+    document.getElementById('mManual').classList.toggle('on', newMode === 'manual');
     SIGNALS.forEach(([k]) => {
-      const s = document.getElementById('s_' + k); s.disabled = m !== 'manual';
-      if (m === 'manual') { const v = lastValues[k]; if (v !== null && v !== undefined) s.value = v; document.getElementById('o_' + k).textContent = s.value; }
+      const slider = document.getElementById('s_' + k); slider.disabled = newMode !== 'manual';
+      if (newMode === 'manual') { const value = lastValues[k]; if (value !== null && value !== undefined) slider.value = value; document.getElementById('o_' + k).textContent = slider.value; }
     });
-    document.getElementById('sigNote').textContent = m === 'manual'
+    document.getElementById('sigNote').textContent = newMode === 'manual'
       ? 'Manual values go in as raw SOME/IP values, the same fields and scaling the car sends (boost through FES displayBoostPressure), and the kit\'s car.js decodes them. Units here: rpm, km/h, deg C, bar.'
       : 'Demo drive is the kit\'s simulator (sim.js). It has no boost signal, so boost reads "--" here, as on a car that does not fill that field.';
     if (!fromServer) pushSignals();
   }
   document.getElementById('mDemo').onclick = () => setMode('demo');
-  document.querySelectorAll('#drive button').forEach((b) => b.onclick = () => {
-    document.querySelectorAll('#drive button').forEach((x) => x.classList.toggle('on', x === b));
-    fetch('/drive', { method: 'POST', body: JSON.stringify({ value: b.dataset.v === '' ? null : Number(b.dataset.v) }) });
+  document.querySelectorAll('#drive button').forEach((button) => button.onclick = () => {
+    document.querySelectorAll('#drive button').forEach((other) => other.classList.toggle('on', other === button));
+    fetch('/drive', { method: 'POST', body: JSON.stringify({ value: button.dataset.v === '' ? null : Number(button.dataset.v) }) });
   });
-  document.querySelectorAll('#nav button').forEach((b) => b.onclick = () => {
-    document.querySelectorAll('#nav button').forEach((x) => x.classList.toggle('on', x === b));
-    fetch('/nav', { method: 'POST', body: JSON.stringify({ value: b.dataset.v === '' ? null : b.dataset.v }) });
+  document.querySelectorAll('#nav button').forEach((button) => button.onclick = () => {
+    document.querySelectorAll('#nav button').forEach((other) => other.classList.toggle('on', other === button));
+    fetch('/nav', { method: 'POST', body: JSON.stringify({ value: button.dataset.v === '' ? null : button.dataset.v }) });
   });
-  document.querySelectorAll('#assist button').forEach((b) => b.onclick = () => {
-    document.querySelectorAll('#assist button').forEach((x) => x.classList.toggle('on', x === b));
-    fetch('/assist', { method: 'POST', body: JSON.stringify({ value: b.dataset.v === '' ? null : b.dataset.v }) });
+  document.querySelectorAll('#assist button').forEach((button) => button.onclick = () => {
+    document.querySelectorAll('#assist button').forEach((other) => other.classList.toggle('on', other === button));
+    fetch('/assist', { method: 'POST', body: JSON.stringify({ value: button.dataset.v === '' ? null : button.dataset.v }) });
   });
   document.getElementById('mManual').onclick = () => setMode('manual');
-  function renderSettings(m) {
-    const blk = appBlock(m.app), box = blk && blk.querySelector('.settings');
+  function renderSettings(msg) {
+    const blk = appBlock(msg.app), box = blk && blk.querySelector('.settings');
     if (!box) return;
     box.innerHTML = '';
-    m.schema.forEach((s) => {
+    msg.schema.forEach((item) => {
       const row = document.createElement('div'); row.className = 'srow';
-      const lab = document.createElement('span'); lab.textContent = s.label; row.appendChild(lab);
+      const lab = document.createElement('span'); lab.textContent = item.label; row.appendChild(lab);
       let ctl;
-      if (s.type === 'bool') {
-        ctl = document.createElement('input'); ctl.type = 'checkbox'; ctl.checked = !!m.values[s.key];
-        ctl.onchange = () => setSetting(m.app, s.key, ctl.checked);
+      if (item.type === 'bool') {
+        ctl = document.createElement('input'); ctl.type = 'checkbox'; ctl.checked = !!msg.values[item.key];
+        ctl.onchange = () => setSetting(msg.app, item.key, ctl.checked);
       } else {
         ctl = document.createElement('select');
-        const opts = s.type === 'choice' ? s.options : s.steps.map((v) => [v, v + (s.unit ? ' ' + s.unit : '')]);
-        opts.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; if (v === m.values[s.key]) o.selected = true; ctl.appendChild(o); });
-        ctl.onchange = () => setSetting(m.app, s.key, s.type === 'number' ? Number(ctl.value) : ctl.value);
+        const opts = item.type === 'choice' ? item.options : item.steps.map((step) => [step, step + (item.unit ? ' ' + item.unit : '')]);
+        opts.forEach(([value, label]) => { const option = document.createElement('option'); option.value = value; option.textContent = label; if (value === msg.values[item.key]) option.selected = true; ctl.appendChild(option); });
+        ctl.onchange = () => setSetting(msg.app, item.key, item.type === 'number' ? Number(ctl.value) : ctl.value);
       }
       row.appendChild(ctl); box.appendChild(row);
     });
