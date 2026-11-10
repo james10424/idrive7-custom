@@ -425,15 +425,16 @@
   }
   // a rough stand-in for BMW's own cluster: two angular gauges and the map window (416,120 1088x480, from the car photo of Nov 4)
   // photos of BMW's own cluster warped to the panel (bench/.data/backdrops/, served at /backdrop/): the ACC view while
-  // ACC is on, the map view otherwise (route guidance on or off); missing ones fall back to the drawn stand-in below
+  // ACC is on; during route guidance its map window as BMW draws it under Sport (no trip computer text: car photo
+  // Nov 9 2026); otherwise its map view; missing ones fall back to the drawn stand-in below
   const stockPhotos = {};
-  ['stock-map', 'stock-acc'].forEach((name) => {
+  ['stock-map', 'stock-nav', 'stock-acc'].forEach((name) => {
     const img = new Image();
     img.onload = () => { stockPhotos[name] = img; dirty = true; };
     img.src = '/backdrop/' + name + '.jpg';
   });
   function drawStockCluster() {
-    const photo = stockPhotos[bmwState.assist === 'acc' ? 'stock-acc' : 'stock-map'] || stockPhotos['stock-map'];
+    const photo = stockPhotos[bmwState.assist === 'acc' ? 'stock-acc' : bmwState.nav === 'ACTIVE' ? 'stock-nav' : 'stock-map'] || stockPhotos['stock-map'];
     if (photo) { ctx.drawImage(photo, 0, 0, VW, VH); return; }
     ctx.fillStyle = '#05070a'; ctx.fillRect(0, 0, VW, VH);
     ctx.fillStyle = '#1d3b5c'; ctx.fillRect(416, 120, 1088, 480);

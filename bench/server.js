@@ -1274,9 +1274,9 @@ const web = http.createServer(async (req, res) => {
     return res.end();
   }
   const url = req.url.split("?")[0];
-  // the cluster backdrop's photos: BMW's own views warped to the panel's 1920x720 (stock-map.jpg, stock-acc.jpg), kept in
+  // the cluster backdrop's photos: BMW's own views warped to the panel's 1920x720 (stock-map.jpg, stock-nav.jpg, stock-acc.jpg), kept in
   // bench/.data/backdrops/ (not in git: car photos); without them the page draws its stand-in
-  const backdrop = /^\/backdrop\/(stock-(?:map|acc))\.jpg$/.exec(url);
+  const backdrop = /^\/backdrop\/(stock-(?:map|nav|acc))\.jpg$/.exec(url);
   if (req.method === "GET" && backdrop) {
     const file = path.join(
       __dirname,
