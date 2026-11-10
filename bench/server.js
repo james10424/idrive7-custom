@@ -1274,6 +1274,26 @@ const web = http.createServer(async (req, res) => {
     return res.end();
   }
   const url = req.url.split("?")[0];
+  // the cluster backdrop's photos: BMW's own views warped to the panel's 1920x720 (stock-map.jpg, stock-acc.jpg), kept in
+  // bench/.data/backdrops/ (not in git: car photos); without them the page draws its stand-in
+  const backdrop = /^\/backdrop\/(stock-(?:map|acc))\.jpg$/.exec(url);
+  if (req.method === "GET" && backdrop) {
+    const file = path.join(
+      __dirname,
+      ".data",
+      "backdrops",
+      backdrop[1] + ".jpg",
+    );
+    if (!fs.existsSync(file)) {
+      res.writeHead(404);
+      return res.end();
+    }
+    res.writeHead(200, {
+      "content-type": "image/jpeg",
+      "cache-control": "no-store",
+    });
+    return fs.createReadStream(file).pipe(res);
+  }
   if (req.method === "GET" && url === "/") {
     res.writeHead(200, {
       "content-type": "text/html; charset=utf-8",
