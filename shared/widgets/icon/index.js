@@ -18,18 +18,27 @@ module.exports = {
   image: true,
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const t = hud.theme;
-    hud._blit(x, null, paintIcon(w.icon, w.w, w.h, color(t, w.color || "fg")));
+  create(hud, widget, state) {
+    const theme = hud.theme;
+    hud._blit(
+      state,
+      null,
+      paintIcon(
+        widget.icon,
+        widget.w,
+        widget.h,
+        color(theme, widget.color || "fg"),
+      ),
+    );
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

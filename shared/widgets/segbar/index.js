@@ -23,39 +23,48 @@ module.exports = {
   shaders: { segbar: SEGBAR },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_segs", [w.max]);
-    c.uniform(ref, "u_on", rgba(color(t, w.color || "hot")));
-    c.uniform(ref, "u_offC", rgba(color(t, "track")));
-    c.uniform(ref, "u_slant", [w.slant || 0]);
-    c.uniform(ref, "u_gap", [isNum(w.gap) ? w.gap : 8]);
-    c.uniform(ref, "u_hotSeg", [-1]);
-    c.uniform(ref, "u_hotC", rgba(color(t, w.hotColor || "hot")));
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_segs", [widget.max]);
+    client.uniform(ref, "u_on", rgba(color(theme, widget.color || "hot")));
+    client.uniform(ref, "u_offC", rgba(color(theme, "track")));
+    client.uniform(ref, "u_slant", [widget.slant || 0]);
+    client.uniform(ref, "u_gap", [isNum(widget.gap) ? widget.gap : 8]);
+    client.uniform(ref, "u_hotSeg", [-1]);
+    client.uniform(ref, "u_hotC", rgba(color(theme, widget.hotColor || "hot")));
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const w = x.w;
-    let v = hud._raw(w.signal);
-    if (isNum(v) && Array.isArray(w.range) && w.range.length === 2)
-      v = ((v - w.range[0]) / (w.range[1] - w.range[0])) * w.max;
-    const lit = isNum(v) ? Math.max(0, Math.min(w.max, Math.round(v))) : 0;
-    const hot = w.hotWhen === "kickdown" && hud._kickdown() && lit === w.max; // the last segment in "hotColor"
+  update(hud, state, now, force) {
+    const widget = state.w;
+    let value = hud._raw(widget.signal);
+    if (
+      isNum(value) &&
+      Array.isArray(widget.range) &&
+      widget.range.length === 2
+    )
+      value =
+        ((value - widget.range[0]) / (widget.range[1] - widget.range[0])) *
+        widget.max;
+    const lit = isNum(value)
+      ? Math.max(0, Math.min(widget.max, Math.round(value)))
+      : 0;
+    const hot =
+      widget.hotWhen === "kickdown" && hud._kickdown() && lit === widget.max; // the last segment in "hotColor"
     const key = lit + (hot ? "h" : "");
-    if (!force && key === x.last) return;
-    x.last = key;
-    x.c.uniform(x.ref, "u_lit", [lit]);
-    x.c.uniform(x.ref, "u_hotSeg", [hot ? w.max - 1 : -1]);
+    if (!force && key === state.last) return;
+    state.last = key;
+    state.c.uniform(state.ref, "u_lit", [lit]);
+    state.c.uniform(state.ref, "u_hotSeg", [hot ? widget.max - 1 : -1]);
   },
 };

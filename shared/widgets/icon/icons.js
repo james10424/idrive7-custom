@@ -20,35 +20,39 @@ function seg(px, py, ax, ay, bx, by) {
     pay = py - ay,
     bax = bx - ax,
     bay = by - ay;
-  const h = Math.max(
+  const along = Math.max(
     0,
     Math.min(1, (pax * bax + pay * bay) / (bax * bax + bay * bay)),
   );
-  return Math.hypot(pax - bax * h, pay - bay * h);
+  return Math.hypot(pax - bax * along, pay - bay * along);
 }
-/** @type {(px: number, py: number, cx: number, cy: number, r: number) => number} distance to a circle line */
-const ring = (px, py, cx, cy, r) => Math.abs(Math.hypot(px - cx, py - cy) - r);
-/** @type {(px: number, py: number, cx: number, cy: number, r: number) => number} signed distance to a filled circle */
-const disc = (px, py, cx, cy, r) => Math.hypot(px - cx, py - cy) - r;
+/** @type {(px: number, py: number, cx: number, cy: number, radius: number) => number} distance to a circle line */
+const ring = (px, py, cx, cy, radius) =>
+  Math.abs(Math.hypot(px - cx, py - cy) - radius);
+/** @type {(px: number, py: number, cx: number, cy: number, radius: number) => number} signed distance to a filled circle */
+const disc = (px, py, cx, cy, radius) => Math.hypot(px - cx, py - cy) - radius;
 /**
- * Distance to an arc of radius r around (cx, cy), from angle a0 to a1.
+ * Distance to an arc of `radius` around (cx, cy), from startAngle to endAngle.
  * @param {number} px
  * @param {number} py
  * @param {number} cx
  * @param {number} cy
- * @param {number} r
- * @param {number} a0
- * @param {number} a1
+ * @param {number} radius
+ * @param {number} startAngle
+ * @param {number} endAngle
  * @returns {number}
  */
-function arc(px, py, cx, cy, r, a0, a1) {
-  // clockwise from 12 o'clock, radians, a0 < a1
-  let a = Math.atan2(px - cx, -(py - cy));
-  if (a < a0) a += Math.PI * 2;
-  if (a <= a1) return Math.abs(Math.hypot(px - cx, py - cy) - r);
-  const e = (b) =>
-    Math.hypot(px - (cx + r * Math.sin(b)), py - (cy - r * Math.cos(b)));
-  return Math.min(e(a0), e(a1));
+function arc(px, py, cx, cy, radius, startAngle, endAngle) {
+  // clockwise from 12 o'clock, radians, startAngle < endAngle
+  let angle = Math.atan2(px - cx, -(py - cy));
+  if (angle < startAngle) angle += Math.PI * 2;
+  if (angle <= endAngle) return Math.abs(Math.hypot(px - cx, py - cy) - radius);
+  const endDist = (theta) =>
+    Math.hypot(
+      px - (cx + radius * Math.sin(theta)),
+      py - (cy - radius * Math.cos(theta)),
+    );
+  return Math.min(endDist(startAngle), endDist(endAngle));
 }
 
 /**
@@ -79,25 +83,25 @@ const ICONS = {
       seg(x, y, 0.5, 0.62, 0.5, 0.86) - 0.05,
     ),
   cog: (x, y) => {
-    let d = Math.min(
+    let dist = Math.min(
       ring(x, y, 0.5, 0.5, 0.27) - 0.06,
       ring(x, y, 0.5, 0.5, 0.1) - 0.04,
     );
     for (let i = 0; i < 8; i++) {
-      const a = (i * Math.PI) / 4;
-      d = Math.min(
-        d,
+      const angle = (i * Math.PI) / 4;
+      dist = Math.min(
+        dist,
         seg(
           x,
           y,
-          0.5 + 0.3 * Math.sin(a),
-          0.5 - 0.3 * Math.cos(a),
-          0.5 + 0.42 * Math.sin(a),
-          0.5 - 0.42 * Math.cos(a),
+          0.5 + 0.3 * Math.sin(angle),
+          0.5 - 0.3 * Math.cos(angle),
+          0.5 + 0.42 * Math.sin(angle),
+          0.5 - 0.42 * Math.cos(angle),
         ) - 0.06,
       );
     }
-    return d;
+    return dist;
   },
   stack: (x, y) =>
     Math.min(
@@ -125,25 +129,25 @@ const ICONS = {
       seg(x, y, 0.76, 0.78, 0.66, 0.84) - 0.04,
     ),
   tyre: (x, y) => {
-    let d = Math.min(
+    let dist = Math.min(
       ring(x, y, 0.5, 0.5, 0.4) - 0.075,
       ring(x, y, 0.5, 0.5, 0.17) - 0.04,
     );
     for (let i = 0; i < 8; i++) {
-      const a = (i * Math.PI) / 4 + Math.PI / 8;
-      d = Math.min(
-        d,
+      const angle = (i * Math.PI) / 4 + Math.PI / 8;
+      dist = Math.min(
+        dist,
         seg(
           x,
           y,
-          0.5 + 0.42 * Math.sin(a),
-          0.5 - 0.42 * Math.cos(a),
-          0.5 + 0.49 * Math.sin(a),
-          0.5 - 0.49 * Math.cos(a),
+          0.5 + 0.42 * Math.sin(angle),
+          0.5 - 0.42 * Math.cos(angle),
+          0.5 + 0.49 * Math.sin(angle),
+          0.5 - 0.49 * Math.cos(angle),
         ) - 0.04,
       );
     }
-    return d;
+    return dist;
   },
   oilcan: (x, y) =>
     Math.min(
@@ -164,23 +168,28 @@ const ICONS = {
  * @returns {Buffer} w*h*4 bytes
  */
 function paintIcon(name, w, h, color) {
-  const f = ICONS[name],
+  const iconFn = ICONS[name],
     out = Buffer.alloc(w * h * 4, 0);
-  if (!f) return out;
-  const s = Math.min(w, h),
-    ox = (w - s) / 2,
-    oy = (h - s) / 2,
-    aa = 1 / s;
+  if (!iconFn) return out;
+  const side = Math.min(w, h),
+    offsetX = (w - side) / 2,
+    offsetY = (h - side) / 2,
+    pixelSize = 1 / side;
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const d = f((x + 0.5 - ox) / s, (y + 0.5 - oy) / s);
-      const a = Math.max(0, Math.min(1, 0.5 - d / aa));
-      if (a <= 0) continue;
-      const o = (y * w + x) * 4;
-      out[o] = color[0];
-      out[o + 1] = color[1];
-      out[o + 2] = color[2];
-      out[o + 3] = Math.round(a * (color[3] === undefined ? 255 : color[3]));
+      const dist = iconFn(
+        (x + 0.5 - offsetX) / side,
+        (y + 0.5 - offsetY) / side,
+      );
+      const coverage = Math.max(0, Math.min(1, 0.5 - dist / pixelSize));
+      if (coverage <= 0) continue;
+      const offset = (y * w + x) * 4;
+      out[offset] = color[0];
+      out[offset + 1] = color[1];
+      out[offset + 2] = color[2];
+      out[offset + 3] = Math.round(
+        coverage * (color[3] === undefined ? 255 : color[3]),
+      );
     }
   }
   return out;

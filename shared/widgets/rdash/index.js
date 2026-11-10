@@ -54,30 +54,30 @@ module.exports = {
   cfg: CFG,
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
+   * @param {Widget} widget
    * @returns {string}
    */
-  shader(hud, w) {
-    return w.needleOnly ? NEEDLE : PACKED;
+  shader(hud, widget) {
+    return widget.needleOnly ? NEEDLE : PACKED;
   },
   shaders: { rdash: PACKED, rdashNeedle: NEEDLE },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState & RdashState} x
+   * @param {Widget} widget
+   * @param {WidgetState & RdashState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref;
-    const pk = hud._cfgPacker(c, ref, "rdash");
-    /** @type {(r: *) => number[]} */
-    const o4 = (r) =>
-      Array.isArray(r) && r.length === 4
-        ? [r[0] - w.x, r[1] - w.y, r[2], r[3]]
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref;
+    const packer = hud._cfgPacker(client, ref, "rdash");
+    /** @type {(rect: *) => number[]} */
+    const rel = (rect) =>
+      Array.isArray(rect) && rect.length === 4
+        ? [rect[0] - widget.x, rect[1] - widget.y, rect[2], rect[3]]
         : [0, 0, 0, 0];
-    const sp = w.spd || [0, 0, 0, 0],
-      sv = w.spdVirt || [300, 45];
-    pk.uniform("u_size", [w.w, w.h]);
+    const spdBox = widget.spd || [0, 0, 0, 0],
+      spdVirt = widget.spdVirt || [300, 45];
+    packer.uniform("u_size", [widget.w, widget.h]);
     [
       "podL",
       "podWin",
@@ -91,117 +91,149 @@ module.exports = {
       "gearBox",
       "lampB",
     ].forEach((k) => {
-      pk.uniform("u_" + k, o4(w[k]));
+      packer.uniform("u_" + k, rel(widget[k]));
     });
-    pk.uniform("u_spd", [sp[0] - w.x, sp[1] - w.y, sp[2] - w.y, sp[3] - w.y]);
-    pk.uniform("u_spdVirt", [sv[0], (sv[1] * Math.PI) / 180]);
-    pk.uniform("u_spdK", [w.spdMid || 55, w.spdMax || 85, w.spdStep || 5]);
-    const fg = w.fuelG || [0, 0, 0, 0],
-      pg = w.podG || [0, 0, 0, 0],
-      ar = w.arrow || [0, 0, 0],
-      bi = w.batIcon || [-99, -99];
-    pk.uniform("u_fuelG", [fg[0] - w.x, fg[1] - w.y, fg[2], fg[3]]);
-    pk.uniform("u_podG", [pg[0] - w.x, pg[1] - w.y, pg[2], pg[3]]);
-    pk.uniform("u_arrow", [ar[0] - w.x, ar[1] - w.y, ar[2]]);
-    pk.uniform("u_batIcon", [bi[0] - w.x, bi[1] - w.y]);
-    if (w.needleOnly)
-      pk.uniform("u_speedV", [0]); // the needle's own layer: only the speed changes
+    packer.uniform("u_spd", [
+      spdBox[0] - widget.x,
+      spdBox[1] - widget.y,
+      spdBox[2] - widget.y,
+      spdBox[3] - widget.y,
+    ]);
+    packer.uniform("u_spdVirt", [spdVirt[0], (spdVirt[1] * Math.PI) / 180]);
+    packer.uniform("u_spdK", [
+      widget.spdMid || 55,
+      widget.spdMax || 85,
+      widget.spdStep || 5,
+    ]);
+    const fuelG = widget.fuelG || [0, 0, 0, 0],
+      podG = widget.podG || [0, 0, 0, 0],
+      arrow = widget.arrow || [0, 0, 0],
+      batIcon = widget.batIcon || [-99, -99];
+    packer.uniform("u_fuelG", [
+      fuelG[0] - widget.x,
+      fuelG[1] - widget.y,
+      fuelG[2],
+      fuelG[3],
+    ]);
+    packer.uniform("u_podG", [
+      podG[0] - widget.x,
+      podG[1] - widget.y,
+      podG[2],
+      podG[3],
+    ]);
+    packer.uniform("u_arrow", [
+      arrow[0] - widget.x,
+      arrow[1] - widget.y,
+      arrow[2],
+    ]);
+    packer.uniform("u_batIcon", [batIcon[0] - widget.x, batIcon[1] - widget.y]);
+    if (widget.needleOnly)
+      packer.uniform("u_speedV", [0]); // the needle's own layer: only the speed changes
     else {
-      pk.uniform("u_gearV", [w.gearPitch || 0, -1]);
-      pk.uniform("u_lamps", [0, 0, 0, 0]);
+      packer.uniform("u_gearV", [widget.gearPitch || 0, -1]);
+      packer.uniform("u_lamps", [0, 0, 0, 0]);
     }
-    pk.flush();
+    packer.flush();
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState & RdashState} x
+   * @param {WidgetState & RdashState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const w = x.w;
-    /** @type {(v: number) => number} */
-    const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 500) / 500;
-    const sp = hud._raw("speed"),
+  update(hud, state, now, force) {
+    const widget = state.w;
+    /** @type {(value: number) => number} */
+    const quantize = (value) =>
+      Math.round(Math.min(1, Math.max(0, value)) * 500) / 500;
+    const speed = hud._raw("speed"),
       rpm = hud._raw("rpm"),
       fuel = hud._raw("fuel"),
-      max = w.rpmMax || 8000;
+      max = widget.rpmMax || 8000;
     // the pods' gauges: each "podSignals" entry's signal over its range, bottom to top
     const pods = [0, 1].map((i) => {
-      const g = (w.podSignals || [])[i],
-        v = g && g.signal ? hud._raw(g.signal) : null,
-        r = (g && g.range) || [0, 1];
-      if (!isNum(v)) return 0; // no reading (the car off): the needle sweeps down to the bottom
+      const pod = (widget.podSignals || [])[i],
+        value = pod && pod.signal ? hud._raw(pod.signal) : null,
+        range = (pod && pod.range) || [0, 1];
+      if (!isNum(value)) return 0; // no reading (the car off): the needle sweeps down to the bottom
       // "mid": the value at the scale's middle mark (each half linear), e.g. the coolant's 110 C
-      const m = g && isNum(g.mid) ? g.mid : null;
-      if (m !== null)
-        return q(
-          v <= m
-            ? (0.5 * (v - r[0])) / (m - r[0])
-            : 0.5 + (0.5 * (v - m)) / (r[1] - m),
+      const midValue = pod && isNum(pod.mid) ? pod.mid : null;
+      if (midValue !== null)
+        return quantize(
+          value <= midValue
+            ? (0.5 * (value - range[0])) / (midValue - range[0])
+            : 0.5 + (0.5 * (value - midValue)) / (range[1] - midValue),
         );
-      return q((v - r[0]) / (r[1] - r[0]));
+      return quantize((value - range[0]) / (range[1] - range[0]));
     });
-    const n = w.ledN || 16;
+    const ledN = widget.ledN || 16;
     const led = isNum(rpm)
-      ? Math.floor((Math.max(0, rpm) / max) * n + 0.5) / n
+      ? Math.floor((Math.max(0, rpm) / max) * ledN + 0.5) / ledN
       : 0;
-    const shiftAt = Math.floor((hud._shift().rpm / max) * n) / n;
+    const shiftAt = Math.floor((hud._shift().rpm / max) * ledN) / ledN;
     // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
-    const n2 = w.led2N || 15,
-      r2 = w.led2Range || [0, 1.5],
-      b2 = hud._raw(w.led2Signal || "boost");
-    const led2 = isNum(b2)
+    const led2N = widget.led2N || 15,
+      led2Range = widget.led2Range || [0, 1.5],
+      boost = hud._raw(widget.led2Signal || "boost");
+    const led2 = isNum(boost)
       ? Math.floor(
-          Math.min(1, Math.max(0, (b2 - r2[0]) / (r2[1] - r2[0]))) * n2 + 0.5,
-        ) / n2
+          Math.min(
+            1,
+            Math.max(0, (boost - led2Range[0]) / (led2Range[1] - led2Range[0])),
+          ) *
+            led2N +
+            0.5,
+        ) / led2N
       : 0;
-    const gi = hud._regalGear();
-    const bl = hud._brakeLamp(),
+    const gear = hud._regalGear();
+    const brakeLamp = hud._brakeLamp(),
       lamps = [
-        bl === "park" ? 1 : bl === "hold" ? 2 : 0,
+        brakeLamp === "park" ? 1 : brakeLamp === "hold" ? 2 : 0,
         hud._turnLit("L") ? 1 : 0,
         hud._turnLit("R") ? 1 : 0,
         hud._cruiseLit() ? 1 : 0,
       ];
     // speed on the 0..spdMax mph scale with spdMid at its middle, each half linear
-    const mid = w.spdMid || 55,
-      top = w.spdMax || 85,
-      mph = isNum(sp) ? Math.max(0, sp * 0.621371) : 0;
+    const mid = widget.spdMid || 55,
+      top = widget.spdMax || 85,
+      mph = isNum(speed) ? Math.max(0, speed * 0.621371) : 0;
     // below the first mark ("spdStep", 5 mph) the needle drops to its rest under the row ("spdRest" deg past the 0, 12)
-    const st = w.spdStep || 5,
-      half = (w.spdVirt || [300, 45])[1],
-      rest = -(isNum(w.spdRest) ? w.spdRest : 12) / (2 * half);
-    const f5 = (0.5 * st) / mid;
-    let f =
+    const spdStep = widget.spdStep || 5,
+      half = (widget.spdVirt || [300, 45])[1],
+      rest = -(isNum(widget.spdRest) ? widget.spdRest : 12) / (2 * half);
+    const stepFrac = (0.5 * spdStep) / mid;
+    let needleFrac =
       mph <= mid ? (0.5 * mph) / mid : 0.5 + (0.5 * (mph - mid)) / (top - mid);
-    if (mph < st) f = rest + ((f5 - rest) * mph) / st;
+    if (mph < spdStep) needleFrac = rest + ((stepFrac - rest) * mph) / spdStep;
     // the needles ease toward their readings (as Miku's lean: 1 - exp(-dt / tau), the same at any tick rate), so
     // they sweep instead of jumping, down to their rest when a reading goes (the car off) and up from it at the start
-    const dt = x.at ? Math.min(500, now - x.at) : 0;
-    x.at = now;
-    /** @type {(prev: ?number, to: number, tau: number) => number} */
-    const ease = (prev, to, tau) =>
-      isNum(prev) ? prev + (to - prev) * (1 - Math.exp(-dt / tau)) : to;
-    const fTo = Math.min(1, Math.max(-0.5, f)),
+    const dt = state.at ? Math.min(500, now - state.at) : 0;
+    state.at = now;
+    /** @type {(prev: ?number, target: number, tau: number) => number} */
+    const ease = (prev, target, tau) =>
+      isNum(prev) ? prev + (target - prev) * (1 - Math.exp(-dt / tau)) : target;
+    const fTo = Math.min(1, Math.max(-0.5, needleFrac)),
       fuelTo = Math.min(1, Math.max(0, isNum(fuel) ? fuel : 0));
-    if (!x.ez) x.ez = { f: rest, fuel: 0, pods: [0, 0] }; // from rest, as a gauge powering up
-    x.ez.f = ease(x.ez.f, fTo, REGAL_SPEED_TAU_MS);
-    x.ez.fuel = ease(x.ez.fuel, fuelTo, REGAL_NEEDLE_TAU_MS);
-    x.ez.pods = pods.map((v, i) => ease(x.ez.pods[i], v, REGAL_NEEDLE_TAU_MS));
+    if (!state.ez) state.ez = { f: rest, fuel: 0, pods: [0, 0] }; // from rest, as a gauge powering up
+    state.ez.f = ease(state.ez.f, fTo, REGAL_SPEED_TAU_MS);
+    state.ez.fuel = ease(state.ez.fuel, fuelTo, REGAL_NEEDLE_TAU_MS);
+    state.ez.pods = pods.map((reading, i) =>
+      ease(state.ez.pods[i], reading, REGAL_NEEDLE_TAU_MS),
+    );
     // within half a step of the reading: there (so the messages stop once a needle settles)
-    /** @type {(e: number, to: number) => number} */
-    const snap = (e, to) => (Math.abs(e - to) < 0.001 ? to : e);
-    x.ez.f = snap(x.ez.f, fTo);
-    x.ez.fuel = snap(x.ez.fuel, fuelTo);
-    x.ez.pods = x.ez.pods.map((e, i) => snap(e, pods[i]));
-    pods.splice(0, 2, q(x.ez.pods[0]), q(x.ez.pods[1]));
-    const vals = [Math.round(x.ez.f * 500) / 500, q(x.ez.fuel)];
-    if (w.needleOnly) {
+    /** @type {(eased: number, target: number) => number} */
+    const snap = (eased, target) =>
+      Math.abs(eased - target) < 0.001 ? target : eased;
+    state.ez.f = snap(state.ez.f, fTo);
+    state.ez.fuel = snap(state.ez.fuel, fuelTo);
+    state.ez.pods = state.ez.pods.map((eased, i) => snap(eased, pods[i]));
+    pods.splice(0, 2, quantize(state.ez.pods[0]), quantize(state.ez.pods[1]));
+    const vals = [Math.round(state.ez.f * 500) / 500, quantize(state.ez.fuel)];
+    if (widget.needleOnly) {
       // the speed needle's own layer (over the text): only its speed
-      if (!force && vals[0] === x.last) return;
-      x.last = vals[0];
-      x.c.uniform(x.ref, "u_speedV", [vals[0]]);
+      if (!force && vals[0] === state.last) return;
+      state.last = vals[0];
+      state.c.uniform(state.ref, "u_speedV", [vals[0]]);
       return;
     }
     const key =
@@ -215,17 +247,17 @@ module.exports = {
       "|" +
       led2 +
       "|" +
-      gi +
+      gear +
       "|" +
       lamps.join("");
-    if (!force && key === x.last) return;
-    x.last = key;
-    x.c.uniform(x.ref, "u_speedV", [vals[0]]);
-    x.c.uniform(x.ref, "u_fuelV", [vals[1]]);
-    x.c.uniform(x.ref, "u_podV", pods);
-    x.c.uniform(x.ref, "u_ledV", [n, led, shiftAt]);
-    x.c.uniform(x.ref, "u_led2V", [n2, led2]);
-    x.c.uniform(x.ref, "u_gearV", [w.gearPitch || 0, gi]);
-    x.c.uniform(x.ref, "u_lamps", lamps);
+    if (!force && key === state.last) return;
+    state.last = key;
+    state.c.uniform(state.ref, "u_speedV", [vals[0]]);
+    state.c.uniform(state.ref, "u_fuelV", [vals[1]]);
+    state.c.uniform(state.ref, "u_podV", pods);
+    state.c.uniform(state.ref, "u_ledV", [ledN, led, shiftAt]);
+    state.c.uniform(state.ref, "u_led2V", [led2N, led2]);
+    state.c.uniform(state.ref, "u_gearV", [widget.gearPitch || 0, gear]);
+    state.c.uniform(state.ref, "u_lamps", lamps);
   },
 };

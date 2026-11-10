@@ -22,46 +22,52 @@ module.exports = {
   shaders: { mtach: MTACH },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
-    const max = w.max || 8000,
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
+    const max = widget.max || 8000,
       [redFrom, orange] = hud._redMarks(max);
-    const right = w.side === "right";
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_side", [right ? 1 : -1]);
-    c.uniform(ref, "u_geoA", [
-      w.y0 - w.y,
-      w.y8 - w.y,
-      w.ym - w.y,
-      right ? w.x + w.w - w.xm : w.xm - w.x,
+    const right = widget.side === "right";
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_side", [right ? 1 : -1]);
+    client.uniform(ref, "u_geoA", [
+      widget.y0 - widget.y,
+      widget.y8 - widget.y,
+      widget.ym - widget.y,
+      right ? widget.x + widget.w - widget.xm : widget.xm - widget.x,
     ]);
-    c.uniform(ref, "u_geoB", [w.kTop, w.kBot, w.round || 40]);
-    c.uniform(ref, "u_wid", [w.wBot, w.wTop, w.wBend || 0]);
-    c.uniform(ref, "u_ticks", [max / 1000]);
-    c.uniform(ref, "u_orange", [orange]);
-    c.uniform(ref, "u_redFrom", [redFrom]);
-    c.uniform(ref, "u_red", rgb(t.hot));
+    client.uniform(ref, "u_geoB", [
+      widget.kTop,
+      widget.kBot,
+      widget.round || 40,
+    ]);
+    client.uniform(ref, "u_wid", [widget.wBot, widget.wTop, widget.wBend || 0]);
+    client.uniform(ref, "u_ticks", [max / 1000]);
+    client.uniform(ref, "u_orange", [orange]);
+    client.uniform(ref, "u_redFrom", [redFrom]);
+    client.uniform(ref, "u_red", rgb(theme.hot));
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const w = x.w;
+  update(hud, state, now, force) {
+    const widget = state.w;
     const rpm = hud._raw("rpm"),
-      sp = hud._shift();
-    const v = isNum(rpm) ? Math.min(1, Math.max(0, rpm / (w.max || 8000))) : 0;
-    const key = Math.round(v * 600) + "|" + sp.now;
-    if (!force && key === x.last) return;
-    x.last = key;
-    x.c.uniform(x.ref, "u_value", [v]);
-    x.c.uniform(x.ref, "u_shiftNow", [sp.now ? 1 : 0]);
+      shift = hud._shift();
+    const value = isNum(rpm)
+      ? Math.min(1, Math.max(0, rpm / (widget.max || 8000)))
+      : 0;
+    const key = Math.round(value * 600) + "|" + shift.now;
+    if (!force && key === state.last) return;
+    state.last = key;
+    state.c.uniform(state.ref, "u_value", [value]);
+    state.c.uniform(state.ref, "u_shiftNow", [shift.now ? 1 : 0]);
   },
 };

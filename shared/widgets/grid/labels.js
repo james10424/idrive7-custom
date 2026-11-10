@@ -13,33 +13,36 @@ const DOCS = `calibration: image layer, "x/y" at every "step" px (only the label
 /**
  * "x/y" at every step, uploaded as small rects (not the whole, mostly empty, image).
  * @param {HudApp} hud
- * @param {WidgetState} x
+ * @param {WidgetState} state
  * @returns {void}
  */
-function paint(hud, x) {
-  const w = x.w,
-    W = w.w,
-    H = w.h,
-    step = w.step || 100,
-    font = w.font;
+function paint(hud, state) {
+  const widget = state.w,
+    width = widget.w,
+    height = widget.h,
+    step = widget.step || 100,
+    font = widget.font;
   const cell = textRaster.loadFont(font).metrics.cellHeight;
   const rects = [],
     parts = [];
-  for (let gy = 0; gy < H; gy += step) {
-    for (let gx = 0; gx < W; gx += step) {
-      const label = w.x + gx + "/" + (w.y + gy);
-      const lw = Math.min(W - gx - 2, textRaster.measure(label, font, 0) + 2);
-      const lh = Math.min(H - gy - 2, cell);
-      if (lw <= 0 || lh <= 0) continue;
-      const buf = textRaster.drawText(lw, lh, label, {
+  for (let gy = 0; gy < height; gy += step) {
+    for (let gx = 0; gx < width; gx += step) {
+      const label = widget.x + gx + "/" + (widget.y + gy);
+      const labelW = Math.min(
+        width - gx - 2,
+        textRaster.measure(label, font, 0) + 2,
+      );
+      const labelH = Math.min(height - gy - 2, cell);
+      if (labelW <= 0 || labelH <= 0) continue;
+      const buf = textRaster.drawText(labelW, labelH, label, {
         font,
         color: [255, 230, 0, 255],
       });
-      rects.push({ x: gx + 2, y: gy + 2, w: lw, h: lh });
+      rects.push({ x: gx + 2, y: gy + 2, w: labelW, h: labelH });
       parts.push(buf);
     }
   }
-  hud._blit(x, rects, Buffer.concat(parts));
+  hud._blit(state, rects, Buffer.concat(parts));
 }
 
 module.exports = {
@@ -49,17 +52,17 @@ module.exports = {
   image: true,
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    paint(hud, x);
+  create(hud, widget, state) {
+    paint(hud, state);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

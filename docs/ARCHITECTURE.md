@@ -50,16 +50,16 @@ ends in `/` (`"engine/"`, `"car/"`, `"widgets/"`) and ships whole, so relative r
 | `fields` | fields a layout must give it (`layouts.js` refuses a widget without them) |
 | `docs` | what it draws and the fields it reads |
 | `image` | `true`: drawn as pixels (an image layer, packed into a sheet unless `"own": true`); else an effect layer |
-| `shader(hud, w, ci)` | an effect type's GLSL, or `null` when it cannot draw now (it logs why) |
+| `shader(hud, widget, connIndex)` | an effect type's GLSL, or `null` when it cannot draw now (it logs why) |
 | `time` | `true`: cluster-render animates the effect on its own clock |
 | `cfg` | uniforms packed into `u_cfg` (big shaders only) |
 | `shaders` | `{ name: GLSL }` of every shader it can send, for `tools/shader_budget.js` |
-| `create(hud, w, x)` | sets up its layer once made (fixed uniforms, the first paint) |
-| `update(hud, x, now, force)` | sends what changed (`force`: everything) |
+| `create(hud, widget, state)` | sets up its layer once made (fixed uniforms, the first paint) |
+| `update(hud, state, now, force)` | sends what changed (`force`: everything) |
 
 `hud` is the engine (HudApp): a module reads car values (`hud._raw`, `hud._shift`, ...), settings (`hud.setting`),
-the theme (`hud.theme`) and paints through `hud._blit` / `hud._blitDiff`. `x` is the engine's state for the widget
-(`x.w` the widget, `x.c` / `x.ref` its connection and layer, `x.last` the last values sent); a module keeps its own
+the theme (`hud.theme`) and paints through `hud._blit` / `hud._blitDiff`. `state` is the engine's state for the widget
+(`state.w` the widget, `state.c` / `state.ref` its connection and layer, `state.last` the last values sent); a module keeps its own
 state on it too and documents it in a typedef.
 
 HudApp's methods live in several files: `engine/app.js` adds the methods of `engine/plan.js`, `status.js`, `modes.js`,

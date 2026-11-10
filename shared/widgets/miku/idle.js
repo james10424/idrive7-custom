@@ -25,81 +25,92 @@ const MIKU_WAKE_W = 5; // waking for good when the car moves: about 1 s
  * glancing), dozes again, and so on; x.doze rides a critically damped spring so neither the droop nor the waking
  * snaps. Any g past the deadzone or
  * pulling away ends both smoothly; the lean itself is never gated.
- * @param {WidgetState & MikuState} x
+ * @param {WidgetState & MikuState} state
  * @param {number} now
  * @param {number} dt ms
  * @param {?number} gLong
  * @param {?number} speed
  * @returns {void}
  */
-function idle(x, now, dt, gLong, speed) {
+function idle(state, now, dt, gLong, speed) {
   const idle = !isNum(gLong) || Math.abs(gLong) < MIKU_IDLE_G,
     still = isNum(speed) && speed < 1;
-  x.idleMs = idle ? (x.idleMs || 0) + dt : 0;
-  x.stillMs = idle && still ? (x.stillMs || 0) + dt : 0;
-  if (!isNum(x.look)) {
-    x.look = 0;
-    x.lookV = 0;
-    x.doze = 0;
-    x.dozeV = 0;
-    x.lookT = 0;
-    x.lookUntil = 0;
+  state.idleMs = idle ? (state.idleMs || 0) + dt : 0;
+  state.stillMs = idle && still ? (state.stillMs || 0) + dt : 0;
+  if (!isNum(state.look)) {
+    state.look = 0;
+    state.lookV = 0;
+    state.doze = 0;
+    state.dozeV = 0;
+    state.lookT = 0;
+    state.lookUntil = 0;
   }
   // the doze loop: doze, wake, doze, ... from MIKU_DOZE_AFTER_MS on, MIKU_DOZE_PHASE_MS each
-  const looping = x.dozeN !== undefined && x.stillMs >= MIKU_DOZE_AFTER_MS;
+  const looping =
+    state.dozeN !== undefined && state.stillMs >= MIKU_DOZE_AFTER_MS;
   const dozing =
     looping &&
-    Math.floor((x.stillMs - MIKU_DOZE_AFTER_MS) / MIKU_DOZE_PHASE_MS) % 2 === 0;
-  if (dozing) x.wokeUp = true;
-  /** @type {(a: number, b: number) => number} */
-  const rnd = (a, b) => a + Math.random() * (b - a);
+    Math.floor((state.stillMs - MIKU_DOZE_AFTER_MS) / MIKU_DOZE_PHASE_MS) %
+      2 ===
+      0;
+  if (dozing) state.wokeUp = true;
+  /** @type {(min: number, max: number) => number} */
+  const rnd = (min, max) => min + Math.random() * (max - min);
   // the glance's target: none unless idle (and not dozing); otherwise turn, hold, return, pause, at random
-  if (!idle || dozing || x.lookN < 3) {
-    x.lookT = 0;
-    x.lookUntil = 0;
-  } else if (x.idleMs >= MIKU_GLANCE_AFTER_MS) {
+  if (!idle || dozing || state.lookN < 3) {
+    state.lookT = 0;
+    state.lookUntil = 0;
+  } else if (state.idleMs >= MIKU_GLANCE_AFTER_MS) {
     // the first glance: straight away when the car goes idle, soon after she wakes in the doze loop
-    if (!x.lookUntil) {
-      x.lookT = 0;
-      x.lookUntil =
+    if (!state.lookUntil) {
+      state.lookT = 0;
+      state.lookUntil =
         now +
-        (x.idleMs - dt < MIKU_GLANCE_AFTER_MS
+        (state.idleMs - dt < MIKU_GLANCE_AFTER_MS
           ? 0
-          : x.wokeUp
+          : state.wokeUp
             ? rnd(800, 1800)
             : rnd(2000, 6000));
-      x.wokeUp = false;
+      state.wokeUp = false;
     }
-    if (now >= x.lookUntil) {
-      if (x.lookT) {
-        x.lookT = 0;
-        x.lookUntil = now + rnd(2000, 6000);
+    if (now >= state.lookUntil) {
+      if (state.lookT) {
+        state.lookT = 0;
+        state.lookUntil = now + rnd(2000, 6000);
       } else {
-        x.lookT = (Math.random() < 0.5 ? -1 : 1) * rnd(0.45, 1);
-        x.lookUntil = now + rnd(1000, 3000) + 500;
+        state.lookT = (Math.random() < 0.5 ? -1 : 1) * rnd(0.45, 1);
+        state.lookUntil = now + rnd(1000, 3000) + 500;
       }
     }
   }
   for (let left = dt / 1000; left > 0; left -= 0.01) {
-    const h = Math.min(0.01, left);
-    x.lookV += (MIKU_LOOK_K * (x.lookT - x.look) - MIKU_LOOK_C * x.lookV) * h;
-    x.look = Math.max(-1, Math.min(1, x.look + x.lookV * h));
+    const stepSec = Math.min(0.01, left);
+    state.lookV +=
+      (MIKU_LOOK_K * (state.lookT - state.look) - MIKU_LOOK_C * state.lookV) *
+      stepSec;
+    state.look = Math.max(-1, Math.min(1, state.look + state.lookV * stepSec));
   }
-  if (!x.lookT && Math.abs(x.look) < 0.002 && Math.abs(x.lookV) < 0.01) {
-    x.look = 0;
-    x.lookV = 0;
+  if (
+    !state.lookT &&
+    Math.abs(state.look) < 0.002 &&
+    Math.abs(state.lookV) < 0.01
+  ) {
+    state.look = 0;
+    state.lookV = 0;
   }
   // the droop and the waking on a critically damped spring: each starts gently and settles without a bounce
   const target = dozing ? 1 : 0,
-    w = dozing ? MIKU_DROOP_W : looping ? MIKU_RISE_W : MIKU_WAKE_W;
+    omega = dozing ? MIKU_DROOP_W : looping ? MIKU_RISE_W : MIKU_WAKE_W;
   for (let left = dt / 1000; left > 0; left -= 0.01) {
-    const h = Math.min(0.01, left);
-    x.dozeV += (w * w * (target - x.doze) - 2 * w * x.dozeV) * h;
-    x.doze = Math.max(0, Math.min(1, x.doze + x.dozeV * h));
+    const stepSec = Math.min(0.01, left);
+    state.dozeV +=
+      (omega * omega * (target - state.doze) - 2 * omega * state.dozeV) *
+      stepSec;
+    state.doze = Math.max(0, Math.min(1, state.doze + state.dozeV * stepSec));
   }
-  if (!target && x.doze < 0.002 && Math.abs(x.dozeV) < 0.01) {
-    x.doze = 0;
-    x.dozeV = 0;
+  if (!target && state.doze < 0.002 && Math.abs(state.dozeV) < 0.01) {
+    state.doze = 0;
+    state.dozeV = 0;
   }
 }
 

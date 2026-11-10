@@ -13,20 +13,20 @@ const DOCS = `image layer; the M tricolour stripe`;
 /**
  * Paints the M tricolour stripe.
  * @param {HudApp} hud
- * @param {WidgetState} x
+ * @param {WidgetState} state
  * @returns {void}
  */
-function paint(hud, x) {
-  const w = x.w,
-    buf = Buffer.alloc(w.w * w.h * 4, 0);
-  for (let px = 0; px < w.w; px++) {
-    const c = M_STRIPE[Math.min(2, Math.floor((px * 3) / w.w))];
-    for (let py = 0; py < w.h; py++)
-      c.forEach((v, i) => {
-        buf[(py * w.w + px) * 4 + i] = v;
+function paint(hud, state) {
+  const widget = state.w,
+    buf = Buffer.alloc(widget.w * widget.h * 4, 0);
+  for (let px = 0; px < widget.w; px++) {
+    const stripeColor = M_STRIPE[Math.min(2, Math.floor((px * 3) / widget.w))];
+    for (let py = 0; py < widget.h; py++)
+      stripeColor.forEach((channel, i) => {
+        buf[(py * widget.w + px) * 4 + i] = channel;
       });
   }
-  hud._blit(x, null, buf);
+  hud._blit(state, null, buf);
 }
 
 module.exports = {
@@ -36,17 +36,17 @@ module.exports = {
   image: true,
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    paint(hud, x);
+  create(hud, widget, state) {
+    paint(hud, state);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

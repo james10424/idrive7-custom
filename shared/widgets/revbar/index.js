@@ -22,43 +22,43 @@ module.exports = {
   shaders: { revbar: REVBAR },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_top", [w.top || 8]);
-    c.uniform(ref, "u_barH", [w.barH]);
-    c.uniform(ref, "u_slant", [w.slant || 12]);
-    c.uniform(ref, "u_max", [hud._barMax(w)]);
-    c.uniform(ref, "u_red", [hud.setting("redline")]);
-    c.uniform(ref, "u_from", rgb(t.rev.from));
-    c.uniform(ref, "u_to", rgb(t.rev.to));
-    c.uniform(ref, "u_hot", rgb(t.hot));
-    c.uniform(ref, "u_track", rgba(t.track));
-    c.uniform(ref, "u_tick", rgba(t.dim));
-    c.uniform(ref, "u_fg", rgba(t.fg));
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_top", [widget.top || 8]);
+    client.uniform(ref, "u_barH", [widget.barH]);
+    client.uniform(ref, "u_slant", [widget.slant || 12]);
+    client.uniform(ref, "u_max", [hud._barMax(widget)]);
+    client.uniform(ref, "u_red", [hud.setting("redline")]);
+    client.uniform(ref, "u_from", rgb(theme.rev.from));
+    client.uniform(ref, "u_to", rgb(theme.rev.to));
+    client.uniform(ref, "u_hot", rgb(theme.hot));
+    client.uniform(ref, "u_track", rgba(theme.track));
+    client.uniform(ref, "u_tick", rgba(theme.dim));
+    client.uniform(ref, "u_fg", rgba(theme.fg));
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
+  update(hud, state, now, force) {
     const rpm = hud._raw("rpm"),
-      sp = hud._shift();
-    const v = isNum(rpm) ? Math.round(Math.max(0, rpm) / 10) * 10 : 0;
+      shift = hud._shift();
+    const value = isNum(rpm) ? Math.round(Math.max(0, rpm) / 10) * 10 : 0;
     const peak = Math.round(hud.score.peak / 10) * 10;
-    const key = v + "|" + sp.rpm + "|" + peak + "|" + sp.now;
-    if (!force && key === x.last) return;
-    x.last = key;
-    x.c.uniform(x.ref, "u_value", [v]);
-    x.c.uniform(x.ref, "u_shift", [sp.rpm]);
-    x.c.uniform(x.ref, "u_peak", [peak]);
-    x.c.uniform(x.ref, "u_shiftNow", [sp.now ? 1 : 0]);
+    const key = value + "|" + shift.rpm + "|" + peak + "|" + shift.now;
+    if (!force && key === state.last) return;
+    state.last = key;
+    state.c.uniform(state.ref, "u_value", [value]);
+    state.c.uniform(state.ref, "u_shift", [shift.rpm]);
+    state.c.uniform(state.ref, "u_peak", [peak]);
+    state.c.uniform(state.ref, "u_shiftNow", [shift.now ? 1 : 0]);
   },
 };

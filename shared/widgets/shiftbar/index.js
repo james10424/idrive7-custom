@@ -22,42 +22,45 @@ module.exports = {
   shaders: { shiftbar: SHIFTBAR },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
     const max = hud._barMax(),
       red = hud.setting("redline");
-    const midAt = t.bar.midAt === "shift" ? (red - 1500) / max : t.bar.midAt;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_segs", [w.segments || 40]);
-    c.uniform(ref, "u_low", rgb(t.bar.low));
-    c.uniform(ref, "u_mid", rgb(t.bar.mid));
-    c.uniform(ref, "u_high", rgb(t.bar.high));
-    c.uniform(ref, "u_midAt", [midAt]);
-    c.uniform(ref, "u_highAt", [(red - 500) / max]);
-    c.uniform(ref, "u_track", rgba(t.track));
-    c.uniform(ref, "u_flash", [0]);
+    const midAt =
+      theme.bar.midAt === "shift" ? (red - 1500) / max : theme.bar.midAt;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_segs", [widget.segments || 40]);
+    client.uniform(ref, "u_low", rgb(theme.bar.low));
+    client.uniform(ref, "u_mid", rgb(theme.bar.mid));
+    client.uniform(ref, "u_high", rgb(theme.bar.high));
+    client.uniform(ref, "u_midAt", [midAt]);
+    client.uniform(ref, "u_highAt", [(red - 500) / max]);
+    client.uniform(ref, "u_track", rgba(theme.track));
+    client.uniform(ref, "u_flash", [0]);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const w = x.w;
+  update(hud, state, now, force) {
+    const widget = state.w;
     const rpm = hud._raw("rpm");
-    const segs = w.segments || 40;
-    const v = isNum(rpm) ? Math.min(1, Math.max(0, rpm / hud._barMax())) : 0;
-    const q = Math.round(v * segs * 2) / (segs * 2); // only resend on half-segment steps
-    const key = q + (hud.flash ? "f" : "");
-    if (!force && key === x.last) return;
-    x.last = key;
-    x.c.uniform(x.ref, "u_value", [q]);
-    x.c.uniform(x.ref, "u_flash", [hud.flash ? 1 : 0]);
+    const segs = widget.segments || 40;
+    const value = isNum(rpm)
+      ? Math.min(1, Math.max(0, rpm / hud._barMax()))
+      : 0;
+    const quantized = Math.round(value * segs * 2) / (segs * 2); // only resend on half-segment steps
+    const key = quantized + (hud.flash ? "f" : "");
+    if (!force && key === state.last) return;
+    state.last = key;
+    state.c.uniform(state.ref, "u_value", [quantized]);
+    state.c.uniform(state.ref, "u_flash", [hud.flash ? 1 : 0]);
   },
 };

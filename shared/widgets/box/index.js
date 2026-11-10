@@ -23,26 +23,32 @@ module.exports = {
   shaders: { box: BOX },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_fill", rgba(color(t, w.fill || "panel")));
-    c.uniform(ref, "u_line", rgba(color(t, w.line || "line")));
-    c.uniform(ref, "u_head", rgba(color(t, w.headColor || "head")));
-    c.uniform(ref, "u_headH", [w.head || 0]);
-    c.uniform(ref, "u_border", [w.border === undefined ? 2 : w.border]);
-    c.uniform(ref, "u_radius", [w.radius || 0]);
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_fill", rgba(color(theme, widget.fill || "panel")));
+    client.uniform(ref, "u_line", rgba(color(theme, widget.line || "line")));
+    client.uniform(
+      ref,
+      "u_head",
+      rgba(color(theme, widget.headColor || "head")),
+    );
+    client.uniform(ref, "u_headH", [widget.head || 0]);
+    client.uniform(ref, "u_border", [
+      widget.border === undefined ? 2 : widget.border,
+    ]);
+    client.uniform(ref, "u_radius", [widget.radius || 0]);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

@@ -46,29 +46,29 @@ void main() {
  * The swatch as straight RGBA (w*h*4 bytes): the same steps and colours as SWATCH.
  * @param {number} w
  * @param {number} h
- * @param {number} n grey steps
+ * @param {number} greySteps grey steps
  * @returns {Buffer}
  */
-function swatchImage(w, h, n) {
-  const steps = n > 1 ? Math.floor(n) : 1;
+function swatchImage(w, h, greySteps) {
+  const steps = greySteps > 1 ? Math.floor(greySteps) : 1;
   const buf = Buffer.alloc(w * h * 4, 0);
   const half = Math.floor(h / 2);
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const o = (y * w + x) * 4;
+      const offset = (y * w + x) * 4;
       if (y < half) {
         const i = Math.min(Math.floor((x * steps) / w), steps - 1);
-        const g = Math.round(255 * (steps > 1 ? i / (steps - 1) : 1));
-        buf[o] = g;
-        buf[o + 1] = g;
-        buf[o + 2] = g;
+        const grey = Math.round(255 * (steps > 1 ? i / (steps - 1) : 1));
+        buf[offset] = grey;
+        buf[offset + 1] = grey;
+        buf[offset + 2] = grey;
       } else {
-        const c = TEST_COLOURS[Math.min(Math.floor((x * 4) / w), 3)];
-        buf[o] = Math.round(255 * c[0]);
-        buf[o + 1] = Math.round(255 * c[1]);
-        buf[o + 2] = Math.round(255 * c[2]);
+        const testColour = TEST_COLOURS[Math.min(Math.floor((x * 4) / w), 3)];
+        buf[offset] = Math.round(255 * testColour[0]);
+        buf[offset + 1] = Math.round(255 * testColour[1]);
+        buf[offset + 2] = Math.round(255 * testColour[2]);
       }
-      buf[o + 3] = 255;
+      buf[offset + 3] = 255;
     }
   }
   return buf;

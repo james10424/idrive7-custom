@@ -20,20 +20,20 @@ module.exports = {
   },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_n", [w.steps || 11]);
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_n", [widget.steps || 11]);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

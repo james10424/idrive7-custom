@@ -23,23 +23,23 @@ module.exports = {
   shaders: { fill: FILL },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_color", rgba(color(t, w.color || "bg")));
-    c.uniform(ref, "u_hole", hud._hole(w));
-    c.uniform(ref, "u_holeR", [hud._holeRadius(w)]);
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_color", rgba(color(theme, widget.color || "bg")));
+    client.uniform(ref, "u_hole", hud._hole(widget));
+    client.uniform(ref, "u_holeR", [hud._holeRadius(widget)]);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

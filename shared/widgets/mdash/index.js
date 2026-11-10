@@ -28,90 +28,108 @@ module.exports = {
   shaders: { mdash: MDASH },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState & MdashState} x
+   * @param {Widget} widget
+   * @param {WidgetState & MdashState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
-    const ty = w.tyres || [0, 0, 0],
-      L = w.gaugeL || {},
-      R = w.gaugeR || {},
-      b = w.blade || {};
-    const bars = Array.isArray(w.segbars) ? w.segbars.slice(0, 4) : [];
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_card", w.card || [0, 0, 0, 0]);
-    c.uniform(ref, "u_cardTop", w.cardTop || [0, 0, -99999]);
-    c.uniform(ref, "u_cardCutR", w.cardCutR || [0, 0, 0]);
-    c.uniform(ref, "u_cardFill", [isNum(w.cardFill) ? w.cardFill : 0]);
-    c.uniform(ref, "u_blade", [
-      isNum(b.xm) ? b.xm - w.x : 99999,
-      (b.ym || 0) - w.y,
-      b.kTop || 0,
-      b.kBot || 0,
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
+    const tyres = widget.tyres || [0, 0, 0],
+      gaugeL = widget.gaugeL || {},
+      gaugeR = widget.gaugeR || {},
+      blade = widget.blade || {};
+    const bars = Array.isArray(widget.segbars)
+      ? widget.segbars.slice(0, 4)
+      : [];
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_card", widget.card || [0, 0, 0, 0]);
+    client.uniform(ref, "u_cardTop", widget.cardTop || [0, 0, -99999]);
+    client.uniform(ref, "u_cardCutR", widget.cardCutR || [0, 0, 0]);
+    client.uniform(ref, "u_cardFill", [
+      isNum(widget.cardFill) ? widget.cardFill : 0,
     ]);
-    c.uniform(ref, "u_bladeB", [
-      b.round || 40,
-      isNum(w.bladeGap) ? w.bladeGap : 14,
+    client.uniform(ref, "u_blade", [
+      isNum(blade.xm) ? blade.xm - widget.x : 99999,
+      (blade.ym || 0) - widget.y,
+      blade.kTop || 0,
+      blade.kBot || 0,
     ]);
-    c.uniform(ref, "u_line", w.line || [0, -99, 0, 1]);
-    c.uniform(ref, "u_tyre", [ty[0] - w.x, ty[1] - w.y, ty[2] || 0]);
-    c.uniform(ref, "u_mark", w.mark || [0, 0, 0]);
-    c.uniform(ref, "u_red", rgb(t.hot));
+    client.uniform(ref, "u_bladeB", [
+      blade.round || 40,
+      isNum(widget.bladeGap) ? widget.bladeGap : 14,
+    ]);
+    client.uniform(ref, "u_line", widget.line || [0, -99, 0, 1]);
+    client.uniform(ref, "u_tyre", [
+      tyres[0] - widget.x,
+      tyres[1] - widget.y,
+      tyres[2] || 0,
+    ]);
+    client.uniform(ref, "u_mark", widget.mark || [0, 0, 0]);
+    client.uniform(ref, "u_red", rgb(theme.hot));
     [0, 1, 2, 3].forEach((i) => {
-      const s = bars[i];
-      c.uniform(
+      const bar = bars[i];
+      client.uniform(
         ref,
         "u_seg" + i,
-        s ? [s.x - w.x, s.y - w.y, s.w, s.h] : [0, 0, 0, 0],
+        bar ? [bar.x - widget.x, bar.y - widget.y, bar.w, bar.h] : [0, 0, 0, 0],
       );
     });
-    c.uniform(
+    client.uniform(
       ref,
       "u_segMax",
       [0, 1, 2, 3].map((i) => (bars[i] && bars[i].max) || 1),
     );
-    c.uniform(ref, "u_segSlant", [isNum(w.segSlant) ? w.segSlant : 9]);
-    x.gauges = [
-      ["u_gaugeL", L],
-      ["u_gaugeR", R],
+    client.uniform(ref, "u_segSlant", [
+      isNum(widget.segSlant) ? widget.segSlant : 9,
+    ]);
+    state.gauges = [
+      ["u_gaugeL", gaugeL],
+      ["u_gaugeR", gaugeR],
     ];
-    x.bars = bars;
+    state.bars = bars;
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState & MdashState} x
+   * @param {WidgetState & MdashState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const vals = x.gauges.map(([u, G]) => {
-      const v = G.signal ? hud._raw(G.signal) : null;
+  update(hud, state, now, force) {
+    const vals = state.gauges.map(([uniformName, gauge]) => {
+      const value = gauge.signal ? hud._raw(gauge.signal) : null;
       return [
-        u,
-        G,
-        isNum(v)
+        uniformName,
+        gauge,
+        isNum(value)
           ? Math.round(
-              Math.min(1, Math.max(0, (v - G.min) / (G.max - G.min))) * 200,
+              Math.min(
+                1,
+                Math.max(0, (value - gauge.min) / (gauge.max - gauge.min)),
+              ) * 200,
             ) / 200
           : 0,
       ];
     });
     // the setup level bars: the segment at round(signal) is lit (1-based; 0 = none)
     const lit = [0, 1, 2, 3].map((i) => {
-      const s = x.bars[i],
-        v = s && s.signal ? hud._raw(s.signal) : null;
-      return s && isNum(v)
-        ? Math.max(0, Math.min(s.max || 1, Math.round(v)))
+      const bar = state.bars[i],
+        value = bar && bar.signal ? hud._raw(bar.signal) : null;
+      return bar && isNum(value)
+        ? Math.max(0, Math.min(bar.max || 1, Math.round(value)))
         : 0;
     });
-    const key = vals.map((v) => v[2]).join("|") + "|" + lit.join("|");
-    if (!force && key === x.last) return;
-    x.last = key;
-    vals.forEach(([u, G, v]) =>
-      x.c.uniform(x.ref, u, [G.cx || 0, G.cy || 0, G.r || 0, v]),
+    const key = vals.map((row) => row[2]).join("|") + "|" + lit.join("|");
+    if (!force && key === state.last) return;
+    state.last = key;
+    vals.forEach(([uniformName, gauge, level]) =>
+      state.c.uniform(state.ref, uniformName, [
+        gauge.cx || 0,
+        gauge.cy || 0,
+        gauge.r || 0,
+        level,
+      ]),
     );
-    x.c.uniform(x.ref, "u_segLit", lit);
+    state.c.uniform(state.ref, "u_segLit", lit);
   },
 };

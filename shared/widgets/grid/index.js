@@ -22,23 +22,23 @@ module.exports = {
   shaders: { grid: GRID },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_step", [w.step || 50]);
-    c.uniform(ref, "u_major", [w.major || 2]);
-    c.uniform(ref, "u_minor", rgba([255, 255, 255, 90]));
-    c.uniform(ref, "u_majorC", rgba([0, 255, 140, 255]));
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_step", [widget.step || 50]);
+    client.uniform(ref, "u_major", [widget.major || 2]);
+    client.uniform(ref, "u_minor", rgba([255, 255, 255, 90]));
+    client.uniform(ref, "u_majorC", rgba([0, 255, 140, 255]));
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

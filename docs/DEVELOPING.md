@@ -65,7 +65,7 @@ The file lands in the app's `data/layouts/` on the car, overrides the built-in l
 
 ## Adding a widget type
 
-Make `shared/widgets/<type>/index.js` (copy a small one, e.g. `segbar`) exporting `type`, `fields`, `docs`, `image` or `shader` (and `shaders` for the budget), `create(hud, w, x)` and `update(hud, x, now, force)`; keep its GLSL in `shader.js` and its helpers next to it. Add one line to `shared/widgets/index.js`. Nothing in `shared/engine/` or `shared/layouts.js` changes. Removing a type is the reverse: its folder and its registry line. `docs/ARCHITECTURE.md` has the details.
+Make `shared/widgets/<type>/index.js` (copy a small one, e.g. `segbar`) exporting `type`, `fields`, `docs`, `image` or `shader` (and `shaders` for the budget), `create(hud, widget, state)` and `update(hud, state, now, force)`; keep its GLSL in `shader.js` and its helpers next to it. Add one line to `shared/widgets/index.js`. Nothing in `shared/engine/` or `shared/layouts.js` changes. Removing a type is the reverse: its folder and its registry line. `docs/ARCHITECTURE.md` has the details.
 
 ## Fonts
 

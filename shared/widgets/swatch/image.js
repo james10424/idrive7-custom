@@ -17,17 +17,17 @@ module.exports = {
   image: true,
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    hud._blit(x, null, swatchImage(w.w, w.h, w.steps || 11));
+  create(hud, widget, state) {
+    hud._blit(state, null, swatchImage(widget.w, widget.h, widget.steps || 11));
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

@@ -23,59 +23,63 @@ module.exports = {
   shaders: { boxes: BOXES },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
     // the box list goes up as two vec4 arrays (x, y, w, h and headH, border, radius, headKind), 12 slots
-    const list = (Array.isArray(w.boxes) ? w.boxes : [])
+    const list = (Array.isArray(widget.boxes) ? widget.boxes : [])
       .filter(
-        (b) =>
-          b &&
-          isNum(b.x) &&
-          isNum(b.y) &&
-          isNum(b.w) &&
-          isNum(b.h) &&
-          !(b.toggle && !hud._toggleOn(b.toggle)),
+        (box) =>
+          box &&
+          isNum(box.x) &&
+          isNum(box.y) &&
+          isNum(box.w) &&
+          isNum(box.h) &&
+          !(box.toggle && !hud._toggleOn(box.toggle)),
       )
       .slice(0, 12);
     const rects = [],
       styles = [];
     for (let i = 0; i < 12; i++) {
-      const b = list[i];
+      const box = list[i];
       rects.push(
-        b ? b.x - w.x : 0,
-        b ? b.y - w.y : 0,
-        b ? b.w : 0,
-        b ? b.h : 0,
+        box ? box.x - widget.x : 0,
+        box ? box.y - widget.y : 0,
+        box ? box.w : 0,
+        box ? box.h : 0,
       );
       styles.push(
-        b ? b.head || 0 : 0,
-        b ? (b.border === undefined ? 2 : b.border) : 0,
-        b ? b.radius || 0 : 0,
-        b && b.headColor === "accent" ? 1 : 0,
+        box ? box.head || 0 : 0,
+        box ? (box.border === undefined ? 2 : box.border) : 0,
+        box ? box.radius || 0 : 0,
+        box && box.headColor === "accent" ? 1 : 0,
       );
     }
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_bg", rgba(color(t, w.color || "bg")));
-    c.uniform(ref, "u_hole", hud._hole(w));
-    c.uniform(ref, "u_holeR", [hud._holeRadius(w)]);
-    c.uniform(ref, "u_n", [list.length]);
-    c.uniform(ref, "u_box", rects, { type: "vec4" });
-    c.uniform(ref, "u_boxStyle", styles, { type: "vec4" });
-    c.uniform(ref, "u_fill", rgba(color(t, w.fill || "panel")));
-    c.uniform(ref, "u_line", rgba(color(t, w.line || "line")));
-    c.uniform(ref, "u_head", rgba(color(t, w.head || "head")));
-    c.uniform(ref, "u_accent", rgba(color(t, w.accent || "accent")));
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_bg", rgba(color(theme, widget.color || "bg")));
+    client.uniform(ref, "u_hole", hud._hole(widget));
+    client.uniform(ref, "u_holeR", [hud._holeRadius(widget)]);
+    client.uniform(ref, "u_n", [list.length]);
+    client.uniform(ref, "u_box", rects, { type: "vec4" });
+    client.uniform(ref, "u_boxStyle", styles, { type: "vec4" });
+    client.uniform(ref, "u_fill", rgba(color(theme, widget.fill || "panel")));
+    client.uniform(ref, "u_line", rgba(color(theme, widget.line || "line")));
+    client.uniform(ref, "u_head", rgba(color(theme, widget.head || "head")));
+    client.uniform(
+      ref,
+      "u_accent",
+      rgba(color(theme, widget.accent || "accent")),
+    );
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

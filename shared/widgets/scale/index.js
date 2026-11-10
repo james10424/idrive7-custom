@@ -14,37 +14,43 @@ const DOCS = `image layer; the shift bar's rpm numbers (0 .. bar max / 1000), ev
 /**
  * Paints the rpm numbers (red from the redline with "redFrom").
  * @param {HudApp} hud
- * @param {WidgetState} x
+ * @param {WidgetState} state
  * @returns {void}
  */
-function paint(hud, x) {
-  const w = x.w,
-    n = hud._barMax(w) / 1000 + 1,
+function paint(hud, state) {
+  const widget = state.w,
+    labelCount = hud._barMax(widget) / 1000 + 1,
     red = hud.setting("redline");
-  const m = Buffer.alloc(w.w * w.h, 0),
-    hot = Buffer.alloc(w.w * w.h, 0);
-  for (let i = 0; i < n; i++) {
+  const mask = Buffer.alloc(widget.w * widget.h, 0),
+    hot = Buffer.alloc(widget.w * widget.h, 0);
+  for (let i = 0; i < labelCount; i++) {
     const label = String(i);
-    const lw = textRaster.measure(label, w.font, 0);
-    const cx = (i / (n - 1)) * w.w;
-    const left = Math.round(Math.max(0, Math.min(w.w - lw, cx - lw / 2)));
-    const one = textRaster.mask(w.w, w.h, label, { font: w.font, x: left });
-    const into = w.redFrom && i * 1000 >= red ? hot : m;
-    for (let k = 0; k < m.length; k++) if (one[k] > into[k]) into[k] = one[k];
+    const labelW = textRaster.measure(label, widget.font, 0);
+    const cx = (i / (labelCount - 1)) * widget.w;
+    const left = Math.round(
+      Math.max(0, Math.min(widget.w - labelW, cx - labelW / 2)),
+    );
+    const one = textRaster.mask(widget.w, widget.h, label, {
+      font: widget.font,
+      x: left,
+    });
+    const into = widget.redFrom && i * 1000 >= red ? hot : mask;
+    for (let k = 0; k < mask.length; k++)
+      if (one[k] > into[k]) into[k] = one[k];
   }
-  const buf = textRaster.tint(m, w.w, w.h, {
-    color: color(hud.theme, w.color || "dim"),
-    font: w.font,
+  const buf = textRaster.tint(mask, widget.w, widget.h, {
+    color: color(hud.theme, widget.color || "dim"),
+    font: widget.font,
   });
-  if (w.redFrom) {
-    const hb = textRaster.tint(hot, w.w, w.h, {
+  if (widget.redFrom) {
+    const hotBuf = textRaster.tint(hot, widget.w, widget.h, {
       color: hud.theme.hot,
-      font: w.font,
+      font: widget.font,
     });
     for (let k = 0; k < hot.length; k++)
-      if (hot[k]) hb.copy(buf, k * 4, k * 4, k * 4 + 4);
+      if (hot[k]) hotBuf.copy(buf, k * 4, k * 4, k * 4 + 4);
   }
-  hud._blit(x, null, buf);
+  hud._blit(state, null, buf);
 }
 
 module.exports = {
@@ -54,17 +60,17 @@ module.exports = {
   image: true,
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    paint(hud, x);
+  create(hud, widget, state) {
+    paint(hud, state);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {},
+  update(hud, state, now, force) {},
 };

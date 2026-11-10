@@ -23,42 +23,49 @@ module.exports = {
   shaders: { lights: SHADER },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_n", [w.count || 12]);
-    c.uniform(ref, "u_tail", [w.tail || 0]);
-    c.uniform(ref, "u_round", [w.round ? 1 : 0]);
-    c.uniform(ref, "u_green", rgb(LIGHTS.green));
-    c.uniform(ref, "u_yellow", rgb(LIGHTS.yellow));
-    c.uniform(ref, "u_red", rgb(LIGHTS.red));
-    c.uniform(ref, "u_blue", rgb(LIGHTS.blue));
-    c.uniform(ref, "u_off", [w.off === undefined ? 0.14 : w.off]);
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_n", [widget.count || 12]);
+    client.uniform(ref, "u_tail", [widget.tail || 0]);
+    client.uniform(ref, "u_round", [widget.round ? 1 : 0]);
+    client.uniform(ref, "u_green", rgb(LIGHTS.green));
+    client.uniform(ref, "u_yellow", rgb(LIGHTS.yellow));
+    client.uniform(ref, "u_red", rgb(LIGHTS.red));
+    client.uniform(ref, "u_blue", rgb(LIGHTS.blue));
+    client.uniform(ref, "u_off", [
+      widget.off === undefined ? 0.14 : widget.off,
+    ]);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const w = x.w;
+  update(hud, state, now, force) {
+    const widget = state.w;
     const rpm = hud._raw("rpm"),
-      sp = hud._shift(),
-      n = w.count || 12;
+      shift = hud._shift(),
+      count = widget.count || 12;
     // the lights fill from "from" rpm (3000) up to the shift point; a "from" at or past it means the last 500 rpm
-    const from = Math.min(isNum(w.from) ? w.from : 3000, sp.rpm - 500);
+    const from = Math.min(
+      isNum(widget.from) ? widget.from : 3000,
+      shift.rpm - 500,
+    );
     const lit = isNum(rpm)
-      ? Math.floor(Math.min(1, Math.max(0, (rpm - from) / (sp.rpm - from))) * n)
+      ? Math.floor(
+          Math.min(1, Math.max(0, (rpm - from) / (shift.rpm - from))) * count,
+        )
       : 0;
-    const key = lit + "|" + sp.now;
-    if (!force && key === x.last) return;
-    x.last = key;
-    x.c.uniform(x.ref, "u_lit", [lit]);
-    x.c.uniform(x.ref, "u_strobe", [sp.now ? 1 : 0]);
+    const key = lit + "|" + shift.now;
+    if (!force && key === state.last) return;
+    state.last = key;
+    state.c.uniform(state.ref, "u_lit", [lit]);
+    state.c.uniform(state.ref, "u_strobe", [shift.now ? 1 : 0]);
   },
 };

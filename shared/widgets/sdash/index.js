@@ -53,106 +53,134 @@ module.exports = {
   shaders: { sdash: PACKED },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
-    const pk = hud._cfgPacker(c, ref, "sdash");
-    pk.uniform("u_size", [w.w, w.h]);
-    pk.uniform("u_geo", w.geo);
-    pk.uniform("u_k", w.k);
-    pk.uniform("u_w", [w.band]);
-    pk.uniform("u_inner", [w.inner || w.band + 18]);
-    pk.uniform("u_scale", w.scale || [w.geo[2], w.geo[0]]);
-    pk.uniform("u_ticks", w.ticks);
-    const [redFrom, orange] = hud._redMarks(w.rpmMax || 8000);
-    pk.uniform("u_redFrom", [redFrom]);
-    pk.uniform("u_orange", [orange]);
-    pk.uniform("u_fuelSeg", w.fuelSeg);
-    pk.uniform("u_oilSeg", w.oilSeg);
-    pk.uniform("u_hole", hud._hole(w));
-    pk.uniform("u_holeR", [hud._holeRadius(w)]);
-    pk.uniform(
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
+    const packer = hud._cfgPacker(client, ref, "sdash");
+    packer.uniform("u_size", [widget.w, widget.h]);
+    packer.uniform("u_geo", widget.geo);
+    packer.uniform("u_k", widget.k);
+    packer.uniform("u_w", [widget.band]);
+    packer.uniform("u_inner", [widget.inner || widget.band + 18]);
+    packer.uniform("u_scale", widget.scale || [widget.geo[2], widget.geo[0]]);
+    packer.uniform("u_ticks", widget.ticks);
+    const [redFrom, orange] = hud._redMarks(widget.rpmMax || 8000);
+    packer.uniform("u_redFrom", [redFrom]);
+    packer.uniform("u_orange", [orange]);
+    packer.uniform("u_fuelSeg", widget.fuelSeg);
+    packer.uniform("u_oilSeg", widget.oilSeg);
+    packer.uniform("u_hole", hud._hole(widget));
+    packer.uniform("u_holeR", [hud._holeRadius(widget)]);
+    packer.uniform(
       "u_holeCut",
-      Array.isArray(w.holeCut) && w.holeCut.length === 4
-        ? w.holeCut
+      Array.isArray(widget.holeCut) && widget.holeCut.length === 4
+        ? widget.holeCut
         : [0, 0, 0, 0],
     );
-    /** @type {(r: *) => number[]} */
-    const rel = (r) =>
-      Array.isArray(r) && r.length === 4
-        ? [r[0] - w.x, r[1] - w.y, r[2], r[3]]
+    /** @type {(rect: *) => number[]} */
+    const rel = (rect) =>
+      Array.isArray(rect) && rect.length === 4
+        ? [rect[0] - widget.x, rect[1] - widget.y, rect[2], rect[3]]
         : [0, 0, 0, 0];
-    pk.uniform("u_holeMask", rel(w.holeMask).concat(rel(w.holeOpen)), {
-      type: "vec4",
-    });
-    const hf =
-      Array.isArray(w.holeFade) && w.holeFade.length >= 4 ? w.holeFade : null;
-    pk.uniform(
+    packer.uniform(
+      "u_holeMask",
+      rel(widget.holeMask).concat(rel(widget.holeOpen)),
+      {
+        type: "vec4",
+      },
+    );
+    const holeFade =
+      Array.isArray(widget.holeFade) && widget.holeFade.length >= 4
+        ? widget.holeFade
+        : null;
+    packer.uniform(
       "u_holeFade",
-      hf ? [hf[0] - w.x, hf[1] - w.y, hf[2], hf[3]] : [0, 0, 0, 0],
+      holeFade
+        ? [
+            holeFade[0] - widget.x,
+            holeFade[1] - widget.y,
+            holeFade[2],
+            holeFade[3],
+          ]
+        : [0, 0, 0, 0],
     );
-    pk.uniform("u_holeFadeK", [
-      hf && isNum(hf[4]) ? hf[4] : 30,
-      hf && isNum(hf[5]) ? hf[5] : 0.85,
+    packer.uniform("u_holeFadeK", [
+      holeFade && isNum(holeFade[4]) ? holeFade[4] : 30,
+      holeFade && isNum(holeFade[5]) ? holeFade[5] : 0.85,
     ]);
-    pk.uniform("u_strip", w.strip);
-    const gg =
-      w.gapGauge && Array.isArray(w.gapGauge.box) ? w.gapGauge.box : null;
-    pk.uniform(
+    packer.uniform("u_strip", widget.strip);
+    const gapRail =
+      widget.gapGauge && Array.isArray(widget.gapGauge.box)
+        ? widget.gapGauge.box
+        : null;
+    packer.uniform(
       "u_gapRail",
-      gg ? [gg[0] - w.x, gg[1] - w.y, gg[2], gg[3]] : [0, 0, 0, 0],
+      gapRail
+        ? [gapRail[0] - widget.x, gapRail[1] - widget.y, gapRail[2], gapRail[3]]
+        : [0, 0, 0, 0],
     );
-    pk.uniform("u_gapG", [-1, 0]);
-    const vb = Array.isArray(w.vbars) ? w.vbars.slice(0, 2) : [];
+    packer.uniform("u_gapG", [-1, 0]);
+    const vbars = Array.isArray(widget.vbars) ? widget.vbars.slice(0, 2) : [];
     [0, 1].forEach((i) => {
-      const b = vb[i] && Array.isArray(vb[i].box) ? vb[i] : null;
-      pk.uniform(
+      const vbar = vbars[i] && Array.isArray(vbars[i].box) ? vbars[i] : null;
+      packer.uniform(
         "u_vbar" + i,
-        b ? [b.box[0] - w.x, b.box[1] - w.y, b.box[2], b.box[3]] : [0, 0, 0, 0],
+        vbar
+          ? [
+              vbar.box[0] - widget.x,
+              vbar.box[1] - widget.y,
+              vbar.box[2],
+              vbar.box[3],
+            ]
+          : [0, 0, 0, 0],
       );
-      pk.uniform("u_vbarC" + i, rgb(color(t, (b && b.color) || "fg")));
+      packer.uniform(
+        "u_vbarC" + i,
+        rgb(color(theme, (vbar && vbar.color) || "fg")),
+      );
     });
-    pk.uniform("u_vbarV", [-1, -1]);
-    pk.uniform(
+    packer.uniform("u_vbarV", [-1, -1]);
+    packer.uniform(
       "u_stripFill",
-      Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0],
+      Array.isArray(widget.stripSignals) ? [0, 0, 0] : [-1, 0, 0],
     );
-    pk.uniform("u_stripRoute", [-1]);
-    pk.uniform("u_topEnd", [w.topEnd]);
-    pk.flush();
+    packer.uniform("u_stripRoute", [-1]);
+    packer.uniform("u_topEnd", [widget.topEnd]);
+    packer.flush();
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const w = x.w;
-    const us = hud.setting("units") === "us";
-    const sp = hud._raw("speed"),
+  update(hud, state, now, force) {
+    const widget = state.w;
+    const usUnits = hud.setting("units") === "us";
+    const speed = hud._raw("speed"),
       rpm = hud._raw("rpm"),
       fuel = hud._raw("fuel"),
       oil = hud._raw("oil");
-    /** @type {(v: number) => number} */
-    const q = (v) => Math.round(Math.min(1, Math.max(0, v)) * 500) / 500;
+    /** @type {(value: number) => number} */
+    const quantize = (value) =>
+      Math.round(Math.min(1, Math.max(0, value)) * 500) / 500;
     const vals = [
-      q(
-        isNum(sp)
+      quantize(
+        isNum(speed)
           ? scaleFrac(
-              us ? sp * 0.621371 : sp,
-              SPEED_SCALE[us ? "us" : "metric"],
+              usUnits ? speed * 0.621371 : speed,
+              SPEED_SCALE[usUnits ? "us" : "metric"],
             )
           : 0,
       ),
-      q(isNum(rpm) ? rpm / (w.rpmMax || 8000) : 0),
-      q(isNum(fuel) ? fuel : 0),
+      quantize(isNum(rpm) ? rpm / (widget.rpmMax || 8000) : 0),
+      quantize(isNum(fuel) ? fuel : 0),
       // oil: 50..150 C with 110 (the B58's running temperature) at the bar's middle, each half linear
-      q(
+      quantize(
         isNum(oil)
           ? oil <= 110
             ? (0.5 * (oil - 50)) / 60
@@ -161,59 +189,74 @@ module.exports = {
       ),
     ];
     // the strip's two bars: each signal over its "stripMax", in 50 steps
-    const ss = Array.isArray(w.stripSignals) ? w.stripSignals : null,
-      sm = Array.isArray(w.stripMax) ? w.stripMax : [100, 10];
-    const strip = ss
+    const stripSignals = Array.isArray(widget.stripSignals)
+        ? widget.stripSignals
+        : null,
+      stripMax = Array.isArray(widget.stripMax) ? widget.stripMax : [100, 10];
+    const strip = stripSignals
       ? [0, 1].map((i) => {
-          const v = ss[i] ? hud._raw(ss[i]) : null;
-          return isNum(v)
-            ? Math.round(Math.min(1, Math.max(0, v / (sm[i] || 1))) * 50) / 50
+          const value = stripSignals[i] ? hud._raw(stripSignals[i]) : null;
+          return isNum(value)
+            ? Math.round(
+                Math.min(1, Math.max(0, value / (stripMax[i] || 1))) * 50,
+              ) / 50
             : 0;
         })
       : null;
-    const hot = !!ss && w.stripHotWhen === "kickdown" && hud._kickdown();
+    const hot =
+      !!stripSignals && widget.stripHotWhen === "kickdown" && hud._kickdown();
     // the car-ahead gauge: the gap over its "max" m, in 300 steps; red while closing fast
-    const gm = w.gapGauge ? hud._acc("gap") : null;
-    const gv = isNum(gm)
+    const gap = widget.gapGauge ? hud._acc("gap") : null;
+    const gapFrac = isNum(gap)
       ? Math.round(
-          Math.min(1, Math.max(0, gm / (w.gapGauge.max || 150))) * 300,
+          Math.min(1, Math.max(0, gap / (widget.gapGauge.max || 150))) * 300,
         ) / 300
       : -1;
-    const gHot = gv >= 0 && hud._closing();
+    const gHot = gapFrac >= 0 && hud._closing();
     // boost and battery boxes: each signal over its "range" [lo, hi], in 100 steps
     const vbv =
-      Array.isArray(w.vbars) && w.vbars.length
+      Array.isArray(widget.vbars) && widget.vbars.length
         ? [0, 1].map((i) => {
-            const b = w.vbars[i],
-              v = b && b.signal ? hud._raw(b.signal) : null,
-              r = (b && b.range) || [0, 1];
-            return isNum(v)
+            const vbar = widget.vbars[i],
+              value = vbar && vbar.signal ? hud._raw(vbar.signal) : null,
+              range = (vbar && vbar.range) || [0, 1];
+            return isNum(value)
               ? Math.round(
-                  Math.min(1, Math.max(0, (v - r[0]) / (r[1] - r[0]))) * 100,
+                  Math.min(
+                    1,
+                    Math.max(0, (value - range[0]) / (range[1] - range[0])),
+                  ) * 100,
                 ) / 100
               : -1;
           })
         : null;
     // while guiding, "routeStrip" turns the strip into the route's progress (filled from the right), in 400 steps
-    const rp = w.routeStrip ? hud._routeProgress() : null;
-    const route = isNum(rp) ? Math.round(rp * 400) / 400 : -1;
+    const routeProgress = widget.routeStrip ? hud._routeProgress() : null;
+    const route = isNum(routeProgress)
+      ? Math.round(routeProgress * 400) / 400
+      : -1;
     const key =
       vals.join("|") +
       (strip ? "|" + strip.join("|") + (hot ? "h" : "") : "") +
-      (w.gapGauge ? "|" + gv + (gHot ? "c" : "") : "") +
+      (widget.gapGauge ? "|" + gapFrac + (gHot ? "c" : "") : "") +
       (vbv ? "|" + vbv.join("|") : "") +
       "|" +
       route;
-    if (!force && key === x.last) return;
-    x.last = key;
-    if (w.gapGauge) x.c.uniform(x.ref, "u_gapG", [gv, gHot ? 1 : 0]);
-    if (vbv) x.c.uniform(x.ref, "u_vbarV", vbv);
+    if (!force && key === state.last) return;
+    state.last = key;
+    if (widget.gapGauge)
+      state.c.uniform(state.ref, "u_gapG", [gapFrac, gHot ? 1 : 0]);
+    if (vbv) state.c.uniform(state.ref, "u_vbarV", vbv);
     if (strip)
-      x.c.uniform(x.ref, "u_stripFill", [strip[0], strip[1], hot ? 1 : 0]);
-    x.c.uniform(x.ref, "u_stripRoute", [route]);
-    x.c.uniform(x.ref, "u_speed", [vals[0]]);
-    x.c.uniform(x.ref, "u_rpm", [vals[1]]);
-    x.c.uniform(x.ref, "u_fuel", [vals[2]]);
-    x.c.uniform(x.ref, "u_oil", [vals[3]]);
+      state.c.uniform(state.ref, "u_stripFill", [
+        strip[0],
+        strip[1],
+        hot ? 1 : 0,
+      ]);
+    state.c.uniform(state.ref, "u_stripRoute", [route]);
+    state.c.uniform(state.ref, "u_speed", [vals[0]]);
+    state.c.uniform(state.ref, "u_rpm", [vals[1]]);
+    state.c.uniform(state.ref, "u_fuel", [vals[2]]);
+    state.c.uniform(state.ref, "u_oil", [vals[3]]);
   },
 };

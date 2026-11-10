@@ -44,95 +44,112 @@ module.exports = {
   image: true,
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {},
+  create(hud, widget, state) {},
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const w = x.w;
-    if (!force && now - x.lastPaint < (w.rate || TEXT_MS)) return;
-    const s =
-      w.needs && hud._token(w.needs) === "--" ? "" : hud._resolve(w.text);
-    let role = w.color || "fg";
-    if (w.colorBy === "verdict" && hud.score.last)
+  update(hud, state, now, force) {
+    const widget = state.w;
+    if (!force && now - state.lastPaint < (widget.rate || TEXT_MS)) return;
+    const resolved =
+      widget.needs && hud._token(widget.needs) === "--"
+        ? ""
+        : hud._resolve(widget.text);
+    let role = widget.color || "fg";
+    if (widget.colorBy === "verdict" && hud.score.last)
       role = VERDICT[hud.score.last.verdict] || role;
-    if (w.near && isNum(w.nearFade)) {
+    if (widget.near && isNum(widget.nearFade)) {
       // fade in as the value comes near (iDrive 8): full "nearColor" at the label, its own colour "nearFade"
       // label steps away, in 8 steps so a label repaints only when its step changes
-      const pos = hud._nearPos(w.near[0]);
-      const f = isNum(pos)
+      const pos = hud._nearPos(widget.near[0]);
+      const fade = isNum(pos)
         ? Math.round(
-            Math.max(0, 1 - Math.abs(pos - w.near[1]) / w.nearFade) * 8,
+            Math.max(0, 1 - Math.abs(pos - widget.near[1]) / widget.nearFade) *
+              8,
           ) / 8
         : 0;
-      if (f > 0) {
-        const a = color(hud.theme, role),
-          b = color(hud.theme, w.nearColor || "fg");
-        role = [0, 1, 2, 3].map((i) => Math.round(a[i] + (b[i] - a[i]) * f));
+      if (fade > 0) {
+        const ownColor = color(hud.theme, role),
+          nearRgba = color(hud.theme, widget.nearColor || "fg");
+        role = [0, 1, 2, 3].map((i) =>
+          Math.round(ownColor[i] + (nearRgba[i] - ownColor[i]) * fade),
+        );
       }
-    } else if (w.near && hud._nearMark(w.near[0]) === w.near[1])
-      role = w.nearColor || "fg";
+    } else if (widget.near && hud._nearMark(widget.near[0]) === widget.near[1])
+      role = widget.nearColor || "fg";
     // "litGear": the Regal gear row's slot (P 0, R 1, N 2, D 3, the gear number 5): while the lit gear box sits
     // behind it, the text turns "litColor" (fg: white on the box is 5.0:1, WCAG AA; the VFD orange was 1.9:1)
-    if (isNum(w.litGear) && hud._regalGear() === w.litGear)
-      role = w.litColor || "fg";
-    if (w.hotWhen === "closing") {
+    if (isNum(widget.litGear) && hud._regalGear() === widget.litGear)
+      role = widget.litColor || "fg";
+    if (widget.hotWhen === "closing") {
       if (hud._closing()) role = "hot";
-    } else if (w.hotWhen || w.coldWhen) {
-      const sp = hud._shift();
-      if (w.coldWhen && sp[w.coldWhen]) role = VERDICT.COLD;
-      if (w.hotWhen && sp[w.hotWhen]) role = "hot";
+    } else if (widget.hotWhen || widget.coldWhen) {
+      const shift = hud._shift();
+      if (widget.coldWhen && shift[widget.coldWhen]) role = VERDICT.COLD;
+      if (widget.hotWhen && shift[widget.hotWhen]) role = "hot";
     }
     // "slide": the text rides up its box with a value (the car-ahead gauge's label), blank without one
     let offY = 0,
-      text = s;
-    if (w.slide) {
-      const v =
-        w.slide.signal === "accGap"
+      text = resolved;
+    if (widget.slide) {
+      const value =
+        widget.slide.signal === "accGap"
           ? hud._acc("gap")
-          : hud._raw(w.slide.signal);
-      if (!isNum(v)) text = "";
+          : hud._raw(widget.slide.signal);
+      if (!isNum(value)) text = "";
       else {
-        const lo = w.slide.min || 0,
-          f = Math.min(1, Math.max(0, (v - lo) / ((w.slide.max || 150) - lo)));
-        const y = w.slide.yBottom - f * (w.slide.yBottom - w.slide.yTop);
+        const low = widget.slide.min || 0,
+          progress = Math.min(
+            1,
+            Math.max(0, (value - low) / ((widget.slide.max || 150) - low)),
+          );
+        const y =
+          widget.slide.yBottom -
+          progress * (widget.slide.yBottom - widget.slide.yTop);
         offY = Math.round(
-          y - w.y - textRaster.loadFont(w.font).metrics.cellHeight / 2,
+          y -
+            widget.y -
+            textRaster.loadFont(widget.font).metrics.cellHeight / 2,
         );
       }
     }
     const key = text + "|" + role + "|" + offY;
-    if (!force && key === x.last) return;
-    x.last = key;
-    x.lastPaint = now;
+    if (!force && key === state.last) return;
+    state.last = key;
+    state.lastPaint = now;
     let buf;
-    if (w.font === "@sys") {
+    if (widget.font === "@sys") {
       // the car's own font, any script ("size" px, default 80 % of the box)
-      const f = hud._sysFont();
-      const m =
-        f && text
-          ? f.mask(w.w, w.h, text, {
-              size: w.size || Math.round(w.h * 0.8),
-              align: w.align,
+      const sysFont = hud._sysFont();
+      const mask =
+        sysFont && text
+          ? sysFont.mask(widget.w, widget.h, text, {
+              size: widget.size || Math.round(widget.h * 0.8),
+              align: widget.align,
             })
-          : Buffer.alloc(w.w * w.h);
-      buf = textRaster.tint(m, w.w, w.h, { color: color(hud.theme, role) });
-    } else
-      buf = textRaster.drawText(w.w, w.h, text, {
-        font: w.font,
+          : Buffer.alloc(widget.w * widget.h);
+      buf = textRaster.tint(mask, widget.w, widget.h, {
         color: color(hud.theme, role),
-        align: w.align,
-        spacing: w.spacing,
-        offsetY: offY,
-        color2: w.color2 && role !== "hot" ? color(hud.theme, w.color2) : null,
-        glow: w.glow ? hud.theme.glow : 0,
       });
-    hud._blitDiff(x, buf);
+    } else
+      buf = textRaster.drawText(widget.w, widget.h, text, {
+        font: widget.font,
+        color: color(hud.theme, role),
+        align: widget.align,
+        spacing: widget.spacing,
+        offsetY: offY,
+        color2:
+          widget.color2 && role !== "hot"
+            ? color(hud.theme, widget.color2)
+            : null,
+        glow: widget.glow ? hud.theme.glow : 0,
+      });
+    hud._blitDiff(state, buf);
   },
 };

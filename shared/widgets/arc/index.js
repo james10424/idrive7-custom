@@ -23,39 +23,39 @@ module.exports = {
   shaders: { arc: ARC },
   /**
    * @param {HudApp} hud
-   * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {Widget} widget
+   * @param {WidgetState} state
    */
-  create(hud, w, x) {
-    const c = x.c,
-      ref = x.ref,
-      t = hud.theme;
-    c.uniform(ref, "u_size", [w.w, w.h]);
-    c.uniform(ref, "u_color", rgb(color(t, w.color || "arc")));
-    c.uniform(ref, "u_track", rgba(t.track));
-    c.uniform(ref, "u_width", [w.width || 7]);
-    c.uniform(ref, "u_start", [
-      ((w.start === undefined ? 225 : w.start) * Math.PI) / 180,
+  create(hud, widget, state) {
+    const client = state.c,
+      ref = state.ref,
+      theme = hud.theme;
+    client.uniform(ref, "u_size", [widget.w, widget.h]);
+    client.uniform(ref, "u_color", rgb(color(theme, widget.color || "arc")));
+    client.uniform(ref, "u_track", rgba(theme.track));
+    client.uniform(ref, "u_width", [widget.width || 7]);
+    client.uniform(ref, "u_start", [
+      ((widget.start === undefined ? 225 : widget.start) * Math.PI) / 180,
     ]);
-    c.uniform(ref, "u_sweep", [
-      ((w.sweep === undefined ? 270 : w.sweep) * Math.PI) / 180,
+    client.uniform(ref, "u_sweep", [
+      ((widget.sweep === undefined ? 270 : widget.sweep) * Math.PI) / 180,
     ]);
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    */
-  update(hud, x, now, force) {
-    const w = x.w;
-    const raw = hud._raw(w.signal);
-    const v = isNum(raw)
-      ? Math.min(1, Math.max(0, (raw - w.min) / (w.max - w.min)))
+  update(hud, state, now, force) {
+    const widget = state.w;
+    const raw = hud._raw(widget.signal);
+    const value = isNum(raw)
+      ? Math.min(1, Math.max(0, (raw - widget.min) / (widget.max - widget.min)))
       : 0;
-    const q = Math.round(v * 200) / 200;
-    if (!force && q === x.last) return;
-    x.last = q;
-    x.c.uniform(x.ref, "u_value", [q]);
+    const quantized = Math.round(value * 200) / 200;
+    if (!force && quantized === state.last) return;
+    state.last = quantized;
+    state.c.uniform(state.ref, "u_value", [quantized]);
   },
 };
