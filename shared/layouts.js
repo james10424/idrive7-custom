@@ -26,7 +26,7 @@ const visible = require("./visible");
  * The widget types and the fields each must have.
  * @type {Record<string, string[]>}
  */
-const TYPES = {
+const LEGACY_TYPES = {
   text: ["text", "font"],
   scale: ["font"],
   stripe: [],
@@ -50,8 +50,13 @@ const TYPES = {
   boxes: ["boxes"],
   atext: ["text", "font"],
   odo: [],
-  miku: [],
 };
+const widgetTypes = require("./widgets");
+/** @type {Record<string, string[]>} */
+const TYPES = Object.assign({}, LEGACY_TYPES);
+Object.keys(widgetTypes).forEach((t) => {
+  TYPES[t] = widgetTypes[t].fields;
+});
 const CLASSES = ["ambient", "content", "overlay", "alert"];
 // the HUD modes a layout can have a variant for (hud.js header); "normal" is every layout's own
 const MODES = ["cruise", "nav", "cruiseNav"];

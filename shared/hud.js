@@ -222,7 +222,6 @@
  * app exit, and on the car a second unexpected exit uninstalls the app.
  */
 const fs = require("fs");
-const path = require("path");
 const { ClusterRender, DEFAULT_PATH } = require("./cluster_render_client.js");
 const Layouts = require("./layouts");
 const { THEMES, M_STRIPE, LIGHTS, VERDICT, color } = require("./hud_themes");
@@ -232,6 +231,8 @@ const textRaster = require("./hud_text");
 const { paintIcon } = require("./icons");
 const shaders = require("./shaders");
 const calibration = require("./calibration");
+const widgetTypes = require("./widgets");
+const { isNum, rgb, rgba, pad2, mib } = require("./engine/util");
 const Car = require("./kit/car");
 
 /** @typedef {import("./cluster_render_client.js").ClusterRender} Client */
@@ -385,42 +386,6 @@ const Car = require("./kit/car");
  * @property {string[]} chars the glyph at each cell
  * @property {number} bytes pixel memory
  */
-/** @typedef {{ lean: number, look: number, doze: number }} MikuCounts */
-/**
- * The Miku bake's atlas.json (tools/live2d_bake); only what is read here.
- * @typedef {object} MikuInfo
- * @property {number[]} atlas [w, h]
- * @property {number[]} frame [w, h]
- * @property {number[]} anchor frame px between her feet
- * @property {Record<string, number[]>} frames idle, half, shut, talk
- * @property {Array<number[]>} [lean]
- * @property {Array<number[]>} [look]
- * @property {Array<number[]>} [doze]
- * @property {number[]} [leanShift]
- * @property {number[]} [leanShiftY]
- * @property {number[]} [lookShift]
- * @property {Array<number[]>} [dozeShift]
- * @property {Array<Record<string, *>>} [arms]
- * @property {Record<string, *>} [tails]
- * @property {number[]} [crop]
- * @property {number} [hipY]
- * @property {number} [headY]
- * @property {boolean} [breathe]
- * @property {string} [leanAxis] "fb" for a forward/back bake
- * @property {string} [pose]
- */
-/**
- * The Miku frames as an RGBA asset on a connection (_sprite).
- * @typedef {object} SpriteAtlas
- * @property {number} ref
- * @property {Client} c
- * @property {number} ci
- * @property {MikuInfo} info
- * @property {number[]} size [w, h] with the table rows
- * @property {number} dataY where the table rows start
- * @property {MikuCounts} counts
- * @property {number} bytes pixel memory
- */
 
 /**
  * The engine's state per drawn widget (this.widgets).
@@ -527,101 +492,6 @@ const LAYER_BUDGET = 64; // cluster-render's limit per client connection (Compos
 const MAX_CONN = 4; // connections a layout may ask for ("conn"); 96 layers service-wide, 64 per connection
 const PIXEL_BYTES = 16 * 1024 * 1024; // cluster-render's pixel memory for every app's images together (CompositorLimits.pixel_bytes)
 const SHEET_AREA_FRAC = 4; // the first sheet size limit: 1/4 of the target area (see the header)
-const MIKU_MS = 16; // the Miku character's own update rate (60 Hz)
-const MIKU_TAU_MS = 450; // the Miku character's speed follows the car this smoothly
-const MIKU_LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly (no spring: no sway back past upright)
-const MIKU_POINT_K = 70; // the pointing arm's spring (1/s^2): about 1.3 Hz
-const MIKU_IDLE_G = 0.03; // below this |longitudinal g| the car idles: she glances around (the lean is not gated)
-const MIKU_GLANCE_AFTER_MS = 1000; // the first glance this long after the car goes idle
-const MIKU_LOOK_K = 30; // the glance's spring (1/s^2): a turn of about half a second
-const MIKU_LOOK_C = 11; // critically damped: no overshoot
-const MIKU_DOZE_AFTER_MS = 15000; // stopped and idle this long: she starts dozing
-const MIKU_DOZE_PHASE_MS = 5000; // then dozes this long, wakes this long (glancing), dozes again, and so on
-const MIKU_DROOP_W = 1.6; // her droop's spring (rad/s, critically damped): about 3 s to the bottom
-const MIKU_RISE_W = 3; // waking in the loop: about 1.5 s
-const MIKU_WAKE_W = 5; // waking for good when the car moves: about 1 s
-const MIKU_POINT_C = 16.7; // critically damped: it rises and settles without bouncing
-
-/**
- * The Miku shader for a widget and the "Miku parts" setting: leaving the glances and dozing, or (bare) everything
- * but the lean out of the shader altogether, to find what a display can't take. The layout's "idle": false does the
- * same as noIdle.
- * @param {Widget} w
- * @param {string} parts the "Miku parts" setting
- * @returns {string} the fragment shader
- */
-function mikuShader(w, parts) {
-  const noIdle = w.idle === false || parts === "noIdle" || parts === "bare";
-  return (
-    (noIdle ? "#define MIKU_NO_IDLE\n" : "") +
-    (parts === "bare" ? "#define MIKU_BARE\n" : "") +
-    shaders.miku
-  );
-}
-
-/**
- * The Miku shader's tables as pixel rows to go under the atlas art: 56 entries of two values each, each entry a 3x3 px
- * block (so a bilinear read at its middle gets it whole), opaque (alpha 255: a canvas or driver that premultiplies
- * leaves it alone), each value 12 bits: (v + 1024) * 2 in R (high 8) and B's high or low nibble, in G likewise:
- * -1024 .. 1023.5 px in half px. Entries: 0-15 the lean frames' atlas x, y; 16-31 each lean frame's head shift x, y
- * (y: the forward/back lean's head drop; 0 sideways); 32-39 the glance frames' x, y; 40-47 each glance's head shift; 48-51 the doze frames' x, y; 52-55 each doze
- * frame's head shift x, y. Returns { px, rows, counts: { lean, look, doze } }.
- * @param {MikuInfo} j atlas.json
- * @param {number} aw the atlas width, px
- * @returns {{ px: Buffer, rows: number, counts: MikuCounts }}
- */
-function mikuData(j, aw) {
-  /** @type {(v: *) => number[]} */
-  const xy = (v) =>
-      Array.isArray(v) ? [Number(v[0]) || 0, Number(v[1]) || 0] : [0, 0],
-    /** @type {(a: *, i: number) => number} */
-    num = (a, i) => (Array.isArray(a) && isNum(a[i]) ? a[i] : 0);
-  const lean =
-    Array.isArray(j.lean) && j.lean.length >= 3
-      ? j.lean.slice(0, 15)
-      : [j.frames.idle];
-  const look =
-    Array.isArray(j.look) && j.look.length >= 3 && j.look.length % 2
-      ? j.look.slice(0, 7)
-      : [];
-  const doze = Array.isArray(j.doze) ? j.doze.slice(0, 4) : [];
-  const e = [];
-  for (let i = 0; i < 16; i++) e[i] = xy(lean[i]);
-  for (let i = 0; i < 16; i++)
-    e[16 + i] = [num(j.leanShift, i), num(j.leanShiftY, i)];
-  for (let i = 0; i < 8; i++) {
-    e[32 + i] = xy(look[i]);
-    e[40 + i] = [num(j.lookShift, i), 0];
-  }
-  for (let i = 0; i < 4; i++) {
-    e[48 + i] = xy(doze[i]);
-    e[52 + i] = xy(Array.isArray(j.dozeShift) ? j.dozeShift[i] : null);
-  }
-  const per = Math.floor(aw / 3),
-    rows = Math.ceil(e.length / per) * 3,
-    px = Buffer.alloc(aw * rows * 4, 0);
-  /** @type {(v: number) => number} */
-  const q = (v) => Math.max(0, Math.min(4095, Math.round((v + 1024) * 2)));
-  e.forEach((v, i) => {
-    const a = q(v[0]),
-      b = q(v[1]),
-      x0 = (i % per) * 3,
-      y0 = Math.floor(i / per) * 3;
-    for (let dy = 0; dy < 3; dy++)
-      for (let dx = 0; dx < 3; dx++) {
-        const o = ((y0 + dy) * aw + x0 + dx) * 4;
-        px[o] = a >> 4;
-        px[o + 1] = b >> 4;
-        px[o + 2] = ((a & 15) << 4) | (b & 15);
-        px[o + 3] = 255;
-      }
-  });
-  return {
-    px,
-    rows,
-    counts: { lean: lean.length, look: look.length, doze: doze.length },
-  };
-}
 const TICK_MS = 50; // 20 Hz: shift bar and gauges
 const REGAL_NEEDLE_TAU_MS = 170; // Regal's fuel and pod needles ease toward a reading: settled in about 0.5 s
 const REGAL_SPEED_TAU_MS = 50; // its speed needle: about 0.15 s, so it keeps up with the digits
@@ -913,15 +783,6 @@ function driveModeOf(raw) {
 }
 
 /**
- * A 0..255 colour as 0..1 RGB.
- * @param {number[]} c
- * @returns {number[]}
- */
-function rgb(c) {
-  return [c[0] / 255, c[1] / 255, c[2] / 255];
-}
-
-/**
  * The one rectangle around what differs between two RGBA images of the same size, with its pixels, or null
  * when they are the same (after idrive7-EVAHUD's eva_canvas.js, MIT). The link is what is short, not the CPU:
  * comparing a widget costs about a tenth of painting it.
@@ -973,27 +834,6 @@ function changes(was, now, w, h) {
       (top + y) * row + (right + 1) * 4,
     );
   return { rect, px };
-}
-/**
- * A 0..255 colour (alpha optional) as 0..1 RGBA.
- * @param {number[]} c
- * @returns {number[]}
- */
-function rgba(c) {
-  return [
-    c[0] / 255,
-    c[1] / 255,
-    c[2] / 255,
-    (c[3] === undefined ? 255 : c[3]) / 255,
-  ];
-}
-/**
- * A finite number.
- * @param {*} v
- * @returns {v is number}
- */
-function isNum(v) {
-  return typeof v === "number" && isFinite(v);
 }
 
 class HudApp {
@@ -2519,144 +2359,6 @@ class HudApp {
         " of pixel memory",
     );
     return a;
-  }
-
-  /**
-   * The Miku layout's baked frames: <data>/miku/atlas.json and
-   * atlas.rgba (straight-alpha RGBA, atlas[0] x atlas[1] px), made by tools/live2d_bake and pushed by
-   * scripts/deploy.sh --miku. They are not in the app: the character's art stays with its owner. Uploaded once as an
-   * RGBA asset per connection and kept in this.atlases (so the pixel memory counts it); new files (a later bake)
-   * drop the old asset. Null, with this.problem set, when the files are missing or bad.
-   * @param {Widget} w
-   * @param {number} ci connection index
-   * @returns {?SpriteAtlas}
-   */
-  _sprite(w, ci) {
-    // the HUD's Miku from miku/ (a forward/back lean bake, lean.axis "fb", works there too: its leanAxis turns
-    // the arms' balance off)
-    const sub = "miku",
-      dir = path.join(this.ctx.dataDir || ".", sub);
-    let st;
-    try {
-      st = fs.statSync(path.join(dir, "atlas.rgba"));
-    } catch (e) {
-      st = null;
-    }
-    const pre = "sprite:" + ci + ":",
-      key = pre + dir + ":" + (st ? st.mtimeMs : 0);
-    if (this.atlases.has(key)) return this.atlases.get(key);
-    // another bake (or a newer file) on this connection: drop the old asset before uploading, so one is in the
-    // pixel memory at a time. Swapping this way while running works on the car (Nov 9 2026: Custom HUD 0.1.18's
-    // Miku lean setting swapped her 1024x564 atlas between the sideways and fb bakes and the new frames showed)
-    this.atlases.forEach((a, k) => {
-      if (k.indexOf(pre) === 0) {
-        a.c.drop(a.ref);
-        this.atlases.delete(k);
-      }
-    });
-    try {
-      if (!st)
-        throw new Error(
-          "no baked frames in " +
-            dir +
-            " (tools/live2d_bake, then scripts/deploy.sh --" +
-            sub +
-            ")",
-        );
-      const info = JSON.parse(
-        fs.readFileSync(path.join(dir, "atlas.json"), "utf8"),
-      );
-      const [aw, ah] = info.atlas || [];
-      if (!(aw > 0 && ah > 0)) throw new Error('atlas.json: bad "atlas" size');
-      // the instrument cluster (KOMBI) restarted on a 1024x1128 RGBA asset (Nov 2026): nothing over 1024 a side
-      if (aw > 1024 || ah > 1024)
-        throw new Error(
-          "atlas " +
-            aw +
-            "x" +
-            ah +
-            " is over 1024 px a side, which restarts the instrument cluster; bake again with the current tools/live2d_bake",
-        );
-      if (
-        !info.frames ||
-        !info.frames.idle ||
-        !Array.isArray(info.frame) ||
-        !Array.isArray(info.anchor)
-      )
-        throw new Error('atlas.json: needs "frame", "anchor" and frames.idle');
-      const art = fs.readFileSync(path.join(dir, "atlas.rgba"));
-      if (art.length !== aw * ah * 4)
-        throw new Error(
-          "atlas.rgba is " +
-            art.length +
-            " bytes, " +
-            aw +
-            "x" +
-            ah +
-            " RGBA needs " +
-            aw * ah * 4,
-        );
-      // the per-frame tables go in a few rows under the art, which the shader reads (mikuData), not in uniforms
-      if (info.pose)
-        throw new Error(
-          "atlas.json is a " +
-            info.pose +
-            " bake (no layout draws one now): bake the standing one",
-        );
-      const data = mikuData(info, aw),
-        h = ah + data.rows;
-      if (h > 1024)
-        throw new Error(
-          "atlas " +
-            aw +
-            "x" +
-            ah +
-            " leaves no room under 1024 px for its " +
-            data.rows +
-            " rows of tables; bake again with the current tools/live2d_bake",
-        );
-      const px = Buffer.concat([art, data.px]);
-      const c = this._clientAt(ci);
-      const ref = c.asset({
-        target: this.target,
-        format: "rgba8",
-        w: aw,
-        h,
-        sampling: "bilinear",
-      });
-      if (!ref) throw new Error("atlas asset refused (" + aw + "x" + h + ")");
-      c.pixels(ref, null, px);
-      const a = {
-        ref,
-        c,
-        ci,
-        info,
-        size: [aw, h],
-        dataY: ah,
-        counts: data.counts,
-        bytes: aw * h * 8,
-      };
-      this.atlases.set(key, a);
-      this.log.info(
-        "miku frames: " +
-          Object.keys(info.frames).length +
-          " of " +
-          info.frame.join("x") +
-          ", " +
-          (info.tails ? "tails, " : "") +
-          aw +
-          "x" +
-          h +
-          " RGBA asset, " +
-          mib(a.bytes) +
-          " of pixel memory",
-      );
-      return a;
-    } catch (e) {
-      this.problem = "Miku: " + e.message;
-      this.log.warn('widget "' + w.id + '": ' + e.message);
-      return null;
-    }
   }
 
   /**
@@ -4245,6 +3947,7 @@ class HudApp {
    * @returns {void}
    */
   _create(w, sheet) {
+    const mod = widgetTypes[w.type];
     let ref, c;
     if (sheet) {
       ref = sheet.ref;
@@ -4263,19 +3966,20 @@ class HudApp {
       if (IMAGE_TYPES[w.type])
         ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
       else {
-        if (w.type === "miku" && !this._sprite(w, this._connOf(w))) return;
+        // a widget module's shader; null: it can't draw now (it said why)
+        const fs = mod
+          ? mod.shader(this, w, this._connOf(w))
+          : w.type === "swatch"
+            ? calibration.SWATCH
+            : w.type === "rdash" && w.needleOnly
+              ? shaders.rdashNeedle
+              : shaders[w.type];
+        if (fs === null) return;
         ref = c.effect(
           Object.assign(
             {
-              fs:
-                w.type === "swatch"
-                  ? calibration.SWATCH
-                  : w.type === "miku"
-                    ? mikuShader(w, this.setting("mikuParts"))
-                    : w.type === "rdash" && w.needleOnly
-                      ? shaders.rdashNeedle
-                      : shaders[w.type],
-              time: w.type === "miku" || undefined,
+              fs,
+              time: (mod && mod.time) || undefined,
             },
             base,
           ),
@@ -4298,7 +4002,8 @@ class HudApp {
     };
     this.widgets.set(w.id, x);
     const t = this.theme;
-    if (w.type === "atext") {
+    if (mod) mod.create(this, w, x);
+    else if (w.type === "atext") {
       const a = this._atlas(w.font, x.ci);
       x.atlas = a;
       x.cells = Math.max(
@@ -4605,91 +4310,6 @@ class HudApp {
       c.uniform(ref, "u_headH", [w.head || 0]);
       c.uniform(ref, "u_border", [w.border === undefined ? 2 : w.border]);
       c.uniform(ref, "u_radius", [w.radius || 0]);
-    } else if (w.type === "miku") {
-      // the bake's "anchor" (frame px, between her feet) goes on the widget's "feet" point
-      const sp = this._sprite(w, x.ci),
-        j = sp.info,
-        ft = Array.isArray(w.feet) && w.feet.length === 2 ? w.feet : [480, 377];
-      /** @type {(k: string) => number[]} */
-      const fr = (k) => (j.frames && j.frames[k]) || j.frames.idle;
-      /** @type {(o: *) => number[]} */
-      const rect = (o) => (o && Array.isArray(o.rect) ? o.rect : [0, 0, 0, 0]);
-      c.bind(ref, "u_atlas", sp.ref);
-      c.uniform(ref, "u_size", [w.w, w.h]);
-      c.uniform(ref, "u_atlasSize", sp.size);
-      c.uniform(ref, "u_frame", j.frame);
-      c.uniform(ref, "u_origin", [
-        ft[0] - w.x - j.anchor[0],
-        ft[1] - w.y - j.anchor[1],
-      ]);
-      // the fixed sprite values go up as three vec4 arrays (u_spr: the eye frames, the tails, the crop and the
-      // tables' counts; u_arm), which shaders.js miku names back with #define; the per-frame tables (lean,
-      // glance and doze frames, head and hip shifts) are pixel rows under the atlas (_sprite, mikuData). Few
-      // uniforms: the cluster's GPU restarted on the 0.1.9 .. 0.1.12 shader's 55 uniform vectors (or its size)
-      const spr = fr("idle").concat(fr("half"), fr("shut"), fr("talk"));
-      const am = Array.isArray(j.arms) ? j.arms.slice(0, 2) : [],
-        /** @type {(o: *) => number[]} */
-        v3 = (o) =>
-          Array.isArray(o)
-            ? [o[0] || 0, o[1] || 0, o[2] || 0, 0]
-            : [0, 0, 0, 0];
-      const armF = [];
-      [0, 1].forEach((i) => {
-        const a = am[i];
-        armF.push(
-          ...(a ? a.rect : [0, 0, 0, 0]),
-          ...(a
-            ? [a.at[0], a.at[1], a.shoulder[0], a.shoulder[1]]
-            : [0, 0, 0, 0]),
-          ...v3(a && a.left),
-          ...v3(a && a.right),
-        );
-      });
-      c.uniform(ref, "u_arm", armF, { type: "vec4" });
-      c.uniform(ref, "u_armSide", [
-        am[0] ? am[0].side : -1,
-        am[1] ? am[1].side : 1,
-        ((isNum(w.point) ? w.point : 60) * Math.PI) / 180,
-        // the arms balance a sideways lean only: leaning toward or away from you they just ride along
-        j.leanAxis === "fb"
-          ? 0
-          : ((isNum(w.balance) ? w.balance : 50) * Math.PI) / 180,
-      ]);
-      x.lookN = sp.counts.look;
-      x.dozeN = sp.counts.doze;
-      c.uniform(ref, "u_idle", [0, 0, 0, 0]);
-      c.uniform(ref, "u_hip", [
-        j.hipY,
-        isNum(j.headY) ? j.headY : 0,
-        j.breathe === false ? 0 : 1,
-        0,
-      ]);
-      // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
-      // moved only every third frame would step. A message goes up only when the lean or speed changes a step
-      x.timer = setInterval(
-        () =>
-          this._guard("widget " + w.id, () =>
-            this._update(x, Date.now(), false),
-          ),
-        MIKU_MS,
-      );
-      const tl = j.tails || null;
-      // u_spr[4]: the rect the face, glance and doze frames are crops of (none: an older bake's whole frames)
-      const cr =
-        Array.isArray(j.crop) && j.crop.length === 4 ? j.crop : [0, 0, 0, 0];
-      c.uniform(
-        ref,
-        "u_spr",
-        spr.concat(
-          rect(tl),
-          tl
-            ? [tl.at[0], tl.at[1], tl.rootY || 0, tl.length || tl.rect[3]]
-            : [0, 0, 0, 1],
-          cr,
-          [sp.counts.lean, sp.counts.look, sp.counts.doze, sp.dataY],
-        ),
-        { type: "vec4" },
-      );
     } else if (w.type === "swatch") {
       c.uniform(ref, "u_size", [w.w, w.h]);
       c.uniform(ref, "u_n", [w.steps || 11]);
@@ -4817,7 +4437,9 @@ class HudApp {
    */
   _update(x, now, force) {
     const w = x.w;
-    if (w.type === "atext") {
+    const mod = widgetTypes[w.type];
+    if (mod) mod.update(this, x, now, force);
+    else if (w.type === "atext") {
       if (!force && now - x.lastPaint < (w.rate || TEXT_MS)) return;
       const s = this._resolve(w.text);
       if (!force && s === x.last) return;
@@ -5224,60 +4846,6 @@ class HudApp {
       x.c.uniform(x.ref, "u_shift", [sp.rpm]);
       x.c.uniform(x.ref, "u_peak", [peak]);
       x.c.uniform(x.ref, "u_shiftNow", [sp.now ? 1 : 0]);
-    } else if (w.type === "miku") {
-      // lean: the longitudinal g, -0.4 g .. +0.4 g to -1 .. 1, eased over MIKU_LEAN_TAU_MS; speed 0..130 km/h to
-      // 0..1, eased over MIKU_TAU_MS; both sent in steps of 0.002 (a small uniform message, at most one per MIKU_MS, and only while she moves)
-      const d = this.car.data(),
-        dt = x.at ? Math.min(500, now - x.at) : 0;
-      x.at = now;
-      // standing on a bus: the lean eases toward the g (as Unreal's FInterpTo, but 1 - exp(-dt / tau), the same at
-      // any update rate), so she leans into a pull and straightens when it ends, without swaying back past upright;
-      // the ease also smooths the car's steppy, noisy g
-      const g = isNum(d.gLong)
-        ? Math.max(-0.4, Math.min(0.4, d.gLong)) / 0.4
-        : 0;
-      x.lean = isNum(x.lean)
-        ? x.lean + (g - x.lean) * (1 - Math.exp(-dt / MIKU_LEAN_TAU_MS))
-        : g;
-      // pointing: toward the indicator ('L' -1, 'R' 1, hazards or none 0), on a quicker spring (about 1.3 Hz, no
-      // overshoot) so the arm rises and falls smoothly
-      const tp = this._turnSide(),
-        dtp = dt / 1000;
-      if (!isNum(x.point)) {
-        x.point = tp;
-        x.pointV = 0;
-      }
-      for (let left = dtp; left > 0; left -= 0.01) {
-        const h = Math.min(0.01, left);
-        x.pointV +=
-          (MIKU_POINT_K * (tp - x.point) - MIKU_POINT_C * x.pointV) * h;
-        x.point = Math.max(-1, Math.min(1, x.point + x.pointV * h));
-      }
-      const v = this._raw("speed"),
-        sv = isNum(v) ? Math.min(1, Math.max(0, v / 130)) : 0,
-        /** @type {(f: number) => number} */
-        step = (f) => Math.round(f * 500) / 500;
-      this._mikuIdle(x, now, dt, d.gLong, v);
-      x.spd = isNum(x.spd)
-        ? x.spd + (sv - x.spd) * (1 - Math.exp(-dt / MIKU_TAU_MS))
-        : sv;
-      // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
-      const u = [
-        step(Math.tanh(x.lean * 1.15)),
-        step(x.spd),
-        step(x.point),
-        this.themeName === "night" ? 0.8 : 1,
-      ];
-      const ui = [step(x.look), step(x.doze), 0, 0];
-      const key = u.join("|"),
-        keyI = ui.join("|");
-      if (force || keyI !== x.lastI) {
-        x.lastI = keyI;
-        x.c.uniform(x.ref, "u_idle", ui);
-      }
-      if (!force && key === x.last) return;
-      x.last = key;
-      x.c.uniform(x.ref, "u_drive", u);
     } else if (w.type === "lights") {
       const rpm = this._raw("rpm"),
         sp = this._shift(),
@@ -5294,93 +4862,6 @@ class HudApp {
       x.last = key;
       x.c.uniform(x.ref, "u_lit", [lit]);
       x.c.uniform(x.ref, "u_strobe", [sp.now ? 1 : 0]);
-    }
-  }
-
-  /**
-   * The Miku character while the car idles (|longitudinal g| under MIKU_IDLE_G): from MIKU_GLANCE_AFTER_MS on she
-   * glances left or right now and then (x.look -1 .. 1 on a critically damped spring: turn, hold 1 to 3 s, back,
-   * a pause of 2 to 6 s), and once the car has also stood still for MIKU_DOZE_AFTER_MS she loops: dozes for
-   * MIKU_DOZE_PHASE_MS (x.doze 0 .. 1: eyes shut, then the head drooping), wakes for as long (head up, eyes open,
-   * glancing), dozes again, and so on; x.doze rides a critically damped spring so neither the droop nor the waking
-   * snaps. Any g past the deadzone or
-   * pulling away ends both smoothly; the lean itself is never gated.
-   * @param {WidgetState} x
-   * @param {number} now
-   * @param {number} dt ms
-   * @param {?number} gLong
-   * @param {?number} speed
-   * @returns {void}
-   */
-  _mikuIdle(x, now, dt, gLong, speed) {
-    const idle = !isNum(gLong) || Math.abs(gLong) < MIKU_IDLE_G,
-      still = isNum(speed) && speed < 1;
-    x.idleMs = idle ? (x.idleMs || 0) + dt : 0;
-    x.stillMs = idle && still ? (x.stillMs || 0) + dt : 0;
-    if (!isNum(x.look)) {
-      x.look = 0;
-      x.lookV = 0;
-      x.doze = 0;
-      x.dozeV = 0;
-      x.lookT = 0;
-      x.lookUntil = 0;
-    }
-    // the doze loop: doze, wake, doze, ... from MIKU_DOZE_AFTER_MS on, MIKU_DOZE_PHASE_MS each
-    const looping = x.dozeN !== undefined && x.stillMs >= MIKU_DOZE_AFTER_MS;
-    const dozing =
-      looping &&
-      Math.floor((x.stillMs - MIKU_DOZE_AFTER_MS) / MIKU_DOZE_PHASE_MS) % 2 ===
-        0;
-    if (dozing) x.wokeUp = true;
-    /** @type {(a: number, b: number) => number} */
-    const rnd = (a, b) => a + Math.random() * (b - a);
-    // the glance's target: none unless idle (and not dozing); otherwise turn, hold, return, pause, at random
-    if (!idle || dozing || x.lookN < 3) {
-      x.lookT = 0;
-      x.lookUntil = 0;
-    } else if (x.idleMs >= MIKU_GLANCE_AFTER_MS) {
-      // the first glance: straight away when the car goes idle, soon after she wakes in the doze loop
-      if (!x.lookUntil) {
-        x.lookT = 0;
-        x.lookUntil =
-          now +
-          (x.idleMs - dt < MIKU_GLANCE_AFTER_MS
-            ? 0
-            : x.wokeUp
-              ? rnd(800, 1800)
-              : rnd(2000, 6000));
-        x.wokeUp = false;
-      }
-      if (now >= x.lookUntil) {
-        if (x.lookT) {
-          x.lookT = 0;
-          x.lookUntil = now + rnd(2000, 6000);
-        } else {
-          x.lookT = (Math.random() < 0.5 ? -1 : 1) * rnd(0.45, 1);
-          x.lookUntil = now + rnd(1000, 3000) + 500;
-        }
-      }
-    }
-    for (let left = dt / 1000; left > 0; left -= 0.01) {
-      const h = Math.min(0.01, left);
-      x.lookV += (MIKU_LOOK_K * (x.lookT - x.look) - MIKU_LOOK_C * x.lookV) * h;
-      x.look = Math.max(-1, Math.min(1, x.look + x.lookV * h));
-    }
-    if (!x.lookT && Math.abs(x.look) < 0.002 && Math.abs(x.lookV) < 0.01) {
-      x.look = 0;
-      x.lookV = 0;
-    }
-    // the droop and the waking on a critically damped spring: each starts gently and settles without a bounce
-    const target = dozing ? 1 : 0,
-      w = dozing ? MIKU_DROOP_W : looping ? MIKU_RISE_W : MIKU_WAKE_W;
-    for (let left = dt / 1000; left > 0; left -= 0.01) {
-      const h = Math.min(0.01, left);
-      x.dozeV += (w * w * (target - x.doze) - 2 * w * x.dozeV) * h;
-      x.doze = Math.max(0, Math.min(1, x.doze + x.dozeV * h));
-    }
-    if (!target && x.doze < 0.002 && Math.abs(x.dozeV) < 0.01) {
-      x.doze = 0;
-      x.dozeV = 0;
     }
   }
 
@@ -5521,21 +5002,6 @@ class HudApp {
     }
     this._blit(x, null, buf);
   }
-}
-
-/**
- * @param {number} n
- * @returns {string}
- */
-function pad2(n) {
-  return n < 10 ? "0" + n : String(n);
-}
-/**
- * @param {number} bytes
- * @returns {string}
- */
-function mib(bytes) {
-  return (bytes / 1048576).toFixed(1) + " MiB";
 }
 
 module.exports = HudApp;

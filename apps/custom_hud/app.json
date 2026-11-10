@@ -18,7 +18,9 @@
     "sun.js",
     "cluster_render_client.js",
     "calibration.js",
-    "visible.js"
+    "visible.js",
+    "engine/",
+    "widgets/"
   ],
   "signals": {
     "de.bmw.body.Light": {

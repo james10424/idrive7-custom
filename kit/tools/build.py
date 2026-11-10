@@ -440,8 +440,17 @@ def build(app_id, language='en'):
     fetch_assets(adir, spec.get('assets', []))
     # bimmer-lab addition: app.json "shared" names .js files in the repo's shared/ folder (code more
     # than one app uses, e.g. the cluster-render drawing engine); they ship next to the app's own .js.
-    # An app's own file of the same name wins.
+    # An app's own file of the same name wins. An entry ending in "/" (e.g. "widgets/") names a folder of shared/; it
+    # ships whole, with its sub-folders, so code split into folders keeps its relative requires.
     for f in spec.get('shared', []):
+        if f.endswith('/'):
+            d = f.rstrip('/')
+            sp = os.path.join(ROOT, 'shared', d)
+            if '/' in d or d in ('', '.', '..') or not os.path.isdir(sp):
+                raise SystemExit('%s: app.json "shared" lists %r, which is not a folder of shared/' % (app_id, f))
+            shutil.copytree(sp, os.path.join(src, 'javascript', d),
+                            ignore=shutil.ignore_patterns('.*', '__pycache__'))
+            continue
         sp = os.path.join(ROOT, 'shared', f)
         if not f.endswith('.js') or os.path.basename(f) != f or not os.path.isfile(sp):
             raise SystemExit('%s: app.json "shared" lists %r, which is not a .js file in shared/' % (app_id, f))

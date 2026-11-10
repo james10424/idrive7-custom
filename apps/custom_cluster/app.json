@@ -19,6 +19,8 @@
     "cluster_render_client.js",
     "calibration.js",
     "visible.js",
+    "engine/",
+    "widgets/",
     "sysfont.js",
     "opentype.js"
   ],

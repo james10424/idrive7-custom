@@ -3,6 +3,8 @@
 *
 !*/
 !shared/*.js
+!shared/*/*.js
+!shared/*/*/*.js
 !bench/*.js
 !tools/*.js
 !tools/live2d_bake/*.js

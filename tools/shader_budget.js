@@ -13,7 +13,8 @@
  * apart. Both are counted as the compiler sees them, with every function inlined into main (a function called 6 times
  * counts 6 times), after the #ifdefs. Loops count their body once (none of the shaders that matter loop over reads).
  *
- * Used by bench/server.js on every effect layer, and from the command line on every shader in shared/shaders.js:
+ * Used by bench/server.js on every effect layer, and from the command line on every widget type's shaders
+ * (shared/widgets, each module's "shaders"):
  *   node tools/shader_budget.js        (exits 1 if any shader reaches the crash mark)
  */
 
@@ -173,13 +174,13 @@ function check(src) {
 module.exports = { measure, check, READS_GOOD, READS_CRASH, TOKENS_GOOD };
 
 if (require.main === module) {
+  const widgets = require("../shared/widgets");
   const shaders = require("../shared/shaders");
-  /** @type {Record<string, string>} */
+  /** @type {Record<string, string>} every widget type's shaders (its "shaders"), its own first */
   const all = Object.assign({}, shaders, { rdashNeedle: shaders.rdashNeedle });
-  // the Miku parts setting builds these from shaders.miku (shared/hud.js mikuShader)
-  all["miku (no idle)"] = "#define MIKU_NO_IDLE\n" + shaders.miku;
-  all["miku (bare)"] =
-    "#define MIKU_NO_IDLE\n#define MIKU_BARE\n" + shaders.miku;
+  Object.keys(widgets).forEach((t) =>
+    Object.assign(all, widgets[t].shaders || {}),
+  );
   let worst = "ok";
   for (const name of Object.keys(all)) {
     const r = check(all[name]);
