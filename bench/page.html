@@ -292,6 +292,11 @@
   const bmwState = { nav: null, assist: null };   // route guidance and the ACC block, as the server last sent them
   function drawBmwHud() {
     const kmh = lastValues.speed, useMiles = units === 'us';
+    if (hudNavPhoto() && document.getElementById('road').checked) {   // the photo shows BMW's guidance, speed and sign
+      if (bmwState.assist === 'acc') drawBmwAcc(useMiles);
+      if (document.getElementById('outlines').checked) labelBox("BMW's HUD (photo)", 150, 296, '#ff8c1a');
+      return;
+    }
     const speed = typeof kmh === 'number' && isFinite(kmh) ? Math.round(useMiles ? kmh * 0.621371 : kmh) : null;
     const limit = useMiles ? (speed !== null && speed > 45 ? 65 : 35) : (speed !== null && speed > 70 ? 100 : 50);
     // the sign: a light rounded square with the limit, the unit under it
@@ -301,12 +306,13 @@
     ctx.fillStyle = '#222'; ctx.textAlign = 'center';
     ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText(String(limit), 177, 352);
     ctx.font = '10px -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 177, 365);
-    // the speed: big white digits, the unit small above their right end, a line from the sign to the unit
+    // the speed: white digits right-aligned under the unit, a line from the sign to the unit (HUD photo, Nov 9 2026:
+    // unit and digits end at x ~308, the line runs x 212..268 at y 330)
     ctx.textAlign = 'right'; ctx.fillStyle = '#f4f4f0';
-    ctx.font = 'bold 46px -apple-system, Helvetica, sans-serif'; ctx.fillText(speed === null ? '--' : String(speed), 318, 374);
-    ctx.font = 'bold 13px -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 352, 334);
+    ctx.font = 'bold 38px -apple-system, Helvetica, sans-serif'; ctx.fillText(speed === null ? '--' : String(speed), 308, 376);
+    ctx.font = 'bold 13px -apple-system, Helvetica, sans-serif'; ctx.fillText(useMiles ? 'mph' : 'km/h', 308, 334);
     ctx.strokeStyle = 'rgba(244,244,240,.8)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(212, 330); ctx.lineTo(318, 330); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(212, 330); ctx.lineTo(268, 330); ctx.stroke();
     ctx.textAlign = 'left';
     const acc = bmwState.assist === 'acc', nav = bmwState.nav === 'ACTIVE';
     if (acc) drawBmwAcc(useMiles);
@@ -351,7 +357,7 @@
     ctx.fillStyle = fgColor; ctx.beginPath(); ctx.moveTo(x0 + 2, 236); ctx.lineTo(x0 + 18, 226); ctx.lineTo(x0 + 18, 246); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#ff8a1a'; ctx.beginPath(); ctx.moveTo(midX, 228); ctx.lineTo(midX - 8, 246); ctx.lineTo(midX + 8, 246); ctx.closePath(); ctx.fill();   // the car
     ctx.restore();
-    ctx.fillStyle = fgColor; ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText('200 m', x1, 372);
+    ctx.fillStyle = fgColor; ctx.font = 'bold 22px -apple-system, Helvetica, sans-serif'; ctx.fillText('20 m', x1, 372);
     ctx.textAlign = 'left';
   }
   /** A display per app ({ id, view } from the server's hello), in the server's order; the first reuses canvas#hud. */
@@ -379,7 +385,12 @@
     dirty = true;
   }
   const appBlock = (id) => document.querySelector('#screens .appblock[data-app="' + id + '"]') || document.querySelector('#screens .appblock');
+  // the HUD in route guidance: a photo through the windshield warped to the HUD's 800x480 (bench/.data/backdrops/hud-nav.jpg,
+  // car photo, Nov 9 2026); it holds BMW's own guidance, speed and sign, so drawBmwHud leaves those out over it
+  const hudNavPhoto = () => bmwState.nav === 'ACTIVE' && stockPhotos['hud-nav'];
   function drawRoad() {
+    const photo = hudNavPhoto();
+    if (photo) { ctx.drawImage(photo, 0, 0, 800, 480); return; }
     const gradient = ctx.createLinearGradient(0, 0, 0, 480);
     gradient.addColorStop(0, '#2a3340'); gradient.addColorStop(0.45, '#56606b'); gradient.addColorStop(0.46, '#2b2d30'); gradient.addColorStop(1, '#151618');
     ctx.fillStyle = gradient; ctx.fillRect(0, 0, 800, 480);
@@ -429,7 +440,7 @@
   // (the M340i badge; no trip computer text either way: car photos Nov 9 2026); stock-map.jpg, BMW's ordinary view,
   // when those are missing; then the drawn stand-in below
   const stockPhotos = {};
-  ['stock-map', 'stock-sport', 'stock-nav', 'stock-acc'].forEach((name) => {
+  ['stock-map', 'stock-sport', 'stock-nav', 'stock-acc', 'hud-nav'].forEach((name) => {
     const img = new Image();
     img.onload = () => { stockPhotos[name] = img; dirty = true; };
     img.src = '/backdrop/' + name + '.jpg';
