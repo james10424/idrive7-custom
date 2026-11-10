@@ -45,7 +45,7 @@ const { ROUTE_UNIT } = require("./consts");
 const { SPEED_SCALE } = require("./scales");
 const { isNum, pad2 } = require("../engine/util");
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** Local time: config.utcOffsetMinutes when set, else the car's time zone once the cluster's clock has been seen, else
    *  the unit's own (UTC on the car).
    * @returns {{ getHours: () => number, getMinutes: () => number }}
@@ -361,4 +361,4 @@ module.exports = {
         return "{{" + tok + "}}";
     }
   },
-};
+});

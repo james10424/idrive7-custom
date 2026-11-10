@@ -8,7 +8,7 @@ const BOX = require("./shader");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer; a framed box: "fill" and "line" roles, "border" px, "radius" px, and a header strip "head" px tall in role "headColor" (its label is a text widget on top)`;
 

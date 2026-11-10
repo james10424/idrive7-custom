@@ -6,7 +6,7 @@ const { SWATCH } = require("./calibration");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `calibration: effect layer (calibration.js SWATCH), "steps" (11) grey steps 0..1 over the top half, four dark test colours over the bottom half`;
 

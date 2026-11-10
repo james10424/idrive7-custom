@@ -34,7 +34,7 @@ const { isNum } = require("../engine/util");
 /** @typedef {import("./consts").ShiftPoint} ShiftPoint */
 /** @typedef {import("./consts").CarData} CarData */
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * BMW-like tach: a 120 ms filter, and a readout that moves in 50 rpm steps, only by 40 rpm or more.
    * @param {number} now
@@ -468,4 +468,4 @@ module.exports = {
         : this.driveMode
     ];
   },
-};
+});

@@ -8,7 +8,7 @@ const path = require("path");
 const { isNum, mib } = require("../../engine/util");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 /** @typedef {import("../../cluster_render_client.js").ClusterRender} Client */
 /** @typedef {{ lean: number, look: number, doze: number }} MikuCounts */
 /**

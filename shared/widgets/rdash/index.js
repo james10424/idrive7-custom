@@ -43,7 +43,7 @@ const NEEDLE = packCfg(
  * @property {{ f: number, fuel: number, pods: number[] }} [ez] the eased needles
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer; the whole Regal theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMid" (55, the middle), "spdStep" (5, between marks; the first mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" / "podG" [pivot x, y, tick r0, r1], "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "led" with "ledN" and "rpmMax", "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]) in "led2N" (15) segments), "gearBox" + "gearPitch" (the lit box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "arrow" [x, y, size], "batIcon" [x, y]`;
 
@@ -64,7 +64,7 @@ module.exports = {
   /**
    * @param {HudApp} hud
    * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {WidgetState & RdashState} x
    */
   create(hud, w, x) {
     const c = x.c,
@@ -114,7 +114,7 @@ module.exports = {
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState & RdashState} x
    * @param {number} now
    * @param {boolean} force
    */

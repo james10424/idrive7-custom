@@ -8,7 +8,7 @@ const SEGBAR = require("./shader");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer; "max" segments, the first round(signal) lit (e.g. "setupLevel:engine"), "slant" px, "gap" px between segments (8), "hotWhen": "kickdown" draws the last segment in "hotColor" (hot) while the pedal is in kickdown and the bar is full; "range" [lo, hi] maps the signal from that span onto 0..max (e.g. "boost" over [0, 1.5] bar, "batt12" over [0, 100] %)`;
 

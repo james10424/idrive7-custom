@@ -68,7 +68,7 @@ function changes(was, now, w, h) {
   return { rect, px };
 }
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /**
    * The layers of a layout, in the order to make them: { kind: 'layer', w } for an effect or an "own"
    * image widget, { kind: 'sheet', klass, z, x, y, w, h, members } for a packed image layer. Widgets are
@@ -335,4 +335,4 @@ module.exports = {
   _layerCount(n) {
     return n === 1 ? "1 layer" : n + " layers";
   },
-};
+});

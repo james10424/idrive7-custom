@@ -6,7 +6,7 @@ const { M_STRIPE } = require("../../hud_themes");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `image layer; the M tricolour stripe`;
 

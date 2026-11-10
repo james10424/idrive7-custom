@@ -17,7 +17,7 @@ const {
 } = require("./consts");
 const { isNum } = require("../engine/util");
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * functionalLibraryData: BMW's HUD shows its driver assistance block while it has the assist symbol (ldmSym
    * with a colour), the ACC car or distance bars, or a lit (not grey) lane-assist wheel.
@@ -211,4 +211,4 @@ module.exports = {
           : 10;
     return isNum(r) && r < -lim;
   },
-};
+});

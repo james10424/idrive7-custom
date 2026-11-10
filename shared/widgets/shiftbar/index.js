@@ -7,7 +7,7 @@ const SHIFTBAR = require("./shader");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer; shiftbar/shader.js, lit by rpm, zones from the redline`;
 

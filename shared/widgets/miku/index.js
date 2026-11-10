@@ -29,7 +29,7 @@ const { idle } = require("./idle");
  * @property {string} [lastI] the last u_idle key
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer; the Miku layout's standing character, from frames baked offline
 (tools/live2d_bake) and kept in the app's data folder (miku/, see sprite.js); animated by the renderer's
@@ -85,7 +85,7 @@ module.exports = {
   /**
    * @param {HudApp} hud
    * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {WidgetState & MikuState} x
    */
   create(hud, w, x) {
     const c = x.c,
@@ -173,7 +173,7 @@ module.exports = {
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState & MikuState} x
    * @param {number} now
    * @param {boolean} force
    */

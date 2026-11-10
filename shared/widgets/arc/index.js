@@ -8,7 +8,7 @@ const ARC = require("./shader");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer; arc/shader.js, lit by a signal between min and max. Also "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise).`;
 

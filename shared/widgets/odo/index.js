@@ -14,7 +14,7 @@ const ODO = require("./shader");
  * @property {number} [drums]
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer (odo/shader.js): a mechanical odometer, "drums" (6) digit drums of "font"'s glyph atlas (r_gl), "color" role, "gap" px between drums (2), "frame" px (1); the car's KombiIF mileageKilometre in the units setting's unit, the last drum turning with the distance (from the speed between whole km) and the others rolling over as the real gears do. Blank drums without a reading.`;
 
@@ -30,7 +30,7 @@ module.exports = {
   /**
    * @param {HudApp} hud
    * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {WidgetState & OdoState} x
    */
   create(hud, w, x) {
     const c = x.c,
@@ -58,7 +58,7 @@ module.exports = {
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState & OdoState} x
    * @param {number} now
    * @param {boolean} force
    */

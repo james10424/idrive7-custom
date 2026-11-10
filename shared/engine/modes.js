@@ -10,7 +10,7 @@ const { isNum } = require("./util");
 
 /** @typedef {import("./app").Widget} Widget */
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /**
    * HUD modes only on the HUD, in apps that have the "makeRoom" setting.
    * @returns {boolean}
@@ -151,4 +151,4 @@ module.exports = {
   _holeRadius(w) {
     return isNum(w.holeRadius) ? w.holeRadius : 28;
   },
-};
+});

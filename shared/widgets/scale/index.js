@@ -7,7 +7,7 @@ const textRaster = require("../../hud_text");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `image layer; the shift bar's rpm numbers (0 .. bar max / 1000), evenly spread. "over" as revbar; "redFrom": true draws the numbers from the redline on in red.`;
 

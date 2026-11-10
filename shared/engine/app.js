@@ -237,6 +237,11 @@ const { isNum, mib } = require("./util");
  * @property {number} [at] ms of the last eased update
  * A widget module keeps its own state on it too (see its typedef).
  */
+/**
+ * HudApp with the methods the engine and car files add to its prototype (mixin, at the end of this file): what
+ * widget modules get as their app, and `this` inside those files.
+ * @typedef {HudApp & typeof import("./plan") & typeof import("./status") & typeof import("./modes") & typeof import("./assets") & typeof import("../car/signals") & typeof import("../car/route") & typeof import("../car/assist") & typeof import("../car/values") & typeof import("../car/lamps") & typeof import("../car/tokens")} App
+ */
 /** @typedef {{ c: Client, ci: number, ref: number, key: string }} LayerRef */
 /** @typedef {{ state: string, reason?: string }} LayerState */
 /**
@@ -255,6 +260,8 @@ class HudApp {
    * @param {HudCtx} ctx
    */
   constructor(ctx) {
+    /** this, with the methods the engine and car files add (App): what the constructor calls of them */
+    const app = /** @type {App} */ (/** @type {unknown} */ (this));
     this.ctx = ctx;
     this.log = ctx.log;
     /** @type {HudConfig} */
@@ -279,7 +286,7 @@ class HudApp {
     this.widgets = new Map(); // widget.id -> { w, ref, sheet | null, last, lastPaint }
     /** @type {Sheet[]} */
     this.sheets = []; // the packed image layers: { ref, klass, z, x, y, w, h, members, buf }
-    this._initCar(); // the car's values (car/signals.js)
+    app._initCar(); // the car's values (car/signals.js)
     this.activeMode = "normal"; // the HUD mode the layers were built for
     /** @type {?string} */
     this.activeName = null; // the layout shown now ('off' = nothing)
@@ -303,11 +310,11 @@ class HudApp {
     /** @type {?string} */
     this.lastStatus = null;
 
-    this._setupVehicleData();
+    app._setupVehicleData();
     this.layouts.onChange(() => this._rebuild());
     ctx.settings.onChange((key) => {
       if (key !== "demo") this._rebuild();
-      else this._status();
+      else app._status();
     });
   }
 
@@ -315,6 +322,7 @@ class HudApp {
    * A setting's value, or its default when the saved value isn't one the schema allows.
    * @param {string} key
    * @returns {*}
+   * @this {App}
    */
   setting(key) {
     // while the "navLayout" switch is in force the map window is open, whatever "mapWindow" says
@@ -345,6 +353,7 @@ class HudApp {
    * is up are replayed by the client when it connects.
    * @param {number} i
    * @returns {Client}
+   * @this {App}
    */
   _clientAt(i) {
     while (this.clients.length <= i) {
@@ -368,6 +377,7 @@ class HudApp {
    * @param {Client} c
    * @param {number} ci connection index
    * @returns {void}
+   * @this {App}
    */
   _wireClientEvents(c, ci) {
     const tag = ci ? " [connection " + (ci + 1) + "]" : "";
@@ -449,6 +459,7 @@ class HudApp {
   /**
    * Connects and starts the timers and signal watches.
    * @returns {void}
+   * @this {App}
    */
   start() {
     this.log.info("connecting to cluster-render at " + this.socketPath);
@@ -480,6 +491,7 @@ class HudApp {
   /**
    * Stops the timers and watches and closes the connections.
    * @returns {void}
+   * @this {App}
    */
   stop() {
     clearInterval(this.tickTimer);
@@ -502,6 +514,7 @@ class HudApp {
    * @param {string} what
    * @param {() => void} fn
    * @returns {void}
+   * @this {App}
    */
   _guard(what, fn) {
     try {
@@ -520,6 +533,7 @@ class HudApp {
   /**
    * Drops the layers and builds the layout for now again (never throws).
    * @returns {void}
+   * @this {App}
    */
   _rebuild() {
     this._guard("rebuild", () => this._rebuildInner());
@@ -529,6 +543,7 @@ class HudApp {
   /**
    * _rebuild's work.
    * @returns {void}
+   * @this {App}
    */
   _rebuildInner() {
     if (!this.client.ready) return; // the 'ready' handler calls us again
@@ -718,6 +733,7 @@ class HudApp {
    * @param {Widget} w
    * @param {?Sheet} sheet
    * @returns {void}
+   * @this {App}
    */
   _create(w, sheet) {
     const mod = widgetTypes[w.type];
@@ -776,6 +792,7 @@ class HudApp {
    * The 20 Hz tick: the rpm, the shift flash, and every widget without its
    * own timer.
    * @returns {void}
+   * @this {App}
    */
   _tick() {
     const now = Date.now();
@@ -798,6 +815,7 @@ class HudApp {
    * @param {number} now
    * @param {boolean} force
    * @returns {void}
+   * @this {App}
    */
   _update(x, now, force) {
     widgetTypes[x.w.type].update(this, x, now, force);

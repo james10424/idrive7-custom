@@ -8,7 +8,7 @@ const { isNum } = require("../engine/util");
 
 /** @typedef {import("./consts").Route} Route */
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * finalDestinationInfo: distance left (formattedDistance: BMW's text, its unit, rawDistance), time left (travelTime, s).
    * @param {*} v
@@ -125,4 +125,4 @@ module.exports = {
     }
     this._modeChanged();
   },
-};
+});

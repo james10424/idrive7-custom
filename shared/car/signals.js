@@ -37,7 +37,7 @@ const { isNum, pad2 } = require("../engine/util");
 /** @typedef {import("./consts").Signals} Signals */
 /** @typedef {import("./consts").Car} Car */
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * The car's values, empty until the car sends them.
    * @returns {void}
@@ -816,4 +816,4 @@ module.exports = {
         pad2(Math.abs(off) % 60),
     );
   },
-};
+});

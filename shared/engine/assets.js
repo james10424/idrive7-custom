@@ -11,7 +11,7 @@ const { mib } = require("./util");
 /** @typedef {import("./app").CfgPacker} CfgPacker */
 /** @typedef {import("../cluster_render_client.js").ClusterRender} Client */
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /**
    * The glyph atlas of a font on a connection: an R8 asset of the font's characters in equal cells (cols x
    * rows), made on first use and kept while the connection lives (the client re-sends it by itself after a
@@ -171,4 +171,4 @@ module.exports = {
       },
     };
   },
-};
+});

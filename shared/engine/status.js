@@ -9,7 +9,7 @@ const { MODE_TEXT } = require("./consts");
 const { THEMES } = require("../hud_themes");
 const { mib } = require("./util");
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /**
    * fn(text) whenever the status line changes.
    * @param {(text: string, detail: string) => void} fn
@@ -183,4 +183,4 @@ module.exports = {
       }
     });
   },
-};
+});

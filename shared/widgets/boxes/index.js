@@ -8,7 +8,7 @@ const BOXES = require("./shader");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer; the GT3 dash's frame in ONE layer (boxes/shader.js; the car draws only a few effect layers): the background (role "color", default "bg") with the optional map "hole" as fill, and up to 12 framed boxes "boxes": [{ id, x, y, w, h (target px), head (header strip px), border (2), radius (0), headColor "accent" (else the "head" role), toggle }]. Roles "fill" (panel), "line", "head", "accent" for all of them; the labels are text widgets on top. Sent as array uniforms (vec4 x 12).`;
 

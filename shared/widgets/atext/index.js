@@ -14,13 +14,13 @@ const ATEXT = require("./shader");
  * @property {number} [cells]
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer (atext/shader.js): text drawn by the GPU from a glyph atlas, the probe for the path that needs no pixel writes. The font's glyphs go up once per connection as an R8 asset (one byte a pixel, not a layer, shared by every atext widget on that font); the widget is "cells" equal cells across its width ("w" / cells wide each; the glyphs keep their shape when w = cells x the font's widest advance and h = its cell height, logged at creation), and a new value is one uniform message of glyph codes. "text" tokens as text, "font", "color" role, "align" left | right | center. Up to 32 cells; only the characters the font has.`;
 
 /**
  * The glyph codes of a text in an atlas widget's cells, aligned; -1 is an empty cell.
- * @param {WidgetState} x
+ * @param {WidgetState & AtextState} x
  * @param {*} s
  * @returns {number[]} 32 codes
  */
@@ -54,7 +54,7 @@ module.exports = {
   /**
    * @param {HudApp} hud
    * @param {Widget} w
-   * @param {WidgetState} x
+   * @param {WidgetState & AtextState} x
    */
   create(hud, w, x) {
     const c = x.c,
@@ -93,7 +93,7 @@ module.exports = {
   },
   /**
    * @param {HudApp} hud
-   * @param {WidgetState} x
+   * @param {WidgetState & AtextState} x
    * @param {number} now
    * @param {boolean} force
    */

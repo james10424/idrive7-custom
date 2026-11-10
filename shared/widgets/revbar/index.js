@@ -7,7 +7,7 @@ const REVBAR = require("./shader");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
-/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
+/** @typedef {import("../../engine/app").App} HudApp */
 
 const DOCS = `effect layer; revbar/shader.js, the G20-style slanted rev bar (Redline layout): "barH" bar height, "top" room for the marks above it, "slant" px, "over" rpm past the redline's thousand the scale runs to (1000: a 7000 redline gives 0..8)`;
 

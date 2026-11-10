@@ -5,6 +5,7 @@
 const { isNum } = require("../../engine/util");
 
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {import("./index").MikuState} MikuState */
 
 const MIKU_IDLE_G = 0.03; // below this |longitudinal g| the car idles: she glances around (the lean is not gated)
 const MIKU_GLANCE_AFTER_MS = 1000; // the first glance this long after the car goes idle
@@ -24,7 +25,7 @@ const MIKU_WAKE_W = 5; // waking for good when the car moves: about 1 s
  * glancing), dozes again, and so on; x.doze rides a critically damped spring so neither the droop nor the waking
  * snaps. Any g past the deadzone or
  * pulling away ends both smoothly; the lean itself is never gated.
- * @param {WidgetState} x
+ * @param {WidgetState & MikuState} x
  * @param {number} now
  * @param {number} dt ms
  * @param {?number} gLong

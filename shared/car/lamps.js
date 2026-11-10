@@ -6,7 +6,7 @@
 const { REGAL_GEARS } = require("./consts");
 const { isNum } = require("../engine/util");
 
-module.exports = {
+module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** The Regal lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
    *  that side (hazards: both); the demo drive blinks left now and then. Cruise: BMW's ACC car or bars up. */
   /** The Regal left lamp: 'park' (the parking brake set: red PARK BRAKE), 'hold' (Auto Hold holding the car: green AUTO
@@ -91,4 +91,4 @@ module.exports = {
       ? REGAL_GEARS[stage]
       : -1;
   },
-};
+});
