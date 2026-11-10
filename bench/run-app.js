@@ -45,55 +45,56 @@ if (!stage || !dataDir) {
   process.exit(2);
 }
 
-/** @param {FromApp} m */
-const send = (m) => {
-  if (process.connected) process.send(m);
+/** @param {FromApp} msg */
+const send = (msg) => {
+  if (process.connected) process.send(msg);
 };
 /**
  * Log arguments as one line.
- * @param {any[]} a
+ * @param {any[]} args
  * @returns {string}
  */
-const fmt = (a) =>
-  a
-    .map((x) =>
-      x && x.stack
-        ? x.stack
-        : typeof x === "object"
-          ? JSON.stringify(x)
-          : String(x),
+const fmt = (args) =>
+  args
+    .map((arg) =>
+      arg && arg.stack
+        ? arg.stack
+        : typeof arg === "object"
+          ? JSON.stringify(arg)
+          : String(arg),
     )
     .join(" ");
 const tag = "[" + path.basename(stage) + "] ";
 const log = {
-  info: (...a) => console.log(tag + fmt(a)),
-  warn: (...a) => console.warn(tag + "WARN " + fmt(a)),
-  error: (...a) => console.warn(tag + "ERROR " + fmt(a)),
+  info: (...args) => console.log(tag + fmt(args)),
+  warn: (...args) => console.warn(tag + "WARN " + fmt(args)),
+  error: (...args) => console.warn(tag + "ERROR " + fmt(args)),
   debug: () => {},
 };
 // As on the car, an uncaught exception ends the app (kit/mgu.js): the bench shows the exit.
-process.on("uncaughtException", (e) => {
+process.on("uncaughtException", (err) => {
   log.error(
-    "uncaught (the car would exit the app here): " + ((e && e.stack) || e),
+    "uncaught (the car would exit the app here): " +
+      ((err && err.stack) || err),
   );
   process.exit(1);
 });
 
 try {
   fs.mkdirSync(dataDir);
-} catch (e) {
+} catch (err) {
   /* there */
 }
 const { headUnit } = require(
   path.join(__dirname, "..", "kit", "tools", "hu-stub.js"),
 );
-const hu = headUnit(stage, {
+const stub = headUnit(stage, {
   live: true,
   dataDir,
   log,
   image: () => Promise.resolve(),
 });
-const { spec, settings, ui } = hu;
+const { spec, settings, ui } = stub;
 
 // the app's HudApp instance, for the values the page shows (hud.js is loaded by the app's main.js)
 /** @type {any} */
@@ -104,9 +105,9 @@ const realLoad = Module._load;
  * @returns {any}
  */
 Module._load = function (req) {
-  const m = realLoad.apply(this, arguments);
-  if (req === "./hud" && typeof m === "function" && !m.__bench) {
-    const Wrapped = class extends m {
+  const exported = realLoad.apply(this, arguments);
+  if (req === "./hud" && typeof exported === "function" && !exported.__bench) {
+    const Wrapped = class extends exported {
       constructor(ctx) {
         super(ctx);
         hud = this;
@@ -115,7 +116,7 @@ Module._load = function (req) {
     Wrapped.__bench = true;
     return Wrapped;
   }
-  return m;
+  return exported;
 };
 
 // the center screen's status row
@@ -123,21 +124,21 @@ let status = "",
   detail = "";
 const text = ui.text;
 /**
- * @param {string} n component name
- * @param {any} t
+ * @param {string} name component name
+ * @param {any} value
  * @param {number} [row]
  * @param {number} [cell]
  */
-ui.text = (n, t, row, cell) => {
-  if (n === "STATUS" && !row) {
-    status = String(t);
+ui.text = (name, value, row, cell) => {
+  if (name === "STATUS" && !row) {
+    status = String(value);
     send({ t: "status", s: status, d: detail });
   }
-  if (n === "DETAIL" && !row) {
-    detail = String(t).trim();
+  if (name === "DETAIL" && !row) {
+    detail = String(value).trim();
     send({ t: "status", s: status, d: detail });
   }
-  return text(n, t, row, cell);
+  return text(name, value, row, cell);
 };
 
 /** @returns {void} */
@@ -156,14 +157,17 @@ settings.onChange(sendSettings);
  * @returns {void}
  */
 function press(key, value) {
-  const s = settings.item(key);
-  if (!s) return log.warn("bench: no setting " + key);
+  const item = settings.item(key);
+  if (!item) return log.warn("bench: no setting " + key);
   const comp = ui.comp("SET_" + key.toUpperCase());
-  if (s.type === "bool") {
+  if (item.type === "bool") {
     if (!!settings.get(key) !== !!value) comp.emit("action", {}); // a checkbox press toggles
     return;
   }
-  const rows = s.type === "choice" ? s.options.map((o) => o[0]) : s.steps;
+  const rows =
+    item.type === "choice"
+      ? item.options.map((option) => option[0])
+      : item.steps;
   const row = rows.indexOf(value);
   if (row < 0)
     return log.warn("bench: " + key + " has no value " + JSON.stringify(value));
@@ -183,10 +187,10 @@ const SCALE = {
 /**
  * A value in the car's units as the raw SOME/IP number.
  * @param {string} k a SCALE name
- * @param {number} v
+ * @param {number} value
  * @returns {number}
  */
-const raw = (k, v) => Math.round((v - SCALE[k][1]) / SCALE[k][0]);
+const raw = (k, value) => Math.round((value - SCALE[k][1]) / SCALE[k][0]);
 let mode = "demo",
   /** @type {ManualValues} */
   manual = {},
@@ -201,7 +205,7 @@ let mode = "demo",
 // the drive mode buttons, sent once a second as the car does on change (wire numbers: 1 Sport, 4 Comfort, 7 Eco Pro)
 setInterval(() => {
   if (drive !== null)
-    hu.feed(
+    stub.feed(
       "de.bmw.infotainment.drivingexcitement.FES",
       "statusFESVehicleDynamicSwitchHMI",
       { actualValueModeDrivingExperience: drive },
@@ -210,7 +214,7 @@ setInterval(() => {
 // route guidance (Guidance guidanceState, the enum names oap-sdk reads), sent once a second
 setInterval(() => {
   if (nav !== null)
-    hu.feed(
+    stub.feed(
       "de.bmw.infotainment.navigation.guiding.Guidance",
       "guidanceState",
       nav,
@@ -227,7 +231,7 @@ setInterval(() => {
   const total = 24000,
     done = total * (((Date.now() - routeT0) / 240000) % 1),
     left = total - done;
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.navigation.guiding.Guidance",
     "finalDestinationInfo",
     {
@@ -243,7 +247,7 @@ setInterval(() => {
       isCheckeredFlag: true,
     },
   );
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.navigation.guiding.Guidance",
     "travelledDistance",
     { distance: (done / 1000).toFixed(1), unit: "KM", rawDistance: done },
@@ -251,7 +255,7 @@ setInterval(() => {
 }, 1000);
 // the trip computer (ResetLogic) as the car would send it: 9.8 l/100km since refuelling, scale / 10^digit
 setInterval(() => {
-  hu.feed("de.bmw.infotainment.resetlogic.ResetLogic", "averageConsumption", {
+  stub.feed("de.bmw.infotainment.resetlogic.ResetLogic", "averageConsumption", {
     consumptionCombustionCurrentScale: 98,
     consumptionCombustionCurrentDigit: 1,
     consumptionElectricCurrentScale: 65535,
@@ -282,7 +286,7 @@ setInterval(() => {
   // as the car's player sends it (Nov 9 2026): playerMetadata holds only the artist and the album; the title is in the
   // track list, found by the playing track's id
   const id = song ? DEMO_SONGS.indexOf(song) + 1 : 0;
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.hmi.hmimediastate.HmiMediaState",
     "playerMetadata",
     song
@@ -305,15 +309,15 @@ setInterval(() => {
           threeRowText: "",
         },
   );
-  hu.feed("de.bmw.infotainment.hmi.hmimediastate.HmiMediaState", "tracks", {
+  stub.feed("de.bmw.infotainment.hmi.hmimediastate.HmiMediaState", "tracks", {
     sessionId: 1,
     startIndex: 0,
     totalLength: DEMO_SONGS.length + 1,
-    tracks: DEMO_SONGS.map((d, i) => ({
+    tracks: DEMO_SONGS.map((demo, i) => ({
       trackId: i + 1,
-      firstLine: d[1],
+      firstLine: demo[1],
       firstLineExtension: "",
-      secondLine: d[0],
+      secondLine: demo[0],
     })).concat(
       song && song[0] === ""
         ? [
@@ -327,7 +331,7 @@ setInterval(() => {
         : [],
     ),
   });
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.hmi.hmimediastate.HmiMediaState",
     "trackSelection",
     { sessionId: 1, selectedTrackId: song && song[0] === "" ? 0 : id },
@@ -337,7 +341,7 @@ setInterval(() => {
 setInterval(() => {
   if (assist === null) return;
   const on = assist === "acc";
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.displaydataserver.DisplayDataServer",
     "functionalLibraryData",
     {
@@ -357,7 +361,7 @@ setInterval(() => {
   // steps, as the car's reading was 10 times BMW's own at 1:1)
   const t = Date.now() / 4000,
     gap = on ? Math.round(200 + 50 * Math.sin(t)) : 253;
-  hu.feed("de.bmw.dass.GapVehicleAhead", "GapVehicleDrivingAhead", {
+  stub.feed("de.bmw.dass.GapVehicleAhead", "GapVehicleDrivingAhead", {
     qualifierFunctionVehicleDrivingAhead: "FUNKTION_VERFUEGBAR",
     statusMeasurementVehicleDrivingAhead: on
       ? "ELEMENT__GEMESSEN"
@@ -369,7 +373,7 @@ setInterval(() => {
     lampStatusVehicleDrivingAhead: on ? "LICHT_AUS" : "SIGNAL_UNGUELTIG",
   });
   // DataFrontVehicle as the car sends it with no object: 4093 in every field, object id 253 (its speed is not used)
-  hu.feed("de.bmw.dass.GapVehicleAhead", "DataFrontVehicle", {
+  stub.feed("de.bmw.dass.GapVehicleAhead", "DataFrontVehicle", {
     frontVehicleObjectID: 253,
     frontVehicleSpeedX: 4093,
     frontVehicleSpeedY: 4093,
@@ -381,22 +385,25 @@ setInterval(() => {
 }, 1000);
 setInterval(() => {
   if (mode !== "manual") return;
-  const v = manual,
+  const values = manual,
     /**
      * The manual value k when it is a number, else d.
      * @param {string} k
      * @param {number} d
      * @returns {number}
      */
-    num = (k, d) => (typeof v[k] === "number" && isFinite(v[k]) ? v[k] : d);
-  const g = Math.round(num("gear", 0));
-  hu.feed("de.bmw.infotainment.vehicle.CDS", "statusEngineSpeed2", {
+    num = (k, fallback) =>
+      typeof values[k] === "number" && isFinite(values[k])
+        ? values[k]
+        : fallback;
+  const gear = Math.round(num("gear", 0));
+  stub.feed("de.bmw.infotainment.vehicle.CDS", "statusEngineSpeed2", {
     actualValueRPMEngineCrankshaft: raw("rpm", num("rpm", 0)),
   });
-  hu.feed("de.bmw.infotainment.vehicle.Vehicle2", "statusCarSpeed2", {
+  stub.feed("de.bmw.infotainment.vehicle.Vehicle2", "statusCarSpeed2", {
     speedVehicleCentreOfGravity: raw("speed", num("speed", 0)),
   });
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.vehicle.CDS2",
     "statusLongitudinalAccelerationMassCenter",
     {
@@ -406,7 +413,7 @@ setInterval(() => {
       ),
     },
   );
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.vehicle.CDS2",
     "statusLateralAccelerationMassCenter",
     {
@@ -416,70 +423,70 @@ setInterval(() => {
       ),
     },
   );
-  hu.feed("de.bmw.infotainment.vehicle.CDS", "statusEngineTemperature", {
+  stub.feed("de.bmw.infotainment.vehicle.CDS", "statusEngineTemperature", {
     temperatureEngineDrive: raw("temp", num("coolant", 90)),
     temperatureEngineOilDrive: raw("temp", num("oil", 100)),
   });
-  hu.feed("de.bmw.infrastructure.VehicleInformation", "statusGearboxDrive", {
-    statusActualGearDrive: g > 0 ? "G" + g : "N_OR_P",
-    statusActualStageDrive: g > 0 ? "D" : "P",
+  stub.feed("de.bmw.infrastructure.VehicleInformation", "statusGearboxDrive", {
+    statusActualGearDrive: gear > 0 ? "G" + gear : "N_OR_P",
+    statusActualStageDrive: gear > 0 ? "D" : "P",
   });
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.drivingexcitement.FES",
     "statusActualValueTorque2",
     { actualValueTorqueCrankshaft: raw("torque", num("torque", 0)) },
   );
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.drivingexcitement.FES",
     "statusSwitchDriveDynamicSport2",
     { displayBoostPressure: raw("boost", Math.max(0, num("boost", 0))) },
   );
-  hu.feed("de.bmw.infotainment.KombiIF", "statusRangeTankStatus", {
+  stub.feed("de.bmw.infotainment.KombiIF", "statusRangeTankStatus", {
     fluidLevelFuelTank: Math.round(num("fuelL", 40)),
     range: Math.round(num("range", 450)),
     mileageKilometre: Math.round(num("odo", 23817)),
   });
-  hu.feed(
+  stub.feed(
     "de.bmw.infrastructure.EnvironmentalInformation",
     "ExteriorTemperature",
     { temperatureExterior: Math.round((num("ambient", 22) + 40) / 0.5) },
   );
   // the car's display units (bar, C), so the tyre values below read as 0.1 bar and C + 40; the shifter programme from `program` (S / M)
-  hu.feed(
+  stub.feed(
     "de.bmw.infotainment.vehicle.Vehicle",
     "statusNewCurrentUnitsStatusExt",
     { unitOfMeasurementAirPressure: 1, unitOfMeasurementTemperature: 1 },
   );
   if (!carSw.program)
-    hu.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
+    stub.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
       displayProgramGearbox: "D_PROGRAMM",
     });
   // tyres (TPMS, the fields the car answers a read with): pressure in 0.1 bar, temperature raw - 40 C; the rear pair a notch higher
-  const tp = Math.round(num("tyreP", 2.3) * 10),
-    tt = Math.round(num("tyreT", 24) + 40);
-  hu.feed("de.bmw.infotainment.vehicle.TPMS", "statusTyrePressure", {
-    actualValuePressureTyreFLH: tp,
-    actualValuePressureTyreFRH: tp,
-    actualValuePressureTyreRLH: tp + 2,
-    actualValuePressureTyreRRH: tp + 2,
+  const pressure = Math.round(num("tyreP", 2.3) * 10),
+    temperature = Math.round(num("tyreT", 24) + 40);
+  stub.feed("de.bmw.infotainment.vehicle.TPMS", "statusTyrePressure", {
+    actualValuePressureTyreFLH: pressure,
+    actualValuePressureTyreFRH: pressure,
+    actualValuePressureTyreRLH: pressure + 2,
+    actualValuePressureTyreRRH: pressure + 2,
   });
-  hu.feed("de.bmw.infotainment.vehicle.TPMS", "statusTyreTemperature", {
-    actualValueTemperatureTyreFLH: tt,
-    actualValueTemperatureTyreFRH: tt,
-    actualValueTemperatureTyreRLH: tt + 3,
-    actualValueTemperatureTyreRRH: tt + 3,
+  stub.feed("de.bmw.infotainment.vehicle.TPMS", "statusTyreTemperature", {
+    actualValueTemperatureTyreFLH: temperature,
+    actualValueTemperatureTyreFRH: temperature,
+    actualValueTemperatureTyreRLH: temperature + 3,
+    actualValueTemperatureTyreRRH: temperature + 3,
   });
 }, 50);
 
 // what the app actually sees, so the page shows demo values too
 setInterval(() => {
   if (!hud) return;
-  const d = hud.car.data(),
+  const data = hud.car.data(),
     /** @type {Record<string, number | null>} */
     out = {};
   ["rpm", "speed", "oil", "coolant", "gear", "gLong", "gLat", "torque"].forEach(
-    (n) => {
-      out[n] = d[n] === undefined ? null : d[n];
+    (name) => {
+      out[name] = data[name] === undefined ? null : data[name];
     },
   );
   out.boost = hud._boost();
@@ -491,42 +498,42 @@ setInterval(() => {
 
 // the page's car switches, as the car sends each message (catalog enum names), in demo and manual alike; a switch left at
 // "not sent" sends nothing
-/** @type {Record<string, (v: string) => void>} */
+/** @type {Record<string, (value: string) => void>} */
 const CAR_SW = {
-  turn: (v) =>
-    hu.feed("de.bmw.body.Light", "StatusFunctionsIndicators", {
+  turn: (value) =>
+    stub.feed("de.bmw.body.Light", "StatusFunctionsIndicators", {
       controlIndicateDirection: {
         off: "BLINKEN_AUS",
         left: "DAUER_BLINKEN_LINKS_EIN",
         right: "DAUER_BLINKEN_RECHTS_EIN",
         hazard: "BEIDSEITIGES_BLINKEN_EIN",
-      }[v],
+      }[value],
       activeFunctionIndicateDirection:
-        v === "hazard"
+        value === "hazard"
           ? "WARNBLINKEN_MANUELL"
-          : v === "off"
+          : value === "off"
             ? "BLINKEN_AUS"
-            : v === "left"
+            : value === "left"
               ? "DAUERBLINKEN_LINKS"
               : "DAUERBLINKEN_RECHTS",
     }),
-  brakeLights: (v) =>
-    hu.feed("de.bmw.body.Light", "LampExterior", {
-      controlFunctionBrakeLight: v === "on" ? "ON_BL" : "OFF_BL",
+  brakeLights: (value) =>
+    stub.feed("de.bmw.body.Light", "LampExterior", {
+      controlFunctionBrakeLight: value === "on" ? "ON_BL" : "OFF_BL",
     }),
-  parkBrake: (v) =>
-    hu.feed(
+  parkBrake: (value) =>
+    stub.feed(
       "de.bmw.infotainment.vehicle.Vehicle2",
       "statusStandstillFunctions",
       {
         statusParkingBrake:
-          v === "set"
+          value === "set"
             ? "PARKBREMSE_MECHANISCH_FESTGESTELLT"
             : "PARKBREMSE_MECHANISCH_NICHT_FESTGESTELLT",
       },
     ),
-  autoHold: (v) =>
-    hu.feed(
+  autoHold: (value) =>
+    stub.feed(
       "de.bmw.chassis.VehicleStabilizationManagement",
       "StandStillFunction",
       {
@@ -534,15 +541,15 @@ const CAR_SW = {
           off: "AUTOH_NICHT_AKTIVIERT",
           armed: "AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG_NICHT",
           hold: "AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG",
-        }[v],
+        }[value],
       },
     ),
-  program: (v) =>
-    hu.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
+  program: (value) =>
+    stub.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
       displayProgramGearbox:
-        v === "S"
+        value === "S"
           ? "S_MINUS_PROGRAMM"
-          : v === "M"
+          : value === "M"
             ? "M_MINUS_PROGRAMM"
             : "D_PROGRAMM",
     }),
@@ -557,28 +564,28 @@ setInterval(
 
 process.on(
   "message",
-  /** @param {ToApp} m */ (m) => {
-    if (!m) return;
-    if (m.t === "signals") {
-      mode = m.mode === "manual" ? "manual" : "demo";
-      manual = m.values || {};
+  /** @param {ToApp} msg */ (msg) => {
+    if (!msg) return;
+    if (msg.t === "signals") {
+      mode = msg.mode === "manual" ? "manual" : "demo";
+      manual = msg.values || {};
       // demo drive = the kit's sim; manual = live data (auto: the sim gives way once data arrives)
       const want = mode === "manual" ? "off" : "on";
       if (settings.get("demo") !== want) press("demo", want);
-    } else if (m.t === "set") press(m.key, m.value);
-    else if (m.t === "drive") drive = m.value;
-    else if (m.t === "nav") nav = m.value;
-    else if (m.t === "assist") assist = m.value;
-    else if (m.t === "car") {
-      if (m.value) carSw[m.key] = m.value;
-      else delete carSw[m.key];
+    } else if (msg.t === "set") press(msg.key, msg.value);
+    else if (msg.t === "drive") drive = msg.value;
+    else if (msg.t === "nav") nav = msg.value;
+    else if (msg.t === "assist") assist = msg.value;
+    else if (msg.t === "car") {
+      if (msg.value) carSw[msg.key] = msg.value;
+      else delete carSw[msg.key];
     }
   },
 );
 process.on("disconnect", () => process.exit(0));
 process.on("SIGTERM", () => process.exit(0));
 
-hu.start();
+stub.start();
 sendSettings();
 log.info(
   "bench: app loaded from " +

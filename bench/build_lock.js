@@ -31,24 +31,24 @@ function takeBuildLock(distDir, id, log) {
       return () => {
         try {
           fs.rmSync(dir, { recursive: true, force: true });
-        } catch (e) {
+        } catch (err) {
           /* gone */
         }
       };
-    } catch (e) {
-      if (e.code !== "EEXIST") throw e;
+    } catch (err) {
+      if (err.code !== "EEXIST") throw err;
     }
     // held: by a live bench, recently? then wait; else take it over
     let owner = 0,
       age = 0;
     try {
       owner = Number(fs.readFileSync(pidFile, "utf8"));
-    } catch (e) {
+    } catch (err) {
       /* being written or gone */
     }
     try {
       age = Date.now() - fs.statSync(dir).mtimeMs;
-    } catch (e) {
+    } catch (err) {
       continue;
     }
     let alive = false;
@@ -56,8 +56,8 @@ function takeBuildLock(distDir, id, log) {
       try {
         process.kill(owner, 0);
         alive = true;
-      } catch (e) {
-        alive = e.code === "EPERM";
+      } catch (err) {
+        alive = err.code === "EPERM";
       }
     }
     if ((owner > 0 && !alive) || age > BUILD_LOCK_STALE_MS) {
@@ -70,7 +70,7 @@ function takeBuildLock(distDir, id, log) {
       );
       try {
         fs.rmSync(dir, { recursive: true, force: true });
-      } catch (e) {
+      } catch (err) {
         /* someone else did */
       }
       continue;

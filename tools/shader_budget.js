@@ -43,34 +43,34 @@ const TOKENS_GOOD = 7835;
  * @returns {string}
  */
 function preprocess(src) {
-  const s = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
   const defs = new Set(),
     /** @type {boolean[]} */
-    on = [],
+    active = [],
     /** @type {string[]} */
     out = [];
-  for (const line of s.split("\n")) {
-    const t = line.trim();
-    let m;
-    if ((m = t.match(/^#ifdef\s+(\w+)/))) {
-      on.push(defs.has(m[1]));
+  for (const line of code.split("\n")) {
+    const trimmed = line.trim();
+    let match;
+    if ((match = trimmed.match(/^#ifdef\s+(\w+)/))) {
+      active.push(defs.has(match[1]));
       continue;
     }
-    if ((m = t.match(/^#ifndef\s+(\w+)/))) {
-      on.push(!defs.has(m[1]));
+    if ((match = trimmed.match(/^#ifndef\s+(\w+)/))) {
+      active.push(!defs.has(match[1]));
       continue;
     }
-    if (t.startsWith("#else")) {
-      on.push(!on.pop());
+    if (trimmed.startsWith("#else")) {
+      active.push(!active.pop());
       continue;
     }
-    if (t.startsWith("#endif")) {
-      on.pop();
+    if (trimmed.startsWith("#endif")) {
+      active.pop();
       continue;
     }
-    if (!on.every(Boolean)) continue;
-    if ((m = t.match(/^#define\s+(\w+)/))) defs.add(m[1]);
-    if (!t.startsWith("#")) out.push(line);
+    if (!active.every(Boolean)) continue;
+    if ((match = trimmed.match(/^#define\s+(\w+)/))) defs.add(match[1]);
+    if (!trimmed.startsWith("#")) out.push(line);
   }
   return out.join("\n");
 }
@@ -84,21 +84,21 @@ const TOKEN =
  * @returns {ShaderCost | null}
  */
 function measure(src) {
-  const s = preprocess(src);
+  const code = preprocess(src);
   /** @type {Record<string, string>} function name to body */
   const bodies = {};
   const head =
     /\b(?:void|bool|int|float|vec[234]|ivec[234]|bvec[234]|mat[234])\s+(\w+)\s*\([^)]*\)\s*\{/g;
-  let m;
-  while ((m = head.exec(s))) {
+  let match;
+  while ((match = head.exec(code))) {
     let i = head.lastIndex,
       depth = 1;
-    while (depth && i < s.length) {
-      if (s[i] === "{") depth++;
-      else if (s[i] === "}") depth--;
+    while (depth && i < code.length) {
+      if (code[i] === "{") depth++;
+      else if (code[i] === "}") depth--;
       i++;
     }
-    bodies[m[1]] = s.slice(head.lastIndex, i);
+    bodies[match[1]] = code.slice(head.lastIndex, i);
   }
   if (!bodies.main) return null;
   /** @type {Record<string, ShaderCost>} */
@@ -109,21 +109,23 @@ function measure(src) {
    */
   const cost = (name) => {
     if (memo[name]) return memo[name];
-    const b = bodies[name];
-    const r = {
-      reads: (b.match(/\btexture2D\s*\(/g) || []).length,
-      tokens: (b.match(TOKEN) || []).length,
+    const body = bodies[name];
+    const total = {
+      reads: (body.match(/\btexture2D\s*\(/g) || []).length,
+      tokens: (body.match(TOKEN) || []).length,
     };
-    for (const f in bodies) {
-      if (f === name) continue;
-      const n = (b.match(new RegExp("\\b" + f + "\\s*\\(", "g")) || []).length;
-      if (n) {
-        const c = cost(f);
-        r.reads += n * c.reads;
-        r.tokens += n * c.tokens;
+    for (const callee in bodies) {
+      if (callee === name) continue;
+      const calls = (
+        body.match(new RegExp("\\b" + callee + "\\s*\\(", "g")) || []
+      ).length;
+      if (calls) {
+        const calleeCost = cost(callee);
+        total.reads += calls * calleeCost.reads;
+        total.tokens += calls * calleeCost.tokens;
       }
     }
-    return (memo[name] = r);
+    return (memo[name] = total);
   };
   return cost("main");
 }
@@ -134,25 +136,26 @@ function measure(src) {
  * @returns {ShaderCheck}
  */
 function check(src) {
-  const r = measure(src);
-  if (!r) return { level: "ok", text: "no main", reads: 0, tokens: 0 };
-  const at = r.reads + " texture reads, " + r.tokens + " tokens inlined";
-  if (r.reads >= READS_CRASH) {
+  const measured = measure(src);
+  if (!measured) return { level: "ok", text: "no main", reads: 0, tokens: 0 };
+  const summary =
+    measured.reads + " texture reads, " + measured.tokens + " tokens inlined";
+  if (measured.reads >= READS_CRASH) {
     return {
       level: "crash",
       text:
-        at +
+        summary +
         ": " +
         READS_CRASH +
         " reads restarted the instrument cluster (Custom HUD 0.1.15); cut reads to " +
         READS_GOOD +
         " or fewer",
-      ...r,
+      ...measured,
     };
   }
   /** @type {string[]} */
   const over = [];
-  if (r.reads > READS_GOOD)
+  if (measured.reads > READS_GOOD)
     over.push(
       "reads over the " +
         READS_GOOD +
@@ -160,15 +163,15 @@ function check(src) {
         READS_CRASH +
         " crashed)",
     );
-  if (r.tokens > TOKENS_GOOD)
+  if (measured.tokens > TOKENS_GOOD)
     over.push("size over the " + TOKENS_GOOD + " tokens known to hold");
   if (over.length)
     return {
       level: "warn",
-      text: at + ": " + over.join(", ") + "; untested on the car",
-      ...r,
+      text: summary + ": " + over.join(", ") + "; untested on the car",
+      ...measured,
     };
-  return { level: "ok", text: at, ...r };
+  return { level: "ok", text: summary, ...measured };
 }
 
 module.exports = { measure, check, READS_GOOD, READS_CRASH, TOKENS_GOOD };
@@ -179,12 +182,18 @@ if (require.main === module) {
     Module = require("module"),
     shared = path.join(__dirname, "..", "shared") + path.sep;
   /** @type {*} */
-  const M = Module;
-  const resolve = M._resolveFilename;
-  M._resolveFilename = function (req, parent, ...rest) {
-    const p = parent && parent.filename ? parent.filename : "";
-    if (p.indexOf(shared) === 0 && /^(\.\/|(\.\.\/)+)kit\//.test(req)) {
-      const kit = path.resolve(path.dirname(p), req.replace(/^\.\//, ""));
+  const loader = Module;
+  const resolve = loader._resolveFilename;
+  loader._resolveFilename = function (req, parent, ...rest) {
+    const parentFile = parent && parent.filename ? parent.filename : "";
+    if (
+      parentFile.indexOf(shared) === 0 &&
+      /^(\.\/|(\.\.\/)+)kit\//.test(req)
+    ) {
+      const kit = path.resolve(
+        path.dirname(parentFile),
+        req.replace(/^\.\//, ""),
+      );
       const rel = path.relative(path.join(shared, "kit"), kit);
       if (!rel.startsWith(".."))
         req = path.join(__dirname, "..", "kit", "runtime", rel);
@@ -194,19 +203,19 @@ if (require.main === module) {
   const widgets = require("../shared/widgets");
   /** @type {Record<string, string>} every widget type's shaders (its module's "shaders") */
   const all = {};
-  Object.keys(widgets).forEach((t) =>
-    Object.assign(all, widgets[t].shaders || {}),
+  Object.keys(widgets).forEach((type) =>
+    Object.assign(all, widgets[type].shaders || {}),
   );
   let worst = "ok";
   for (const name of Object.keys(all)) {
-    const r = check(all[name]);
+    const result = check(all[name]);
     console.log(
-      (r.level === "ok" ? "  " : r.level === "warn" ? "! " : "X ") +
+      (result.level === "ok" ? "  " : result.level === "warn" ? "! " : "X ") +
         name.padEnd(16) +
-        r.text,
+        result.text,
     );
-    if (r.level === "crash" || (r.level === "warn" && worst === "ok"))
-      worst = r.level;
+    if (result.level === "crash" || (result.level === "warn" && worst === "ok"))
+      worst = result.level;
   }
   process.exit(worst === "crash" ? 1 : 0);
 }

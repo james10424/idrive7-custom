@@ -40,7 +40,7 @@
  *               head, so the tails can follow it
  *   pad         px of transparent border round each sprite (2)
  */
-const C = window.Live2DCubismCore;
+const cubismCore = window.Live2DCubismCore;
 
 /** @typedef {Record<string, number>} Params parameter id to value */
 /** @typedef {[number, number, number, number]} Box [x0, y0, x1, y1] in model units, y up */
@@ -157,64 +157,64 @@ const DEFAULTS = {
  * @returns {BakeConfig}
  */
 function withDefaults(cfg) {
-  const c = Object.assign({}, cfg);
-  c.frames = Object.assign({}, DEFAULTS.frames, cfg.frames || {});
-  c.lean = Object.assign({}, DEFAULTS.lean, cfg.lean || {});
-  c.look = Object.assign({}, DEFAULTS.look, cfg.look || {});
-  c.doze = Object.assign({}, DEFAULTS.doze, cfg.doze || {});
-  return c;
+  const merged = Object.assign({}, cfg);
+  merged.frames = Object.assign({}, DEFAULTS.frames, cfg.frames || {});
+  merged.lean = Object.assign({}, DEFAULTS.lean, cfg.lean || {});
+  merged.look = Object.assign({}, DEFAULTS.look, cfg.look || {});
+  merged.doze = Object.assign({}, DEFAULTS.doze, cfg.doze || {});
+  return merged;
 }
 const logEl = /** @type {HTMLElement} */ (document.getElementById("log")),
   view = document.getElementById("view");
-/** @param {string} s */
-const log = (s) => {
-  logEl.textContent += "\n" + s;
+/** @param {string} line */
+const log = (line) => {
+  logEl.textContent += "\n" + line;
 };
-const SS = 4; // render this many times bigger than the frame, then scale down
+const SUPERSAMPLE = 4; // render this many times bigger than the frame, then scale down
 
 /**
- * @param {string} u
+ * @param {string} url
  * @returns {Promise<any>}
  */
-async function json(u) {
-  const r = await fetch(u);
-  if (!r.ok) throw new Error(u + ": " + r.status);
-  return r.json();
+async function json(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(url + ": " + response.status);
+  return response.json();
 }
 
 /** @returns {Promise<Loaded>} */
 async function loadModel() {
-  const m3 = await json("/model.json");
-  const moc = C.Moc.fromArrayBuffer(
-    await (await fetch("/model/" + m3.FileReferences.Moc)).arrayBuffer(),
+  const modelJson = await json("/model.json");
+  const moc = cubismCore.Moc.fromArrayBuffer(
+    await (await fetch("/model/" + modelJson.FileReferences.Moc)).arrayBuffer(),
   );
   if (!moc)
     throw new Error("the .moc3 did not load (Cubism Core too old for it?)");
-  const model = C.Model.fromMoc(moc);
+  const model = cubismCore.Model.fromMoc(moc);
   const imgs = await Promise.all(
-    m3.FileReferences.Textures.map(
-      (t) =>
+    modelJson.FileReferences.Textures.map(
+      (texturePath) =>
         new Promise((res, rej) => {
           const i = new Image();
           i.onload = () => res(i);
-          i.onerror = () => rej(new Error("texture " + t));
-          i.src = "/model/" + encodeURI(t);
+          i.onerror = () => rej(new Error("texture " + texturePath));
+          i.src = "/model/" + encodeURI(texturePath);
         }),
     ),
   );
-  const cdi = m3.FileReferences.DisplayInfo
-    ? await json("/model/" + encodeURI(m3.FileReferences.DisplayInfo)).catch(
-        () => null,
-      )
+  const cdi = modelJson.FileReferences.DisplayInfo
+    ? await json(
+        "/model/" + encodeURI(modelJson.FileReferences.DisplayInfo),
+      ).catch(() => null)
     : null;
-  return { m3, model, imgs, cdi };
+  return { m3: modelJson, model, imgs, cdi };
 }
 
 /* ---------- renderer ---------- */
-const VS = `attribute vec2 a_pos; attribute vec2 a_uv;
+const VERTEX_SRC = `attribute vec2 a_pos; attribute vec2 a_uv;
 uniform vec4 u_xf; varying vec2 v_uv;
 void main() { gl_Position = vec4(a_pos * u_xf.xy + u_xf.zw, 0.0, 1.0); v_uv = vec2(a_uv.x, 1.0 - a_uv.y); }`;
-const FS = `precision mediump float;
+const FRAGMENT_SRC = `precision mediump float;
 uniform sampler2D u_tex; uniform float u_op; uniform vec4 u_mul; uniform vec4 u_scr; uniform float u_mask;
 varying vec2 v_uv;
 void main() {
@@ -227,9 +227,9 @@ void main() {
 }`;
 
 class Renderer {
-  /** @param {Loaded} L */
-  constructor(L) {
-    this.L = L;
+  /** @param {Loaded} loaded */
+  constructor(loaded) {
+    this.L = loaded;
     this.canvas = document.createElement("canvas");
     const gl = (this.gl = this.canvas.getContext("webgl", {
       stencil: true,
@@ -243,35 +243,37 @@ class Renderer {
      * @param {string} src
      * @returns {WebGLShader}
      */
-    const sh = (type, src) => {
-      const s = gl.createShader(type);
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
-        throw new Error(gl.getShaderInfoLog(s));
-      return s;
+    const compileShader = (type, src) => {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS))
+        throw new Error(gl.getShaderInfoLog(shader));
+      return shader;
     };
-    const p = (this.prog = gl.createProgram());
-    gl.attachShader(p, sh(gl.VERTEX_SHADER, VS));
-    gl.attachShader(p, sh(gl.FRAGMENT_SHADER, FS));
-    gl.linkProgram(p);
-    gl.useProgram(p);
+    const program = (this.prog = gl.createProgram());
+    gl.attachShader(program, compileShader(gl.VERTEX_SHADER, VERTEX_SRC));
+    gl.attachShader(program, compileShader(gl.FRAGMENT_SHADER, FRAGMENT_SRC));
+    gl.linkProgram(program);
+    gl.useProgram(program);
     this.loc = {
-      pos: gl.getAttribLocation(p, "a_pos"),
-      uv: gl.getAttribLocation(p, "a_uv"),
+      pos: gl.getAttribLocation(program, "a_pos"),
+      uv: gl.getAttribLocation(program, "a_uv"),
     };
     /** @type {Record<string, WebGLUniformLocation | null>} */
     this.u = {};
-    ["u_xf", "u_tex", "u_op", "u_mul", "u_scr", "u_mask"].forEach((n) => {
-      this.u[n] = gl.getUniformLocation(p, n);
-    });
+    ["u_xf", "u_tex", "u_op", "u_mul", "u_scr", "u_mask"].forEach(
+      (uniformName) => {
+        this.u[uniformName] = gl.getUniformLocation(program, uniformName);
+      },
+    );
     this.bufPos = gl.createBuffer();
     this.bufUv = gl.createBuffer();
     this.bufIdx = gl.createBuffer();
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-    this.tex = L.imgs.map((img) => {
-      const t = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, t);
+    this.tex = loaded.imgs.map((img) => {
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
       gl.generateMipmap(gl.TEXTURE_2D);
       gl.texParameteri(
@@ -282,7 +284,7 @@ class Renderer {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-      return t;
+      return texture;
     });
   }
 
@@ -297,8 +299,8 @@ class Renderer {
    */
   draw(w, h, box, opts) {
     const gl = this.gl,
-      d = this.L.model.drawables,
-      o = opts || {};
+      drawables = this.L.model.drawables,
+      options = opts || {};
     this.canvas.width = w;
     this.canvas.height = h;
     gl.viewport(0, 0, w, h);
@@ -309,44 +311,52 @@ class Renderer {
     gl.disable(gl.CULL_FACE);
     gl.disable(gl.DEPTH_TEST);
     gl.enable(gl.BLEND);
-    const sx = 2 / (box[2] - box[0]),
-      sy = 2 / (box[3] - box[1]);
-    gl.uniform4f(this.u.u_xf, sx, sy, -1 - box[0] * sx, -1 - box[1] * sy);
+    const scaleX = 2 / (box[2] - box[0]),
+      scaleY = 2 / (box[3] - box[1]);
+    gl.uniform4f(
+      this.u.u_xf,
+      scaleX,
+      scaleY,
+      -1 - box[0] * scaleX,
+      -1 - box[1] * scaleY,
+    );
     gl.uniform1i(this.u.u_tex, 0);
-    const ro = this.L.model.getRenderOrders
+    const renderOrders = this.L.model.getRenderOrders
       ? this.L.model.getRenderOrders()
-      : d.renderOrders;
-    const order = Array.from({ length: d.count }, (_, i) => i).sort(
-      (a, b) => ro[a] - ro[b],
+      : drawables.renderOrders;
+    const order = Array.from({ length: drawables.count }, (_, i) => i).sort(
+      (a, b) => renderOrders[a] - renderOrders[b],
     );
     order.forEach((i) => {
       if (
-        !C.Utils.hasIsVisibleBit(d.dynamicFlags[i]) ||
-        d.opacities[i] <= 0.001
+        !cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i]) ||
+        drawables.opacities[i] <= 0.001
       )
         return;
-      if (o.only && !o.only(i)) return;
-      if (o.skip && o.skip(i)) return;
-      const masks = d.masks[i],
-        n = d.maskCounts[i];
-      if (n > 0) {
+      if (options.only && !options.only(i)) return;
+      if (options.skip && options.skip(i)) return;
+      const masks = drawables.masks[i],
+        maskCount = drawables.maskCounts[i];
+      if (maskCount > 0) {
         gl.enable(gl.STENCIL_TEST);
         gl.clear(gl.STENCIL_BUFFER_BIT);
         gl.colorMask(false, false, false, false);
         gl.stencilFunc(gl.ALWAYS, 1, 0xff);
         gl.stencilOp(gl.KEEP, gl.KEEP, gl.REPLACE);
         gl.uniform1f(this.u.u_mask, 1);
-        for (let k = 0; k < n; k++) this._mesh(masks[k]);
+        for (let k = 0; k < maskCount; k++) this._mesh(masks[k]);
         gl.uniform1f(this.u.u_mask, 0);
         gl.colorMask(true, true, true, true);
-        const inv = C.Utils.hasIsInvertedMaskBit(d.constantFlags[i]);
+        const inv = cubismCore.Utils.hasIsInvertedMaskBit(
+          drawables.constantFlags[i],
+        );
         gl.stencilFunc(inv ? gl.NOTEQUAL : gl.EQUAL, 1, 0xff);
         gl.stencilOp(gl.KEEP, gl.KEEP, gl.KEEP);
       }
-      const f = d.constantFlags[i];
-      if (C.Utils.hasBlendAdditiveBit(f))
+      const flags = drawables.constantFlags[i];
+      if (cubismCore.Utils.hasBlendAdditiveBit(flags))
         gl.blendFuncSeparate(gl.ONE, gl.ONE, gl.ZERO, gl.ONE);
-      else if (C.Utils.hasBlendMultiplicativeBit(f))
+      else if (cubismCore.Utils.hasBlendMultiplicativeBit(flags))
         gl.blendFuncSeparate(
           gl.DST_COLOR,
           gl.ONE_MINUS_SRC_ALPHA,
@@ -360,25 +370,25 @@ class Renderer {
           gl.ONE,
           gl.ONE_MINUS_SRC_ALPHA,
         );
-      gl.uniform1f(this.u.u_op, d.opacities[i]);
-      const mc = d.multiplyColors,
-        sc = d.screenColors;
+      gl.uniform1f(this.u.u_op, drawables.opacities[i]);
+      const multiplyColors = drawables.multiplyColors,
+        screenColors = drawables.screenColors;
       gl.uniform4f(
         this.u.u_mul,
-        mc ? mc[i * 4] : 1,
-        mc ? mc[i * 4 + 1] : 1,
-        mc ? mc[i * 4 + 2] : 1,
+        multiplyColors ? multiplyColors[i * 4] : 1,
+        multiplyColors ? multiplyColors[i * 4 + 1] : 1,
+        multiplyColors ? multiplyColors[i * 4 + 2] : 1,
         1,
       );
       gl.uniform4f(
         this.u.u_scr,
-        sc ? sc[i * 4] : 0,
-        sc ? sc[i * 4 + 1] : 0,
-        sc ? sc[i * 4 + 2] : 0,
+        screenColors ? screenColors[i * 4] : 0,
+        screenColors ? screenColors[i * 4 + 1] : 0,
+        screenColors ? screenColors[i * 4 + 2] : 0,
         0,
       );
       this._mesh(i);
-      if (n > 0) gl.disable(gl.STENCIL_TEST);
+      if (maskCount > 0) gl.disable(gl.STENCIL_TEST);
     });
     return this.canvas;
   }
@@ -389,26 +399,30 @@ class Renderer {
    */
   _mesh(i) {
     const gl = this.gl,
-      d = this.L.model.drawables;
-    const pos = d.vertexPositions[i];
+      drawables = this.L.model.drawables;
+    const pos = drawables.vertexPositions[i];
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.tex[d.textureIndices[i]]);
+    gl.bindTexture(gl.TEXTURE_2D, this.tex[drawables.textureIndices[i]]);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufPos);
     gl.bufferData(gl.ARRAY_BUFFER, pos, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this.loc.pos);
     gl.vertexAttribPointer(this.loc.pos, 2, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufUv);
-    gl.bufferData(gl.ARRAY_BUFFER, d.vertexUvs[i], gl.DYNAMIC_DRAW);
+    gl.bufferData(gl.ARRAY_BUFFER, drawables.vertexUvs[i], gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(this.loc.uv);
     gl.vertexAttribPointer(this.loc.uv, 2, gl.FLOAT, false, 0, 0);
     const cut = this.L.cut && this.L.cut.get(i);
-    const idx = cut || d.indices[i];
+    const idx = cut || drawables.indices[i];
     if (!idx.length) return;
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.bufIdx);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.DYNAMIC_DRAW);
     gl.drawElements(
       gl.TRIANGLES,
-      cut ? cut.length : d.indexCounts ? d.indexCounts[i] : d.indices[i].length,
+      cut
+        ? cut.length
+        : drawables.indexCounts
+          ? drawables.indexCounts[i]
+          : drawables.indices[i].length,
       gl.UNSIGNED_SHORT,
       0,
     );
@@ -418,21 +432,22 @@ class Renderer {
 /* ---------- model helpers ---------- */
 /**
  * Every parameter to its default, then these.
- * @param {Loaded} L
+ * @param {Loaded} loaded
  * @param {Params} [values]
  */
-function setParams(L, values) {
-  const p = L.model.parameters;
-  for (let i = 0; i < p.count; i++) p.values[i] = p.defaultValues[i];
+function setParams(loaded, values) {
+  const parameters = loaded.model.parameters;
+  for (let i = 0; i < parameters.count; i++)
+    parameters.values[i] = parameters.defaultValues[i];
   Object.keys(values || {}).forEach((id) => {
-    const i = p.ids.indexOf(id);
+    const i = parameters.ids.indexOf(id);
     if (i < 0) {
       log('  (no parameter "' + id + '")');
       return;
     }
-    p.values[i] = Math.max(
-      p.minimumValues[i],
-      Math.min(p.maximumValues[i], values[id]),
+    parameters.values[i] = Math.max(
+      parameters.minimumValues[i],
+      Math.min(parameters.maximumValues[i], values[id]),
     );
   });
 }
@@ -444,28 +459,28 @@ function setParams(L, values) {
 async function expressionParams(names) {
   /** @type {Params} */
   const out = {};
-  for (const n of names || []) {
-    const e = await json("/model/" + encodeURI(n));
-    (e.Parameters || []).forEach((q) => {
-      out[q.Id] =
-        q.Blend === "Multiply"
-          ? (out[q.Id] || 1) * q.Value
-          : q.Blend === "Overwrite"
-            ? q.Value
-            : (out[q.Id] || 0) + q.Value;
+  for (const fileName of names || []) {
+    const expression = await json("/model/" + encodeURI(fileName));
+    (expression.Parameters || []).forEach((param) => {
+      out[param.Id] =
+        param.Blend === "Multiply"
+          ? (out[param.Id] || 1) * param.Value
+          : param.Blend === "Overwrite"
+            ? param.Value
+            : (out[param.Id] || 0) + param.Value;
     });
   }
   return out;
 }
 /* Is drawable i inside one of these parts (by id), at any depth? */
 /**
- * @param {Loaded} L
+ * @param {Loaded} loaded
  * @param {string[]} ids
  * @returns {DrawablePick}
  */
-function inParts(L, ids) {
-  const parts = L.model.parts,
-    d = L.model.drawables,
+function inParts(loaded, ids) {
+  const parts = loaded.model.parts,
+    drawables = loaded.model.drawables,
     /** @type {Set<number>} */
     want = new Set();
   ids.forEach((id) => {
@@ -477,7 +492,7 @@ function inParts(L, ids) {
   const memo = new Map();
   return (i) => {
     if (memo.has(i)) return memo.get(i);
-    let k = d.parentPartIndices[i],
+    let k = drawables.parentPartIndices[i],
       hit = false;
     while (k >= 0 && !hit) {
       hit = want.has(k);
@@ -489,29 +504,29 @@ function inParts(L, ids) {
 }
 /**
  * The box round the visible drawables (only these, when given).
- * @param {Loaded} L
+ * @param {Loaded} loaded
  * @param {DrawablePick} [only]
  * @returns {Box}
  */
-function bounds(L, only) {
-  const d = L.model.drawables;
+function bounds(loaded, only) {
+  const drawables = loaded.model.drawables;
   let x0 = Infinity,
     y0 = Infinity,
     x1 = -Infinity,
     y1 = -Infinity;
-  for (let i = 0; i < d.count; i++) {
+  for (let i = 0; i < drawables.count; i++) {
     if (
-      !C.Utils.hasIsVisibleBit(d.dynamicFlags[i]) ||
-      d.opacities[i] <= 0.001 ||
+      !cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i]) ||
+      drawables.opacities[i] <= 0.001 ||
       (only && !only(i))
     )
       continue;
-    const v = d.vertexPositions[i];
-    for (let k = 0; k < v.length; k += 2) {
-      x0 = Math.min(x0, v[k]);
-      x1 = Math.max(x1, v[k]);
-      y0 = Math.min(y0, v[k + 1]);
-      y1 = Math.max(y1, v[k + 1]);
+    const positions = drawables.vertexPositions[i];
+    for (let k = 0; k < positions.length; k += 2) {
+      x0 = Math.min(x0, positions[k]);
+      x1 = Math.max(x1, positions[k]);
+      y0 = Math.min(y0, positions[k + 1]);
+      y1 = Math.max(y1, positions[k + 1]);
     }
   }
   return [x0, y0, x1, y1];
@@ -520,16 +535,16 @@ function bounds(L, only) {
 /* ---------- inspect ---------- */
 /**
  * ?inspect: the figure with a grid in model units, and each part alone.
- * @param {Loaded} L
+ * @param {Loaded} loaded
  * @param {BakeConfig} cfg
  */
-async function inspect(L, cfg) {
-  setParams(L, cfg.params);
-  L.model.update();
-  const R = new Renderer(L),
-    d = L.model.drawables,
-    parts = L.model.parts;
-  const box = bounds(L);
+async function inspect(loaded, cfg) {
+  setParams(loaded, cfg.params);
+  loaded.model.update();
+  const renderer = new Renderer(loaded),
+    drawables = loaded.model.drawables,
+    parts = loaded.model.parts;
+  const box = bounds(loaded);
   log(
     "figure box (model units): x " +
       box[0].toFixed(3) +
@@ -543,37 +558,45 @@ async function inspect(L, cfg) {
   );
   /** @type {Record<string, string>} part id to name */
   const names = {};
-  ((L.cdi && L.cdi.Parts) || []).forEach((p) => {
-    names[p.Id] = p.Name;
+  ((loaded.cdi && loaded.cdi.Parts) || []).forEach((part) => {
+    names[part.Id] = part.Name;
   });
   const H = 1000,
     W = Math.round((H * (box[2] - box[0])) / (box[3] - box[1]));
-  const full = R.draw(W, H, box);
+  const full = renderer.draw(W, H, box);
   const big = document.createElement("canvas");
   big.className = "big";
   big.width = W;
   big.height = H;
-  const g2 = big.getContext("2d");
-  g2.drawImage(full, 0, 0);
+  const bigCtx = big.getContext("2d");
+  bigCtx.drawImage(full, 0, 0);
   // a grid every 0.1 model units, labelled, to read positions off (the anchor between her feet, the waist, the face)
-  g2.strokeStyle = "rgba(255,80,80,.5)";
-  g2.fillStyle = "#f66";
-  g2.font = "11px monospace";
-  for (let v = Math.ceil(box[1] * 10) / 10; v <= box[3]; v += 0.1) {
-    const y = H - ((v - box[1]) / (box[3] - box[1])) * H;
-    g2.beginPath();
-    g2.moveTo(0, y);
-    g2.lineTo(W, y);
-    g2.stroke();
-    g2.fillText(v.toFixed(1), 2, y - 2);
+  bigCtx.strokeStyle = "rgba(255,80,80,.5)";
+  bigCtx.fillStyle = "#f66";
+  bigCtx.font = "11px monospace";
+  for (
+    let modelY = Math.ceil(box[1] * 10) / 10;
+    modelY <= box[3];
+    modelY += 0.1
+  ) {
+    const y = H - ((modelY - box[1]) / (box[3] - box[1])) * H;
+    bigCtx.beginPath();
+    bigCtx.moveTo(0, y);
+    bigCtx.lineTo(W, y);
+    bigCtx.stroke();
+    bigCtx.fillText(modelY.toFixed(1), 2, y - 2);
   }
-  for (let v = Math.ceil(box[0] * 10) / 10; v <= box[2]; v += 0.1) {
-    const x = ((v - box[0]) / (box[2] - box[0])) * W;
-    g2.beginPath();
-    g2.moveTo(x, 0);
-    g2.lineTo(x, H);
-    g2.stroke();
-    g2.fillText(v.toFixed(1), x + 2, 12);
+  for (
+    let modelX = Math.ceil(box[0] * 10) / 10;
+    modelX <= box[2];
+    modelX += 0.1
+  ) {
+    const x = ((modelX - box[0]) / (box[2] - box[0])) * W;
+    bigCtx.beginPath();
+    bigCtx.moveTo(x, 0);
+    bigCtx.lineTo(x, H);
+    bigCtx.stroke();
+    bigCtx.fillText(modelX.toFixed(1), x + 2, 12);
   }
   view.appendChild(big);
   // every part with drawables of its own, alone
@@ -581,31 +604,31 @@ async function inspect(L, cfg) {
   grid.className = "grid";
   view.appendChild(grid);
   for (let k = 0; k < parts.count; k++) {
-    const only = inParts(L, [parts.ids[k]]);
+    const only = inParts(loaded, [parts.ids[k]]);
     let any = false;
-    for (let i = 0; i < d.count && !any; i++)
+    for (let i = 0; i < drawables.count && !any; i++)
       any =
         only(i) &&
-        C.Utils.hasIsVisibleBit(d.dynamicFlags[i]) &&
-        d.opacities[i] > 0.001;
+        cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i]) &&
+        drawables.opacities[i] > 0.001;
     if (!any) continue;
-    const c = document.createElement("div");
-    c.className = "cell";
-    const cv = document.createElement("canvas");
-    cv.width = 128;
-    cv.height = 128;
-    const img = R.draw(
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 128;
+    const img = renderer.draw(
       128,
       128,
       [box[0], box[1], box[0] + (box[3] - box[1]), box[3]],
       { only },
     );
-    cv.getContext("2d").drawImage(img, 0, 0);
-    c.appendChild(cv);
-    c.appendChild(
+    canvas.getContext("2d").drawImage(img, 0, 0);
+    cell.appendChild(canvas);
+    cell.appendChild(
       document.createTextNode(parts.ids[k] + " " + (names[parts.ids[k]] || "")),
     );
-    grid.appendChild(c);
+    grid.appendChild(cell);
   }
   log("parts shown: " + grid.children.length + " of " + parts.count);
 }
@@ -619,38 +642,40 @@ async function inspect(L, cfg) {
  * @returns {HTMLCanvasElement}
  */
 function shrink(src, w, h) {
-  let c = src;
-  while (c.width / 2 >= w * 1.01) {
-    const n = document.createElement("canvas");
-    n.width = Math.round(c.width / 2);
-    n.height = Math.round(c.height / 2);
-    const g = n.getContext("2d");
-    g.imageSmoothingQuality = "high";
-    g.drawImage(c, 0, 0, n.width, n.height);
-    c = n;
+  let current = src;
+  while (current.width / 2 >= w * 1.01) {
+    const half = document.createElement("canvas");
+    half.width = Math.round(current.width / 2);
+    half.height = Math.round(current.height / 2);
+    const ctx = half.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(current, 0, 0, half.width, half.height);
+    current = half;
   }
-  const n = document.createElement("canvas");
-  n.width = w;
-  n.height = h;
-  const g = n.getContext("2d");
-  g.imageSmoothingQuality = "high";
-  g.drawImage(c, 0, 0, w, h);
-  return n;
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  const ctx = out.getContext("2d");
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(current, 0, 0, w, h);
+  return out;
 }
 /**
  * The rect of the canvas's pixels that are not transparent; null when none.
- * @param {HTMLCanvasElement} cv
+ * @param {HTMLCanvasElement} canvas
  * @returns {Rect | null}
  */
-function alphaBox(cv) {
-  const d = cv.getContext("2d").getImageData(0, 0, cv.width, cv.height).data;
-  let x0 = cv.width,
-    y0 = cv.height,
+function alphaBox(canvas) {
+  const pixels = canvas
+    .getContext("2d")
+    .getImageData(0, 0, canvas.width, canvas.height).data;
+  let x0 = canvas.width,
+    y0 = canvas.height,
     x1 = -1,
     y1 = -1;
-  for (let y = 0; y < cv.height; y++)
-    for (let x = 0; x < cv.width; x++)
-      if (d[(y * cv.width + x) * 4 + 3] > 2) {
+  for (let y = 0; y < canvas.height; y++)
+    for (let x = 0; x < canvas.width; x++)
+      if (pixels[(y * canvas.width + x) * 4 + 3] > 2) {
         x0 = Math.min(x0, x);
         x1 = Math.max(x1, x);
         y0 = Math.min(y0, y);
@@ -663,41 +688,43 @@ function alphaBox(cv) {
  * and dropped by index from then on (so they stay dropped as she moves): for a drawable that carries something you may
  * leave out inside a mesh you need, e.g. text built into a face mesh. */
 /**
- * @param {Loaded} L
+ * @param {Loaded} loaded
  * @param {Record<string, number> | undefined} cut
  * @param {Params} params the idle pose
  */
-function makeCuts(L, cut, params) {
-  L.cut = new Map();
+function makeCuts(loaded, cut, params) {
+  loaded.cut = new Map();
   if (!cut) return;
-  setParams(L, params);
-  L.model.update();
-  const d = L.model.drawables;
+  setParams(loaded, params);
+  loaded.model.update();
+  const drawables = loaded.model.drawables;
   Object.keys(cut).forEach((id) => {
-    const i = d.ids.indexOf(id);
+    const i = drawables.ids.indexOf(id);
     if (i < 0) {
       log('  (no drawable "' + id + '")');
       return;
     }
-    const v = d.vertexPositions[i],
-      ix = d.indices[i],
-      n = d.indexCounts ? d.indexCounts[i] : ix.length,
+    const positions = drawables.vertexPositions[i],
+      indices = drawables.indices[i],
+      indexCount = drawables.indexCounts
+        ? drawables.indexCounts[i]
+        : indices.length,
       /** @type {number[]} */
       keep = [];
-    for (let k = 0; k < n; k += 3) {
-      const below = [ix[k], ix[k + 1], ix[k + 2]].every(
-        (q) => v[2 * q + 1] < cut[id],
+    for (let k = 0; k < indexCount; k += 3) {
+      const below = [indices[k], indices[k + 1], indices[k + 2]].every(
+        (vertex) => positions[2 * vertex + 1] < cut[id],
       );
-      if (!below) keep.push(ix[k], ix[k + 1], ix[k + 2]);
+      if (!below) keep.push(indices[k], indices[k + 1], indices[k + 2]);
     }
-    L.cut.set(i, new Uint16Array(keep));
+    loaded.cut.set(i, new Uint16Array(keep));
     log(
       "  cut " +
         id +
         ": " +
-        (n - keep.length) / 3 +
+        (indexCount - keep.length) / 3 +
         " of " +
-        n / 3 +
+        indexCount / 3 +
         " triangles",
     );
   });
@@ -705,29 +732,32 @@ function makeCuts(L, cut, params) {
 
 /**
  * Bakes the frames and sprites into the atlas and posts atlas.rgba, atlas.json and preview.png to serve.js.
- * @param {Loaded} L
+ * @param {Loaded} loaded
  * @param {BakeConfig} cfg
  */
-async function bake(L, cfg) {
+async function bake(loaded, cfg) {
   const pad = cfg.pad || 2;
   /** @type {DrawablePick} */
   const hidden =
-    cfg.hide && cfg.hide.length ? inParts(L, cfg.hide) : () => false;
-  const tailsIn = cfg.tails && cfg.tails.length ? inParts(L, cfg.tails) : null;
+    cfg.hide && cfg.hide.length ? inParts(loaded, cfg.hide) : () => false;
+  const tailsIn =
+    cfg.tails && cfg.tails.length ? inParts(loaded, cfg.tails) : null;
   /** @type {DrawablePick | null} */
   const tails = tailsIn ? (i) => tailsIn(i) && !hidden(i) : null;
   // arms: each its own sprite, which the HUD turns from the shoulder (to point at the indicator); left out of every
   // body frame. The bake measures where each shoulder sits and how the arm turns at a full lean each way
-  const armsIn = (cfg.arms || []).map((a) => inParts(L, a.parts || []));
+  const armsIn = (cfg.arms || []).map((arm) =>
+    inParts(loaded, arm.parts || []),
+  );
   /** @type {DrawablePick} */
-  const isArm = (i) => armsIn.some((f) => f(i));
-  const R = new Renderer(L);
+  const isArm = (i) => armsIn.some((inArm) => inArm(i));
+  const renderer = new Renderer(loaded);
   const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {};
-  makeCuts(L, cfg.cut, Object.assign({}, cfg.params, idle));
+  makeCuts(loaded, cfg.cut, Object.assign({}, cfg.params, idle));
   // one box for every frame and sprite: the whole figure at idle, with a margin for the swaying tails
-  setParams(L, Object.assign({}, cfg.params, idle));
-  L.model.update();
-  let box = bounds(L, (i) => !hidden(i));
+  setParams(loaded, Object.assign({}, cfg.params, idle));
+  loaded.model.update();
+  let box = bounds(loaded, (i) => !hidden(i));
   // her size: pxPerUnit, else heightPx (200) over the figure's height; landmarks default to fractions of the figure,
   // so a model in any units bakes without them
   const figH = box[3] - box[1];
@@ -735,10 +765,15 @@ async function bake(L, cfg) {
   const ppu = cfg.pxPerUnit || (cfg.heightPx || 200) / figH;
   const headY = isFinite(cfg.headY) ? cfg.headY : box[3] - 0.15 * figH;
   const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - 0.4 * figH;
-  const m = 0.025 * figH;
-  box = [box[0] - m, box[1] - 0.006 * figH, box[2] + m, box[3] + 0.006 * figH];
-  const fw = Math.ceil((box[2] - box[0]) * ppu),
-    fh = Math.ceil((box[3] - box[1]) * ppu);
+  const margin = 0.025 * figH;
+  box = [
+    box[0] - margin,
+    box[1] - 0.006 * figH,
+    box[2] + margin,
+    box[3] + 0.006 * figH,
+  ];
+  const frameW = Math.ceil((box[2] - box[0]) * ppu),
+    frameH = Math.ceil((box[3] - box[1]) * ppu);
   /**
    * A model point in frame px.
    * @param {number} x
@@ -746,72 +781,85 @@ async function bake(L, cfg) {
    * @returns {[number, number]}
    */
   const toFrame = (x, y) => [(x - box[0]) * ppu, (box[3] - y) * ppu];
-  log("frame " + fw + "x" + fh + " px");
+  log("frame " + frameW + "x" + frameH + " px");
   /**
    * @param {DrawOpts} opts
    * @returns {HTMLCanvasElement} a new fw x fh frame
    */
-  const render = (opts) => shrink(R.draw(fw * SS, fh * SS, box, opts), fw, fh);
+  const render = (opts) =>
+    shrink(
+      renderer.draw(frameW * SUPERSAMPLE, frameH * SUPERSAMPLE, box, opts),
+      frameW,
+      frameH,
+    );
   // the forward/back lean in perspective: above the waist she tips out of the screen, so her upper body gets shorter
   // (by "shorten" at a full lean) and its top narrower leaning back (a full lean right), wider toward you (by "widen"); her legs stay as they are.
   // Baked into the frames, so the HUD's shader does nothing more. persp(a, x, y) moves a frame px point the same way
   const fbLean = cfg.lean && cfg.lean.axis === "fb";
-  const pv = fbLean
+  const perspective = fbLean
     ? Object.assign({ widen: 0.14, shorten: 0.1 }, cfg.lean.perspective || {})
     : null;
   const waistPx = toFrame(0, waist)[1],
     cxPx = toFrame(centreX, 0)[0];
   /**
-   * @param {number} a the lean, -1 .. 1
+   * @param {number} lean the lean, -1 .. 1
    * @param {number} x
    * @param {number} y
    * @returns {number[]}
    */
-  const persp = (a, x, y) => {
-    if (!pv || y >= waistPx) return [x, y];
-    const up = (waistPx - y) * (1 - pv.shorten * Math.abs(a)),
-      u = up / waistPx;
-    return [cxPx + (x - cxPx) * (1 - pv.widen * a * u), waistPx - up];
+  const persp = (lean, x, y) => {
+    if (!perspective || y >= waistPx) return [x, y];
+    const above = (waistPx - y) * (1 - perspective.shorten * Math.abs(lean)),
+      aboveFrac = above / waistPx;
+    return [
+      cxPx + (x - cxPx) * (1 - perspective.widen * lean * aboveFrac),
+      waistPx - above,
+    ];
   };
   // the same on a render at SS times the size, row by row: each row above the waist comes from the row it was before
   // the shortening, scaled about her middle
   /**
    * @param {DrawOpts} opts
-   * @param {number} a the lean, -1 .. 1
+   * @param {number} lean the lean, -1 .. 1
    * @returns {HTMLCanvasElement}
    */
-  const renderLean = (opts, a) => {
-    const big = R.draw(fw * SS, fh * SS, box, opts);
-    if (!pv) return shrink(big, fw, fh);
-    const W = fw * SS,
-      H = fh * SS,
-      wy = waistPx * SS,
-      cx = cxPx * SS,
-      k = 1 - pv.shorten * Math.abs(a);
+  const renderLean = (opts, lean) => {
+    const big = renderer.draw(
+      frameW * SUPERSAMPLE,
+      frameH * SUPERSAMPLE,
+      box,
+      opts,
+    );
+    if (!perspective) return shrink(big, frameW, frameH);
+    const W = frameW * SUPERSAMPLE,
+      H = frameH * SUPERSAMPLE,
+      waistY = waistPx * SUPERSAMPLE,
+      cx = cxPx * SUPERSAMPLE,
+      k = 1 - perspective.shorten * Math.abs(lean);
     const out = document.createElement("canvas");
     out.width = W;
     out.height = H;
-    const g = out.getContext("2d");
-    g.imageSmoothingQuality = "high";
-    g.drawImage(
+    const ctx = out.getContext("2d");
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(
       big,
       0,
-      Math.floor(wy),
+      Math.floor(waistY),
       W,
-      H - Math.floor(wy),
+      H - Math.floor(waistY),
       0,
-      Math.floor(wy),
+      Math.floor(waistY),
       W,
-      H - Math.floor(wy),
+      H - Math.floor(waistY),
     );
-    for (let y = 0; y < Math.floor(wy); y++) {
-      const up = wy - y - 0.5,
-        src = wy - up / k;
+    for (let y = 0; y < Math.floor(waistY); y++) {
+      const above = waistY - y - 0.5,
+        src = waistY - above / k;
       if (src < 0) continue;
-      const sx = 1 - pv.widen * a * (up / wy);
-      g.drawImage(big, 0, src, W, 1, cx - cx * sx, y, W * sx, 1);
+      const scaleX = 1 - perspective.widen * lean * (above / waistY);
+      ctx.drawImage(big, 0, src, W, 1, cx - cx * scaleX, y, W * scaleX, 1);
     }
-    return shrink(out, fw, fh);
+    return shrink(out, frameW, frameH);
   };
   /** @type {DrawOpts} */
   const body = {
@@ -820,195 +868,214 @@ async function bake(L, cfg) {
   const names = ["idle", "half", "shut", "talk"],
     /** @type {Record<string, HTMLCanvasElement>} */
     frames = {};
-  for (const n of names) {
-    const f = (cfg.frames && cfg.frames[n]) || {};
-    const ex = await expressionParams(f.expressions);
-    setParams(L, Object.assign({}, cfg.params, ex, f.params || {}));
-    L.model.update();
-    frames[n] = render(body);
+  for (const name of names) {
+    const frameCfg = (cfg.frames && cfg.frames[name]) || {};
+    const exprParams = await expressionParams(frameCfg.expressions);
+    setParams(
+      loaded,
+      Object.assign({}, cfg.params, exprParams, frameCfg.params || {}),
+    );
+    loaded.model.update();
+    frames[name] = render(body);
   }
   // the lean angles, left to right; the middle one is upright (idle itself, not baked again)
-  const LN = (cfg.lean && cfg.lean.steps) || 11,
-    lp = (cfg.lean && cfg.lean.params) || {},
+  const leanSteps = (cfg.lean && cfg.lean.steps) || 11,
+    leanParams = (cfg.lean && cfg.lean.params) || {},
     faceAt = (cfg.lean && cfg.lean.face) || 0.6;
   /** @type {string[]} */
   const leanNames = [];
-  for (let k = 0; k < LN; k++) {
-    const a = -1 + (2 * k) / (LN - 1);
-    if (Math.abs(a) < 1e-6) {
+  for (let k = 0; k < leanSteps; k++) {
+    const lean = -1 + (2 * k) / (leanSteps - 1);
+    if (Math.abs(lean) < 1e-6) {
       leanNames.push("idle");
       continue;
     }
     /** @type {Params} */
-    const q = {};
-    Object.keys(lp).forEach((id) => {
-      q[id] = lp[id] * a;
+    const poseParams = {};
+    Object.keys(leanParams).forEach((id) => {
+      poseParams[id] = leanParams[id] * lean;
     });
-    if (a <= -faceAt + 1e-6)
-      Object.assign(q, (cfg.lean && cfg.lean.left) || {});
-    if (a >= faceAt - 1e-6)
-      Object.assign(q, (cfg.lean && cfg.lean.right) || {});
-    setParams(L, Object.assign({}, cfg.params, idle, q));
-    L.model.update();
-    const n = "lean" + k;
-    frames[n] = renderLean(body, a);
-    names.push(n);
-    leanNames.push(n);
+    if (lean <= -faceAt + 1e-6)
+      Object.assign(poseParams, (cfg.lean && cfg.lean.left) || {});
+    if (lean >= faceAt - 1e-6)
+      Object.assign(poseParams, (cfg.lean && cfg.lean.right) || {});
+    setParams(loaded, Object.assign({}, cfg.params, idle, poseParams));
+    loaded.model.update();
+    const name = "lean" + k;
+    frames[name] = renderLean(body, lean);
+    names.push(name);
+    leanNames.push(name);
   }
   // the glances, left to right (the middle one is idle): head and eyes only, so the arms and tails still fit her
-  const LK = Math.max(0, Math.min(3, Math.round(cfg.look.steps || 0))),
+  const lookSteps = Math.max(0, Math.min(3, Math.round(cfg.look.steps || 0))),
     lkp = cfg.look.params || {},
     lead = new Set(cfg.look.lead || []);
   /** @type {string[]} */
   const lookNames = [];
-  for (let s = -LK; s <= LK && LK; s++) {
-    if (!s) {
+  for (let step = -lookSteps; step <= lookSteps && lookSteps; step++) {
+    if (!step) {
       lookNames.push("idle");
       continue;
     }
-    const a = s / LK,
+    const glance = step / lookSteps,
       /** @type {Params} */
-      q = {};
+      poseParams = {};
     Object.keys(lkp).forEach((id) => {
-      q[id] =
+      poseParams[id] =
         lkp[id] *
-        (lead.has(id) ? Math.sign(a) * Math.min(1, 2 * Math.abs(a)) : a);
+        (lead.has(id)
+          ? Math.sign(glance) * Math.min(1, 2 * Math.abs(glance))
+          : glance);
     });
-    setParams(L, Object.assign({}, cfg.params, idle, q));
-    L.model.update();
-    const n = "look" + (s + LK);
-    frames[n] = render(body);
-    names.push(n);
-    lookNames.push(n);
+    setParams(loaded, Object.assign({}, cfg.params, idle, poseParams));
+    loaded.model.update();
+    const name = "look" + (step + lookSteps);
+    frames[name] = render(body);
+    names.push(name);
+    lookNames.push(name);
   }
   // dozing: the head drooping forward, eyes shut (after the upright half and shut frames on the HUD)
-  const DN = Math.max(0, Math.min(4, Math.round(cfg.doze.steps || 0))),
+  const dozeSteps = Math.max(0, Math.min(4, Math.round(cfg.doze.steps || 0))),
     dzp = cfg.doze.params || {};
   const hold =
     cfg.doze.hold || (cfg.frames.shut && cfg.frames.shut.params) || {};
   /** @type {string[]} */
   const dozeNames = [];
-  for (let k = 1; k <= DN; k++) {
-    const q = Object.assign({}, hold);
+  for (let k = 1; k <= dozeSteps; k++) {
+    const poseParams = Object.assign({}, hold);
     Object.keys(dzp).forEach((id) => {
-      q[id] = (dzp[id] * k) / DN;
+      poseParams[id] = (dzp[id] * k) / dozeSteps;
     });
-    setParams(L, Object.assign({}, cfg.params, idle, q));
-    L.model.update();
-    const n = "doze" + k;
-    frames[n] = render(body);
-    names.push(n);
-    dozeNames.push(n);
+    setParams(loaded, Object.assign({}, cfg.params, idle, poseParams));
+    loaded.model.update();
+    const name = "doze" + k;
+    frames[name] = render(body);
+    names.push(name);
+    dozeNames.push(name);
   }
   // each arm: its shoulder (the middle of its topmost vertices) and its middle, in frame px, at rest and at a full lean
   // each way (the lean's own arm sway included), so the HUD can carry the sprite with her and turn it as she turns it
   /**
-   * @param {DrawablePick} f the arm's drawables
+   * @param {DrawablePick} inArm the arm's drawables
    * @returns {ArmPose | null} null when none is visible
    */
-  const armAt = (f) => {
-    const d = L.model.drawables;
+  const armAt = (inArm) => {
+    const drawables = loaded.model.drawables;
     let top = -Infinity,
       bot = Infinity,
-      cx = 0,
-      cy = 0,
-      n = 0;
-    /** @param {(v: Float32Array) => void} fn called with each visible drawable's vertex positions */
+      sumX = 0,
+      sumY = 0,
+      count = 0;
+    /** @param {(positions: Float32Array) => void} fn called with each visible drawable's vertex positions */
     const each = (fn) => {
-      for (let i = 0; i < d.count; i++) {
-        if (!f(i) || hidden(i) || !C.Utils.hasIsVisibleBit(d.dynamicFlags[i]))
+      for (let i = 0; i < drawables.count; i++) {
+        if (
+          !inArm(i) ||
+          hidden(i) ||
+          !cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i])
+        )
           continue;
-        fn(d.vertexPositions[i]);
+        fn(drawables.vertexPositions[i]);
       }
     };
-    each((v) => {
-      for (let k = 0; k < v.length; k += 2) {
-        top = Math.max(top, v[k + 1]);
-        bot = Math.min(bot, v[k + 1]);
-        cx += v[k];
-        cy += v[k + 1];
-        n++;
+    each((positions) => {
+      for (let k = 0; k < positions.length; k += 2) {
+        top = Math.max(top, positions[k + 1]);
+        bot = Math.min(bot, positions[k + 1]);
+        sumX += positions[k];
+        sumY += positions[k + 1];
+        count++;
       }
     });
-    if (!n) return null;
+    if (!count) return null;
     const band = top - (top - bot) * 0.06;
-    let px = 0,
-      m2 = 0;
-    each((v) => {
-      for (let k = 0; k < v.length; k += 2)
-        if (v[k + 1] >= band) {
-          px += v[k];
-          m2++;
+    let bandSumX = 0,
+      bandCount = 0;
+    each((positions) => {
+      for (let k = 0; k < positions.length; k += 2)
+        if (positions[k + 1] >= band) {
+          bandSumX += positions[k];
+          bandCount++;
         }
     });
-    const P = toFrame(px / m2, top),
-      M = toFrame(cx / n, cy / n);
-    return { P, ang: Math.atan2(M[1] - P[1], M[0] - P[0]) };
+    const shoulder = toFrame(bandSumX / bandCount, top),
+      middle = toFrame(sumX / count, sumY / count);
+    return {
+      P: shoulder,
+      ang: Math.atan2(middle[1] - shoulder[1], middle[0] - shoulder[0]),
+    };
   };
   /** @type {{ rest?: ArmPose | null, left?: ArmPose | null, right?: ArmPose | null }[]} */
   const armPose = armsIn.map(() => ({}));
   if (armsIn.length) {
     [
       [0, "left"],
-      [LN - 1, "right"],
+      [leanSteps - 1, "right"],
     ].forEach(([k, side]) => {
-      const a = -1 + (2 * k) / (LN - 1),
+      const lean = -1 + (2 * k) / (leanSteps - 1),
         /** @type {Params} */
-        q = {};
-      Object.keys(lp).forEach((id) => {
-        q[id] = lp[id] * a;
+        poseParams = {};
+      Object.keys(leanParams).forEach((id) => {
+        poseParams[id] = leanParams[id] * lean;
       });
-      setParams(L, Object.assign({}, cfg.params, idle, q));
-      L.model.update();
-      armsIn.forEach((f, j) => {
-        const q = armAt(f);
-        if (q) q.P = persp(a, q.P[0], q.P[1]); // the shoulder where the perspective puts it
-        armPose[j][side] = q;
+      setParams(loaded, Object.assign({}, cfg.params, idle, poseParams));
+      loaded.model.update();
+      armsIn.forEach((inArm, j) => {
+        const pose = armAt(inArm);
+        if (pose) pose.P = persp(lean, pose.P[0], pose.P[1]); // the shoulder where the perspective puts it
+        armPose[j][side] = pose;
       });
     });
   }
-  setParams(L, Object.assign({}, cfg.params, idle));
-  L.model.update();
+  setParams(loaded, Object.assign({}, cfg.params, idle));
+  loaded.model.update();
   /** @type {{ j: number, cv: HTMLCanvasElement, bb: Rect, pose: (typeof armPose)[number] }[]} */
   const arms = [];
-  armsIn.forEach((f, j) => {
-    armPose[j].rest = armAt(f);
-    const cv = render({ only: (i) => f(i) && !hidden(i) }),
-      bb = alphaBox(cv);
-    if (bb && armPose[j].rest) arms.push({ j, cv, bb, pose: armPose[j] });
+  armsIn.forEach((inArm, j) => {
+    armPose[j].rest = armAt(inArm);
+    const canvas = render({ only: (i) => inArm(i) && !hidden(i) }),
+      rect = alphaBox(canvas);
+    if (rect && armPose[j].rest)
+      arms.push({ j, cv: canvas, bb: rect, pose: armPose[j] });
   });
   /** @type {{ cv: HTMLCanvasElement, bb: Rect } | null} */
-  let tl = null;
+  let tailsSprite = null;
   if (tails) {
-    const cv = render({ only: tails }),
-      bb = alphaBox(cv);
-    if (bb) tl = { cv, bb };
+    const canvas = render({ only: tails }),
+      rect = alphaBox(canvas);
+    if (rect) tailsSprite = { cv: canvas, bb: rect };
   }
   // the face, glance and doze frames differ from idle only around her head: each keeps just one crop, the same rect
   // for all of them (where any of them differs from idle, plus a margin), and the HUD draws idle round it
-  const cropped = names.filter((n) => n !== "idle" && n.indexOf("lean") !== 0);
+  const cropped = names.filter(
+    (name) => name !== "idle" && name.indexOf("lean") !== 0,
+  );
   /** @type {Rect | null} */
   let crop = null;
   if (cropped.length) {
-    const base = frames.idle.getContext("2d").getImageData(0, 0, fw, fh).data;
-    let x0 = fw,
-      y0 = fh,
+    const base = frames.idle
+      .getContext("2d")
+      .getImageData(0, 0, frameW, frameH).data;
+    let x0 = frameW,
+      y0 = frameH,
       x1 = -1,
       y1 = -1;
-    cropped.forEach((n) => {
-      const dd = frames[n].getContext("2d").getImageData(0, 0, fw, fh).data;
-      for (let k = 0; k < dd.length; k += 4) {
+    cropped.forEach((name) => {
+      const pixels = frames[name]
+        .getContext("2d")
+        .getImageData(0, 0, frameW, frameH).data;
+      for (let k = 0; k < pixels.length; k += 4) {
         if (
-          Math.abs(dd[k] - base[k]) +
-            Math.abs(dd[k + 1] - base[k + 1]) +
-            Math.abs(dd[k + 2] - base[k + 2]) +
-            Math.abs(dd[k + 3] - base[k + 3]) <
+          Math.abs(pixels[k] - base[k]) +
+            Math.abs(pixels[k + 1] - base[k + 1]) +
+            Math.abs(pixels[k + 2] - base[k + 2]) +
+            Math.abs(pixels[k + 3] - base[k + 3]) <
           6
         )
           continue;
-        const q = k / 4,
-          x = q % fw,
-          y = (q - x) / fw;
+        const pixel = k / 4,
+          x = pixel % frameW,
+          y = (pixel - x) / frameW;
         x0 = Math.min(x0, x);
         x1 = Math.max(x1, x);
         y0 = Math.min(y0, y);
@@ -1016,11 +1083,11 @@ async function bake(L, cfg) {
       }
     });
     if (x1 >= 0) {
-      const m = 4;
-      x0 = Math.max(0, x0 - m);
-      y0 = Math.max(0, y0 - m);
-      x1 = Math.min(fw - 1, x1 + m);
-      y1 = Math.min(fh - 1, y1 + m);
+      const cropMargin = 4;
+      x0 = Math.max(0, x0 - cropMargin);
+      y0 = Math.max(0, y0 - cropMargin);
+      x1 = Math.min(frameW - 1, x1 + cropMargin);
+      y1 = Math.min(frameH - 1, y1 + cropMargin);
       crop = [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
       log(
         "face, glance and doze frames cropped to " +
@@ -1037,157 +1104,169 @@ async function bake(L, cfg) {
   // pack everything into the atlas, at most 1024 px a side: the instrument cluster (KOMBI) restarted on a
   // 1024x1128 RGBA asset (Nov 2026)
   /** @type {AtlasItem[]} */
-  const items = names.map((n) => ({
-    n,
-    cv: frames[n],
-    bb: crop && cropped.includes(n) ? crop : [0, 0, fw, fh],
+  const items = names.map((name) => ({
+    n: name,
+    cv: frames[name],
+    bb: crop && cropped.includes(name) ? crop : [0, 0, frameW, frameH],
   }));
-  if (tl) items.push({ n: "tails", cv: tl.cv, bb: tl.bb });
-  arms.forEach((a) => items.push({ n: "arm" + a.j, cv: a.cv, bb: a.bb }));
+  if (tailsSprite)
+    items.push({ n: "tails", cv: tailsSprite.cv, bb: tailsSprite.bb });
+  arms.forEach((arm) =>
+    items.push({ n: "arm" + arm.j, cv: arm.cv, bb: arm.bb }),
+  );
   // a skyline: tallest first, each where its top lands lowest (then leftmost)
   const MAX = 1024,
     sky = new Array(MAX).fill(0);
   items
     .slice()
     .sort((a, b) => b.bb[3] - a.bb[3] || b.bb[2] - a.bb[2])
-    .forEach((it) => {
-      const w = it.bb[2] + 2 * pad,
-        h = it.bb[3] + 2 * pad;
-      let bx = -1,
-        by = Infinity;
+    .forEach((item) => {
+      const w = item.bb[2] + 2 * pad,
+        h = item.bb[3] + 2 * pad;
+      let bestX = -1,
+        bestY = Infinity;
       for (let x = 0; x + w <= MAX; x++) {
         let y = 0;
         for (let k = x; k < x + w; k++) if (sky[k] > y) y = sky[k];
-        if (y < by) {
-          by = y;
-          bx = x;
+        if (y < bestY) {
+          bestY = y;
+          bestX = x;
         }
       }
-      if (bx < 0)
+      if (bestX < 0)
         throw new Error(
           "a sprite " + w + " px wide does not fit in " + MAX + " px",
         );
-      for (let k = bx; k < bx + w; k++) sky[k] = by + h;
-      it.at = [bx + pad, by + pad];
+      for (let k = bestX; k < bestX + w; k++) sky[k] = bestY + h;
+      item.at = [bestX + pad, bestY + pad];
     });
-  let AW = 64;
+  let atlasW = 64;
   while (
-    AW <
+    atlasW <
     Math.max.apply(
       null,
-      items.map((it) => it.at[0] + it.bb[2] + pad),
+      items.map((item) => item.at[0] + item.bb[2] + pad),
     )
   )
-    AW *= 2;
-  const AH = Math.max.apply(
+    atlasW *= 2;
+  const atlasH = Math.max.apply(
     null,
-    items.map((it) => it.at[1] + it.bb[3] + pad),
+    items.map((item) => item.at[1] + item.bb[3] + pad),
   );
-  if (AW > MAX || AH > MAX)
+  if (atlasW > MAX || atlasH > MAX)
     throw new Error(
       "the atlas would be " +
-        AW +
+        atlasW +
         "x" +
-        AH +
+        atlasH +
         ": over " +
         MAX +
         " px a side, which restarts the instrument cluster. Bake fewer or smaller frames (heightPx, lean.steps, look.steps, doze.steps)",
     );
   const atlas = document.createElement("canvas");
-  atlas.width = AW;
-  atlas.height = AH;
-  const ag = atlas.getContext("2d");
-  items.forEach((it) =>
-    ag.drawImage(
-      it.cv,
-      it.bb[0],
-      it.bb[1],
-      it.bb[2],
-      it.bb[3],
-      it.at[0],
-      it.at[1],
-      it.bb[2],
-      it.bb[3],
+  atlas.width = atlasW;
+  atlas.height = atlasH;
+  const atlasCtx = atlas.getContext("2d");
+  items.forEach((item) =>
+    atlasCtx.drawImage(
+      item.cv,
+      item.bb[0],
+      item.bb[1],
+      item.bb[2],
+      item.bb[3],
+      item.at[0],
+      item.at[1],
+      item.bb[2],
+      item.bb[3],
     ),
   );
   /** @type {Record<string, AtlasItem>} */
   const byN = {};
-  items.forEach((it) => {
-    byN[it.n] = it;
+  items.forEach((item) => {
+    byN[item.n] = item;
   });
   // where her head is in each lean frame (the alpha centroid of a band across the head), so the HUD can slide the
   // two nearest lean angles onto each other while it blends them instead of fading one through the other
   const headMid = Math.round(toFrame(0, headY)[1]);
-  const bandY0 = Math.max(0, headMid - Math.round(fh * 0.04)),
-    bandY1 = Math.min(fh, headMid + Math.round(fh * 0.04));
+  const bandY0 = Math.max(0, headMid - Math.round(frameH * 0.04)),
+    bandY1 = Math.min(frameH, headMid + Math.round(frameH * 0.04));
   /**
    * The x of her head in a frame: the alpha centroid of the band at headY.
-   * @param {HTMLCanvasElement} cv
+   * @param {HTMLCanvasElement} canvas
    * @returns {number}
    */
-  const headX = (cv) => {
-    const dd = cv
+  const headX = (canvas) => {
+    const pixels = canvas
       .getContext("2d")
-      .getImageData(0, bandY0, fw, bandY1 - bandY0).data;
-    let sx = 0,
-      sa = 0;
-    for (let k = 0; k < dd.length; k += 4) {
-      const a = dd[k + 3];
-      sx += ((k / 4) % fw) * a;
-      sa += a;
+      .getImageData(0, bandY0, frameW, bandY1 - bandY0).data;
+    let sumX = 0,
+      sumAlpha = 0;
+    for (let k = 0; k < pixels.length; k += 4) {
+      const alpha = pixels[k + 3];
+      sumX += ((k / 4) % frameW) * alpha;
+      sumAlpha += alpha;
     }
-    return sa ? sx / sa : fw / 2;
+    return sumAlpha ? sumX / sumAlpha : frameW / 2;
   };
-  const x0 = headX(frames.idle);
+  const idleHeadX = headX(frames.idle);
   const shift = leanNames.map(
-    (n) => Math.round((headX(frames[n]) - x0) * 10) / 10,
+    (name) => Math.round((headX(frames[name]) - idleHeadX) * 10) / 10,
   );
   log("head shift per lean angle (px): " + shift.join(", "));
   const lookShift = lookNames.map(
-    (n) => Math.round((headX(frames[n]) - x0) * 10) / 10,
+    (name) => Math.round((headX(frames[name]) - idleHeadX) * 10) / 10,
   );
-  if (LK) log("head shift per glance (px): " + lookShift.join(", "));
+  if (lookSteps) log("head shift per glance (px): " + lookShift.join(", "));
   // a drooping head also drops: the top of her head (the first row with a few solid pixels) against idle's
   /**
    * The top row of her head in a frame.
-   * @param {HTMLCanvasElement} cv
+   * @param {HTMLCanvasElement} canvas
    * @returns {number}
    */
-  const headTop = (cv) => {
-    const dd = cv.getContext("2d").getImageData(0, 0, fw, fh).data;
-    for (let y = 0; y < fh; y++) {
-      let n = 0;
-      for (let x = 0; x < fw; x++) if (dd[(y * fw + x) * 4 + 3] > 128) n++;
-      if (n >= 3) return y;
+  const headTop = (canvas) => {
+    const pixels = canvas
+      .getContext("2d")
+      .getImageData(0, 0, frameW, frameH).data;
+    for (let y = 0; y < frameH; y++) {
+      let solid = 0;
+      for (let x = 0; x < frameW; x++)
+        if (pixels[(y * frameW + x) * 4 + 3] > 128) solid++;
+      if (solid >= 3) return y;
     }
     return 0;
   };
   const top0 = headTop(frames.idle);
-  const dozeShift = dozeNames.map((n) => [
-    Math.round((headX(frames[n]) - x0) * 10) / 10,
-    headTop(frames[n]) - top0,
+  const dozeShift = dozeNames.map((name) => [
+    Math.round((headX(frames[name]) - idleHeadX) * 10) / 10,
+    headTop(frames[name]) - top0,
   ]);
-  if (DN)
+  if (dozeSteps)
     log(
       "head shift per doze frame (px): " +
-        dozeShift.map((v) => v.join("/")).join(", "),
+        dozeShift.map((pair) => pair.join("/")).join(", "),
     );
   // the forward/back lean moves her head up and down more than sideways: the tails follow that too
   const shiftY = fbLean
-    ? leanNames.map((n) => headTop(frames[n]) - top0)
+    ? leanNames.map((name) => headTop(frames[name]) - top0)
     : null;
   if (fbLean) log("head drop per lean angle (px): " + shiftY.join(", "));
-  const an = cfg.anchor || [(box[0] + box[2]) / 2, box[1] + 0.006 * figH],
-    ap = cfg.anchorPx || [0, 0],
-    anchor = toFrame(an[0], an[1]);
+  const anchorModel = cfg.anchor || [
+      (box[0] + box[2]) / 2,
+      box[1] + 0.006 * figH,
+    ],
+    anchorOffset = cfg.anchorPx || [0, 0],
+    anchor = toFrame(anchorModel[0], anchorModel[1]);
   /** @type {AtlasInfo} */
   const info = {
     version: 1,
-    atlas: [AW, AH],
-    frame: [fw, fh],
-    frames: Object.fromEntries(names.map((n) => [n, byN[n].at])),
-    lean: leanNames.map((n) => byN[n].at),
-    anchor: [Math.round(anchor[0] - ap[0]), Math.round(anchor[1] - ap[1])],
+    atlas: [atlasW, atlasH],
+    frame: [frameW, frameH],
+    frames: Object.fromEntries(names.map((name) => [name, byN[name].at])),
+    lean: leanNames.map((name) => byN[name].at),
+    anchor: [
+      Math.round(anchor[0] - anchorOffset[0]),
+      Math.round(anchor[1] - anchorOffset[1]),
+    ],
     hipY: Math.round(toFrame(0, waist)[1]),
     headY: Math.round((bandY0 + bandY1) / 2),
     leanShift: shift,
@@ -1198,22 +1277,27 @@ async function bake(L, cfg) {
     info.leanShiftY = shiftY;
   }
   if (crop) info.crop = crop;
-  if (LK) {
-    info.look = lookNames.map((n) => byN[n].at);
+  if (lookSteps) {
+    info.look = lookNames.map((name) => byN[name].at);
     info.lookShift = lookShift;
   }
-  if (DN) {
-    info.doze = dozeNames.map((n) => byN[n].at);
+  if (dozeSteps) {
+    info.doze = dozeNames.map((name) => byN[name].at);
     info.dozeShift = dozeShift;
   }
-  if (tl) {
-    const t = byN.tails,
+  if (tailsSprite) {
+    const tailsItem = byN.tails,
       root = cfg.tailsRoot || 0.15;
     info.tails = {
-      rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]],
-      at: [t.bb[0], t.bb[1]],
-      rootY: Math.round(t.bb[3] * root),
-      length: Math.round(t.bb[3] * (1 - root)),
+      rect: [
+        tailsItem.at[0],
+        tailsItem.at[1],
+        tailsItem.bb[2],
+        tailsItem.bb[3],
+      ],
+      at: [tailsItem.bb[0], tailsItem.bb[1]],
+      rootY: Math.round(tailsItem.bb[3] * root),
+      length: Math.round(tailsItem.bb[3] * (1 - root)),
     };
   }
   if (arms.length) {
@@ -1223,53 +1307,53 @@ async function bake(L, cfg) {
        * @param {number} x
        * @returns {number}
        */
-      r1 = (x) => Math.round(x * 10) / 10;
-    info.arms = arms.map((a) => {
-      const t = byN["arm" + a.j],
-        r = a.pose.rest;
+      round1 = (x) => Math.round(x * 10) / 10;
+    info.arms = arms.map((arm) => {
+      const armItem = byN["arm" + arm.j],
+        rest = arm.pose.rest;
       /**
        * The pose against rest: [dx, dy, angle].
-       * @param {ArmPose | null | undefined} q
+       * @param {ArmPose | null | undefined} pose
        * @returns {number[]}
        */
-      const off = (q) =>
-        q
+      const off = (pose) =>
+        pose
           ? [
-              r1(q.P[0] - r.P[0]),
-              r1(q.P[1] - r.P[1]),
-              Math.round((q.ang - r.ang) * 1000) / 1000,
+              round1(pose.P[0] - rest.P[0]),
+              round1(pose.P[1] - rest.P[1]),
+              Math.round((pose.ang - rest.ang) * 1000) / 1000,
             ]
           : [0, 0, 0];
       return {
-        rect: [t.at[0], t.at[1], t.bb[2], t.bb[3]],
-        at: [t.bb[0], t.bb[1]],
-        shoulder: [r1(r.P[0]), r1(r.P[1])],
-        side: Math.sign(r.P[0] - cx) || 1,
-        left: off(a.pose.left),
-        right: off(a.pose.right),
+        rect: [armItem.at[0], armItem.at[1], armItem.bb[2], armItem.bb[3]],
+        at: [armItem.bb[0], armItem.bb[1]],
+        shoulder: [round1(rest.P[0]), round1(rest.P[1])],
+        side: Math.sign(rest.P[0] - cx) || 1,
+        left: off(arm.pose.left),
+        right: off(arm.pose.right),
       };
     });
   }
   // write: raw straight-alpha RGBA (what the HUD uploads), the description, a preview
-  const px = ag.getImageData(0, 0, AW, AH).data;
-  await fetch("/out/atlas.rgba", { method: "POST", body: new Blob([px]) });
+  const rgba = atlasCtx.getImageData(0, 0, atlasW, atlasH).data;
+  await fetch("/out/atlas.rgba", { method: "POST", body: new Blob([rgba]) });
   await fetch("/out/atlas.json", {
     method: "POST",
     body: JSON.stringify(info, null, 1),
   });
   await fetch("/out/preview.png", {
     method: "POST",
-    body: await new Promise((r) => atlas.toBlob(r, "image/png")),
+    body: await new Promise((resolve) => atlas.toBlob(resolve, "image/png")),
   });
   log(
     "atlas " +
-      AW +
+      atlasW +
       "x" +
-      AH +
+      atlasH +
       " (" +
-      ((AW * AH * 4) / 1048576).toFixed(2) +
+      ((atlasW * atlasH * 4) / 1048576).toFixed(2) +
       " MiB, " +
-      ((AW * AH * 8) / 1048576).toFixed(2) +
+      ((atlasW * atlasH * 8) / 1048576).toFixed(2) +
       " MiB of the HUD pixel memory), " +
       items.length +
       " sprites",
@@ -1281,25 +1365,25 @@ async function bake(L, cfg) {
 
 (async () => {
   try {
-    const L = await loadModel();
+    const loaded = await loadModel();
     const cfg = withDefaults(await json("/config.json"));
     log(
       "model: " +
-        L.model.parameters.count +
+        loaded.model.parameters.count +
         " parameters, " +
-        L.model.parts.count +
+        loaded.model.parts.count +
         " parts, " +
-        L.model.drawables.count +
+        loaded.model.drawables.count +
         " drawables, " +
-        L.imgs.length +
+        loaded.imgs.length +
         " textures",
     );
-    if (/[?&]inspect/.test(location.search)) await inspect(L, cfg);
-    else await bake(L, cfg);
+    if (/[?&]inspect/.test(location.search)) await inspect(loaded, cfg);
+    else await bake(loaded, cfg);
     log("done");
     document.title = "Miku bake: done";
-  } catch (e) {
-    log("ERROR: " + ((e && e.stack) || e));
+  } catch (err) {
+    log("ERROR: " + ((err && err.stack) || err));
     document.title = "Miku bake: error";
   }
 })();

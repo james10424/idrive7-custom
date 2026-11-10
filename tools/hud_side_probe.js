@@ -24,22 +24,22 @@ const secs = Number(process.argv[2]) || 60;
  * @returns {Buffer}
  */
 function picture() {
-  const px = Buffer.alloc(W * H * 4, 0);
+  const pixels = Buffer.alloc(W * H * 4, 0);
   /**
    * @param {number} x0
    * @param {number} y0
    * @param {number} w
    * @param {number} h
-   * @param {number[]} c RGB
+   * @param {number[]} color RGB
    */
-  const fill = (x0, y0, w, h, c) => {
+  const fill = (x0, y0, w, h, color) => {
     for (let y = Math.max(0, y0); y < Math.min(H, y0 + h); y++)
       for (let x = Math.max(0, x0); x < Math.min(W, x0 + w); x++) {
-        const o = (y * W + x) * 4;
-        px[o] = c[0];
-        px[o + 1] = c[1];
-        px[o + 2] = c[2];
-        px[o + 3] = 255;
+        const offset = (y * W + x) * 4;
+        pixels[offset] = color[0];
+        pixels[offset + 1] = color[1];
+        pixels[offset + 2] = color[2];
+        pixels[offset + 3] = 255;
       }
   };
   const white = [240, 240, 240];
@@ -47,11 +47,11 @@ function picture() {
   fill(0, H - 4, W, 4, white);
   fill(0, 0, 4, H, white);
   fill(W - 4, 0, 4, H, white);
-  const s = Math.round(Math.min(W, H) / 6);
-  fill(8, 8, s, s, [255, 40, 40]);
-  fill(W - 8 - s, 8, s, s, [40, 220, 80]);
-  fill(8, H - 8 - s, s, s, [60, 110, 255]);
-  fill(W - 8 - s, H - 8 - s, s, s, [255, 210, 30]);
+  const size = Math.round(Math.min(W, H) / 6);
+  fill(8, 8, size, size, [255, 40, 40]);
+  fill(W - 8 - size, 8, size, size, [40, 220, 80]);
+  fill(8, H - 8 - size, size, size, [60, 110, 255]);
+  fill(W - 8 - size, H - 8 - size, size, size, [255, 210, 30]);
   fill(
     Math.round(W * 0.2),
     Math.round(H / 2) - 6,
@@ -59,12 +59,12 @@ function picture() {
     12,
     white,
   );
-  return px;
+  return pixels;
 }
 
 const TARGET = process.env.SIDE_TARGET || "map";
-const cr = new ClusterRender("hud_side_probe");
-const ref = cr.image({
+const client = new ClusterRender("hud_side_probe");
+const ref = client.image({
   target: TARGET,
   klass: "overlay",
   z: 0,
@@ -75,11 +75,11 @@ const ref = cr.image({
   iw: W,
   ih: H,
 });
-cr.on("ready", () => {
+client.on("ready", () => {
   console.log("connected; drawing " + W + "x" + H + " on target " + TARGET);
-  cr.pixels(ref, null, picture());
+  client.pixels(ref, null, picture());
 });
-cr.on("target", (name, state, holder, reason) =>
+client.on("target", (name, state, holder, reason) =>
   console.log(
     "target " +
       name +
@@ -89,15 +89,17 @@ cr.on("target", (name, state, holder, reason) =>
       (reason ? ": " + reason : ""),
   ),
 );
-cr.on("layer", (r, state, reason) =>
-  console.log("layer " + r + ": " + state + (reason ? ": " + reason : "")),
+client.on("layer", (layerRef, state, reason) =>
+  console.log(
+    "layer " + layerRef + ": " + state + (reason ? ": " + reason : ""),
+  ),
 );
-cr.on("refused", (op, r, reason) =>
-  console.log("refused " + op + " " + r + ": " + reason),
+client.on("refused", (op, layerRef, reason) =>
+  console.log("refused " + op + " " + layerRef + ": " + reason),
 );
-cr.connect();
+client.connect();
 setTimeout(() => {
   console.log("done");
-  cr.close();
+  client.close();
   process.exit(0);
 }, secs * 1000);

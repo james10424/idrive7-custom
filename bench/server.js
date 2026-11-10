@@ -146,30 +146,30 @@ const PIXEL_BYTES =
 // the service's accounting: an image or asset costs its bytes twice (compositor.cpp: the pixels and a rectangle scratch)
 /** @returns {number} */
 function pixelBytes() {
-  let n = 0;
-  layers.forEach((l) => {
-    if (l.image) n += l.iw * l.ih * (l.bpp || 4) * 2;
+  let bytes = 0;
+  layers.forEach((layer) => {
+    if (layer.image) bytes += layer.iw * layer.ih * (layer.bpp || 4) * 2;
   });
-  return n;
+  return bytes;
 }
 /**
  * Layers, not counting assets.
  * @returns {number}
  */
 function layerCount() {
-  let n = 0;
-  layers.forEach((l) => {
-    if (l.kind !== "asset") n++;
+  let count = 0;
+  layers.forEach((layer) => {
+    if (layer.kind !== "asset") count++;
   });
-  return n;
+  return count;
 }
 const TOTAL_ASSETS = 32,
   ASSETS_PER_CLIENT = 16; // CompositorLimits assets / assets_per_client
 /**
- * @param {number} b bytes
+ * @param {number} bytes bytes
  * @returns {string}
  */
-const mib = (b) => (b / 1048576).toFixed(1) + " MiB";
+const mib = (bytes) => (bytes / 1048576).toFixed(1) + " MiB";
 const SOCK = path.join(os.tmpdir(), "hud-bench-" + process.pid + ".sock");
 const ROOT = path.join(__dirname, "..");
 const APP_IDS = process.argv.slice(2).length
@@ -199,7 +199,7 @@ const apps = APP_IDS.map((id) => {
  * @param {string} id
  * @returns {BenchApp | null}
  */
-const appOf = (id) => apps.find((a) => a.id === id) || null;
+const appOf = (id) => apps.find((app) => app.id === id) || null;
 /** @type {Record<string, [number, number]>} target name to [w, h] */
 const TARGETS = { hud: [800, 480], map: [1088, 480], panel: [1920, 720] };
 const CLASSES = ["ambient", "content", "overlay", "alert"];
@@ -219,15 +219,16 @@ const APP_NODE =
   process.env.BENCH_NODE || (fs.existsSync(NODE8) ? NODE8 : null);
 /**
  * The target the page draws for an app: its config.target (read again on each restart).
- * @param {BenchApp} a
+ * @param {BenchApp} app
  * @returns {string}
  */
-function appView(a) {
+function appView(app) {
   try {
-    const t = JSON.parse(fs.readFileSync(path.join(a.dir, "app.json"), "utf8"))
-      .config.target;
-    return TARGETS[t] ? t : "hud";
-  } catch (e) {
+    const target = JSON.parse(
+      fs.readFileSync(path.join(app.dir, "app.json"), "utf8"),
+    ).config.target;
+    return TARGETS[target] ? target : "hud";
+  } catch (err) {
     return "hud";
   }
 }
@@ -271,53 +272,54 @@ let nextConn = 1;
 
 /**
  * The visibility warnings for one layer's rect on its target (the same check layouts.js runs per widget).
- * @param {BenchLayer} l
+ * @param {BenchLayer} layer
  * @returns {string[]}
  */
-function layerWarnings(l) {
+function layerWarnings(layer) {
   return visible
     .check(
-      [{ id: "#" + l.ref, x: l.x, y: l.y, w: l.w, h: l.h }],
-      l.target === "panel" ? "panel" : "hud",
+      [{ id: "#" + layer.ref, x: layer.x, y: layer.y, w: layer.w, h: layer.h }],
+      layer.target === "panel" ? "panel" : "hud",
     )
-    .map((w) => w.replace(/^#\d+: /, ""));
+    .map((warning) => warning.replace(/^#\d+: /, ""));
 }
 /**
  * Layers waiting over the layer cap.
  * @returns {number}
  */
 function overCap() {
-  return Array.from(layers.values()).filter((l) => l.state === "waiting")
-    .length;
+  return Array.from(layers.values()).filter(
+    (layer) => layer.state === "waiting",
+  ).length;
 }
 /** @returns {SceneLayer[]} */
 function sceneMeta() {
-  return Array.from(layers.values()).map((l) => ({
-    key: l.key,
-    conn: l.conn,
-    ref: l.ref,
-    app: l.app,
-    kind: l.kind,
-    target: l.target,
-    class: l.class,
-    z: l.z,
-    x: l.x,
-    y: l.y,
-    w: l.w,
-    h: l.h,
-    visible: l.visible,
-    opacity: l.opacity,
-    exclusive: l.exclusive,
-    iw: l.iw,
-    ih: l.ih,
-    fs: l.fs,
-    time: l.time,
-    uniforms: l.uniforms,
-    binds: l.binds,
-    format: l.format,
-    state: l.state,
-    reason: l.reason,
-    warnings: l.kind === "asset" ? [] : layerWarnings(l),
+  return Array.from(layers.values()).map((layer) => ({
+    key: layer.key,
+    conn: layer.conn,
+    ref: layer.ref,
+    app: layer.app,
+    kind: layer.kind,
+    target: layer.target,
+    class: layer.class,
+    z: layer.z,
+    x: layer.x,
+    y: layer.y,
+    w: layer.w,
+    h: layer.h,
+    visible: layer.visible,
+    opacity: layer.opacity,
+    exclusive: layer.exclusive,
+    iw: layer.iw,
+    ih: layer.ih,
+    fs: layer.fs,
+    time: layer.time,
+    uniforms: layer.uniforms,
+    binds: layer.binds,
+    format: layer.format,
+    state: layer.state,
+    reason: layer.reason,
+    warnings: layer.kind === "asset" ? [] : layerWarnings(layer),
   }));
 }
 /**
@@ -328,7 +330,7 @@ function helloMsg() {
   return {
     t: "hello",
     targets: TARGETS,
-    apps: apps.map((a) => ({ id: a.id, view: appView(a) })),
+    apps: apps.map((app) => ({ id: app.id, view: appView(app) })),
     view: appView(apps[0]),
     app: APP_IDS.join(" + "),
     cap: layerCap,
@@ -357,65 +359,75 @@ function sceneChanged() {
  * bytes from GET /px (binary, the layer's current pixels). Base64 on the stream choked the page once the engine
  * packed text into 1 MB sheets (Nov 5 2026). */
 /**
- * @param {BenchLayer} l
+ * @param {BenchLayer} layer
  * @param {http.ServerResponse} [only]
  */
-function sendPixels(l, only) {
-  if (!l.image) return;
-  sendRect(l, 0, 0, l.iw, l.ih, only);
+function sendPixels(layer, only) {
+  if (!layer.image) return;
+  sendRect(layer, 0, 0, layer.iw, layer.ih, only);
 }
 /**
- * @param {BenchLayer} l
+ * @param {BenchLayer} layer
  * @param {number} x
  * @param {number} y
  * @param {number} w
  * @param {number} h
  * @param {http.ServerResponse} [only]
  */
-function sendRect(l, x, y, w, h, only) {
-  send({ t: "px", key: l.key, iw: l.iw, ih: l.ih, x, y, w, h }, only);
+function sendRect(layer, x, y, w, h, only) {
+  send(
+    { t: "px", key: layer.key, iw: layer.iw, ih: layer.ih, x, y, w, h },
+    only,
+  );
 }
 /**
  * GET /px?key=&x=&y=&w=&h=: that rect of the layer's image, raw RGBA rows.
- * @param {Record<string, string>} q the query
+ * @param {Record<string, string>} query the query
  * @returns {Buffer | null} null for an unknown layer or a rect off its image
  */
-function pixelRect(q) {
-  const l = layers.get(q.key);
-  const x = Number(q.x),
-    y = Number(q.y),
-    w = Number(q.w),
-    h = Number(q.h);
+function pixelRect(query) {
+  const layer = layers.get(query.key);
+  const x = Number(query.x),
+    y = Number(query.y),
+    w = Number(query.w),
+    h = Number(query.h);
   if (
-    !l ||
-    !l.image ||
-    !(w > 0 && h > 0 && x >= 0 && y >= 0 && x + w <= l.iw && y + h <= l.ih)
+    !layer ||
+    !layer.image ||
+    !(
+      w > 0 &&
+      h > 0 &&
+      x >= 0 &&
+      y >= 0 &&
+      x + w <= layer.iw &&
+      y + h <= layer.ih
+    )
   )
     return null;
-  if (l.bpp === 1) {
+  if (layer.bpp === 1) {
     // an R8 asset: the page gets it as RGBA, the byte in R (what a shader's .r reads) and A, grey in G and B
     const out = Buffer.alloc(w * h * 4);
-    for (let r = 0; r < h; r++) {
+    for (let row = 0; row < h; row++) {
       for (let i = 0; i < w; i++) {
-        const v = l.image[(y + r) * l.iw + x + i],
-          o = (r * w + i) * 4;
-        out[o] = v;
-        out[o + 1] = v;
-        out[o + 2] = v;
-        out[o + 3] = v;
+        const value = layer.image[(y + row) * layer.iw + x + i],
+          offset = (row * w + i) * 4;
+        out[offset] = value;
+        out[offset + 1] = value;
+        out[offset + 2] = value;
+        out[offset + 3] = value;
       }
     }
     return out;
   }
-  if (x === 0 && w === l.iw)
-    return l.image.slice(y * l.iw * 4, (y + h) * l.iw * 4);
+  if (x === 0 && w === layer.iw)
+    return layer.image.slice(y * layer.iw * 4, (y + h) * layer.iw * 4);
   const out = Buffer.alloc(w * h * 4);
-  for (let r = 0; r < h; r++)
-    l.image.copy(
+  for (let row = 0; row < h; row++)
+    layer.image.copy(
       out,
-      r * w * 4,
-      ((y + r) * l.iw + x) * 4,
-      ((y + r) * l.iw + x + w) * 4,
+      row * w * 4,
+      ((y + row) * layer.iw + x) * 4,
+      ((y + row) * layer.iw + x + w) * 4,
     );
   return out;
 }
@@ -427,19 +439,19 @@ function pixelRect(q) {
  */
 function writeEv(sock, obj) {
   const body = Buffer.from(JSON.stringify(obj), "utf8");
-  const m = Buffer.alloc(5 + body.length);
-  m.writeUInt32LE(body.length + 1, 0);
-  m[4] = 0x4a;
-  body.copy(m, 5);
-  sock.write(m);
+  const packet = Buffer.alloc(5 + body.length);
+  packet.writeUInt32LE(body.length + 1, 0);
+  packet[4] = 0x4a;
+  body.copy(packet, 5);
+  sock.write(packet);
 }
 
 const renderServer = net.createServer((sock) => {
   const conn = nextConn++;
-  const st = { conn, app: "?", hello: false, buf: Buffer.alloc(0) };
+  const session = { conn, app: "?", hello: false, buf: Buffer.alloc(0) };
   /** @param {string} why */
   const bad = (why) => {
-    log("error", "protocol [" + st.app + "]: " + why);
+    log("error", "protocol [" + session.app + "]: " + why);
   };
   /**
    * Logs it and sends the app an error event.
@@ -452,40 +464,46 @@ const renderServer = net.createServer((sock) => {
     writeEv(sock, { ev: "error", op, ref, reason });
   };
 
-  sock.on("data", (d) => {
-    st.buf = st.buf.length ? Buffer.concat([st.buf, d]) : d;
+  sock.on("data", (chunk) => {
+    session.buf = session.buf.length
+      ? Buffer.concat([session.buf, chunk])
+      : chunk;
     let off = 0;
-    while (st.buf.length - off >= 5) {
-      const len = st.buf.readUInt32LE(off);
+    while (session.buf.length - off >= 5) {
+      const len = session.buf.readUInt32LE(off);
       if (len < 1 || len > MAX_MSG) {
         bad("message length " + len + " out of range, closing");
         sock.destroy();
         return;
       }
-      if (st.buf.length - off < 4 + len) break;
-      const type = st.buf[off + 4];
-      const body = st.buf.slice(off + 5, off + 4 + len);
+      if (session.buf.length - off < 4 + len) break;
+      const type = session.buf[off + 4];
+      const body = session.buf.slice(off + 5, off + 4 + len);
       off += 4 + len;
       try {
         handle(type, body);
-      } catch (e) {
-        bad("handler threw: " + e.stack);
+      } catch (err) {
+        bad("handler threw: " + err.stack);
       }
     }
-    st.buf = st.buf.slice(off);
+    session.buf = session.buf.slice(off);
   });
   sock.on("error", () => {});
   sock.on("close", () => {
-    let n = 0;
-    layers.forEach((l, k) => {
-      if (l.conn === conn) {
+    let dropped = 0;
+    layers.forEach((layer, k) => {
+      if (layer.conn === conn) {
         layers.delete(k);
-        n++;
+        dropped++;
       }
     });
     log(
       "info",
-      "renderer: " + st.app + " disconnected, dropped its " + n + " layer(s)",
+      "renderer: " +
+        session.app +
+        " disconnected, dropped its " +
+        dropped +
+        " layer(s)",
     );
     sceneChanged();
   });
@@ -497,7 +515,7 @@ const renderServer = net.createServer((sock) => {
    */
   function handle(type, body) {
     if (type === 0x4a) return onJson(body);
-    if (!st.hello) return bad("binary message before hello");
+    if (!session.hello) return bad("binary message before hello");
     if (type === 0x46) return onFrame(body);
     if (type === 0x4d)
       return bad("mesh geometry received; the bench does not draw meshes");
@@ -510,19 +528,20 @@ const renderServer = net.createServer((sock) => {
    */
   function onJson(body) {
     /** @type {RenderOp} */
-    let m;
+    let msg;
     try {
-      m = JSON.parse(body.toString("utf8"));
-    } catch (e) {
-      return bad("JSON message does not parse: " + e.message);
+      msg = JSON.parse(body.toString("utf8"));
+    } catch (err) {
+      return bad("JSON message does not parse: " + err.message);
     }
-    if (m.op === "hello") {
-      st.hello = true;
-      st.app = m.app || "?";
-      if (m.proto !== 1) bad("hello proto " + m.proto + ", service speaks 1");
+    if (msg.op === "hello") {
+      session.hello = true;
+      session.app = msg.app || "?";
+      if (msg.proto !== 1)
+        bad("hello proto " + msg.proto + ", service speaks 1");
       log(
         "info",
-        "renderer: hello from " + st.app + " (proto " + m.proto + ")",
+        "renderer: hello from " + session.app + " (proto " + msg.proto + ")",
       );
       writeEv(sock, {
         ev: "hello",
@@ -531,50 +550,50 @@ const renderServer = net.createServer((sock) => {
       });
       return;
     }
-    if (!st.hello) return bad(m.op + " before hello");
-    const key = conn + ":" + m.ref;
-    const l = layers.get(key);
-    switch (m.op) {
+    if (!session.hello) return bad(msg.op + " before hello");
+    const key = conn + ":" + msg.ref;
+    const layer = layers.get(key);
+    switch (msg.op) {
       case "layer": {
-        if (!TARGETS[m.target])
-          return refuse("layer", m.ref, "unknown target " + m.target);
-        if (m.class && CLASSES.indexOf(m.class) < 0)
-          return refuse("layer", m.ref, "unknown class " + m.class);
-        if (m.z !== undefined && (m.z < -1000 || m.z > 1000))
-          return refuse("layer", m.ref, "z out of -1000..1000");
-        const [tw, th] = TARGETS[m.target];
+        if (!TARGETS[msg.target])
+          return refuse("layer", msg.ref, "unknown target " + msg.target);
+        if (msg.class && CLASSES.indexOf(msg.class) < 0)
+          return refuse("layer", msg.ref, "unknown class " + msg.class);
+        if (msg.z !== undefined && (msg.z < -1000 || msg.z > 1000))
+          return refuse("layer", msg.ref, "z out of -1000..1000");
+        const [targetW, targetH] = TARGETS[msg.target];
         let mineL = 0;
-        layers.forEach((o) => {
-          if (o.conn === conn && o.kind !== "asset") mineL++;
+        layers.forEach((other) => {
+          if (other.conn === conn && other.kind !== "asset") mineL++;
         });
         if (layerCount() >= TOTAL_LAYERS || mineL >= LAYERS_PER_CLIENT)
-          return refuse("layer", m.ref, "too many layers");
+          return refuse("layer", msg.ref, "too many layers");
         if (
-          m.kind === "image" &&
+          msg.kind === "image" &&
           PIXEL_BYTES &&
-          m.iw > 0 &&
-          m.ih > 0 &&
-          pixelBytes() + m.iw * m.ih * 8 > PIXEL_BYTES
+          msg.iw > 0 &&
+          msg.ih > 0 &&
+          pixelBytes() + msg.iw * msg.ih * 8 > PIXEL_BYTES
         ) {
-          return refuse("layer", m.ref, "the service's pixel memory is full");
+          return refuse("layer", msg.ref, "the service's pixel memory is full");
         }
         /** @type {BenchLayer} */
-        const nl = {
+        const newLayer = {
           key,
           conn,
-          ref: m.ref,
-          app: st.app,
-          kind: m.kind,
-          target: m.target,
-          class: m.class || "content",
-          z: m.z || 0,
-          x: m.x || 0,
-          y: m.y || 0,
-          w: m.w || 0,
-          h: m.h || 0,
-          visible: m.visible === undefined ? 1 : m.visible,
-          opacity: m.opacity === undefined ? 1 : m.opacity,
-          exclusive: m.exclusive || 0,
+          ref: msg.ref,
+          app: session.app,
+          kind: msg.kind,
+          target: msg.target,
+          class: msg.class || "content",
+          z: msg.z || 0,
+          x: msg.x || 0,
+          y: msg.y || 0,
+          w: msg.w || 0,
+          h: msg.h || 0,
+          visible: msg.visible === undefined ? 1 : msg.visible,
+          opacity: msg.opacity === undefined ? 1 : msg.opacity,
+          exclusive: msg.exclusive || 0,
           uniforms: {},
           state: "shown",
           reason: "",
@@ -584,29 +603,29 @@ const renderServer = net.createServer((sock) => {
         if (layerCap > 0) {
           let shown = 0,
             live = 0;
-          layers.forEach((o) => {
-            if (o.conn === conn && o.kind !== "asset") {
+          layers.forEach((other) => {
+            if (other.conn === conn && other.kind !== "asset") {
               live++;
-              if (o.state === "shown") shown++;
+              if (other.state === "shown") shown++;
             }
           });
           if (shown >= layerCap) {
-            nl.state = "waiting";
-            nl.reason = "bench: over the layer cap of " + layerCap;
+            newLayer.state = "waiting";
+            newLayer.reason = "bench: over the layer cap of " + layerCap;
             log(
               "warn",
               "layer " +
-                m.ref +
+                msg.ref +
                 " (" +
-                m.kind +
+                msg.kind +
                 " " +
-                nl.x +
+                newLayer.x +
                 "," +
-                nl.y +
+                newLayer.y +
                 " " +
-                nl.w +
+                newLayer.w +
                 "x" +
-                nl.h +
+                newLayer.h +
                 ") is live layer #" +
                 (live + 1) +
                 " on this connection: over the layer cap of " +
@@ -615,162 +634,167 @@ const renderServer = net.createServer((sock) => {
             );
           }
         }
-        if (nl.x + nl.w > tw || nl.y + nl.h > th || nl.x < 0 || nl.y < 0) {
+        if (
+          newLayer.x + newLayer.w > targetW ||
+          newLayer.y + newLayer.h > targetH ||
+          newLayer.x < 0 ||
+          newLayer.y < 0
+        ) {
           log(
             "warn",
             "layer " +
-              m.ref +
+              msg.ref +
               " (" +
-              nl.x +
+              newLayer.x +
               "," +
-              nl.y +
+              newLayer.y +
               " " +
-              nl.w +
+              newLayer.w +
               "x" +
-              nl.h +
+              newLayer.h +
               ") runs off the " +
-              tw +
+              targetW +
               "x" +
-              th +
+              targetH +
               " " +
-              m.target +
+              msg.target +
               " target",
           );
         }
-        if (nl.exclusive)
+        if (newLayer.exclusive)
           log(
             "warn",
             "layer " +
-              m.ref +
+              msg.ref +
               " is exclusive: it hides everything under it (CarPlay/AA map too)",
           );
-        if (m.kind === "image") {
-          nl.iw = m.iw;
-          nl.ih = m.ih;
-          nl.bpp = 4;
-          if (!(m.iw > 0 && m.ih > 0 && m.iw <= 1920 && m.ih <= 720))
-            return refuse("layer", m.ref, "image iw/ih out of range");
-          nl.image = Buffer.alloc(m.iw * m.ih * 4);
-        } else if (m.kind === "effect") {
-          if (!m.fs) return refuse("layer", m.ref, "effect without fs");
+        if (msg.kind === "image") {
+          newLayer.iw = msg.iw;
+          newLayer.ih = msg.ih;
+          newLayer.bpp = 4;
+          if (!(msg.iw > 0 && msg.ih > 0 && msg.iw <= 1920 && msg.ih <= 720))
+            return refuse("layer", msg.ref, "image iw/ih out of range");
+          newLayer.image = Buffer.alloc(msg.iw * msg.ih * 4);
+        } else if (msg.kind === "effect") {
+          if (!msg.fs) return refuse("layer", msg.ref, "effect without fs");
           // the car's KOMBI restarted on a shader with 38 texture reads (Custom HUD 0.1.15); refuse that here first
-          const sb = shaderBudget.check(m.fs);
-          if (sb.level === "crash")
-            return refuse("layer", m.ref, "shader " + sb.text);
-          if (sb.level === "warn")
-            log("warn", "layer " + m.ref + ": shader " + sb.text);
-          nl.fs = m.fs;
-          nl.time = !!m.time;
-          nl.binds = {};
+          const budget = shaderBudget.check(msg.fs);
+          if (budget.level === "crash")
+            return refuse("layer", msg.ref, "shader " + budget.text);
+          if (budget.level === "warn")
+            log("warn", "layer " + msg.ref + ": shader " + budget.text);
+          newLayer.fs = msg.fs;
+          newLayer.time = !!msg.time;
+          newLayer.binds = {};
         } else {
           log(
             "warn",
             "layer " +
-              m.ref +
+              msg.ref +
               ": kind " +
-              m.kind +
+              msg.kind +
               " is not drawn by the bench",
           );
         }
-        layers.set(key, nl); // its visibility warnings (hood, gear box, belt light, HUD window) ride along in sceneMeta()
-        if (nl.state === "waiting")
+        layers.set(key, newLayer); // its visibility warnings (hood, gear box, belt light, HUD window) ride along in sceneMeta()
+        if (newLayer.state === "waiting")
           writeEv(sock, {
             ev: "layer",
-            ref: m.ref,
+            ref: msg.ref,
             state: "waiting",
-            reason: nl.reason,
+            reason: newLayer.reason,
           });
-        else writeEv(sock, { ev: "layer", ref: m.ref, state: "shown" });
+        else writeEv(sock, { ev: "layer", ref: msg.ref, state: "shown" });
         sceneChanged();
         return;
       }
       case "asset": {
         // PROTOCOL.md "asset": an R8 or RGBA8 texture, not drawn, not a layer; effect layers sample it through "bind".
         // The service's limits: 32 assets, 16 per client, 1..2048 a side, within one frame message; pixel memory twice its bytes.
-        if (!TARGETS[m.target])
-          return refuse("asset", m.ref, "unknown target " + m.target);
-        const format = m.format || "rgba8",
+        if (!TARGETS[msg.target])
+          return refuse("asset", msg.ref, "unknown target " + msg.target);
+        const format = msg.format || "rgba8",
           bpp = format === "r8" ? 1 : format === "rgba8" ? 4 : 0;
         if (!bpp)
-          return refuse("asset", m.ref, "unknown asset format " + format);
+          return refuse("asset", msg.ref, "unknown asset format " + format);
         if (!(
-          m.w > 0 &&
-          m.h > 0 &&
-          m.w <= 2048 &&
-          m.h <= 2048 &&
-          m.w * m.h * bpp + 64 <= 1920 * 720 * 4 + 64
+          msg.w > 0 &&
+          msg.h > 0 &&
+          msg.w <= 2048 &&
+          msg.h <= 2048 &&
+          msg.w * msg.h * bpp + 64 <= 1920 * 720 * 4 + 64
         ))
-          return refuse("asset", m.ref, "asset size out of range");
+          return refuse("asset", msg.ref, "asset size out of range");
         let all = 0,
           mine = 0;
-        layers.forEach((o) => {
-          if (o.kind === "asset") {
+        layers.forEach((other) => {
+          if (other.kind === "asset") {
             all++;
-            if (o.conn === conn) mine++;
+            if (other.conn === conn) mine++;
           }
         });
         if (all >= TOTAL_ASSETS || mine >= ASSETS_PER_CLIENT)
-          return refuse("asset", m.ref, "too many assets");
-        if (PIXEL_BYTES && pixelBytes() + m.w * m.h * bpp * 2 > PIXEL_BYTES)
-          return refuse("asset", m.ref, "the service's pixel memory is full");
+          return refuse("asset", msg.ref, "too many assets");
+        if (PIXEL_BYTES && pixelBytes() + msg.w * msg.h * bpp * 2 > PIXEL_BYTES)
+          return refuse("asset", msg.ref, "the service's pixel memory is full");
         layers.set(key, {
           key,
           conn,
-          ref: m.ref,
-          app: st.app,
+          ref: msg.ref,
+          app: session.app,
           kind: "asset",
-          target: m.target,
+          target: msg.target,
           format,
           bpp,
           class: "-",
           z: 0,
           x: 0,
           y: 0,
-          w: m.w,
-          h: m.h,
-          iw: m.w,
-          ih: m.h,
+          w: msg.w,
+          h: msg.h,
+          iw: msg.w,
+          ih: msg.h,
           visible: 0,
           opacity: 1,
           exclusive: 0,
           uniforms: {},
-          image: Buffer.alloc(m.w * m.h * bpp),
+          image: Buffer.alloc(msg.w * msg.h * bpp),
           state: "shown",
           reason: "",
         });
         log(
           "info",
           "asset " +
-            m.ref +
+            msg.ref +
             ": " +
             format +
             " " +
-            m.w +
+            msg.w +
             "x" +
-            m.h +
+            msg.h +
             " (" +
-            mib(m.w * m.h * bpp * 2) +
+            mib(msg.w * msg.h * bpp * 2) +
             " of pixel memory)",
         );
-        writeEv(sock, { ev: "layer", ref: m.ref, state: "shown" });
+        writeEv(sock, { ev: "layer", ref: msg.ref, state: "shown" });
         sceneChanged();
         return;
       }
       case "bind": {
-        if (!l) return refuse("bind", m.ref, "no such layer");
-        if (l.kind !== "effect")
-          return refuse("bind", m.ref, "bind on a " + l.kind + " layer");
-        const a = layers.get(conn + ":" + m.asset);
-        if (!a || a.kind !== "asset")
-          return refuse("bind", m.ref, "no such asset " + m.asset);
-        if (a.target !== l.target)
-          return refuse("bind", m.ref, "the asset is on another target");
-        l.binds[m.sampler] = a.key;
+        if (!layer) return refuse("bind", msg.ref, "no such layer");
+        if (layer.kind !== "effect")
+          return refuse("bind", msg.ref, "bind on a " + layer.kind + " layer");
+        const asset = layers.get(conn + ":" + msg.asset);
+        if (!asset || asset.kind !== "asset")
+          return refuse("bind", msg.ref, "no such asset " + msg.asset);
+        if (asset.target !== layer.target)
+          return refuse("bind", msg.ref, "the asset is on another target");
+        layer.binds[msg.sampler] = asset.key;
         sceneChanged();
         return;
       }
       case "set": {
-        if (!l) return refuse("set", m.ref, "no such layer");
+        if (!layer) return refuse("set", msg.ref, "no such layer");
         [
           "class",
           "z",
@@ -782,78 +806,95 @@ const renderServer = net.createServer((sock) => {
           "exclusive",
           "opacity",
         ].forEach((k) => {
-          if (m[k] !== undefined) l[k] = m[k];
+          if (msg[k] !== undefined) layer[k] = msg[k];
         });
         sceneChanged();
         return;
       }
       case "drop": {
-        if (!l) return refuse("drop", m.ref, "no such layer");
-        if (l.kind === "asset") {
+        if (!layer) return refuse("drop", msg.ref, "no such layer");
+        if (layer.kind === "asset") {
           let used = false;
-          layers.forEach((o) => {
-            if (o.binds && Object.keys(o.binds).some((s) => o.binds[s] === key))
+          layers.forEach((other) => {
+            if (
+              other.binds &&
+              Object.keys(other.binds).some(
+                (sampler) => other.binds[sampler] === key,
+              )
+            )
               used = true;
           });
-          if (used) return refuse("drop", m.ref, "asset in use");
+          if (used) return refuse("drop", msg.ref, "asset in use");
         }
         layers.delete(key);
         sceneChanged();
         return;
       }
       case "uniform": {
-        if (!l) return refuse("uniform", m.ref, "no such layer");
-        if (l.kind !== "effect")
-          return refuse("uniform", m.ref, "uniform on a " + l.kind + " layer");
-        const v = String(m.v).trim().split(/\s+/).map(Number);
-        if (v.some((n) => !isFinite(n)))
-          return refuse("uniform", m.ref, 'non-numeric value "' + m.v + '"');
+        if (!layer) return refuse("uniform", msg.ref, "no such layer");
+        if (layer.kind !== "effect")
+          return refuse(
+            "uniform",
+            msg.ref,
+            "uniform on a " + layer.kind + " layer",
+          );
+        const values = String(msg.v).trim().split(/\s+/).map(Number);
+        if (values.some((num) => !isFinite(num)))
+          return refuse(
+            "uniform",
+            msg.ref,
+            'non-numeric value "' + msg.v + '"',
+          );
         // PROTOCOL.md "Uniforms": without type, 1-4 numbers; with type, whole elements, up to 1024
         // numbers (an array uniform). Both the numbers and the type reach the page.
         /** @type {Record<string, number>} */
         const WIDTH = { float: 1, vec2: 2, vec3: 3, vec4: 4, mat4: 16 };
-        if (m.type !== undefined) {
-          if (!WIDTH[m.type])
+        if (msg.type !== undefined) {
+          if (!WIDTH[msg.type])
             return refuse(
               "uniform",
-              m.ref,
-              'unknown uniform type "' + m.type + '"',
+              msg.ref,
+              'unknown uniform type "' + msg.type + '"',
             );
-          if (v.length > 1024 || v.length % WIDTH[m.type])
+          if (values.length > 1024 || values.length % WIDTH[msg.type])
             return refuse(
               "uniform",
-              m.ref,
+              msg.ref,
               "uniform " +
-                m.name +
+                msg.name +
                 ": " +
-                v.length +
+                values.length +
                 " numbers is not whole " +
-                m.type +
+                msg.type +
                 "s (or over 1024)",
             );
-        } else if (v.length > 4)
+        } else if (values.length > 4)
           return refuse(
             "uniform",
-            m.ref,
+            msg.ref,
             "uniform " +
-              m.name +
+              msg.name +
               ": " +
-              v.length +
+              values.length +
               " numbers without a type (max 4)",
           );
         // the car's cluster-render keeps at most 32 uniform names a layer (Uniforms::kMaxNames, 0.4.5), u_time among
         // them on a layer with the renderer's clock, and refuses a new one past that (Custom HUD 0.1.9's Miku sent 34
         // and the car refused it, Nov 8 2026; the bench had let it through)
-        const maxU = 32 - (l.time ? 1 : 0);
-        if (!l.uniforms[m.name] && Object.keys(l.uniforms).length >= maxU)
-          return refuse("uniform", m.ref, "at most 32 uniforms a layer");
-        l.uniforms[m.name] = { v, type: m.type || null };
+        const maxU = 32 - (layer.time ? 1 : 0);
+        if (
+          !layer.uniforms[msg.name] &&
+          Object.keys(layer.uniforms).length >= maxU
+        )
+          return refuse("uniform", msg.ref, "at most 32 uniforms a layer");
+        layer.uniforms[msg.name] = { v: values, type: msg.type || null };
         sceneChanged();
         return;
       }
       case "status":
-        const conns = new Set(Array.from(layers.values()).map((l) => l.conn))
-          .size;
+        const conns = new Set(
+          Array.from(layers.values()).map((layer) => layer.conn),
+        ).size;
         const assets = layers.size - layerCount();
         writeEv(sock, {
           ev: "status",
@@ -877,7 +918,7 @@ const renderServer = net.createServer((sock) => {
         });
         return;
       default:
-        bad('op "' + m.op + '" not handled by the bench');
+        bad('op "' + msg.op + '" not handled by the bench');
     }
   }
 
@@ -889,58 +930,65 @@ const renderServer = net.createServer((sock) => {
   function onFrame(body) {
     if (body.length < 14) return bad("frame message too short");
     const ref = body.readUInt32LE(0);
-    const n = body.readUInt16LE(12);
-    const l = layers.get(conn + ":" + ref);
-    if (!l) return bad("frame for unknown ref " + ref);
-    if (l.kind !== "image" && l.kind !== "asset")
-      return bad("frame for a " + l.kind + " layer (ref " + ref + ")");
-    const head = 14 + n * 8,
-      bpp = l.bpp || 4;
-    const px = body.slice(head);
-    if (n === 0) {
-      if (px.length !== l.image.length)
+    const rectCount = body.readUInt16LE(12);
+    const layer = layers.get(conn + ":" + ref);
+    if (!layer) return bad("frame for unknown ref " + ref);
+    if (layer.kind !== "image" && layer.kind !== "asset")
+      return bad("frame for a " + layer.kind + " layer (ref " + ref + ")");
+    const head = 14 + rectCount * 8,
+      bpp = layer.bpp || 4;
+    const pixels = body.slice(head);
+    if (rectCount === 0) {
+      if (pixels.length !== layer.image.length)
         return bad(
           "whole frame for ref " +
             ref +
             " is " +
-            px.length +
+            pixels.length +
             " bytes, layer needs " +
-            l.image.length,
+            layer.image.length,
         );
-      px.copy(l.image);
+      pixels.copy(layer.image);
     } else {
-      let o = 0;
+      let offset = 0;
       /** @type {number[][]} [x, y, w, h] */
       const rects = [];
-      for (let i = 0; i < n; i++) {
+      for (let i = 0; i < rectCount; i++) {
         const x = body.readUInt16LE(14 + i * 8),
           y = body.readUInt16LE(16 + i * 8);
         const w = body.readUInt16LE(18 + i * 8),
           h = body.readUInt16LE(20 + i * 8);
-        if (x + w > l.iw || y + h > l.ih)
+        if (x + w > layer.iw || y + h > layer.ih)
           return bad("dirty rect off the image on ref " + ref);
-        for (let r = 0; r < h; r++) {
-          px.copy(l.image, ((y + r) * l.iw + x) * bpp, o, o + w * bpp);
-          o += w * bpp;
+        for (let row = 0; row < h; row++) {
+          pixels.copy(
+            layer.image,
+            ((y + row) * layer.iw + x) * bpp,
+            offset,
+            offset + w * bpp,
+          );
+          offset += w * bpp;
         }
         rects.push([x, y, w, h]);
       }
-      if (o !== px.length)
+      if (offset !== pixels.length)
         return bad(
           "dirty rects for ref " +
             ref +
             " carry " +
-            px.length +
+            pixels.length +
             " bytes, expected " +
-            o,
+            offset,
         );
-      if (l.sentWhole) {
-        rects.forEach((r) => sendRect(l, r[0], r[1], r[2], r[3]));
+      if (layer.sentWhole) {
+        rects.forEach((rect) =>
+          sendRect(layer, rect[0], rect[1], rect[2], rect[3]),
+        );
         return;
       }
     }
-    l.sentWhole = true;
-    sendPixels(l);
+    layer.sentWhole = true;
+    sendPixels(layer);
   }
 });
 
@@ -958,20 +1006,20 @@ let carSw = {}; // the car switches (page "Car switches": turn signals, brake li
 let assist = { t: "assist", value: null }; // BMW's HUD driver assistance block (DisplayDataServer): 'acc' or 'off', null = car hasn't said
 /**
  * A message to every running app (the vehicle signals are the car's, so every app gets them).
- * @param {ToApp} m
+ * @param {ToApp} msg
  */
-function toApps(m) {
-  apps.forEach((a) => {
-    if (a.child) a.child.send(m);
+function toApps(msg) {
+  apps.forEach((app) => {
+    if (app.child) app.child.send(msg);
   });
 }
 
 /**
  * Builds dist/<id> with kit/tools/build.py.
- * @param {BenchApp} a
+ * @param {BenchApp} app
  * @returns {boolean} whether it built
  */
-function build(a) {
+function build(app) {
   // The kit's build needs an oap-sdk folder; on the Mac that is a stub (see bench/README.md).
   const sdk = path.join(ROOT, "oap-sdk");
   if (!fs.existsSync(path.join(sdk, "index.js"))) {
@@ -991,14 +1039,14 @@ function build(a) {
   }
   // Every bench running on this repo builds into the same dist/<id>/ (two benches, e.g. "bench" and "bench-hud",
   // both rebuild an app when one of its files is saved), so a build holds a lock other benches wait for.
-  const lock = takeBuildLock(path.join(ROOT, "dist"), a.id, (level, text) =>
+  const lock = takeBuildLock(path.join(ROOT, "dist"), app.id, (level, text) =>
     log(level, text),
   );
   if (!lock) {
     log(
       "error",
       "build " +
-        a.id +
+        app.id +
         ": another bench has been building it for over " +
         BUILD_LOCK_WAIT_MS / 1000 +
         " s; restart to try again",
@@ -1008,18 +1056,21 @@ function build(a) {
   try {
     const out = execFileSync(
       "python3",
-      [path.join(ROOT, "kit", "tools", "build.py"), a.id],
+      [path.join(ROOT, "kit", "tools", "build.py"), app.id],
       { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] },
     );
     String(out)
       .split("\n")
       .filter(Boolean)
-      .forEach((ln) => log("info", "build " + a.id + ": " + ln.trim()));
+      .forEach((line) => log("info", "build " + app.id + ": " + line.trim()));
     return true;
-  } catch (e) {
+  } catch (err) {
     log(
       "error",
-      "build " + a.id + " failed: " + String(e.stderr || e.message).trim(),
+      "build " +
+        app.id +
+        " failed: " +
+        String(err.stderr || err.message).trim(),
     );
     return false;
   } finally {
@@ -1029,36 +1080,36 @@ function build(a) {
 
 /**
  * Builds the app and forks run-app.js on it.
- * @param {BenchApp} a
+ * @param {BenchApp} app
  */
-function startApp(a) {
+function startApp(app) {
   try {
-    fs.mkdirSync(a.data, { recursive: true });
-  } catch (e) {
+    fs.mkdirSync(app.data, { recursive: true });
+  } catch (err) {
     /* there */
   }
   send(helloMsg());
-  if (!build(a)) {
-    send({ t: "app", app: a.id, state: "stopped" });
+  if (!build(app)) {
+    send({ t: "app", app: app.id, state: "stopped" });
     return;
   }
   /** @type {import("child_process").ForkOptions} */
   const opts = {
-    cwd: a.data,
+    cwd: app.data,
     stdio: ["ignore", "pipe", "pipe", "ipc"],
     env: Object.assign({}, process.env, { HUD_CLUSTER_SOCKET: SOCK }),
   };
   if (APP_NODE) opts.execPath = APP_NODE;
-  const c = (a.child = fork(
+  const child = (app.child = fork(
     path.join(__dirname, "run-app.js"),
-    [a.stage, a.data],
+    [app.stage, app.data],
     opts,
   ));
-  if (drive.value !== null) c.send(drive);
-  if (nav.value !== null) c.send(nav);
-  if (assist.value !== null) c.send(assist);
+  if (drive.value !== null) child.send(drive);
+  if (nav.value !== null) child.send(nav);
+  if (assist.value !== null) child.send(assist);
   Object.keys(carSw).forEach((k) =>
-    c.send({ t: "car", key: k, value: carSw[k] }),
+    child.send({ t: "car", key: k, value: carSw[k] }),
   );
   /**
    * The child's output into the log, line by line.
@@ -1067,56 +1118,58 @@ function startApp(a) {
    */
   const pipe = (stream, level) => {
     let rest = "";
-    stream.on("data", (d) => {
-      const lines = (rest + d).split("\n");
+    stream.on("data", (chunk) => {
+      const lines = (rest + chunk).split("\n");
       rest = lines.pop();
       lines.forEach(
-        (ln) =>
-          ln && log(/WARN|Error|error/.test(ln) ? "warn" : level, "app: " + ln),
+        (line) =>
+          line &&
+          log(/WARN|Error|error/.test(line) ? "warn" : level, "app: " + line),
       );
     });
   };
-  pipe(c.stdout, "info");
-  pipe(c.stderr, "warn");
-  c.on(
+  pipe(child.stdout, "info");
+  pipe(child.stderr, "warn");
+  child.on(
     "message",
-    /** @param {FromApp} m */ (m) => {
-      if (!m) return;
-      m.app = a.id;
-      if (m.t === "settings") a.lastSettings = m;
-      if (m.t === "status") {
-        a.lastStatus = m;
+    /** @param {FromApp} msg */ (msg) => {
+      if (!msg) return;
+      msg.app = app.id;
+      if (msg.t === "settings") app.lastSettings = msg;
+      if (msg.t === "status") {
+        app.lastStatus = msg;
         log(
           "info",
           "center screen status [" +
-            a.id +
+            app.id +
             "]: " +
-            m.s +
-            (m.d ? " / " + m.d : ""),
+            msg.s +
+            (msg.d ? " / " + msg.d : ""),
         );
       }
-      if (m.t === "values" || m.t === "settings" || m.t === "status") send(m);
+      if (msg.t === "values" || msg.t === "settings" || msg.t === "status")
+        send(msg);
     },
   );
-  c.on("exit", (code, sig) => {
-    if (c !== a.child) return;
-    a.child = null;
-    send({ t: "app", app: a.id, state: "stopped" });
-    if (!a.stopping)
+  child.on("exit", (code, sig) => {
+    if (child !== app.child) return;
+    app.child = null;
+    send({ t: "app", app: app.id, state: "stopped" });
+    if (!app.stopping)
       log(
         "error",
-        a.id +
+        app.id +
           " exited (code " +
           code +
           (sig ? ", " + sig : "") +
           "); fix and save to restart",
       );
   });
-  c.send(signals);
-  send({ t: "app", app: a.id, state: "running" });
+  child.send(signals);
+  send({ t: "app", app: app.id, state: "running" });
   log(
     "info",
-    a.id +
+    app.id +
       " started on " +
       (APP_NODE
         ? APP_NODE.replace(/^.*\/(node-v[^/]+)\/.*$/, "$1")
@@ -1125,36 +1178,36 @@ function startApp(a) {
 }
 
 /**
- * @param {BenchApp} a
+ * @param {BenchApp} app
  * @param {string} why for the log
  */
-function restartApp(a, why) {
+function restartApp(app, why) {
   // already stopping the old one, with a start queued on its exit: a second start now would run the app twice
-  if (a.stopping) {
-    log("info", "restarting " + a.id + ": " + why + " (already restarting)");
+  if (app.stopping) {
+    log("info", "restarting " + app.id + ": " + why + " (already restarting)");
     return;
   }
-  log("info", "restarting " + a.id + ": " + why);
-  if (a.child) {
-    const old = a.child;
-    a.child = null;
-    a.stopping = true;
+  log("info", "restarting " + app.id + ": " + why);
+  if (app.child) {
+    const old = app.child;
+    app.child = null;
+    app.stopping = true;
     old.once("exit", () => {
-      a.stopping = false;
-      startApp(a);
+      app.stopping = false;
+      startApp(app);
     });
     old.kill("SIGTERM");
     setTimeout(() => {
       try {
         old.kill("SIGKILL");
-      } catch (e) {
+      } catch (err) {
         /* gone */
       }
     }, 1500);
-  } else startApp(a);
+  } else startApp(app);
 }
 /** @param {string} why */
-const restartAll = (why) => apps.forEach((a) => restartApp(a, why));
+const restartAll = (why) => apps.forEach((app) => restartApp(app, why));
 
 // an app's own folder restarts that app; shared/ and kit/ restart them all
 /**
@@ -1164,17 +1217,17 @@ const restartAll = (why) => apps.forEach((a) => restartApp(a, why));
  * @returns {fs.FSWatcher}
  */
 const watchFor = (dir, targets) =>
-  fs.watch(dir, { recursive: true }, (ev, file) => {
+  fs.watch(dir, { recursive: true }, (event, file) => {
     if (!file || /(^|\/)\./.test(file) || /__pycache__/.test(file)) return;
-    targets.forEach((a) => {
-      clearTimeout(a.restartTimer);
-      a.restartTimer = setTimeout(
-        () => restartApp(a, path.basename(dir) + "/" + file + " changed"),
+    targets.forEach((app) => {
+      clearTimeout(app.restartTimer);
+      app.restartTimer = setTimeout(
+        () => restartApp(app, path.basename(dir) + "/" + file + " changed"),
         300,
       );
     });
   });
-apps.forEach((a) => watchFor(a.dir, [a]));
+apps.forEach((app) => watchFor(app.dir, [app]));
 [path.join(ROOT, "shared"), path.join(ROOT, "kit")].forEach((dir) =>
   watchFor(dir, apps),
 );
@@ -1188,15 +1241,15 @@ apps.forEach((a) => watchFor(a.dir, [a]));
  */
 function body(req) {
   return new Promise((resolve) => {
-    let s = "";
-    req.on("data", (d) => {
-      s += d;
-      if (s.length > 1e5) req.destroy();
+    let text = "";
+    req.on("data", (chunk) => {
+      text += chunk;
+      if (text.length > 1e5) req.destroy();
     });
     req.on("end", () => {
       try {
-        resolve(JSON.parse(s || "{}"));
-      } catch (e) {
+        resolve(JSON.parse(text || "{}"));
+      } catch (err) {
         resolve({});
       }
     });
@@ -1219,16 +1272,16 @@ const web = http.createServer(async (req, res) => {
   }
   if (req.method === "GET" && url === "/px") {
     /** @type {Record<string, string>} */
-    const q = {};
-    (req.url.split("?")[1] || "").split("&").forEach((kv) => {
-      const i = kv.indexOf("=");
+    const query = {};
+    (req.url.split("?")[1] || "").split("&").forEach((pair) => {
+      const i = pair.indexOf("=");
       if (i > 0)
-        q[decodeURIComponent(kv.slice(0, i))] = decodeURIComponent(
-          kv.slice(i + 1),
+        query[decodeURIComponent(pair.slice(0, i))] = decodeURIComponent(
+          pair.slice(i + 1),
         );
     });
-    const px = pixelRect(q);
-    if (!px) {
+    const pixels = pixelRect(query);
+    if (!pixels) {
       res.writeHead(404);
       return res.end();
     }
@@ -1236,7 +1289,7 @@ const web = http.createServer(async (req, res) => {
       "content-type": "application/octet-stream",
       "cache-control": "no-store",
     });
-    return res.end(px);
+    return res.end(pixels);
   }
   if (req.method === "GET" && url === "/events") {
     res.writeHead(200, {
@@ -1247,40 +1300,43 @@ const web = http.createServer(async (req, res) => {
     clients.add(res);
     req.on("close", () => clients.delete(res));
     send(helloMsg(), res);
-    logLines.forEach((e) => send(e, res));
+    logLines.forEach((entry) => send(entry, res));
     send({ t: "scene", layers: sceneMeta(), pixels: pixelBytes() }, res);
-    layers.forEach((l) => sendPixels(l, res));
-    apps.forEach((a) => {
-      if (a.lastSettings) send(a.lastSettings, res);
-      if (a.lastStatus) send(a.lastStatus, res);
+    layers.forEach((layer) => sendPixels(layer, res));
+    apps.forEach((app) => {
+      if (app.lastSettings) send(app.lastSettings, res);
+      if (app.lastStatus) send(app.lastStatus, res);
     });
     send(nav, res);
     send(assist, res); // the page draws BMW's guidance and ACC stand-ins from these
     send({ t: "car", values: carSw }, res);
-    apps.forEach((a) =>
+    apps.forEach((app) =>
       send(
-        { t: "app", app: a.id, state: a.child ? "running" : "stopped" },
+        { t: "app", app: app.id, state: app.child ? "running" : "stopped" },
         res,
       ),
     );
     return;
   }
   if (req.method === "POST" && url === "/signals") {
-    const b = await body(req);
+    const reqBody = await body(req);
     signals = {
       t: "signals",
-      mode: b.mode === "manual" ? "manual" : "demo",
-      values: b.values || {},
+      mode: reqBody.mode === "manual" ? "manual" : "demo",
+      values: reqBody.values || {},
     };
     toApps(signals);
     res.writeHead(204);
     return res.end();
   }
   if (req.method === "POST" && url === "/drive") {
-    const b = await body(req);
+    const reqBody = await body(req);
     drive = {
       t: "drive",
-      value: b.value === null || b.value === undefined ? null : b.value,
+      value:
+        reqBody.value === null || reqBody.value === undefined
+          ? null
+          : reqBody.value,
     };
     toApps(drive);
     log("info", "bench: drive mode " + JSON.stringify(drive.value));
@@ -1288,8 +1344,11 @@ const web = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === "POST" && url === "/nav") {
-    const b = await body(req);
-    nav = { t: "nav", value: typeof b.value === "string" ? b.value : null };
+    const reqBody = await body(req);
+    nav = {
+      t: "nav",
+      value: typeof reqBody.value === "string" ? reqBody.value : null,
+    };
     toApps(nav);
     send(nav);
     log("info", "bench: route guidance " + JSON.stringify(nav.value));
@@ -1297,25 +1356,32 @@ const web = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === "POST" && url === "/car") {
-    const b = await body(req);
-    if (typeof b.key === "string" && /^[a-zA-Z]+$/.test(b.key)) {
-      if (typeof b.value === "string" && b.value) carSw[b.key] = b.value;
-      else delete carSw[b.key];
-      toApps({ t: "car", key: b.key, value: carSw[b.key] || null });
+    const reqBody = await body(req);
+    if (typeof reqBody.key === "string" && /^[a-zA-Z]+$/.test(reqBody.key)) {
+      if (typeof reqBody.value === "string" && reqBody.value)
+        carSw[reqBody.key] = reqBody.value;
+      else delete carSw[reqBody.key];
+      toApps({ t: "car", key: reqBody.key, value: carSw[reqBody.key] || null });
       send({ t: "car", values: carSw });
       log(
         "info",
-        "bench: " + b.key + " " + JSON.stringify(carSw[b.key] || null),
+        "bench: " +
+          reqBody.key +
+          " " +
+          JSON.stringify(carSw[reqBody.key] || null),
       );
     }
     res.writeHead(204);
     return res.end();
   }
   if (req.method === "POST" && url === "/assist") {
-    const b = await body(req);
+    const reqBody = await body(req);
     assist = {
       t: "assist",
-      value: b.value === "acc" || b.value === "off" ? b.value : null,
+      value:
+        reqBody.value === "acc" || reqBody.value === "off"
+          ? reqBody.value
+          : null,
     };
     toApps(assist);
     send(assist);
@@ -1324,9 +1390,9 @@ const web = http.createServer(async (req, res) => {
     return res.end();
   }
   if (req.method === "POST" && url === "/restart") {
-    const b = await body(req),
-      a = appOf(b.app);
-    if (a) restartApp(a, "restart button");
+    const reqBody = await body(req),
+      app = appOf(reqBody.app);
+    if (app) restartApp(app, "restart button");
     else restartAll("restart button");
     res.writeHead(204);
     return res.end();
@@ -1334,42 +1400,44 @@ const web = http.createServer(async (req, res) => {
   if (req.method === "POST" && url === "/shot") {
     // a README screenshot: the page posts a canvas as a PNG data URL; written to docs/images/<name>.png (name: letters,
     // digits, - and _ only)
-    let s = "";
-    req.on("data", (d) => {
-      s += d;
-      if (s.length > 2e7) req.destroy();
+    let text = "";
+    req.on("data", (chunk) => {
+      text += chunk;
+      if (text.length > 2e7) req.destroy();
     });
     req.on("end", () => {
       try {
-        const b = JSON.parse(s),
-          name = String(b.name || "");
-        const m = /^data:image\/png;base64,(.+)$/.exec(String(b.data || ""));
-        if (!/^[a-z0-9_-]{1,40}$/i.test(name) || !m) {
+        const reqBody = JSON.parse(text),
+          name = String(reqBody.name || "");
+        const match = /^data:image\/png;base64,(.+)$/.exec(
+          String(reqBody.data || ""),
+        );
+        if (!/^[a-z0-9_-]{1,40}$/i.test(name) || !match) {
           res.writeHead(400);
           return res.end("bad name or data");
         }
         const out = path.join(ROOT, "docs", "images", name + ".png");
-        fs.writeFileSync(out, Buffer.from(m[1], "base64"));
+        fs.writeFileSync(out, Buffer.from(match[1], "base64"));
         log("info", "screenshot written: " + path.relative(ROOT, out));
         res.writeHead(204);
         res.end();
-      } catch (e) {
+      } catch (err) {
         res.writeHead(400);
-        res.end(String(e.message || e));
+        res.end(String(err.message || err));
       }
     });
     return;
   }
   if (req.method === "POST" && url === "/cap") {
     // The layer cap, set live from the page. The app restarts so it registers its layers again under the new cap.
-    const b = await body(req);
-    const n = Math.max(0, Math.floor(Number(b.cap) || 0));
-    if (n !== layerCap) {
-      layerCap = n;
+    const reqBody = await body(req);
+    const cap = Math.max(0, Math.floor(Number(reqBody.cap) || 0));
+    if (cap !== layerCap) {
+      layerCap = cap;
       send(helloMsg());
       restartAll(
         "layer cap set to " +
-          (n || "unlimited") +
+          (cap || "unlimited") +
           ", the apps register their layers again",
       );
     }
@@ -1378,16 +1446,21 @@ const web = http.createServer(async (req, res) => {
   }
   if (req.method === "POST" && url === "/setting") {
     // Pressed on the stub's RHMI components, as the car's settings page sends it (run-app.js).
-    const b = await body(req),
-      a = appOf(b.app) || apps[0];
-    if (!a.child) {
+    const reqBody = await body(req),
+      app = appOf(reqBody.app) || apps[0];
+    if (!app.child) {
       res.writeHead(409);
       return res.end("app not running");
     }
-    a.child.send({ t: "set", key: b.key, value: b.value });
+    app.child.send({ t: "set", key: reqBody.key, value: reqBody.value });
     log(
       "info",
-      "bench: " + a.id + " setting " + b.key + " = " + JSON.stringify(b.value),
+      "bench: " +
+        app.id +
+        " setting " +
+        reqBody.key +
+        " = " +
+        JSON.stringify(reqBody.value),
     );
     res.writeHead(204);
     return res.end();
@@ -1398,7 +1471,7 @@ const web = http.createServer(async (req, res) => {
 
 try {
   fs.unlinkSync(SOCK);
-} catch (e) {
+} catch (err) {
   /* not there */
 }
 renderServer.listen(SOCK, () => {
@@ -1427,13 +1500,13 @@ renderServer.listen(SOCK, () => {
 });
 /** Stops the apps, removes the socket and exits. */
 function shutdown() {
-  apps.forEach((a) => {
-    a.stopping = true;
-    if (a.child) a.child.kill("SIGTERM");
+  apps.forEach((app) => {
+    app.stopping = true;
+    if (app.child) app.child.kill("SIGTERM");
   });
   try {
     fs.unlinkSync(SOCK);
-  } catch (e) {
+  } catch (err) {
     /* gone */
   }
   process.exit(0);

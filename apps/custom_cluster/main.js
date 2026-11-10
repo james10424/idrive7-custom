@@ -17,25 +17,25 @@ mgu.run({
     let hud;
     try {
       hud = new HudApp(ctx);
-    } catch (e) {
+    } catch (err) {
       // nothing drawn, but stay up: an exit here would count as a crash on the car
-      ctx.log.error("Cluster failed to start: " + ((e && e.stack) || e));
+      ctx.log.error("Cluster failed to start: " + ((err && err.stack) || err));
       ctx.ui.text(
         "STATUS",
-        "Cluster failed to start: " + ((e && e.message) || e),
+        "Cluster failed to start: " + ((err && err.message) || err),
       );
       return;
     }
     // the status row, and under it why layers aren't drawn (waiting, refused), so the long reason isn't cut off
-    hud.onStatus((s, detail) => {
-      ctx.ui.text("STATUS", s);
+    hud.onStatus((status, detail) => {
+      ctx.ui.text("STATUS", status);
       ctx.ui.text("DETAIL", detail || " ");
     });
     hud.start();
     process.on("exit", () => {
       try {
         hud.stop();
-      } catch (e) {
+      } catch (err) {
         /* exiting anyway */
       }
     });

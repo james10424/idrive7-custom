@@ -71,10 +71,10 @@ function send(res, file) {
 
 http
   .createServer((req, res) => {
-    const u = decodeURIComponent(req.url.split("?")[0]);
-    if (req.method === "POST" && u.indexOf("/out/") === 0) {
+    const urlPath = decodeURIComponent(req.url.split("?")[0]);
+    if (req.method === "POST" && urlPath.indexOf("/out/") === 0) {
       // /out/<file> (or /out/inspect/<file>): written under --out, nowhere else
-      const rel = path.normalize(u.slice(5));
+      const rel = path.normalize(urlPath.slice(5));
       if (
         rel.startsWith("..") ||
         path.isAbsolute(rel) ||
@@ -86,7 +86,7 @@ http
       }
       /** @type {Buffer[]} */
       const chunks = [];
-      req.on("data", (c) => chunks.push(c));
+      req.on("data", (chunk) => chunks.push(chunk));
       req.on("end", () => {
         const dest = path.join(out, rel);
         fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -98,16 +98,17 @@ http
       });
       return;
     }
-    if (u === "/") return send(res, path.join(__dirname, "page.html"));
-    if (u === "/page.js") return send(res, path.join(__dirname, "page.js"));
-    if (u === "/core.js") return send(res, path.resolve(core));
-    if (u === "/model.json") return send(res, path.resolve(model));
-    if (u === "/config.json")
+    if (urlPath === "/") return send(res, path.join(__dirname, "page.html"));
+    if (urlPath === "/page.js")
+      return send(res, path.join(__dirname, "page.js"));
+    if (urlPath === "/core.js") return send(res, path.resolve(core));
+    if (urlPath === "/model.json") return send(res, path.resolve(model));
+    if (urlPath === "/config.json")
       return config
         ? send(res, path.resolve(config))
         : (res.writeHead(200), res.end("{}"));
-    if (u.indexOf("/model/") === 0) {
-      const rel = path.normalize(u.slice(7));
+    if (urlPath.indexOf("/model/") === 0) {
+      const rel = path.normalize(urlPath.slice(7));
       if (rel.startsWith("..") || path.isAbsolute(rel)) {
         res.writeHead(400);
         res.end("bad path");
