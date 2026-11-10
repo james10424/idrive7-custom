@@ -1,0 +1,20 @@
+# Prettier formats only our own JavaScript (run: npx prettier@3.9.10 --write .)
+# Everything is ignored, then the in-scope files are let back in.
+*
+!*/
+!shared/*.js
+!bench/*.js
+!tools/*.js
+!tools/live2d_bake/*.js
+!apps/*/*.js
+!scripts/*.js
+
+# vendored
+shared/cluster_render_client.js
+shared/opentype.js
+# out of scope directories
+kit/
+oap-sdk/
+dist/
+node_modules/
+.claude/
