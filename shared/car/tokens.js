@@ -54,10 +54,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     const cfg = this.config.utcOffsetMinutes;
     const off = isNum(cfg) ? cfg : this.carOffsetMin;
     if (!isNum(off)) return new Date();
-    const d = new Date(Date.now() + off * 60000);
+    const local = new Date(Date.now() + off * 60000);
     return {
-      getHours: () => d.getUTCHours(),
-      getMinutes: () => d.getUTCMinutes(),
+      getHours: () => local.getUTCHours(),
+      getMinutes: () => local.getUTCMinutes(),
     };
   },
 
@@ -67,8 +67,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {string}
    */
   _resolve(template) {
-    return String(template).replace(/\{\{([a-zA-Z0-9:]+)\}\}/g, (_, t) =>
-      this._token(t),
+    return String(template).replace(/\{\{([a-zA-Z0-9:]+)\}\}/g, (_, name) =>
+      this._token(name),
     );
   },
 
@@ -78,30 +78,41 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {string}
    */
   _token(tok) {
-    const us = this.setting("units") === "us";
-    /** @type {(v: *, n: number) => string} */
-    const fix = (v, n) => (isNum(v) ? v.toFixed(n) : "--");
+    const usUnits = this.setting("units") === "us";
+    /** @type {(value: *, digits: number) => string} */
+    const fix = (value, digits) =>
+      isNum(value) ? value.toFixed(digits) : "--";
     if (tok.indexOf("tyreP:") === 0) {
-      const v = this._tyre("p", tok.slice(6));
-      return isNum(v) ? (us ? fix(v * 14.5038, 0) : fix(v, 1)) : "--";
+      const bar = this._tyre("p", tok.slice(6));
+      return isNum(bar)
+        ? usUnits
+          ? fix(bar * 14.5038, 0)
+          : fix(bar, 1)
+        : "--";
     }
     if (tok.indexOf("tyreT:") === 0) {
-      const v = this._tyre("t", tok.slice(6));
-      return isNum(v) ? String(Math.round(us ? (v * 9) / 5 + 32 : v)) : "--";
+      const celsius = this._tyre("t", tok.slice(6));
+      return isNum(celsius)
+        ? String(Math.round(usUnits ? (celsius * 9) / 5 + 32 : celsius))
+        : "--";
     }
     switch (tok) {
       case "u:pressure":
-        return us ? "psi" : "bar";
+        return usUnits ? "psi" : "bar";
       case "throttle": {
-        const v = this._throttle();
-        return isNum(v) ? String(Math.round(v)) : "--";
+        const throttle = this._throttle();
+        return isNum(throttle) ? String(Math.round(throttle)) : "--";
       }
       case "musicTitle":
         return this.musicTitle || "";
       // the Regal theme's lamps: their text while lit, else nothing
       case "lampBrake": {
-        const l = this._brakeLamp();
-        return l === "park" ? "PARK BRAKE" : l === "hold" ? "AUTO HOLD" : "";
+        const lamp = this._brakeLamp();
+        return lamp === "park"
+          ? "PARK BRAKE"
+          : lamp === "hold"
+            ? "AUTO HOLD"
+            : "";
       }
       case "lampTurnL":
         return this._turnLit("L") ? "LT. TURN" : "";
@@ -111,147 +122,174 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         return this._cruiseLit() ? "CRUISE" : "";
       case "odometer": {
         // 6 digits, km or mi by the units setting
-        const v = this._odometer();
-        return isNum(v)
-          ? ("000000" + Math.floor(us ? v * 0.621371 : v)).slice(-6)
+        const km = this._odometer();
+        return isNum(km)
+          ? ("000000" + Math.floor(usUnits ? km * 0.621371 : km)).slice(-6)
           : "------";
       }
       case "range3": {
-        const v = this._raw("range");
-        return isNum(v)
+        const range = this._raw("range");
+        return isNum(range)
           ? String(
-              Math.min(999, Math.max(0, Math.round(us ? v * 0.621371 : v))),
+              Math.min(
+                999,
+                Math.max(0, Math.round(usUnits ? range * 0.621371 : range)),
+              ),
             )
           : "---";
       } // up to 3 digits, no leading zeros, 999 past it (Regal's pod)
       case "range4": {
-        const v = this._raw("range");
-        return isNum(v)
-          ? ("0000" + Math.round(us ? v * 0.621371 : v)).slice(-4)
+        const range = this._raw("range");
+        return isNum(range)
+          ? ("0000" + Math.round(usUnits ? range * 0.621371 : range)).slice(-4)
           : "----";
       }
       case "u:distUc":
-        return us ? "MI" : "KM";
+        return usUnits ? "MI" : "KM";
       // the route (while guiding; "--" else): distance left as BMW formats it, its unit, time left h:mm
       case "navLeft": {
-        const r = this.route;
-        return this.navActive && r && r.leftText ? r.leftText : "--";
+        const route = this.route;
+        return this.navActive && route && route.leftText
+          ? route.leftText
+          : "--";
       }
       case "u:navLeft": {
-        const r = this.route;
-        return this.navActive && r ? ROUTE_UNIT[r.leftUnit] || "" : "";
+        const route = this.route;
+        return this.navActive && route ? ROUTE_UNIT[route.leftUnit] || "" : "";
       }
       case "navTime": {
-        const r = this.route;
-        if (!this.navActive || !r || !isNum(r.timeLeft)) return "--";
-        const m = Math.round(r.timeLeft / 60);
-        return Math.floor(m / 60) + ":" + ("0" + (m % 60)).slice(-2);
+        const route = this.route;
+        if (!this.navActive || !route || !isNum(route.timeLeft)) return "--";
+        const minutes = Math.round(route.timeLeft / 60);
+        return (
+          Math.floor(minutes / 60) + ":" + ("0" + (minutes % 60)).slice(-2)
+        );
       }
       case "consumption": {
-        const v = this._consumption();
-        return isNum(v) ? v.toFixed(1) : "--";
+        const cons = this._consumption();
+        return isNum(cons) ? cons.toFixed(1) : "--";
       }
       case "u:cons":
         return this._consUnit();
       case "u:consUc":
         return this._consUnit().toUpperCase();
       case "ambientN": {
-        const v = this._raw("ambient");
-        return isNum(v) ? String(Math.round(us ? (v * 9) / 5 + 32 : v)) : "--";
+        const ambient = this._raw("ambient");
+        return isNum(ambient)
+          ? String(Math.round(usUnits ? (ambient * 9) / 5 + 32 : ambient))
+          : "--";
       } // no + sign (the seven-segment font has none)
       case "volt12": {
-        const v = this._volt12();
-        return isNum(v) ? v.toFixed(1) : "--";
+        const volts = this._volt12();
+        return isNum(volts) ? volts.toFixed(1) : "--";
       }
       case "batt12": {
-        const v = this._batt12();
-        return isNum(v) ? String(Math.round(v)) : "--";
+        const charge = this._batt12();
+        return isNum(charge) ? String(Math.round(charge)) : "--";
       }
       case "accGap": {
-        const v = this._acc("gap");
-        return isNum(v) ? String(Math.round(us ? v * 3.28084 : v)) : "--";
+        const gap = this._acc("gap");
+        return isNum(gap)
+          ? String(Math.round(usUnits ? gap * 3.28084 : gap))
+          : "--";
       }
       case "u:gap":
-        return us ? "FT" : "M";
+        return usUnits ? "FT" : "M";
       case "accRel": {
-        const v = this._acc("rel");
-        return isNum(v) ? String(Math.round(us ? v * 0.621371 : v)) : "--";
+        const rel = this._acc("rel");
+        return isNum(rel)
+          ? String(Math.round(usUnits ? rel * 0.621371 : rel))
+          : "--";
       } // the HUD fonts have no '+'
       case "u:rel":
-        return us ? "MPH" : "KM/H";
+        return usUnits ? "MPH" : "KM/H";
       case "accSet": {
-        const v = this._acc("set");
-        return isNum(v) ? String(Math.round(v)) : "--";
+        const setSpeed = this._acc("set");
+        return isNum(setSpeed) ? String(Math.round(setSpeed)) : "--";
       }
       // speed digits floor as BMW's own do (rounding read 1 higher from x.5 up): whole km/h or mph passed
       case "speed": {
-        const v = this._raw("speed");
-        return isNum(v)
-          ? String(Math.floor(Math.max(0, us ? v * 0.621371 : v)))
+        const speed = this._raw("speed");
+        return isNum(speed)
+          ? String(Math.floor(Math.max(0, usUnits ? speed * 0.621371 : speed)))
           : "--";
       }
       case "u:speed":
-        return us ? "MPH" : "KM/H";
+        return usUnits ? "MPH" : "KM/H";
       case "mph": {
-        const v = this._raw("speed");
-        return isNum(v) ? String(Math.floor(Math.max(0, v) * 0.621371)) : "--";
+        const speed = this._raw("speed");
+        return isNum(speed)
+          ? String(Math.floor(Math.max(0, speed) * 0.621371))
+          : "--";
       } // mph whatever the units (Regal), floored as above
       case "oil":
       case "coolant": {
-        const v = this._raw(tok);
-        return fix(isNum(v) ? (us ? (v * 9) / 5 + 32 : v) : v, 0);
+        const temp = this._raw(tok);
+        return fix(
+          isNum(temp) ? (usUnits ? (temp * 9) / 5 + 32 : temp) : temp,
+          0,
+        );
       }
       case "boost": {
-        const v = this._raw("boost");
-        return us ? fix(isNum(v) ? v * 14.5038 : v, 1) : fix(v, 2);
+        const boost = this._raw("boost");
+        return usUnits
+          ? fix(isNum(boost) ? boost * 14.5038 : boost, 1)
+          : fix(boost, 2);
       }
       case "u:boost":
-        return us ? "PSI" : "BAR";
+        return usUnits ? "PSI" : "BAR";
       case "u:temp":
-        return us ? "°F" : "°C";
+        return usUnits ? "°F" : "°C";
       // the fuel gauge's marks: the tank (config.tankLitres) full and half, in litres or US gallons, whole numbers
       case "fuelFull":
       case "fuelHalf": {
-        const t = (this.config.tankLitres || 65) * (us ? 1 / 3.78541 : 1);
-        return String(Math.round(tok === "fuelFull" ? t : t / 2));
+        const tank =
+          (this.config.tankLitres || 65) * (usUnits ? 1 / 3.78541 : 1);
+        return String(Math.round(tok === "fuelFull" ? tank : tank / 2));
       }
       case "u:fuel":
-        return us ? "gal" : "L";
+        return usUnits ? "gal" : "L";
       case "u:speedLc":
-        return us ? "mph" : "km/h";
+        return usUnits ? "mph" : "km/h";
       case "u:distLc":
-        return us ? "mi" : "km";
+        return usUnits ? "mi" : "km";
       case "range": {
-        const v = this._raw("range");
-        return fix(isNum(v) ? (us ? v * 0.621371 : v) : v, 0);
+        const range = this._raw("range");
+        return fix(
+          isNum(range) ? (usUnits ? range * 0.621371 : range) : range,
+          0,
+        );
       }
       case "ambient": {
-        const v = this._raw("ambient");
-        if (!isNum(v)) return "--";
-        const n = Math.round(us ? (v * 9) / 5 + 32 : v);
-        return (n > 0 ? "+" : "") + n;
+        const ambient = this._raw("ambient");
+        if (!isNum(ambient)) return "--";
+        const rounded = Math.round(usUnits ? (ambient * 9) / 5 + 32 : ambient);
+        return (rounded > 0 ? "+" : "") + rounded;
       }
       case "u:torque":
-        return us ? "lb-ft" : "Nm";
+        return usUnits ? "lb-ft" : "Nm";
       case "torque": {
-        const v = this._raw("torque");
-        return fix(isNum(v) ? (us ? v * 0.737562 : v) : v, 0);
+        const torque = this._raw("torque");
+        return fix(
+          isNum(torque) ? (usUnits ? torque * 0.737562 : torque) : torque,
+          0,
+        );
       }
       case "torquePct":
       case "powerPct": {
-        const v = this._raw(tok);
-        return isNum(v) ? String(Math.min(100, Math.round(v))) : "--";
+        const pct = this._raw(tok);
+        return isNum(pct) ? String(Math.min(100, Math.round(pct))) : "--";
       }
       case "boostHi":
-        return us ? "20" : "1.4";
+        return usUnits ? "20" : "1.4";
       case "boostMid":
-        return us ? "10" : "0.7";
+        return usUnits ? "10" : "0.7";
       case "ampmLc":
         return this._token("ampm").toLowerCase();
       case "gLat":
       case "gLong": {
-        const v = this._raw(tok);
-        return isNum(v) ? Math.abs(v).toFixed(2) : "--";
+        const accel = this._raw(tok);
+        return isNum(accel) ? Math.abs(accel).toFixed(2) : "--";
       }
       case "rpm":
       case "rpm10":
@@ -265,42 +303,43 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "lastShift":
         return this.score.last ? String(this.score.last.rpm) : "--";
       case "lastGears": {
-        const l = this.score.last;
-        return l && l.from !== "?" ? l.from + " > " + l.to : "";
+        const last = this.score.last;
+        return last && last.from !== "?" ? last.from + " > " + last.to : "";
       }
       case "verdict":
         return this.score.last ? this.score.last.verdict : "";
       case "shiftPrompt":
         return this._shift().now ? "SHIFT" : "";
       case "coldNote": {
-        const sp = this._shift();
-        if (!sp.oilCold) return "";
-        return sp.cold ? "COLD · LIMIT " + sp.rpm : "OIL COLD · GO EASY";
+        const shift = this._shift();
+        if (!shift.oilCold) return "";
+        return shift.cold ? "COLD · LIMIT " + shift.rpm : "OIL COLD · GO EASY";
       }
       case "gearnum": {
-        const d = this.car.data();
-        if (d.stage === "P" || d.stage === "R" || d.stage === "N")
-          return d.stage;
-        return isNum(d.gear) && d.gear > 0
-          ? String(d.gear)
-          : d.gear === 0
+        const data = this.car.data();
+        if (data.stage === "P" || data.stage === "R" || data.stage === "N")
+          return data.stage;
+        return isNum(data.gear) && data.gear > 0
+          ? String(data.gear)
+          : data.gear === 0
             ? "N"
             : "-";
       }
       case "stage": {
         // the selector letter alone: P R N, or D / S / M by the shifter programme
-        const d = this.car.data();
-        return d.stage === "D" || (!d.stage && isNum(d.gear) && d.gear > 0)
-          ? this._program(d)
-          : d.stage || "-";
+        const data = this.car.data();
+        return data.stage === "D" ||
+          (!data.stage && isNum(data.gear) && data.gear > 0)
+          ? this._program(data)
+          : data.stage || "-";
       }
       case "gearInD": {
         // the gear number while driving, else nothing (the M "2D")
-        const d = this.car.data();
-        return (d.stage === "D" || (!d.stage && isNum(d.gear))) &&
-          isNum(d.gear) &&
-          d.gear > 0
-          ? String(d.gear)
+        const data = this.car.data();
+        return (data.stage === "D" || (!data.stage && isNum(data.gear))) &&
+          isNum(data.gear) &&
+          data.gear > 0
+          ? String(data.gear)
           : "";
       }
       case "mode": {
@@ -321,42 +360,50 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         );
       }
       case "gear": {
-        const d = this.car.data();
-        if (d.stage === "P" || d.stage === "R" || d.stage === "N")
-          return d.stage;
-        const g = isNum(d.gear) && d.gear > 0 ? String(d.gear) : "";
-        return d.stage === "D" ? this._program(d) + g : g;
+        const data = this.car.data();
+        if (data.stage === "P" || data.stage === "R" || data.stage === "N")
+          return data.stage;
+        const gear = isNum(data.gear) && data.gear > 0 ? String(data.gear) : "";
+        return data.stage === "D" ? this._program(data) + gear : gear;
       }
       case "time":
       case "ampm": {
         const now = this._now();
-        const h = now.getHours(),
-          m = now.getMinutes();
+        const hour = now.getHours(),
+          minute = now.getMinutes();
         if (tok === "ampm")
-          return this.setting("clock") === "12h" ? (h < 12 ? "AM" : "PM") : "";
-        if (this.setting("clock") === "24h") return pad2(h) + ":" + pad2(m);
-        return (h % 12 || 12) + ":" + pad2(m);
+          return this.setting("clock") === "12h"
+            ? hour < 12
+              ? "AM"
+              : "PM"
+            : "";
+        if (this.setting("clock") === "24h")
+          return pad2(hour) + ":" + pad2(minute);
+        return (hour % 12 || 12) + ":" + pad2(minute);
       }
       default:
         if (tok.indexOf("spd:") === 0) {
-          const v = SPEED_SCALE[us ? "us" : "metric"][Number(tok.slice(4))];
-          return v === undefined ? "" : String(v);
+          const label =
+            SPEED_SCALE[usUnits ? "us" : "metric"][Number(tok.slice(4))];
+          return label === undefined ? "" : String(label);
         } // speed scale labels
         if (tok.indexOf("temp:") === 0) {
-          const c = Number(tok.slice(5));
-          return isNum(c)
+          const celsius = Number(tok.slice(5));
+          return isNum(celsius)
             ? String(
-                us ? Math.round(((c * 9) / 5 + 32) / 10) * 10 : Math.round(c),
+                usUnits
+                  ? Math.round(((celsius * 9) / 5 + 32) / 10) * 10
+                  : Math.round(celsius),
               )
             : "--";
         } // gauge labels: °F to the 10
         if (tok.indexOf("setup:") === 0) {
-          const s = this._setup();
-          return s ? s[tok.slice(6)] || "" : "--";
+          const setup = this._setup();
+          return setup ? setup[tok.slice(6)] || "" : "--";
         }
         if (tok.indexOf("signal:") === 0) {
-          const v = this._raw(tok.slice(7));
-          return isNum(v) ? (Math.round(v * 10) / 10).toString() : "--";
+          const value = this._raw(tok.slice(7));
+          return isNum(value) ? (Math.round(value * 10) / 10).toString() : "--";
         }
         return "{{" + tok + "}}";
     }

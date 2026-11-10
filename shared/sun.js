@@ -17,11 +17,15 @@ const RAD = Math.PI / 180;
  */
 function sunTimes(dateMs, lat, lon) {
   // Julian day at 0h UTC of this UTC date
-  const d = new Date(dateMs);
-  const day0 = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const date = new Date(dateMs);
+  const day0 = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+  );
   // solar noon is roughly 12:00 local solar time: start near it for the equations
-  const jd = day0 / 86400000 + 2440587.5 + 0.5 - lon / 360;
-  const T = (jd - 2451545) / 36525;
+  const julianDay = day0 / 86400000 + 2440587.5 + 0.5 - lon / 360;
+  const T = (julianDay - 2451545) / 36525;
   const L0 = (280.46646 + T * (36000.76983 + T * 0.0003032)) % 360;
   const M = 357.52911 + T * (35999.05029 - 0.0001537 * T);
   const e = 0.016708634 - T * (0.000042037 + 0.0000001267 * T);
@@ -49,11 +53,11 @@ function sunTimes(dateMs, lat, lon) {
     (Math.cos(90.833 * RAD) - Math.sin(lat * RAD) * Math.sin(decl * RAD)) /
     (Math.cos(lat * RAD) * Math.cos(decl * RAD));
   if (cosH > 1 || cosH < -1) return null;
-  const ha = Math.acos(cosH) / RAD; // degrees
+  const hourAngle = Math.acos(cosH) / RAD; // degrees
   const noonMin = 720 - 4 * lon - eqTime; // minutes after 0h UTC
   return {
-    sunrise: day0 + (noonMin - 4 * ha) * 60000,
-    sunset: day0 + (noonMin + 4 * ha) * 60000,
+    sunrise: day0 + (noonMin - 4 * hourAngle) * 60000,
+    sunset: day0 + (noonMin + 4 * hourAngle) * 60000,
   };
 }
 
@@ -65,10 +69,10 @@ function sunTimes(dateMs, lat, lon) {
  */
 function isNight(nowMs, lat, lon) {
   // the local solar day can straddle the UTC date line: check yesterday, today and tomorrow
-  for (const off of [-1, 0, 1]) {
-    const t = sunTimes(nowMs + off * 86400000, lat, lon);
-    if (!t) continue;
-    if (nowMs >= t.sunrise && nowMs < t.sunset) return false;
+  for (const dayOffset of [-1, 0, 1]) {
+    const times = sunTimes(nowMs + dayOffset * 86400000, lat, lon);
+    if (!times) continue;
+    if (nowMs >= times.sunrise && nowMs < times.sunset) return false;
   }
   return true;
 }

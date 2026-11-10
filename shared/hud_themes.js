@@ -235,12 +235,12 @@ const M_STRIPE = [
 /**
  * A colour from a role name ("fg") or a literal [r,g,b,a].
  * @param {Theme} theme
- * @param {string|Rgba} c
+ * @param {string|Rgba} spec
  * @returns {Rgba}
  */
-function color(theme, c) {
-  if (Array.isArray(c)) return c;
-  return theme[c] || theme.fg;
+function color(theme, spec) {
+  if (Array.isArray(spec)) return spec;
+  return theme[spec] || theme.fg;
 }
 
 module.exports = { THEMES, M_STRIPE, LIGHTS, VERDICT, color };

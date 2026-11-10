@@ -11,24 +11,29 @@ const { isNum } = require("../engine/util");
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * finalDestinationInfo: distance left (formattedDistance: BMW's text, its unit, rawDistance), time left (travelTime, s).
-   * @param {*} v
+   * @param {*} msg
    * @returns {void}
    */
-  _onRouteInfo(v) {
-    if (!v || typeof v !== "object") return;
-    const fd = v.formattedDistance || {};
-    const raw = isNum(fd.rawDistance)
-      ? fd.rawDistance
-      : isNum(v.distanceFromCurrentToFinalDestination)
-        ? v.distanceFromCurrentToFinalDestination
+  _onRouteInfo(msg) {
+    if (!msg || typeof msg !== "object") return;
+    const formatted = msg.formattedDistance || {};
+    const raw = isNum(formatted.rawDistance)
+      ? formatted.rawDistance
+      : isNum(msg.distanceFromCurrentToFinalDestination)
+        ? msg.distanceFromCurrentToFinalDestination
         : null;
     this.route = Object.assign(this.route || {}, {
       leftRaw: raw,
-      leftText: typeof fd.distance === "string" ? fd.distance.trim() : null,
-      leftUnit: fd.unit,
+      leftText:
+        typeof formatted.distance === "string"
+          ? formatted.distance.trim()
+          : null,
+      leftUnit: formatted.unit,
       timeLeft:
-        isNum(v.travelTime) && v.travelTime >= 0 && v.travelTime < 0xffffffff
-          ? v.travelTime
+        isNum(msg.travelTime) &&
+        msg.travelTime >= 0 &&
+        msg.travelTime < 0xffffffff
+          ? msg.travelTime
           : null,
       at: Date.now(),
     });
@@ -36,37 +41,37 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (isNum(raw))
       this.route.startRaw = Math.max(this.route.startRaw || 0, raw);
     this._logRoute("destination", {
-      distance: fd,
-      travelTime: v.travelTime,
-      delayTime: v.delayTime,
-      delayStatus: v.delayStatus,
+      distance: formatted,
+      travelTime: msg.travelTime,
+      delayTime: msg.delayTime,
+      delayStatus: msg.delayStatus,
       distanceFromCurrentToFinalDestination:
-        v.distanceFromCurrentToFinalDestination,
+        msg.distanceFromCurrentToFinalDestination,
     });
   },
 
   /**
    * travelledDistance (FormattedDistance): how far along the route we are, for the bar's total (travelled + left).
-   * @param {*} v
+   * @param {*} msg
    * @returns {void}
    */
-  _onTravelled(v) {
-    if (!v || typeof v !== "object") return;
+  _onTravelled(msg) {
+    if (!msg || typeof msg !== "object") return;
     this.route = Object.assign(this.route || {}, {
-      doneRaw: isNum(v.rawDistance) ? v.rawDistance : null,
+      doneRaw: isNum(msg.rawDistance) ? msg.rawDistance : null,
     });
-    this._logRoute("travelled", v);
+    this._logRoute("travelled", msg);
   },
 
   /**
    * Route messages as sent, each when it changes, at most every 10 s (to confirm the units on the car).
    * @param {string} kind
-   * @param {*} v
+   * @param {*} msg
    * @returns {void}
    */
-  _logRoute(kind, v) {
+  _logRoute(kind, msg) {
     const now = Date.now(),
-      line = JSON.stringify(v);
+      line = JSON.stringify(msg);
     this.routeLogged = this.routeLogged || {};
     this.routeLogAt = this.routeLogAt || {};
     if (
@@ -84,12 +89,15 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?number}
    */
   _routeProgress() {
-    const r = this.route;
-    if (!this.navActive || !r || !isNum(r.leftRaw)) return null;
-    if (isNum(r.doneRaw) && r.doneRaw + r.leftRaw > 0)
-      return Math.min(1, Math.max(0, r.doneRaw / (r.doneRaw + r.leftRaw)));
-    return r.startRaw > 0
-      ? Math.min(1, Math.max(0, 1 - r.leftRaw / r.startRaw))
+    const route = this.route;
+    if (!this.navActive || !route || !isNum(route.leftRaw)) return null;
+    if (isNum(route.doneRaw) && route.doneRaw + route.leftRaw > 0)
+      return Math.min(
+        1,
+        Math.max(0, route.doneRaw / (route.doneRaw + route.leftRaw)),
+      );
+    return route.startRaw > 0
+      ? Math.min(1, Math.max(0, 1 - route.leftRaw / route.startRaw))
       : null;
   },
 
@@ -99,24 +107,26 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {void}
    */
   _onGuidance(raw) {
-    const v = raw && typeof raw === "object" ? raw.guidanceState : raw;
-    if (String(v) !== String(this.navRaw)) {
-      this.navRaw = v;
+    const state = raw && typeof raw === "object" ? raw.guidanceState : raw;
+    if (String(state) !== String(this.navRaw)) {
+      this.navRaw = state;
       this.log.info("route guidance state " + JSON.stringify(raw));
     }
-    const on =
-      enumNum(typeof v === "string" ? v.toUpperCase() : v, GUIDANCE_STATE) ===
-      GUIDANCE_STATE.ACTIVE;
-    if (on === this.navActive) return;
-    this.navActive = on;
-    if (on) this.route = null; // a new route: its length starts over
+    const active =
+      enumNum(
+        typeof state === "string" ? state.toUpperCase() : state,
+        GUIDANCE_STATE,
+      ) === GUIDANCE_STATE.ACTIVE;
+    if (active === this.navActive) return;
+    this.navActive = active;
+    if (active) this.route = null; // a new route: its length starts over
     if (
       this.ctx.settings.item("navLayout") &&
       this._layoutName() !== this.activeName
     ) {
       this.log.info(
         "route guidance " +
-          (on ? "on" : "off") +
+          (active ? "on" : "off") +
           ": layout " +
           this._layoutName(),
       );

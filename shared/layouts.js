@@ -29,8 +29,8 @@ const widgetTypes = require("./widgets");
  * @type {Record<string, string[]>}
  */
 const TYPES = {};
-Object.keys(widgetTypes).forEach((t) => {
-  TYPES[t] = widgetTypes[t].fields;
+Object.keys(widgetTypes).forEach((type) => {
+  TYPES[type] = widgetTypes[type].fields;
 });
 const CLASSES = ["ambient", "content", "overlay", "alert"];
 // the HUD modes a layout can have a variant for (engine/app.js header); "normal" is every layout's own
@@ -65,9 +65,9 @@ class Layouts {
     if (fs.existsSync(own)) {
       try {
         raw = JSON.parse(fs.readFileSync(own, "utf8"));
-      } catch (e) {
+      } catch (err) {
         throw new Error(
-          "layouts/" + name + ".json is not valid JSON (" + e.message + ")",
+          "layouts/" + name + ".json is not valid JSON (" + err.message + ")",
         );
       }
     } else {
@@ -81,104 +81,118 @@ class Layouts {
     const target = this.size[0] === 1920 ? "panel" : "hud";
     visible
       .check(raw.widgets, target)
-      .forEach((w) => this.log.warn('layout "' + name + '": ' + w));
+      .forEach((warning) => this.log.warn('layout "' + name + '": ' + warning));
     return raw;
   }
 
   /**
-   * Throws with the reason when `p` is not a usable layout.
-   * @param {any} p the parsed file
+   * Throws with the reason when `layout` is not a usable layout.
+   * @param {any} layout the parsed file
    * @param {string} name
    */
-  _validate(p, name) {
+  _validate(layout, name) {
     const bad = (why) => {
       throw new Error('layout "' + name + '": ' + why);
     };
-    if (!p || typeof p !== "object") bad("not an object");
-    if (p.schemaVersion !== 2)
-      bad("schemaVersion must be 2 (got " + p.schemaVersion + ")");
-    if (!Array.isArray(p.widgets)) bad("missing widgets array");
+    if (!layout || typeof layout !== "object") bad("not an object");
+    if (layout.schemaVersion !== 2)
+      bad("schemaVersion must be 2 (got " + layout.schemaVersion + ")");
+    if (!Array.isArray(layout.widgets)) bad("missing widgets array");
     if (
-      p.modes !== undefined &&
-      !(Array.isArray(p.modes) && p.modes.every((m) => MODES.indexOf(m) >= 0))
+      layout.modes !== undefined &&
+      !(
+        Array.isArray(layout.modes) &&
+        layout.modes.every((mode) => MODES.indexOf(mode) >= 0)
+      )
     )
       bad('"modes" must list some of ' + MODES.join(", "));
     const ids = {};
-    p.widgets.forEach((w, i) => {
-      const at = "widgets[" + i + '] ("' + w.id + '")';
-      if (!w.id) bad("widgets[" + i + "] has no id");
-      if (ids[w.id]) bad('two widgets are called "' + w.id + '"');
-      ids[w.id] = true;
-      if (!TYPES[w.type]) bad(at + ' has unknown type "' + w.type + '"');
+    layout.widgets.forEach((widget, i) => {
+      const label = "widgets[" + i + '] ("' + widget.id + '")';
+      if (!widget.id) bad("widgets[" + i + "] has no id");
+      if (ids[widget.id]) bad('two widgets are called "' + widget.id + '"');
+      ids[widget.id] = true;
+      if (!TYPES[widget.type])
+        bad(label + ' has unknown type "' + widget.type + '"');
       ["x", "y", "w", "h"].forEach((k) => {
-        if (typeof w[k] !== "number" || w[k] < 0)
-          bad(at + " needs a number " + k);
+        if (typeof widget[k] !== "number" || widget[k] < 0)
+          bad(label + " needs a number " + k);
       });
-      if (w.x + w.w > this.size[0] || w.y + w.h > this.size[1])
+      if (
+        widget.x + widget.w > this.size[0] ||
+        widget.y + widget.h > this.size[1]
+      )
         bad(
-          at +
+          label +
             " runs off the " +
             this.size[0] +
             "x" +
             this.size[1] +
             " display",
         );
-      if (w.class && CLASSES.indexOf(w.class) < 0)
-        bad(at + ' has unknown class "' + w.class + '"');
-      if (w.exclusive)
+      if (widget.class && CLASSES.indexOf(widget.class) < 0)
+        bad(label + ' has unknown class "' + widget.class + '"');
+      if (widget.exclusive)
         bad(
-          at +
+          label +
             " sets exclusive, which would hide everything under it (the CarPlay / Android Auto map too)",
         );
       if (
-        w.conn !== undefined &&
-        !(Number.isInteger(w.conn) && w.conn >= 0 && w.conn <= 3)
+        widget.conn !== undefined &&
+        !(Number.isInteger(widget.conn) && widget.conn >= 0 && widget.conn <= 3)
       )
-        bad(at + ' "conn" must be 0..3 (the connection to cluster-render)');
+        bad(label + ' "conn" must be 0..3 (the connection to cluster-render)');
       if (
-        w.toggle !== undefined &&
-        !/^!?[a-zA-Z0-9_]+(=[a-zA-Z0-9_]+)?$/.test(String(w.toggle))
+        widget.toggle !== undefined &&
+        !/^!?[a-zA-Z0-9_]+(=[a-zA-Z0-9_]+)?$/.test(String(widget.toggle))
       )
-        bad(at + ' has a bad toggle "' + w.toggle + '"');
-      if (w.in !== undefined) {
-        if (!w.in || typeof w.in !== "object" || Array.isArray(w.in))
-          bad(at + ' "in" must be { mode: { fields } | false }');
-        Object.keys(w.in).forEach((m) => {
-          const o = w.in[m];
-          if (m !== "normal" && MODES.indexOf(m) < 0)
+        bad(label + ' has a bad toggle "' + widget.toggle + '"');
+      if (widget.in !== undefined) {
+        if (
+          !widget.in ||
+          typeof widget.in !== "object" ||
+          Array.isArray(widget.in)
+        )
+          bad(label + ' "in" must be { mode: { fields } | false }');
+        Object.keys(widget.in).forEach((mode) => {
+          const override = widget.in[mode];
+          if (mode !== "normal" && MODES.indexOf(mode) < 0)
             bad(
-              at +
+              label +
                 ' "in" has unknown mode "' +
-                m +
+                mode +
                 '" (normal, ' +
                 MODES.join(", ") +
                 ")",
             );
-          if (o === false) return;
+          if (override === false) return;
           if (
-            !o ||
-            typeof o !== "object" ||
-            Array.isArray(o) ||
-            o.id !== undefined ||
-            o.type !== undefined ||
-            o.in !== undefined
+            !override ||
+            typeof override !== "object" ||
+            Array.isArray(override) ||
+            override.id !== undefined ||
+            override.type !== undefined ||
+            override.in !== undefined
           )
             bad(
-              at +
+              label +
                 ' "in".' +
-                m +
+                mode +
                 " must be false or fields to change (not id, type or in)",
             );
-          const v = Object.assign({}, w, o);
+          const merged = Object.assign({}, widget, override);
           ["x", "y", "w", "h"].forEach((k) => {
-            if (typeof v[k] !== "number" || v[k] < 0)
-              bad(at + " in " + m + " needs a number " + k);
+            if (typeof merged[k] !== "number" || merged[k] < 0)
+              bad(label + " in " + mode + " needs a number " + k);
           });
-          if (v.x + v.w > this.size[0] || v.y + v.h > this.size[1])
+          if (
+            merged.x + merged.w > this.size[0] ||
+            merged.y + merged.h > this.size[1]
+          )
             bad(
-              at +
+              label +
                 " in " +
-                m +
+                mode +
                 " runs off the " +
                 this.size[0] +
                 "x" +
@@ -188,33 +202,34 @@ class Layouts {
         });
       }
       if (
-        w.hole !== undefined &&
+        widget.hole !== undefined &&
         !(
-          Array.isArray(w.hole) &&
-          w.hole.length === 4 &&
-          w.hole.every((n) => typeof n === "number")
+          Array.isArray(widget.hole) &&
+          widget.hole.length === 4 &&
+          widget.hole.every((value) => typeof value === "number")
         )
       )
-        bad(at + ' "hole" must be [x, y, w, h]');
-      TYPES[w.type].forEach((k) => {
-        if (w[k] === undefined) bad(at + " (" + w.type + ') needs "' + k + '"');
+        bad(label + ' "hole" must be [x, y, w, h]');
+      TYPES[widget.type].forEach((k) => {
+        if (widget[k] === undefined)
+          bad(label + " (" + widget.type + ') needs "' + k + '"');
       });
     });
   }
 
   /**
-   * cb() after <data>/layouts/ changes on disk.
-   * @param {() => void} cb
+   * listener() after <data>/layouts/ changes on disk.
+   * @param {() => void} listener
    */
-  onChange(cb) {
-    this.changeListeners.push(cb);
+  onChange(listener) {
+    this.changeListeners.push(listener);
   }
 
   /** Watches <data>/layouts/ (creating it when missing). */
   _watch() {
     try {
       fs.mkdirSync(this.dir);
-    } catch (e) {
+    } catch (err) {
       /* there already, or the data folder is read-only */
     }
     try {
@@ -223,21 +238,21 @@ class Layouts {
         clearTimeout(this._timer);
         this._timer = setTimeout(() => {
           this.log.info("layouts/ changed on disk, reloading");
-          this.changeListeners.forEach((cb) => {
+          this.changeListeners.forEach((listener) => {
             try {
-              cb();
-            } catch (e) {
-              this.log.warn("layouts listener: " + e);
+              listener();
+            } catch (err) {
+              this.log.warn("layouts listener: " + err);
             }
           });
         }, 300);
       });
-    } catch (e) {
+    } catch (err) {
       this.log.warn(
         "layouts: cannot watch " +
           this.dir +
           " (" +
-          e.message +
+          err.message +
           "); a pushed layout shows after an app restart",
       );
     }

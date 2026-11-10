@@ -82,41 +82,49 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       // the car's own sport display % while it sends one, else from the crank torque and app.json
       // config.engine's peaks (an M40i makes 500 Nm, 285 kW)
       if (Date.now() - (this.sportAt || 0) < FRESH_MS) {
-        const v = name === "powerPct" ? this.sportPower : this.sportTorque;
-        if (isNum(v)) return v;
+        const pct = name === "powerPct" ? this.sportPower : this.sportTorque;
+        if (isNum(pct)) return pct;
       }
-      const e = this.config.engine || {},
-        d = this.car.data();
-      if (!isNum(d.torque)) return null;
+      const engine = this.config.engine || {},
+        data = this.car.data();
+      if (!isNum(data.torque)) return null;
       if (name === "torquePct")
-        return (Math.max(0, d.torque) / (e.torqueNm || 500)) * 100;
-      return isNum(d.rpm)
-        ? ((Math.max(0, d.torque) * d.rpm) / 9549 / (e.powerKw || 285)) * 100
+        return (Math.max(0, data.torque) / (engine.torqueNm || 500)) * 100;
+      return isNum(data.rpm)
+        ? ((Math.max(0, data.torque) * data.rpm) /
+            9549 /
+            (engine.powerKw || 285)) *
+            100
         : null;
     }
     if (name.indexOf("setupLevel:") === 0) {
-      const s = this._setup();
-      return s ? SETUP_LEVEL[s[name.slice(11)]] || 0 : 0;
+      const setup = this._setup();
+      return setup ? SETUP_LEVEL[setup[name.slice(11)]] || 0 : 0;
     }
     if (name === "throttle" || name === "throttle10") {
-      const t = this._throttle();
-      return isNum(t) ? (name === "throttle" ? t : t / 10) : null;
+      const throttle = this._throttle();
+      return isNum(throttle)
+        ? name === "throttle"
+          ? throttle
+          : throttle / 10
+        : null;
     }
     if (name === "brake10") return this._brakeLevel();
     if (name === "volt12") return this._volt12();
     if (name === "batt12") return this._batt12();
-    const d = this.car.data();
-    return Object.prototype.hasOwnProperty.call(d, name) ? d[name] : null;
+    const data = this.car.data();
+    return Object.prototype.hasOwnProperty.call(data, name) ? data[name] : null;
   },
 
   /**
    * The rev scale's top: the redline rounded up to 1000 rpm, plus "over".
-   * @param {Widget} [w]
+   * @param {Widget} [widget]
    * @returns {number}
    */
-  _barMax(w) {
+  _barMax(widget) {
     return (
-      Math.ceil(this.setting("redline") / 1000) * 1000 + ((w && w.over) || 0)
+      Math.ceil(this.setting("redline") / 1000) * 1000 +
+      ((widget && widget.over) || 0)
     );
   },
 
@@ -125,12 +133,12 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {ShiftPoint}
    */
   _shift() {
-    const d = this.car.data();
-    const sp = this.score.shiftPoint(d.oil);
-    const rpm = isNum(this.rpmF) ? this.rpmF : d.rpm;
-    sp.now = isNum(rpm) && rpm >= sp.rpm;
-    sp.oilCold = isNum(d.oil) && d.oil < 80;
-    return sp;
+    const data = this.car.data();
+    const shift = this.score.shiftPoint(data.oil);
+    const rpm = isNum(this.rpmF) ? this.rpmF : data.rpm;
+    shift.now = isNum(rpm) && rpm >= shift.rpm;
+    shift.oilCold = isNum(data.oil) && data.oil < 80;
+    return shift;
   },
 
   /** Where the red and orange marks start on a rev scale that ends at `max` rpm, as fractions 0..1: red from the
@@ -150,8 +158,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?number}
    */
   _nearMark(kind) {
-    const p = this._nearPos(kind);
-    return isNum(p) ? Math.round(p) : null;
+    const pos = this._nearPos(kind);
+    return isNum(pos) ? Math.round(pos) : null;
   },
 
   /**
@@ -161,14 +169,17 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _nearPos(kind) {
     if (kind === "rpm") {
-      const r = this._raw("rpm");
-      return isNum(r) ? r / 1000 : null;
+      const rpm = this._raw("rpm");
+      return isNum(rpm) ? rpm / 1000 : null;
     }
-    const v = this._raw("speed");
-    if (!isNum(v)) return null;
-    const us = this.setting("units") === "us";
+    const speed = this._raw("speed");
+    if (!isNum(speed)) return null;
+    const usUnits = this.setting("units") === "us";
     return (
-      scaleFrac(us ? v * 0.621371 : v, SPEED_SCALE[us ? "us" : "metric"]) * 8
+      scaleFrac(
+        usUnits ? speed * 0.621371 : speed,
+        SPEED_SCALE[usUnits ? "us" : "metric"],
+      ) * 8
     );
   },
 
@@ -183,12 +194,12 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (isNum(this.boostDme) && now - this.boostDmeAt < FRESH_MS)
       return this.boostDme;
     // the demo drive: made up from the throttle, building from 1500 to 3500 rpm (up to 1.3 bar)
-    const d = this.car.data();
-    if (d.demo && isNum(d.throttle) && isNum(d.rpm))
+    const data = this.car.data();
+    if (data.demo && isNum(data.throttle) && isNum(data.rpm))
       return (
-        Math.max(0, d.throttle) *
+        Math.max(0, data.throttle) *
         1.3 *
-        Math.min(1, Math.max(0, (d.rpm - 1500) / 2000))
+        Math.min(1, Math.max(0, (data.rpm - 1500) / 2000))
       );
     return null;
   },
@@ -198,40 +209,43 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?number}
    */
   _throttle() {
-    const c0 = this.config.pedal || {};
-    if (c0.source === "obd") {
+    const pedalCfg = this.config.pedal || {};
+    if (pedalCfg.source === "obd") {
       // OBD PID 0x49 reads its own %, mapped from config.pedal.obdRange [at rest, flat out] to 0..100
-      const r =
-        Array.isArray(c0.obdRange) && c0.obdRange.length === 2
-          ? c0.obdRange
+      const range =
+        Array.isArray(pedalCfg.obdRange) && pedalCfg.obdRange.length === 2
+          ? pedalCfg.obdRange
           : [0, 100];
       if (isNum(this.pedalObd) && Date.now() - this.pedalObdAt < 1000)
         return Math.max(
           0,
-          Math.min(100, ((this.pedalObd - r[0]) / (r[1] - r[0])) * 100),
+          Math.min(
+            100,
+            ((this.pedalObd - range[0]) / (range[1] - range[0])) * 100,
+          ),
         );
-      const d0 = this.car.data();
-      return d0.demo
-        ? isNum(d0.throttle)
-          ? Math.max(0, Math.min(100, d0.throttle * 100))
+      const data = this.car.data();
+      return data.demo
+        ? isNum(data.throttle)
+          ? Math.max(0, Math.min(100, data.throttle * 100))
           : 0
         : null;
     }
     if (this.pedal && Date.now() - this.pedal.at < FRESH_MS) {
-      const c = this.config.pedal || {};
+      const pedalCfg = this.config.pedal || {};
       return Math.max(
         0,
         Math.min(
           100,
-          this.pedal.raw * (isNum(c.factor) ? c.factor : 0.025) +
-            (isNum(c.offset) ? c.offset : 0),
+          this.pedal.raw * (isNum(pedalCfg.factor) ? pedalCfg.factor : 0.025) +
+            (isNum(pedalCfg.offset) ? pedalCfg.offset : 0),
         ),
       );
     }
-    const d = this.car.data();
-    return d.demo
-      ? isNum(d.throttle)
-        ? Math.max(0, Math.min(100, d.throttle * 100))
+    const data = this.car.data();
+    return data.demo
+      ? isNum(data.throttle)
+        ? Math.max(0, Math.min(100, data.throttle * 100))
         : 0
       : null;
   },
@@ -241,15 +255,17 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {boolean}
    */
   _kickdown() {
-    const c = this.config.pedal || {};
+    const pedalCfg = this.config.pedal || {};
     if (
-      c.source === "obd" &&
+      pedalCfg.source === "obd" &&
       isNum(this.pedalObd) &&
       Date.now() - this.pedalObdAt < 1000
     )
-      return this.pedalObd >= (isNum(c.kickdown) ? c.kickdown : 87);
-    const d = this.car.data();
-    return !!d.demo && isNum(d.throttle) && d.throttle >= 1;
+      return (
+        this.pedalObd >= (isNum(pedalCfg.kickdown) ? pedalCfg.kickdown : 87)
+      );
+    const data = this.car.data();
+    return !!data.demo && isNum(data.throttle) && data.throttle >= 1;
   },
 
   /**
@@ -258,8 +274,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _brake() {
     if (this.brakeOn !== null) return this.brakeOn;
-    const d = this.car.data();
-    return !!d.demo && isNum(d.gLong) && d.gLong < -0.12;
+    const data = this.car.data();
+    return !!data.demo && isNum(data.gLong) && data.gLong < -0.12;
   },
 
   /** The brake bar 0..10: 0 off; while braking the deceleration on a log scale (BRAKE_G0, BRAKE_GMAX), at least 1; 10
@@ -268,21 +284,22 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _brakeLevel() {
     const now = Date.now(),
-      gl = this.car.data().gLong;
-    const a = isNum(gl) ? Math.max(0, -gl) : null;
-    if (isNum(a)) {
+      gLong = this.car.data().gLong;
+    const decel = isNum(gLong) ? Math.max(0, -gLong) : null;
+    if (isNum(decel)) {
       const dt = this.decelAt ? Math.min(500, now - this.decelAt) : 0;
       this.decelF = isNum(this.decelF)
-        ? this.decelF + (a - this.decelF) * (1 - Math.exp(-dt / BRAKE_TAU_MS))
-        : a;
+        ? this.decelF +
+          (decel - this.decelF) * (1 - Math.exp(-dt / BRAKE_TAU_MS))
+        : decel;
       this.decelAt = now;
     } else this.decelF = null;
     if (!this._brake()) return 0;
     if (!isNum(this.decelF)) return 10;
-    const v =
+    const level =
       (10 * Math.log(1 + Math.min(this.decelF, BRAKE_GMAX) / BRAKE_G0)) /
       Math.log(1 + BRAKE_GMAX / BRAKE_G0);
-    return Math.max(1, Math.min(10, v));
+    return Math.max(1, Math.min(10, level));
   },
 
   /**
@@ -291,13 +308,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _batt12() {
     if (isNum(this.battRaw)) {
-      const c = this.config.battery || {};
+      const batteryCfg = this.config.battery || {};
       return Math.max(
         0,
         Math.min(
           100,
-          this.battRaw * (isNum(c.factor) ? c.factor : 1) +
-            (isNum(c.offset) ? c.offset : 0),
+          this.battRaw * (isNum(batteryCfg.factor) ? batteryCfg.factor : 1) +
+            (isNum(batteryCfg.offset) ? batteryCfg.offset : 0),
         ),
       );
     }
@@ -311,8 +328,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _volt12() {
     if (isNum(this.volt12) && Date.now() - this.volt12At < VOLT_MS * 3)
       return this.volt12;
-    const d = this.car.data();
-    return d.demo ? (isNum(d.rpm) && d.rpm > 400 ? 14.1 : 12.6) : null;
+    const data = this.car.data();
+    return data.demo ? (isNum(data.rpm) && data.rpm > 400 ? 14.1 : 12.6) : null;
   },
 
   /** A tyre's pressure ('p', bar) or temperature ('t', C) at corner FL FR RL RR; steady made-up values on the demo drive. */
@@ -323,16 +340,16 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _tyreBar(raw) {
     if (!isNum(raw) || raw < 0 || raw >= 65532) return null;
-    const v = raw / 10,
+    const value = raw / 10,
       k = PRESS_TO_BAR[this.carUnits.press];
-    if (k) return v * k;
-    if (v >= 0.5 && v <= 6) return v;
-    if (v >= 7 && v < 60) {
+    if (k) return value * k;
+    if (value >= 0.5 && value <= 6) return value;
+    if (value >= 7 && value < 60) {
       this.carUnits.psiSeen = true;
-      return v / 14.5038;
+      return value / 14.5038;
     }
-    if (v >= 60 && v <= 600) return v / 100;
-    return v;
+    if (value >= 60 && value <= 600) return value / 100;
+    return value;
   },
 
   /**
@@ -342,11 +359,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _tyreC(raw) {
     if (!isNum(raw) || raw < 0 || raw >= 65535) return null;
-    const v = raw - 40,
-      f = this.carUnits.temp
+    const temp = raw - 40,
+      fahrenheit = this.carUnits.temp
         ? this.carUnits.temp === "F"
         : this.carUnits.psiSeen;
-    return f ? ((v - 32) * 5) / 9 : v;
+    return fahrenheit ? ((temp - 32) * 5) / 9 : temp;
   },
 
   /**
@@ -357,8 +374,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?number}
    */
   _tyre(kind, corner) {
-    const v = this.tyres[kind][corner];
-    if (isNum(v)) return v;
+    const value = this.tyres[kind][corner];
+    if (isNum(value)) return value;
     if (!this.car.data().demo) return null;
     const rear = corner === "RL" || corner === "RR";
     return kind === "p" ? (rear ? 2.5 : 2.3) : rear ? 27 : 24;
@@ -366,12 +383,12 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
 
   /**
    * The shifter programme letter next to the gear: S or M from the M drive display, else from the gearbox status, else D.
-   * @param {CarData & { program?: string }} d
+   * @param {CarData & { program?: string }} data
    * @returns {string}
    */
-  _program(d) {
-    const p = this.program || d.program;
-    return p === "S" || p === "M" ? p : "D";
+  _program(data) {
+    const program = this.program || data.program;
+    return program === "S" || program === "M" ? program : "D";
   },
 
   /**
@@ -385,8 +402,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (!isNum(now)) now = Date.now();
     const dt = this.odoAt ? Math.min(1000, Math.max(0, now - this.odoAt)) : 0;
     this.odoAt = now;
-    const sp = this._raw("speed");
-    if (isNum(sp) && sp > 0) this.odoAcc += (sp * dt) / 3600000;
+    const speed = this._raw("speed");
+    if (isNum(speed) && speed > 0) this.odoAcc += (speed * dt) / 3600000;
     // KombiIF's whole km, else MileageSupreme's (no longer asked for: it never came on the car)
     const base = isNum(this.odoKm) ? this.odoKm : this.mileage;
     if (isNum(base)) {
@@ -402,13 +419,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?number}
    */
   _consumption() {
-    let v = null;
-    if (isNum(this.consAvg)) v = this.consAvg;
+    let avg = null;
+    if (isNum(this.consAvg)) avg = this.consAvg;
     else if (isNum(this.consBc)) {
-      const c = this.config.consumption || {};
-      v =
-        this.consBc * (isNum(c.factor) ? c.factor : 0.1) +
-        (isNum(c.offset) ? c.offset : 0);
+      const consCfg = this.config.consumption || {};
+      avg =
+        this.consBc * (isNum(consCfg.factor) ? consCfg.factor : 0.1) +
+        (isNum(consCfg.offset) ? consCfg.offset : 0);
     } else
       return this.car.data().demo
         ? this.setting("units") === "us"
@@ -416,19 +433,19 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           : 9.8
         : null;
     // the car sends it in its own unit: to l/100km, then to the units setting's (mpg US or l/100km)
-    const u =
+    const unit =
       isNum(this.consUnit) && this.consUnit > 0
         ? this.consUnit
         : this.consUnitBc;
-    const l100 = !(v > 0)
+    const l100 = !(avg > 0)
       ? null
-      : u === CONS_UNIT.CONSUMPTION_US
-        ? 235.215 / v
-        : u === CONS_UNIT.CONSUMPTION_UK
-          ? 282.481 / v
-          : u === CONS_UNIT.CONSUMPTION_KML
-            ? 100 / v
-            : v;
+      : unit === CONS_UNIT.CONSUMPTION_US
+        ? 235.215 / avg
+        : unit === CONS_UNIT.CONSUMPTION_UK
+          ? 282.481 / avg
+          : unit === CONS_UNIT.CONSUMPTION_KML
+            ? 100 / avg
+            : avg;
     if (!isNum(l100)) return null;
     return this.setting("units") === "us" ? 235.215 / l100 : l100;
   },
@@ -444,11 +461,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * A consumption message as sent, logged when it changes.
    * @param {string} kind
-   * @param {*} v
+   * @param {*} msg
    * @returns {void}
    */
-  _logCons(kind, v) {
-    const line = JSON.stringify(v);
+  _logCons(kind, msg) {
+    const line = JSON.stringify(msg);
     this.consLines = this.consLines || {};
     if (this.consLines[kind] === line) return;
     this.consLines[kind] = line;

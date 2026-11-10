@@ -62,22 +62,28 @@ function hoodY(x) {
   const last = HOOD[HOOD.length - 1];
   if (x >= last[0]) return last[1];
   for (let i = 1; i < HOOD.length; i++) {
-    const a = HOOD[i - 1],
-      b = HOOD[i];
-    if (x <= b[0]) return a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0]);
+    const prev = HOOD[i - 1],
+      next = HOOD[i];
+    if (x <= next[0])
+      return (
+        prev[1] + ((next[1] - prev[1]) * (x - prev[0])) / (next[0] - prev[0])
+      );
   }
   return last[1];
 }
 
 /** @typedef {{ id?: string, x: number, y: number, w: number, h: number }} Rect a widget's box */
 /**
- * @param {Rect} w
+ * @param {Rect} rect
  * @param {number[]} box [x0, y0, x1, y1]
  * @returns {boolean}
  */
-function overlaps(w, box) {
+function overlaps(rect, box) {
   return (
-    w.x < box[2] && w.x + w.w > box[0] && w.y < box[3] && w.y + w.h > box[1]
+    rect.x < box[2] &&
+    rect.x + rect.w > box[0] &&
+    rect.y < box[3] &&
+    rect.y + rect.h > box[1]
   );
 }
 
@@ -91,36 +97,38 @@ function overlaps(w, box) {
 function check(widgets, target) {
   const out = [];
   if (!Array.isArray(widgets)) return out;
-  widgets.forEach((w) => {
+  widgets.forEach((widget) => {
     if (
-      !w ||
-      typeof w.x !== "number" ||
-      typeof w.y !== "number" ||
-      typeof w.w !== "number" ||
-      typeof w.h !== "number"
+      !widget ||
+      typeof widget.x !== "number" ||
+      typeof widget.y !== "number" ||
+      typeof widget.w !== "number" ||
+      typeof widget.h !== "number"
     )
       return;
-    const id = String(w.id);
+    const id = String(widget.id);
     if (target === "panel") {
       // the top edge: both corners, then a few samples along it (the hood curve is not straight)
       const under = [];
       const tryX = (x, what) => {
-        const d = Math.ceil(hoodY(x) - w.y);
-        if (d > 0) under.push({ d, what });
+        const depth = Math.ceil(hoodY(x) - widget.y);
+        if (depth > 0) under.push({ d: depth, what });
       };
-      tryX(w.x, "top-left corner");
-      tryX(w.x + w.w, "top-right corner");
+      tryX(widget.x, "top-left corner");
+      tryX(widget.x + widget.w, "top-right corner");
       const steps = 4;
       for (let i = 1; i < steps; i++)
         tryX(
-          w.x + (w.w * i) / steps,
-          "top edge at x " + Math.round(w.x + (w.w * i) / steps),
+          widget.x + (widget.w * i) / steps,
+          "top edge at x " + Math.round(widget.x + (widget.w * i) / steps),
         );
       if (under.length) {
-        const worst = under.reduce((a, b) => (b.d > a.d ? b : a));
+        const worst = under.reduce((deepest, entry) =>
+          entry.d > deepest.d ? entry : deepest,
+        );
         out.push(id + ": " + worst.what + " " + worst.d + " px under the hood");
       }
-      if (overlaps(w, CAMERA)) {
+      if (overlaps(widget, CAMERA)) {
         out.push(
           id +
             ": behind the dash camera x" +
@@ -133,7 +141,7 @@ function check(widgets, target) {
             CAMERA[3],
         );
       }
-      if (overlaps(w, BLACK_BOX)) {
+      if (overlaps(widget, BLACK_BOX)) {
         out.push(
           id +
             ": overlaps BMW's gear box x" +
@@ -146,7 +154,7 @@ function check(widgets, target) {
             BLACK_BOX[3],
         );
       }
-      if (overlaps(w, GEAR)) {
+      if (overlaps(widget, GEAR)) {
         out.push(
           id +
             ": overlaps BMW's gear letter x" +
@@ -159,7 +167,7 @@ function check(widgets, target) {
             GEAR[3],
         );
       }
-      if (overlaps(w, BELT)) {
+      if (overlaps(widget, BELT)) {
         out.push(
           id +
             ": overlaps BMW's seat-belt light x" +
@@ -174,17 +182,17 @@ function check(widgets, target) {
       }
     } else if (target === "hud") {
       const win = HUD_WINDOW;
-      const d = Math.max(
-        win.x - w.x,
-        win.y - w.y,
-        w.x + w.w - (win.x + win.w),
-        w.y + w.h - (win.y + win.h),
+      const overflow = Math.max(
+        win.x - widget.x,
+        win.y - widget.y,
+        widget.x + widget.w - (win.x + win.w),
+        widget.y + widget.h - (win.y + win.h),
       );
-      if (d > 0) {
+      if (overflow > 0) {
         out.push(
           id +
             ": " +
-            Math.ceil(d) +
+            Math.ceil(overflow) +
             " px outside the visible HUD window " +
             win.x +
             "," +

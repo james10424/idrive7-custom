@@ -62,10 +62,10 @@
 const WARM_OIL = 80; // °C
 const COLD_LIMIT = 4500; // rpm at 30 °C oil (Redline's petrol default)
 const PEAK_HOLD_MS = 15000;
-/** @type {(v: any) => v is number} */
-const isNum = (v) => typeof v === "number" && isFinite(v);
-/** @type {(v: number, a: number, b: number) => number} */
-const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+/** @type {(value: any) => value is number} */
+const isNum = (value) => typeof value === "number" && isFinite(value);
+/** @type {(value: number, min: number, max: number) => number} */
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 class ShiftScore {
   /**
@@ -88,7 +88,7 @@ class ShiftScore {
     this.lastGear = null;
     this.onLimiter = false;
     car.onSample(
-      (d, t) => this._sample(d, t),
+      (data, t) => this._sample(data, t),
       () => {
         this.recent.length = 0;
         this.lastGear = null;
@@ -98,8 +98,8 @@ class ShiftScore {
 
   /** @returns {number} the shift point with the oil warm */
   _normal() {
-    const o = this.opts();
-    return Math.max(2500, o.redline - o.shiftBefore);
+    const opts = this.opts();
+    return Math.max(2500, opts.redline - opts.shiftBefore);
   }
 
   /**
@@ -108,12 +108,15 @@ class ShiftScore {
    * @returns {{ rpm: number, cold: boolean }}
    */
   shiftPoint(oil) {
-    const n = this._normal();
+    const normal = this._normal();
     if (!this.opts().coldGuard || !isNum(oil) || oil >= WARM_OIL)
-      return { rpm: n, cold: false };
-    const cold = Math.min(COLD_LIMIT, n);
-    const f = clamp((oil - 30) / (WARM_OIL - 30), 0, 1);
-    return { rpm: Math.round((cold + (n - cold) * f) / 50) * 50, cold: true };
+      return { rpm: normal, cold: false };
+    const cold = Math.min(COLD_LIMIT, normal);
+    const warmth = clamp((oil - 30) / (WARM_OIL - 30), 0, 1);
+    return {
+      rpm: Math.round((cold + (normal - cold) * warmth) / 50) * 50,
+      cold: true,
+    };
   }
 
   /**
@@ -142,21 +145,21 @@ class ShiftScore {
    * @param {number|string} to
    */
   _record(t, from, to) {
-    const win = this.recent.filter((r) => t - r[0] < 600);
+    const win = this.recent.filter((sample) => t - sample[0] < 600);
     if (!win.length) return;
     const rpm = Math.max.apply(
       null,
-      win.map((r) => r[1]),
+      win.map((sample) => sample[1]),
     );
     if (!(rpm > 2500)) return;
-    const sp = this.shiftPoint(this.car.data().oil);
+    const point = this.shiftPoint(this.car.data().oil);
     this.last = {
       at: Date.now(),
       from,
       to,
       rpm: Math.round(rpm),
-      target: sp.rpm,
-      verdict: this.verdict(rpm, sp.rpm, sp.cold),
+      target: point.rpm,
+      verdict: this.verdict(rpm, point.rpm, point.cold),
     };
     this.log.info(
       "shift " +
@@ -166,52 +169,52 @@ class ShiftScore {
         " @" +
         this.last.rpm +
         " (shift point " +
-        sp.rpm +
+        point.rpm +
         ") " +
         this.last.verdict,
     );
   }
 
   /**
-   * @param {CarData} d
+   * @param {CarData} data
    * @param {number} t sample time, ms
    */
-  _sample(d, t) {
-    if (!isNum(d.rpm)) return;
-    const r = this.recent;
-    r.push([t, d.rpm, d.speed]);
-    while (r.length && t - r[0][0] > 1200) r.shift();
+  _sample(data, t) {
+    if (!isNum(data.rpm)) return;
+    const recent = this.recent;
+    recent.push([t, data.rpm, data.speed]);
+    while (recent.length && t - recent[0][0] > 1200) recent.shift();
     const now = Date.now();
-    if (d.rpm >= this.peak || now - this.peakT > PEAK_HOLD_MS) {
-      this.peak = d.rpm;
+    if (data.rpm >= this.peak || now - this.peakT > PEAK_HOLD_MS) {
+      this.peak = data.rpm;
       this.peakT = now;
     }
-    const lim = d.rpm >= this.opts().redline - 60;
+    const lim = data.rpm >= this.opts().redline - 60;
     if (lim && !this.onLimiter) this.limiterHits++;
     this.onLimiter = lim;
-    const g = d.gear;
+    const gear = data.gear;
     if (
-      isNum(g) &&
-      g > 0 &&
+      isNum(gear) &&
+      gear > 0 &&
       isNum(this.lastGear) &&
       this.lastGear > 0 &&
-      g === this.lastGear + 1
+      gear === this.lastGear + 1
     )
-      this._record(t, this.lastGear, g);
-    else if (!isNum(g) && r.length > 4 && d.speed > 10) {
-      const back = r.filter((x) => t - x[0] < 400);
-      const hi = Math.max.apply(
+      this._record(t, this.lastGear, gear);
+    else if (!isNum(gear) && recent.length > 4 && data.speed > 10) {
+      const back = recent.filter((sample) => t - sample[0] < 400);
+      const peakRpm = Math.max.apply(
         null,
-        back.map((x) => x[1]),
+        back.map((sample) => sample[1]),
       );
       if (
-        hi > 3000 &&
-        d.rpm < hi * 0.82 &&
+        peakRpm > 3000 &&
+        data.rpm < peakRpm * 0.82 &&
         (!this.last || now - this.last.at > 800)
       )
         this._record(t, "?", "?");
     }
-    if (isNum(g)) this.lastGear = g;
+    if (isNum(gear)) this.lastGear = gear;
   }
 }
 

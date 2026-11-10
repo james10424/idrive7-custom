@@ -21,22 +21,24 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * functionalLibraryData: BMW's HUD shows its driver assistance block while it has the assist symbol (ldmSym
    * with a colour), the ACC car or distance bars, or a lit (not grey) lane-assist wheel.
-   * @param {*} v
+   * @param {*} msg
    * @returns {void}
    */
-  _onAssist(v) {
-    if (!v || typeof v !== "object") return;
-    const acc = v.activeCruiseControl || {},
-      sta = v.trafficJamAssist || {};
-    const sym = enumNum(v.ldmSym, LDM_SYM),
-      col = enumNum(v.ldmSymColor, LDM_COLOR);
+  _onAssist(msg) {
+    if (!msg || typeof msg !== "object") return;
+    const acc = msg.activeCruiseControl || {},
+      sta = msg.trafficJamAssist || {};
+    const sym = enumNum(msg.ldmSym, LDM_SYM),
+      col = enumNum(msg.ldmSymColor, LDM_COLOR);
     const car = enumNum(acc.symbolACC, ACC_SYM),
       bars = enumNum(acc.barsColorACC, ACC_BARS);
     const wheel = enumNum(sta.steeringWheel, STA_WHEEL);
-    this.accSetRaw = isNum(v.cruiseCtrlSpeedHUD) ? v.cruiseCtrlSpeedHUD : null;
+    this.accSetRaw = isNum(msg.cruiseCtrlSpeedHUD)
+      ? msg.cruiseCtrlSpeedHUD
+      : null;
     const raw = [
-      v.ldmSym,
-      v.ldmSymColor,
+      msg.ldmSym,
+      msg.ldmSymColor,
       acc.symbolACC,
       acc.barsColorACC,
       sta.steeringWheel,
@@ -45,9 +47,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       this.assistRaw = raw;
       this.log.info(
         "driver assistance on the HUD: symbol " +
-          v.ldmSym +
+          msg.ldmSym +
           " " +
-          v.ldmSymColor +
+          msg.ldmSymColor +
           ", ACC " +
           acc.symbolACC +
           " " +
@@ -57,25 +59,25 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       );
     }
     this.accOn = !!car || !!bars;
-    const on =
+    const active =
       (!!sym && !!col) ||
       !!car ||
       !!bars ||
       (!!wheel && wheel !== STA_WHEEL.LDM_STW_GREY);
-    if (on === this.assistActive) return;
-    this.assistActive = on;
+    if (active === this.assistActive) return;
+    this.assistActive = active;
     this._modeChanged();
   },
 
   /** The car-ahead messages as sent, when they change (an X3 repeats the same one every second), at most once a second,
    *  for calibrating config.acc against what BMW's HUD shows.
    * @param {string} kind
-   * @param {*} v
+   * @param {*} msg
    * @returns {void}
    */
-  _logAhead(kind, v) {
+  _logAhead(kind, msg) {
     const now = Date.now(),
-      line = JSON.stringify(v);
+      line = JSON.stringify(msg);
     this.aheadLogged = this.aheadLogged || {};
     this.aheadLogAt = this.aheadLogAt || {};
     if (
@@ -103,9 +105,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {number}
    */
   _accScale(key, raw) {
-    const c = (this.config.acc && this.config.acc[key]) || {};
+    const scale = (this.config.acc && this.config.acc[key]) || {};
     return (
-      raw * (isNum(c.factor) ? c.factor : 1) + (isNum(c.offset) ? c.offset : 0)
+      raw * (isNum(scale.factor) ? scale.factor : 1) +
+      (isNum(scale.offset) ? scale.offset : 0)
     );
   },
 
@@ -115,23 +118,23 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _gapM() {
     const now = Date.now(),
-      a = this.ahead,
-      b = this.ahead2;
+      ahead = this.ahead,
+      ahead2 = this.ahead2;
     if (
-      a &&
-      now - a.at < FRESH_MS &&
-      enumNum(a.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE &&
-      isNum(a.gapX)
+      ahead &&
+      now - ahead.at < FRESH_MS &&
+      enumNum(ahead.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE &&
+      isNum(ahead.gapX)
     )
-      return this._accScale("gap", a.gapX);
+      return this._accScale("gap", ahead.gapX);
     if (
-      b &&
-      now - b.at < FRESH_MS &&
-      b.measured &&
-      isNum(b.gap) &&
-      [6, 14, 15].indexOf(enumNum(b.q, AHEAD2_Q)) < 0
+      ahead2 &&
+      now - ahead2.at < FRESH_MS &&
+      ahead2.measured &&
+      isNum(ahead2.gap) &&
+      [6, 14, 15].indexOf(enumNum(ahead2.q, AHEAD2_Q)) < 0
     )
-      return this._accScale("gap", b.gap);
+      return this._accScale("gap", ahead2.gap);
     return null;
   },
 
@@ -141,23 +144,23 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _gapRate() {
     const now = Date.now(),
-      g = this._gapM(),
-      r = this.relFromGap;
-    if (!isNum(g)) {
+      gapM = this._gapM(),
+      prev = this.relFromGap;
+    if (!isNum(gapM)) {
       this.relFromGap = null;
       return;
     }
-    if (!r) {
-      this.relFromGap = { v: null, gapM: g, at: now };
+    if (!prev) {
+      this.relFromGap = { v: null, gapM: gapM, at: now };
       return;
     }
-    const dt = now - r.at;
+    const dt = now - prev.at;
     if (dt < 200) return;
-    const inst = ((g - r.gapM) / (dt / 1000)) * 3.6;
+    const inst = ((gapM - prev.gapM) / (dt / 1000)) * 3.6;
     const k = 1 - Math.exp(-dt / REL_TAU_MS);
     this.relFromGap = {
-      v: isNum(r.v) ? r.v + (inst - r.v) * k : inst,
-      gapM: g,
+      v: isNum(prev.v) ? prev.v + (inst - prev.v) * k : inst,
+      gapM: gapM,
       at: now,
     };
   },
@@ -169,25 +172,28 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _acc(key) {
     const now = Date.now(),
-      a = this.ahead;
+      ahead = this.ahead;
     if (key === "gap") return this._gapM();
     if (key === "rel") {
       const own = this._raw("speed");
       if (!isNum(own) || own < 1) return null; // standing still: "--" (the gap's rate is only noise then)
       // DataFrontVehicle's speed only once config.acc.rel says how to read it (use: true): following a car slowly on an
       // X3 it read 509, not a relative km/h; until then the gap's rate
-      const cr = (this.config.acc && this.config.acc.rel) || {};
+      const relCfg = (this.config.acc && this.config.acc.rel) || {};
       if (
-        cr.use === true &&
-        a &&
-        now - a.at < FRESH_MS &&
-        enumNum(a.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE &&
-        isNum(a.speedX)
+        relCfg.use === true &&
+        ahead &&
+        now - ahead.at < FRESH_MS &&
+        enumNum(ahead.q, AHEAD_Q) !== AHEAD_Q.EVENT_DATA_NOT_AVAILABLE &&
+        isNum(ahead.speedX)
       )
-        return this._accScale("rel", a.speedX);
-      const r = this.relFromGap;
-      return r && isNum(r.v) && now - r.at < FRESH_MS && isNum(this._gapM())
-        ? r.v
+        return this._accScale("rel", ahead.speedX);
+      const fromGap = this.relFromGap;
+      return fromGap &&
+        isNum(fromGap.v) &&
+        now - fromGap.at < FRESH_MS &&
+        isNum(this._gapM())
+        ? fromGap.v
         : null;
     }
     if (key === "set")
@@ -204,11 +210,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {boolean}
    */
   _closing() {
-    const r = this._acc("rel"),
+    const rel = this._acc("rel"),
       lim =
         this.config.acc && isNum(this.config.acc.closingKmh)
           ? this.config.acc.closingKmh
           : 10;
-    return isNum(r) && r < -lim;
+    return isNum(rel) && rel < -lim;
   },
 });

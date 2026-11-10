@@ -77,15 +77,15 @@ function loadFont(name) {
 
 /**
  * @param {Font} font
- * @param {string} ch
+ * @param {string} char
  * @returns {Glyph} the space (or an empty glyph) when missing
  */
-function glyphOf(font, ch) {
-  const g = font.metrics.glyphs[ch];
-  if (g) return g;
-  if (!warnedMissing.has(ch)) {
-    warnedMissing.add(ch);
-    console.warn("[hud_text] font has no glyph for " + JSON.stringify(ch));
+function glyphOf(font, char) {
+  const glyph = font.metrics.glyphs[char];
+  if (glyph) return glyph;
+  if (!warnedMissing.has(char)) {
+    warnedMissing.add(char);
+    console.warn("[hud_text] font has no glyph for " + JSON.stringify(char));
   }
   return (
     font.metrics.glyphs[" "] || { x: 0, y: 0, w: 0, h: 0, ox: 0, advance: 0 }
@@ -102,11 +102,12 @@ function glyphOf(font, ch) {
 function measure(text, fontName, spacing) {
   const font = loadFont(fontName);
   const chars = String(text).split("");
-  let w = 0;
-  chars.forEach((ch, i) => {
-    w += glyphOf(font, ch).advance + (i < chars.length - 1 ? spacing || 0 : 0);
+  let width = 0;
+  chars.forEach((char, i) => {
+    width +=
+      glyphOf(font, char).advance + (i < chars.length - 1 ? spacing || 0 : 0);
   });
-  return w;
+  return width;
 }
 
 /**
@@ -130,65 +131,67 @@ function mask(boxW, boxH, text, opts) {
         ? Math.round((boxW - width) / 2)
         : 0);
   const offY = opts.offsetY || 0;
-  for (const ch of String(text)) {
-    const g = glyphOf(font, ch);
-    const x0 = Math.round(pen + g.ox); // spacing can be fractional: snap each glyph to a pixel
-    for (let y = 0; y < g.h; y++) {
-      const dy = y + offY;
-      if (dy < 0 || dy >= boxH) continue;
-      const srcRow = (g.y + y) * font.width + g.x;
-      const dstRow = dy * boxW;
-      for (let x = 0; x < g.w; x++) {
-        const dx = x0 + x;
-        if (dx < 0 || dx >= boxW) continue;
-        const a = font.alpha[srcRow + x];
-        if (a > out[dstRow + dx]) out[dstRow + dx] = a; // overlapping cells: keep the stronger ink
+  for (const char of String(text)) {
+    const glyph = glyphOf(font, char);
+    const x0 = Math.round(pen + glyph.ox); // spacing can be fractional: snap each glyph to a pixel
+    for (let y = 0; y < glyph.h; y++) {
+      const destY = y + offY;
+      if (destY < 0 || destY >= boxH) continue;
+      const srcRow = (glyph.y + y) * font.width + glyph.x;
+      const dstRow = destY * boxW;
+      for (let x = 0; x < glyph.w; x++) {
+        const destX = x0 + x;
+        if (destX < 0 || destX >= boxW) continue;
+        const alpha = font.alpha[srcRow + x];
+        if (alpha > out[dstRow + destX]) out[dstRow + destX] = alpha; // overlapping cells: keep the stronger ink
       }
     }
-    pen += g.advance + spacing;
+    pen += glyph.advance + spacing;
   }
   return out;
 }
 
 /**
- * Separable box blur on a coverage mask, radius r, `passes` times (~gaussian at 3).
+ * Separable box blur on a coverage mask, `radius` px, `passes` times (~gaussian at 3).
  * @param {Buffer} src w*h bytes
  * @param {number} w
  * @param {number} h
- * @param {number} r
+ * @param {number} radius
  * @param {number} passes
  * @returns {Buffer}
  */
-function blur(src, w, h, r, passes) {
-  let a = Buffer.from(src);
-  let b = Buffer.alloc(a.length);
-  const n = 2 * r + 1;
-  for (let p = 0; p < passes; p++) {
+function blur(src, w, h, radius, passes) {
+  let out = Buffer.from(src);
+  let scratch = Buffer.alloc(out.length);
+  const span = 2 * radius + 1;
+  for (let pass = 0; pass < passes; pass++) {
     for (let y = 0; y < h; y++) {
       // horizontal
       const row = y * w;
       let sum = 0;
-      for (let x = -r; x <= r; x++)
-        sum += a[row + Math.min(w - 1, Math.max(0, x))];
+      for (let x = -radius; x <= radius; x++)
+        sum += out[row + Math.min(w - 1, Math.max(0, x))];
       for (let x = 0; x < w; x++) {
-        b[row + x] = (sum / n) | 0;
+        scratch[row + x] = (sum / span) | 0;
         sum +=
-          a[row + Math.min(w - 1, x + r + 1)] - a[row + Math.max(0, x - r)];
+          out[row + Math.min(w - 1, x + radius + 1)] -
+          out[row + Math.max(0, x - radius)];
       }
     }
     for (let x = 0; x < w; x++) {
       // vertical
       let sum = 0;
-      for (let y = -r; y <= r; y++)
-        sum += b[Math.min(h - 1, Math.max(0, y)) * w + x];
+      for (let y = -radius; y <= radius; y++)
+        sum += scratch[Math.min(h - 1, Math.max(0, y)) * w + x];
       for (let y = 0; y < h; y++) {
-        a[y * w + x] = (sum / n) | 0;
+        out[y * w + x] = (sum / span) | 0;
         sum +=
-          b[Math.min(h - 1, y + r + 1) * w + x] - b[Math.max(0, y - r) * w + x];
+          scratch[Math.min(h - 1, y + radius + 1) * w + x] -
+          scratch[Math.max(0, y - radius) * w + x];
       }
     }
   }
-  return a;
+  return out;
 }
 
 /**
@@ -205,44 +208,47 @@ function drawText(boxW, boxH, text, opts) {
 
 /**
  * Colour a coverage mask (plus optional glow) into straight RGBA. opts: color, color2 (bottom, for a gradient), glow, font.
- * @param {Buffer} m coverage, boxW*boxH bytes
+ * @param {Buffer} coverage coverage, boxW*boxH bytes
  * @param {number} boxW
  * @param {number} boxH
  * @param {TextOpts} opts
  * @returns {Buffer} boxW*boxH*4 bytes
  */
-function tint(m, boxW, boxH, opts) {
+function tint(coverage, boxW, boxH, opts) {
   const color = opts.color || [255, 255, 255, 255];
   let halo = null;
   const glow = opts.glow || 0;
   if (glow > 0) {
-    const r = Math.max(2, Math.round(loadFont(opts.font).metrics.size / 24));
-    halo = blur(m, boxW, boxH, r, 2);
+    const radius = Math.max(
+      2,
+      Math.round(loadFont(opts.font).metrics.size / 24),
+    );
+    halo = blur(coverage, boxW, boxH, radius, 2);
   }
   const out = Buffer.alloc(boxW * boxH * 4, 0);
-  const ca = color[3] / 255;
-  const c2 = opts.color2; // optional: the colour at the bottom of the box (a top-to-bottom gradient)
+  const alphaScale = color[3] / 255;
+  const color2 = opts.color2; // optional: the colour at the bottom of the box (a top-to-bottom gradient)
   let rowC = color,
     row = -1;
-  for (let i = 0; i < m.length; i++) {
-    let a = m[i] / 255;
-    if (halo) a = a + (1 - a) * (halo[i] / 255) * glow; // glyph over its own halo
-    if (a <= 0) continue;
-    if (c2) {
+  for (let i = 0; i < coverage.length; i++) {
+    let alpha = coverage[i] / 255;
+    if (halo) alpha = alpha + (1 - alpha) * (halo[i] / 255) * glow; // glyph over its own halo
+    if (alpha <= 0) continue;
+    if (color2) {
       const y = Math.floor(i / boxW);
       if (y !== row) {
         row = y;
-        const f = boxH > 1 ? y / (boxH - 1) : 0;
+        const frac = boxH > 1 ? y / (boxH - 1) : 0;
         rowC = [0, 1, 2].map((j) =>
-          Math.round(color[j] + (c2[j] - color[j]) * f),
+          Math.round(color[j] + (color2[j] - color[j]) * frac),
         );
       }
     }
-    const o = i * 4;
-    out[o] = rowC[0];
-    out[o + 1] = rowC[1];
-    out[o + 2] = rowC[2];
-    out[o + 3] = Math.round(a * ca * 255);
+    const offset = i * 4;
+    out[offset] = rowC[0];
+    out[offset + 1] = rowC[1];
+    out[offset + 2] = rowC[2];
+    out[offset + 3] = Math.round(alpha * alphaScale * 255);
   }
   return out;
 }

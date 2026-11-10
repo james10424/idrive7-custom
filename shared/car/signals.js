@@ -136,15 +136,19 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       "de.bmw.infotainment.KombiIF": {
         // the local time the cluster shows: its offset from UTC is the car's time zone (the app's own clock is UTC
         // on the car, so new Date() read 5 h ahead in Toronto, Nov 2026); follows summer time and the car's setting
-        statusShowTimeDate: (v) => this._onCarClock(v),
-        statusRangeTankStatus: (v) => {
-          const f = v && v.fluidLevelFuelTank,
-            r = v && v.range;
-          this.fuelL = isNum(f) && f >= 0 && f < 255 ? f : null;
-          this.rangeKm = isNum(r) && r >= 0 && r < 4095 ? r : null;
+        statusShowTimeDate: (msg) => this._onCarClock(msg),
+        statusRangeTankStatus: (msg) => {
+          const fuel = msg && msg.fluidLevelFuelTank,
+            range = msg && msg.range;
+          this.fuelL = isNum(fuel) && fuel >= 0 && fuel < 255 ? fuel : null;
+          this.rangeKm =
+            isNum(range) && range >= 0 && range < 4095 ? range : null;
           // the odometer, whole km (cauliflowermossgrape's Live Data reads it here; MileageSupreme never came)
-          const m = v && v.mileageKilometre;
-          const km = isNum(m) && m > 0 && m < 16777215 ? m : null;
+          const mileage = msg && msg.mileageKilometre;
+          const km =
+            isNum(mileage) && mileage > 0 && mileage < 16777215
+              ? mileage
+              : null;
           if (km !== this.odoKm) {
             this.odoKm = km;
             this.odoAcc = 0;
@@ -154,37 +158,43 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       // the trip computer for the period picked on the center screen (this trip, since refuelling, individual, long term):
       // average consumption (app.json config.consumption); raw values logged on change to check the scaling
       "de.bmw.infotainment.resetlogic.ResetLogic": {
-        averageConsumption: (v) => {
-          if (!v) return;
-          const sc = v.consumptionCombustionCurrentScale,
-            dg = v.consumptionCombustionCurrentDigit;
+        averageConsumption: (msg) => {
+          if (!msg) return;
+          const scaled = msg.consumptionCombustionCurrentScale,
+            decimals = msg.consumptionCombustionCurrentDigit;
           this.consAvg =
-            isNum(sc) && sc < 65535 && isNum(dg) && dg >= 0 && dg <= 3
-              ? sc / Math.pow(10, dg)
+            isNum(scaled) &&
+            scaled < 65535 &&
+            isNum(decimals) &&
+            decimals >= 0 &&
+            decimals <= 3
+              ? scaled / Math.pow(10, decimals)
               : null;
-          this.consUnit = enumNum(v.combustionUnit, CONS_UNIT);
+          this.consUnit = enumNum(msg.combustionUnit, CONS_UNIT);
           this.consAt = Date.now();
-          this._logCons("average", v);
+          this._logCons("average", msg);
         },
-        bcDataAll: (v) => {
-          if (!v) return;
-          const d = v.bcData || {};
+        bcDataAll: (msg) => {
+          if (!msg) return;
+          const bc = msg.bcData || {};
           this.consPeriod =
-            d.resetOption !== undefined ? d.resetOption : v.activeResetLogic;
+            bc.resetOption !== undefined
+              ? bc.resetOption
+              : msg.activeResetLogic;
           this.consBc =
-            isNum(d.consumptionAverage) && d.consumptionAverage < 65535
-              ? d.consumptionAverage
+            isNum(bc.consumptionAverage) && bc.consumptionAverage < 65535
+              ? bc.consumptionAverage
               : null;
-          if (v.bcUnits && v.bcUnits.consumption !== undefined)
-            this.consUnitBc = enumNum(v.bcUnits.consumption, CONS_UNIT);
+          if (msg.bcUnits && msg.bcUnits.consumption !== undefined)
+            this.consUnitBc = enumNum(msg.bcUnits.consumption, CONS_UNIT);
           this.consBcAt = Date.now();
           this._logCons("bc", {
             period: this.consPeriod,
-            active: v.activeResetLogic,
-            avg: d.consumptionAverage,
-            now: d.currentConsumption,
-            speed: d.speedAverage,
-            units: v.bcUnits,
+            active: msg.activeResetLogic,
+            avg: bc.consumptionAverage,
+            now: bc.currentConsumption,
+            speed: bc.speedAverage,
+            units: msg.bcUnits,
           });
         },
       },
@@ -192,28 +202,31 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       // The car never notifies these (BMW's own x_call only ever reads them), so they are polled.
       "de.bmw.infotainment.vehicle.TPMS": {
         $pollMs: 10000,
-        statusTyrePressure: (v) =>
+        statusTyrePressure: (msg) =>
           TYRE_CORNERS.forEach((k) => {
             this.tyres.p[k] = this._tyreBar(
-              v && v["actualValuePressureTyre" + k + "H"],
+              msg && msg["actualValuePressureTyre" + k + "H"],
             );
           }),
-        statusTyreTemperature: (v) =>
+        statusTyreTemperature: (msg) =>
           TYRE_CORNERS.forEach((k) => {
             this.tyres.t[k] = this._tyreC(
-              v && v["actualValueTemperatureTyre" + k + "H"],
+              msg && msg["actualValueTemperatureTyre" + k + "H"],
             );
           }),
       },
       // the car's display units: the TPMS reports pressure as 0.1 x raw in the car's pressure unit and temperature
       // as the car's degrees + 40 (car_vitals, MIT; a car set to psi / F showed 32 psi as 464 psi until this was read)
       "de.bmw.infotainment.vehicle.Vehicle": {
-        statusNewCurrentUnitsStatusExt: (v) => {
+        statusNewCurrentUnitsStatusExt: (msg) => {
           const press = unitName(
               PRESS_UNITS,
-              v && v.unitOfMeasurementAirPressure,
+              msg && msg.unitOfMeasurementAirPressure,
             ),
-            temp = unitName(TEMP_UNITS, v && v.unitOfMeasurementTemperature);
+            temp = unitName(
+              TEMP_UNITS,
+              msg && msg.unitOfMeasurementTemperature,
+            );
           if (press === this.carUnits.press && temp === this.carUnits.temp)
             return;
           this.carUnits.press = press;
@@ -228,78 +241,78 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       },
       // S / M next to the gear: the gearbox status carries no programme on some cars, the M drive display does
       "de.bmw.infotainment.misc.MDrive": {
-        dataDisplayGearbox: (v) => {
-          this.program = PROGRAMS[v && v.displayProgramGearbox] || null;
+        dataDisplayGearbox: (msg) => {
+          this.program = PROGRAMS[msg && msg.displayProgramGearbox] || null;
         },
       },
       // outside temperature: raw * 0.5 - 40 deg C, 255 = none (car_vitals, MIT)
       "de.bmw.infrastructure.EnvironmentalInformation": {
-        ExteriorTemperature: (v) => {
-          const t = v && v.temperatureExterior;
-          this.ambient = isNum(t) && t !== 255 ? t * 0.5 - 40 : null;
+        ExteriorTemperature: (msg) => {
+          const raw = msg && msg.temperatureExterior;
+          this.ambient = isNum(raw) && raw !== 255 ? raw * 0.5 - 40 : null;
         },
       },
       // what BMW's HUD draws for ACC / DCC / STA ("cruise" mode); only HUD apps with makeRoom list it in app.json
       "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
-        functionalLibraryData: (v) => this._onAssist(v),
+        functionalLibraryData: (msg) => this._onAssist(msg),
       },
       // the car ahead (gap, its speed): notify only, so "s" in app.json; raw until calibrated (config.acc)
       "de.bmw.dass.GapVehicleAhead": {
-        DataFrontVehicle: (v) => {
-          if (!v) return;
+        DataFrontVehicle: (msg) => {
+          if (!msg) return;
           // 4093..4095 are "no object / not available" codes (with no car ahead an X3 sends 4093 in every field and
           // object id 253, Nov 8 2026), as 253..255 are for the object id
-          /** @type {(x: *) => ?number} */
-          const num = (x) => (isNum(x) && x < 4093 ? x : null);
-          const id = v.frontVehicleObjectID,
+          /** @type {(value: *) => ?number} */
+          const num = (value) => (isNum(value) && value < 4093 ? value : null);
+          const id = msg.frontVehicleObjectID,
             none = !isNum(id) || id >= 253;
           this.ahead = {
-            gapX: none ? null : num(v.frontVehicleGapX),
-            gapY: none ? null : num(v.frontVehicleGapY),
-            speedX: none ? null : num(v.frontVehicleSpeedX),
-            speedY: none ? null : num(v.frontVehicleSpeedY),
-            q: v.qualifierEventDataFunctionFrontVehicle,
+            gapX: none ? null : num(msg.frontVehicleGapX),
+            gapY: none ? null : num(msg.frontVehicleGapY),
+            speedX: none ? null : num(msg.frontVehicleSpeedX),
+            speedY: none ? null : num(msg.frontVehicleSpeedY),
+            q: msg.qualifierEventDataFunctionFrontVehicle,
             at: Date.now(),
           };
-          this._logAhead("front", v);
+          this._logAhead("front", msg);
         },
-        GapVehicleDrivingAhead: (v) => {
-          if (!v) return;
-          const g = v.gapVehicleDrivingAhead,
-            m = enumNum(
-              v.statusMeasurementVehicleDrivingAhead,
+        GapVehicleDrivingAhead: (msg) => {
+          if (!msg) return;
+          const gap = msg.gapVehicleDrivingAhead,
+            measurement = enumNum(
+              msg.statusMeasurementVehicleDrivingAhead,
               AHEAD2_MEASURED,
             );
           this.ahead2 = {
-            gap: isNum(g) && g < 253 ? g : null,
-            q: v.qualifierFunctionVehicleDrivingAhead,
-            measured: m >= 1 && m <= 4,
+            gap: isNum(gap) && gap < 253 ? gap : null,
+            q: msg.qualifierFunctionVehicleDrivingAhead,
+            measured: measurement >= 1 && measurement <= 4,
             at: Date.now(),
           };
           this._gapRate();
-          this._logAhead("gap", v);
+          this._logAhead("gap", msg);
         },
       },
       // the accelerator pedal and the brake lights (config.pedals); notify only, so "s" in app.json
       "de.bmw.powertrain.AcceleratorPedal": {
-        AngleAcceleratorPedal: (v) => {
-          const raw = v && v.actualValueAngleAcceleratorPedal;
-          const ok =
+        AngleAcceleratorPedal: (msg) => {
+          const raw = msg && msg.actualValueAngleAcceleratorPedal;
+          const valid =
             enumNum(
-              v && v.qualifierActualValueAngleAcceleratorPedal,
+              msg && msg.qualifierActualValueAngleAcceleratorPedal,
               PEDAL_OK,
             ) === 1;
-          this.pedal = ok && isNum(raw) ? { raw, at: Date.now() } : null;
+          this.pedal = valid && isNum(raw) ? { raw, at: Date.now() } : null;
           // for working out config.pedal: every change, at most 5 a second, with the pedal message's other values (a
           // slow press on the car showed the bar jumping, Nov 7 2026: wrong field or scaling)
           const line =
             raw +
             " virtual " +
-            (v && v.actualValueAngleAcceleratorPedalVirtual) +
+            (msg && msg.actualValueAngleAcceleratorPedalVirtual) +
             " gradient " +
-            (v && v.gradientActualValueAngleAcceleratorPedal) +
+            (msg && msg.gradientActualValueAngleAcceleratorPedal) +
             " (" +
-            (v && v.qualifierActualValueAngleAcceleratorPedal) +
+            (msg && msg.qualifierActualValueAngleAcceleratorPedal) +
             ")";
           if (line !== this.pedalLine && Date.now() - this.pedalLogged > 200) {
             this.pedalLogged = Date.now();
@@ -311,131 +324,159 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       // the 12 V battery's charge condition (config.pedals, with the 12 V voltage)
       "de.bmw.infotainment.vehicle.CDS": {
         // the hand brake contact (a fallback for the parking brake lamp): 2 set, 1 released
-        statusHandBrake: (v) => {
-          const n = enumNum(v && v.statusContactHandBrake, HAND_BRAKE);
-          this.parkBrakeCds = n === 2 ? true : n === 1 ? false : null;
+        statusHandBrake: (msg) => {
+          const contact = enumNum(
+            msg && msg.statusContactHandBrake,
+            HAND_BRAKE,
+          );
+          this.parkBrakeCds =
+            contact === 2 ? true : contact === 1 ? false : null;
         },
-        statusBattery2: (v) => {
-          const c = v && v.conditionBatteryChargingCondition;
-          const raw = isNum(c) && c !== 255 ? c : null;
+        statusBattery2: (msg) => {
+          const condition = msg && msg.conditionBatteryChargingCondition;
+          const raw = isNum(condition) && condition !== 255 ? condition : null;
           if (raw !== this.battRaw)
-            this.log.info("12 V battery charge condition raw " + c);
+            this.log.info("12 V battery charge condition raw " + condition);
           this.battRaw = raw;
           this.battAt = Date.now();
         },
       },
       "de.bmw.body.Light": {
-        LampExterior: (v) => {
-          const b = enumNum(v && v.controlFunctionBrakeLight, BRAKE_LIGHT);
+        LampExterior: (msg) => {
+          const brakeLight = enumNum(
+            msg && msg.controlFunctionBrakeLight,
+            BRAKE_LIGHT,
+          );
           this.brakeOn =
-            b === BRAKE_LIGHT.ON_BL
+            brakeLight === BRAKE_LIGHT.ON_BL
               ? true
-              : b === BRAKE_LIGHT.OFF_BL
+              : brakeLight === BRAKE_LIGHT.OFF_BL
                 ? false
                 : null;
         },
         // the indicators (the Regal theme's turn lamps): controlIndicateDirection 1 / 3 left, 2 / 4 right, 8 hazards
-        StatusFunctionsIndicators: (v) => {
-          const raw = v && v.controlIndicateDirection,
-            d = enumNum(raw, INDICATE);
-          const t =
-            d === 1 || d === 3
+        StatusFunctionsIndicators: (msg) => {
+          const raw = msg && msg.controlIndicateDirection,
+            direction = enumNum(raw, INDICATE);
+          const turn =
+            direction === 1 || direction === 3
               ? "L"
-              : d === 2 || d === 4
+              : direction === 2 || direction === 4
                 ? "R"
-                : d === 8
+                : direction === 8
                   ? "LR"
-                  : d === 0
+                  : direction === 0
                     ? ""
                     : null;
-          if (t !== this.turn)
+          if (turn !== this.turn)
             this.log.info(
               "indicators raw " +
                 raw +
-                (v && v.activeFunctionIndicateDirection !== undefined
-                  ? " / " + v.activeFunctionIndicateDirection
+                (msg && msg.activeFunctionIndicateDirection !== undefined
+                  ? " / " + msg.activeFunctionIndicateDirection
                   : ""),
             );
-          this.turn = t;
+          this.turn = turn;
           this.turnAt = Date.now();
         },
       },
       // the parking brake (the Regal theme's left lamp): statusParkingBrake 1 / 4 = set or setting, 0 / 2 = released
       "de.bmw.infotainment.vehicle.Vehicle2": {
-        statusStandstillFunctions: (v) => {
-          const raw = v && v.statusParkingBrake,
-            n = enumNum(raw, PARK_BRAKE);
-          const on =
-            n === 1 || n === 4 ? true : n === 0 || n === 2 ? false : null;
-          if (on !== this.parkBrake)
-            this.log.info("parking brake raw " + JSON.stringify(v));
-          this.parkBrake = on;
+        statusStandstillFunctions: (msg) => {
+          const raw = msg && msg.statusParkingBrake,
+            status = enumNum(raw, PARK_BRAKE);
+          const engaged =
+            status === 1 || status === 4
+              ? true
+              : status === 0 || status === 2
+                ? false
+                : null;
+          if (engaged !== this.parkBrake)
+            this.log.info("parking brake raw " + JSON.stringify(msg));
+          this.parkBrake = engaged;
         },
       },
       // Auto Hold (the same lamp, green): statusAutoH 2 = on and holding the car, 1 = on, 0 = off
       "de.bmw.chassis.VehicleStabilizationManagement": {
-        StandStillFunction: (v) => {
-          const raw = v && v.statusAutoH,
-            n = enumNum(raw, AUTO_H);
-          const h =
-            n === 2 ? "hold" : n === 1 ? "armed" : n === 0 ? "off" : null;
-          if (h !== this.autoHold)
+        StandStillFunction: (msg) => {
+          const raw = msg && msg.statusAutoH,
+            status = enumNum(raw, AUTO_H);
+          const autoHold =
+            status === 2
+              ? "hold"
+              : status === 1
+                ? "armed"
+                : status === 0
+                  ? "off"
+                  : null;
+          if (autoHold !== this.autoHold)
             this.log.info(
               "auto hold raw " +
                 raw +
                 ", parking brake " +
-                (v && v.statusParkingBrake),
+                (msg && msg.statusParkingBrake),
             );
-          this.autoHold = h;
+          this.autoHold = autoHold;
           // this message carries the parking brake too, when Vehicle2 has not said
-          const pb = enumNum(v && v.statusParkingBrake, PARK_BRAKE);
+          const parkBrake = enumNum(msg && msg.statusParkingBrake, PARK_BRAKE);
           if (
             this.parkBrake === null &&
-            (pb === 0 || pb === 1 || pb === 2 || pb === 4)
+            (parkBrake === 0 ||
+              parkBrake === 1 ||
+              parkBrake === 2 ||
+              parkBrake === 4)
           )
-            this.parkBrakeVsm = pb === 1 || pb === 4;
+            this.parkBrakeVsm = parkBrake === 1 || parkBrake === 4;
         },
       },
       // the odometer (the Regal theme's VFD): MileageSupreme, unit unconfirmed (taken as km; logged raw on change)
       "de.bmw.infrastructure.MileageSupreme": {
-        mileageSupreme: (v) => {
-          const m = v && v.mileageSupreme;
-          const km = isNum(m) && m > 0 && m < 0xffffff ? m : null;
+        mileageSupreme: (msg) => {
+          const mileage = msg && msg.mileageSupreme;
+          const km =
+            isNum(mileage) && mileage > 0 && mileage < 0xffffff
+              ? mileage
+              : null;
           if (km !== this.mileage)
-            this.log.info("odometer raw " + JSON.stringify(v));
+            this.log.info("odometer raw " + JSON.stringify(msg));
           this.mileage = km;
         },
       },
       "de.bmw.infotainment.drivingexcitement.FES": {
-        statusSwitchDriveDynamicSport2: (v) => {
-          const raw = v && v.displayBoostPressure;
+        statusSwitchDriveDynamicSport2: (msg) => {
+          const raw = msg && msg.displayBoostPressure;
           if (typeof raw !== "number" || raw === BOOST_SCALE.invalid) return;
           this.boostFes = raw * BOOST_SCALE.factor + BOOST_SCALE.offset;
           this.boostFesAt = Date.now();
         },
         // the HMI's sport display: power and torque in % of the car's maximum (car_vitals, MIT); 255 = none
-        statusVehicleDynamicEngine: (v) => {
-          const p = v && v.displaySportEnginePower,
-            t = v && v.displaySportEngineTorque;
-          this.sportPower = isNum(p) && p >= 0 && p <= 150 ? p : null;
-          this.sportTorque = isNum(t) && t >= 0 && t <= 150 ? t : null;
+        statusVehicleDynamicEngine: (msg) => {
+          const power = msg && msg.displaySportEnginePower,
+            torque = msg && msg.displaySportEngineTorque;
+          this.sportPower =
+            isNum(power) && power >= 0 && power <= 150 ? power : null;
+          this.sportTorque =
+            isNum(torque) && torque >= 0 && torque <= 150 ? torque : null;
           this.sportAt = Date.now();
         },
-        statusFESVehicleDynamicSwitchHMI: (v) => {
-          const raw = v && v.actualValueModeDrivingExperience;
-          const m = driveModeOf(raw),
-            variant = m ? driveVariantOf(raw) : null;
-          if (!m || (m === this.driveMode && variant === this.driveVariant))
+        statusFESVehicleDynamicSwitchHMI: (msg) => {
+          const raw = msg && msg.actualValueModeDrivingExperience;
+          const mode = driveModeOf(raw),
+            variant = mode ? driveVariantOf(raw) : null;
+          if (
+            !mode ||
+            (mode === this.driveMode && variant === this.driveVariant)
+          )
             return;
           this.log.info(
             "drive mode " +
-              MODE_NAME[m] +
+              MODE_NAME[mode] +
               (variant ? " " + variant : "") +
               " (" +
               raw +
               ")",
           );
-          this.driveMode = m;
+          this.driveMode = mode;
           this.driveVariant = variant;
           if (this._layoutName() !== this.activeName) this._rebuild();
           else this._status();
@@ -499,7 +540,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       )
     )
       return;
-    let rd = null,
+    let reader = null,
       busy = false,
       baro = 101.3,
       baroAt = 0,
@@ -511,14 +552,14 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       link.quiet = true;
       Promise.resolve()
         .then(() => link.init())
-        .catch((e) =>
+        .catch((err) =>
           this.log.info(
-            "engine unit link not available: " + ((e && e.message) || e),
+            "engine unit link not available: " + ((err && err.message) || err),
           ),
         );
-      rd = new DidReader(link, { ecu: dme.ecu || 18 });
-    } catch (e) {
-      this.log.info("engine unit boost off: " + ((e && e.message) || e));
+      reader = new DidReader(link, { ecu: dme.ecu || 18 });
+    } catch (err) {
+      this.log.info("engine unit boost off: " + ((err && err.message) || err));
       return;
     }
     this.dmeTimer = setInterval(
@@ -547,41 +588,45 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           busy = true;
           (async () => {
             if (wantPedal) {
-              const v = await rd.value("pedal", dme.pedal);
+              const pedal = await reader.value("pedal", dme.pedal);
               this.pedalObdAt = Date.now();
-              this.pedalObd = isNum(v) ? v : null;
+              this.pedalObd = isNum(pedal) ? pedal : null;
               if (
-                isNum(v) &&
-                Math.round(v) !== this.pedalObdLogged &&
+                isNum(pedal) &&
+                Math.round(pedal) !== this.pedalObdLogged &&
                 now - this.pedalLogged > 200
               ) {
                 // for config.pedal.obdRange
-                this.pedalObdLogged = Math.round(v);
+                this.pedalObdLogged = Math.round(pedal);
                 this.pedalLogged = now;
-                this.log.info("accelerator pedal (OBD) " + v.toFixed(1) + " %");
+                this.log.info(
+                  "accelerator pedal (OBD) " + pedal.toFixed(1) + " %",
+                );
               }
               return;
             }
             if (wantVolt) {
-              const v = await rd.value("volt", dme.volt);
+              const volt = await reader.value("volt", dme.volt);
               this.volt12At = Date.now();
-              this.volt12 = isNum(v) ? v : null;
+              this.volt12 = isNum(volt) ? volt : null;
               return;
             }
             boostAskAt = now;
             if (now - baroAt > 60000 && Array.isArray(dme.baro)) {
               baroAt = now;
-              const b = await rd.value("baro", dme.baro);
-              if (isNum(b)) baro = b;
+              const baroNow = await reader.value("baro", dme.baro);
+              if (isNum(baroNow)) baro = baroNow;
             }
-            const m = await rd.value("boost", dme.boost);
-            if (isNum(m)) {
-              this.boostDme = (m - baro) / 100;
+            const manifold = await reader.value("boost", dme.boost);
+            if (isNum(manifold)) {
+              this.boostDme = (manifold - baro) / 100;
               this.boostDmeAt = Date.now();
             }
           })()
-            .catch((e) =>
-              this.log.info("engine unit boost: " + ((e && e.message) || e)),
+            .catch((err) =>
+              this.log.info(
+                "engine unit boost: " + ((err && err.message) || err),
+              ),
             )
             .then(() => {
               busy = false;
@@ -597,30 +642,36 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _startNav() {
     if (!this._modesOn() && !this.ctx.settings.item("navLayout")) return;
-    const h = {
-      guidanceState: (v) => this._guard("guidance", () => this._onGuidance(v)),
+    const handlers = {
+      guidanceState: (msg) =>
+        this._guard("guidance", () => this._onGuidance(msg)),
     };
     if (this.ctx.settings.item("navLayout")) {
       // the route's progress (Sport's route bar): distance and time left to the final destination, distance travelled
-      h.finalDestinationInfo = (v) =>
-        this._guard("route", () => this._onRouteInfo(v));
-      h.travelledDistance = (v) =>
-        this._guard("route", () => this._onTravelled(v));
+      handlers.finalDestinationInfo = (msg) =>
+        this._guard("route", () => this._onRouteInfo(msg));
+      handlers.travelledDistance = (msg) =>
+        this._guard("route", () => this._onTravelled(msg));
     }
     Promise.resolve()
       .then(() =>
-        this.ctx.signals.watch(GUIDANCE.iface, GUIDANCE.instance, h, this.log),
+        this.ctx.signals.watch(
+          GUIDANCE.iface,
+          GUIDANCE.instance,
+          handlers,
+          this.log,
+        ),
       )
-      .then((s) => {
-        this.navSub = s;
+      .then((sub) => {
+        this.navSub = sub;
         this.log.info(
           "signal Guidance " +
-            (s && s.error ? "error: " + s.error : "subscribed"),
+            (sub && sub.error ? "error: " + sub.error : "subscribed"),
         );
       })
-      .catch((e) =>
+      .catch((err) =>
         this.log.info(
-          "route guidance not available: " + ((e && e.message) || e),
+          "route guidance not available: " + ((err && err.message) || err),
         ),
       );
   },
@@ -632,10 +683,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _startMedia() {
     if (!this.config.music) return;
     this.media = { pm: null, mm: null, tracks: null, sel: null };
-    /** @type {(k: string) => (v: *) => void} */
-    const on = (k) => (v) =>
+    /** @type {(k: string) => (msg: *) => void} */
+    const handler = (k) => (msg) =>
       this._guard("media", () => {
-        this.media[k] = v && typeof v === "object" ? v : null;
+        this.media[k] = msg && typeof msg === "object" ? msg : null;
         this._pickTitle(k);
       });
     Promise.resolve()
@@ -644,24 +695,24 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           MEDIA.iface,
           MEDIA.instance,
           {
-            playerMetadata: on("pm"),
-            mainMenuMetadata: on("mm"),
-            tracks: on("tracks"),
-            trackSelection: on("sel"),
+            playerMetadata: handler("pm"),
+            mainMenuMetadata: handler("mm"),
+            tracks: handler("tracks"),
+            trackSelection: handler("sel"),
           },
           this.log,
         ),
       )
-      .then((s) => {
-        this.mediaSub = s;
+      .then((sub) => {
+        this.mediaSub = sub;
         this.log.info(
           "signal HmiMediaState " +
-            (s && s.error ? "error: " + s.error : "subscribed"),
+            (sub && sub.error ? "error: " + sub.error : "subscribed"),
         );
       })
-      .catch((e) =>
+      .catch((err) =>
         this.log.info(
-          "media metadata not available: " + ((e && e.message) || e),
+          "media metadata not available: " + ((err && err.message) || err),
         ),
       );
     // load the font now, not on the first title's paint (the search walks folders once)
@@ -679,126 +730,137 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {void}
    */
   _pickTitle(changed) {
-    const m = this.media,
-      pm = m.pm || {};
-    /** @type {(x: *) => string} */
-    const clean = (x) =>
-      String(x || "")
+    const media = this.media,
+      player = media.pm || {};
+    /** @type {(text: *) => string} */
+    const clean = (text) =>
+      String(text || "")
         .replace(/\s+/g, " ")
         .trim();
-    /** @type {(ty: *) => number} a MEDIA_ITEM */
-    const kind = (ty) => {
-      const n = enumNum(ty, MEDIA_ITEM);
-      if (n >= 0 && n !== null) return n;
-      const u = String(ty || "").toUpperCase();
-      return /TITLE/.test(u)
+    /** @type {(type: *) => number} a MEDIA_ITEM */
+    const kind = (type) => {
+      const item = enumNum(type, MEDIA_ITEM);
+      if (item >= 0 && item !== null) return item;
+      const name = String(type || "").toUpperCase();
+      return /TITLE/.test(name)
         ? MEDIA_ITEM.TITLE
-        : /ARTIST/.test(u)
+        : /ARTIST/.test(name)
           ? MEDIA_ITEM.ARTIST
-          : /ALBUM/.test(u)
+          : /ALBUM/.test(name)
             ? MEDIA_ITEM.ALBUM
             : 0;
     };
     const lines = [
-      [clean(pm.firstLineText), kind(pm.firstLineType)],
-      [clean(pm.secondLineText), kind(pm.secondLineType)],
+      [clean(player.firstLineText), kind(player.firstLineType)],
+      [clean(player.secondLineText), kind(player.secondLineType)],
     ];
     const other = lines
       .filter(
-        (l) =>
-          l[0] && (l[1] === MEDIA_ITEM.ARTIST || l[1] === MEDIA_ITEM.ALBUM),
+        (line) =>
+          line[0] &&
+          (line[1] === MEDIA_ITEM.ARTIST || line[1] === MEDIA_ITEM.ALBUM),
       )
-      .map((l) => l[0]);
-    /** @type {(x: string) => boolean | string} */
-    const fresh = (x) => x && other.indexOf(x) < 0;
+      .map((line) => line[0]);
+    /** @type {(text: string) => boolean | string} */
+    const fresh = (text) => text && other.indexOf(text) < 0;
     // the raw sources, logged once per change
-    const id =
-      m.sel && m.sel.selectedTrackId !== undefined
-        ? m.sel.selectedTrackId
-        : pm.trackId;
+    const trackId =
+      media.sel && media.sel.selectedTrackId !== undefined
+        ? media.sel.selectedTrackId
+        : player.trackId;
     const list =
-      m.tracks && Array.isArray(m.tracks.tracks) ? m.tracks.tracks : [];
-    const tr =
-      id !== undefined
-        ? list.find((t) => t && String(t.trackId) === String(id))
+      media.tracks && Array.isArray(media.tracks.tracks)
+        ? media.tracks.tracks
+        : [];
+    const track =
+      trackId !== undefined
+        ? list.find(
+            (entry) => entry && String(entry.trackId) === String(trackId),
+          )
         : null;
-    const mm = m.mm
+    const menu = media.mm
       ? [
-          clean(m.mm.firstLineText),
-          clean(m.mm.secondLineText),
-          clean(m.mm.thirdLineText),
+          clean(media.mm.firstLineText),
+          clean(media.mm.secondLineText),
+          clean(media.mm.thirdLineText),
         ]
       : null;
     const raw = JSON.stringify({
-      track: tr ? [clean(tr.firstLine), clean(tr.secondLine)] : null,
-      id: id,
+      track: track ? [clean(track.firstLine), clean(track.secondLine)] : null,
+      id: trackId,
       of: list.length,
-      menu: mm,
+      menu: menu,
     });
     if (raw !== this.mediaRaw) {
       this.mediaRaw = raw;
       this.log.info("media sources (" + changed + "): " + raw);
     }
-    let t = "",
+    let title = "",
       from = "";
-    const typed = lines.find((l) => l[0] && l[1] === MEDIA_ITEM.TITLE);
+    const typed = lines.find((line) => line[0] && line[1] === MEDIA_ITEM.TITLE);
     if (typed) {
-      t = typed[0];
+      title = typed[0];
       from = "player TITLE";
     }
-    if (!t && tr) {
-      const c = [clean(tr.firstLine), clean(tr.secondLine)].find(fresh);
-      if (c) {
-        t = c;
+    if (!title && track) {
+      const found = [clean(track.firstLine), clean(track.secondLine)].find(
+        fresh,
+      );
+      if (found) {
+        title = found;
         from = "track list";
       }
     }
-    if (!t && mm) {
-      const c = mm.find(fresh);
-      if (c) {
-        t = c;
+    if (!title && menu) {
+      const found = menu.find(fresh);
+      if (found) {
+        title = found;
         from = "main menu";
       }
     }
-    if (!t) {
-      const u = [lines[1], lines[0]].find(
-        (l) => l[0] && l[1] !== MEDIA_ITEM.ARTIST && l[1] !== MEDIA_ITEM.ALBUM,
+    if (!title) {
+      const untyped = [lines[1], lines[0]].find(
+        (line) =>
+          line[0] &&
+          line[1] !== MEDIA_ITEM.ARTIST &&
+          line[1] !== MEDIA_ITEM.ALBUM,
       );
-      if (u) {
-        t = u[0];
+      if (untyped) {
+        title = untyped[0];
         from = "player line";
       }
     }
-    if (!t) {
-      t = lines[0][0];
-      from = t ? "artist (no title anywhere)" : "nothing";
+    if (!title) {
+      title = lines[0][0];
+      from = title ? "artist (no title anywhere)" : "nothing";
     }
-    if (t !== this.musicTitle)
+    if (title !== this.musicTitle)
       this.log.info(
         "now playing " +
-          JSON.stringify(t) +
+          JSON.stringify(title) +
           " from " +
           from +
           " (player lines " +
           JSON.stringify(lines) +
           ", uiType " +
-          JSON.stringify(pm.uiType) +
+          JSON.stringify(player.uiType) +
           ")",
       );
-    this.musicTitle = t;
+    this.musicTitle = title;
   },
 
   /** KombiIF statusShowTimeDate: the cluster's displayed local time against UTC now, to the nearest 15 min within
    *  -12..+14 h, is the car's time zone. 255 = not sent.
-   * @param {*} v
+   * @param {*} msg
    * @returns {void}
    */
-  _onCarClock(v) {
-    const h = v && v.displayHour,
-      m = v && v.displayMinute;
-    if (!isNum(h) || !isNum(m) || h > 23 || m > 59) return;
+  _onCarClock(msg) {
+    const hour = msg && msg.displayHour,
+      minute = msg && msg.displayMinute;
+    if (!isNum(hour) || !isNum(minute) || hour > 23 || minute > 59) return;
     const now = new Date();
-    let off = h * 60 + m - (now.getUTCHours() * 60 + now.getUTCMinutes());
+    let off =
+      hour * 60 + minute - (now.getUTCHours() * 60 + now.getUTCMinutes());
     off = Math.round(off / 15) * 15;
     while (off < -12 * 60) off += 1440;
     while (off > 14 * 60) off -= 1440;
@@ -806,9 +868,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.carOffsetMin = off;
     this.log.info(
       "car clock " +
-        h +
+        hour +
         ":" +
-        pad2(m) +
+        pad2(minute) +
         ": time zone UTC" +
         (off < 0 ? "-" : "+") +
         pad2(Math.floor(Math.abs(off) / 60)) +

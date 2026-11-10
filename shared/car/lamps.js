@@ -14,26 +14,26 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?string}
    */
   _brakeLamp() {
-    /** @type {(x: *) => boolean} */
-    const known = (x) => x === true || x === false;
-    const pb = known(this.parkBrake)
+    /** @type {(value: *) => boolean} */
+    const known = (value) => value === true || value === false;
+    const parkBrake = known(this.parkBrake)
       ? this.parkBrake
       : known(this.parkBrakeVsm)
         ? this.parkBrakeVsm
         : known(this.parkBrakeCds)
           ? this.parkBrakeCds
           : null;
-    if (pb === true) return "park";
+    if (parkBrake === true) return "park";
     if (this.autoHold === "hold") return "hold";
-    const d = this.car.data();
+    const data = this.car.data();
     if (
-      pb === null &&
+      parkBrake === null &&
       this.autoHold === null &&
-      d.demo &&
-      isNum(d.speed) &&
-      d.speed < 1
+      data.demo &&
+      isNum(data.speed) &&
+      data.speed < 1
     )
-      return d.stage === "P" ? "park" : "hold";
+      return data.stage === "P" ? "park" : "hold";
     return null;
   },
 
@@ -44,16 +44,16 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _turnSide() {
     if (this.config.indicators !== true) return 0;
     const now = Date.now();
-    let t =
+    let turn =
       this.turn !== null && now - (this.turnAt || 0) < 5000 ? this.turn : null;
-    if (t === null && this.car.data().demo)
-      t =
+    if (turn === null && this.car.data().demo)
+      turn =
         Math.floor(now / 6000) % 4 === 1
           ? "L"
           : Math.floor(now / 6000) % 4 === 3
             ? "R"
             : "";
-    return t === "L" ? -1 : t === "R" ? 1 : 0;
+    return turn === "L" ? -1 : turn === "R" ? 1 : 0;
   },
 
   /**
@@ -63,11 +63,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _turnLit(side) {
     const now = Date.now();
-    let t =
+    let turn =
       this.turn !== null && now - (this.turnAt || 0) < 5000 ? this.turn : null;
-    if (t === null && this.car.data().demo)
-      t = Math.floor(now / 6000) % 4 === 1 ? "L" : "";
-    return !!t && t.indexOf(side) >= 0 && Math.floor(now / 400) % 2 === 0;
+    if (turn === null && this.car.data().demo)
+      turn = Math.floor(now / 6000) % 4 === 1 ? "L" : "";
+    return !!turn && turn.indexOf(side) >= 0 && Math.floor(now / 400) % 2 === 0;
   },
 
   /**

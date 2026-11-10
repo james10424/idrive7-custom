@@ -56,11 +56,11 @@ const PRESS_TO_BAR = { BAR: 1, KPA: 0.01, PSI: 1 / 14.5038 };
 /**
  * A unit by wire number (map) or by name, else null.
  * @param {Record<string, string>} map
- * @param {*} v
+ * @param {*} unit
  * @returns {?string}
  */
-const unitName = (map, v) =>
-  map[v] || (Object.values(map).indexOf(v) >= 0 ? v : null);
+const unitName = (map, unit) =>
+  map[unit] || (Object.values(map).indexOf(unit) >= 0 ? unit : null);
 // MDrive dataDisplayGearbox.displayProgramGearbox: the programme the cluster shows next to the gear (car_vitals, MIT)
 /** @type {Record<string, string>} */
 const PROGRAMS = {
@@ -192,15 +192,15 @@ const BRAKE_G0 = 0.05,
 const BRAKE_TAU_MS = 150; // the deceleration's smoothing for the brake bar
 /**
  * An enum field as a number: its wire number, or its name looked up in items (unknown names: null).
- * @param {*} v
+ * @param {*} value
  * @param {Record<string, number>} items
  * @returns {?number}
  */
-function enumNum(v, items) {
-  if (typeof v === "number") return v;
-  if (typeof v !== "string") return null;
-  if (/^\d+$/.test(v.trim())) return Number(v.trim());
-  return items[v.trim()] !== undefined ? items[v.trim()] : -1; // a name we don't know is some non-off value
+function enumNum(value, items) {
+  if (typeof value === "number") return value;
+  if (typeof value !== "string") return null;
+  if (/^\d+$/.test(value.trim())) return Number(value.trim());
+  return items[value.trim()] !== undefined ? items[value.trim()] : -1; // a name we don't know is some non-off value
 }
 const FRESH_MS = 3000;
 /**
@@ -214,20 +214,20 @@ const FRESH_MS = 3000;
  * @returns {?string}
  */
 function driveVariantOf(raw) {
-  const v =
+  const mode =
     typeof raw === "string" && /^\d+$/.test(raw.trim())
       ? Number(raw.trim())
       : raw;
-  if (typeof v === "number")
-    return v === 2 || v === 5 || v === 8
+  if (typeof mode === "number")
+    return mode === 2 || mode === 5 || mode === 8
       ? "plus"
-      : v === 3 || v === 6 || v === 9
+      : mode === 3 || mode === 6 || mode === 9
         ? "individual"
         : null;
-  if (typeof v !== "string") return null;
-  return /PLUS|EXPERT/i.test(v)
+  if (typeof mode !== "string") return null;
+  return /PLUS|EXPERT/i.test(mode)
     ? "plus"
-    : /INDIVID/i.test(v)
+    : /INDIVID/i.test(mode)
       ? "individual"
       : null;
 }
@@ -280,19 +280,20 @@ const SETUP_LEVEL = {
  * @returns {?string}
  */
 function driveModeOf(raw) {
-  let v = raw;
-  if (typeof v === "string" && /^\d+$/.test(v.trim())) v = Number(v.trim());
-  if (typeof v === "number") {
-    if (v >= 1 && v <= 3) return "sport";
-    if (v >= 7 && v <= 9) return "eco";
-    if ((v >= 4 && v <= 6) || v === 10) return "comfort";
+  let mode = raw;
+  if (typeof mode === "string" && /^\d+$/.test(mode.trim()))
+    mode = Number(mode.trim());
+  if (typeof mode === "number") {
+    if (mode >= 1 && mode <= 3) return "sport";
+    if (mode >= 7 && mode <= 9) return "eco";
+    if ((mode >= 4 && mode <= 6) || mode === 10) return "comfort";
     return null;
   }
-  if (typeof v !== "string") return null;
-  const u = v.trim().toUpperCase();
-  if (u.indexOf("SPORT") === 0) return "sport";
-  if (u.indexOf("ECO") === 0) return "eco";
-  if (u.indexOf("COMFORT") === 0 || u.indexOf("ADAPTIVE") === 0)
+  if (typeof mode !== "string") return null;
+  const name = mode.trim().toUpperCase();
+  if (name.indexOf("SPORT") === 0) return "sport";
+  if (name.indexOf("ECO") === 0) return "eco";
+  if (name.indexOf("COMFORT") === 0 || name.indexOf("ADAPTIVE") === 0)
     return "comfort";
   return null;
 }

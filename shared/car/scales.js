@@ -11,16 +11,16 @@ const SPEED_SCALE = {
 };
 /**
  * speed (display unit) -> 0..1 along a scale of evenly spaced labels
- * @param {number} v
+ * @param {number} speed
  * @param {number[]} marks
  * @returns {number}
  */
-function scaleFrac(v, marks) {
-  if (!(v > 0)) return 0;
+function scaleFrac(speed, marks) {
+  if (!(speed > 0)) return 0;
   for (let i = 1; i < marks.length; i++)
-    if (v <= marks[i])
+    if (speed <= marks[i])
       return (
-        (i - 1 + (v - marks[i - 1]) / (marks[i] - marks[i - 1])) /
+        (i - 1 + (speed - marks[i - 1]) / (marks[i] - marks[i - 1])) /
         (marks.length - 1)
       );
   return 1;
