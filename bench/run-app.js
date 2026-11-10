@@ -338,9 +338,12 @@ setInterval(() => {
   );
 }, 1000);
 // BMW's HUD driver assistance block (DisplayDataServer functionalLibraryData, the catalog's enum names): ACC with a car ahead, or all off
+let assistOnce = null; // a single "all off" after "not sent" (see the message handler)
 setInterval(() => {
-  if (assist === null) return;
-  const on = assist === "acc";
+  const state = assist !== null ? assist : assistOnce;
+  assistOnce = null;
+  if (state === null) return;
+  const on = state === "acc";
   stub.feed(
     "de.bmw.infotainment.displaydataserver.DisplayDataServer",
     "functionalLibraryData",
@@ -574,9 +577,21 @@ process.on(
       if (settings.get("demo") !== want) press("demo", want);
     } else if (msg.t === "set") press(msg.key, msg.value);
     else if (msg.t === "drive") drive = msg.value;
-    else if (msg.t === "nav") nav = msg.value;
-    else if (msg.t === "assist") assist = msg.value;
-    else if (msg.t === "car") {
+    else if (msg.t === "nav") {
+      // "not sent" after a value: the app would keep the last state it saw (a route that never ends, the HUD giving way
+      // for good), so it hears "no route" once, as from a car that has none, and then nothing
+      if (msg.value === null && nav !== null)
+        stub.feed(
+          "de.bmw.infotainment.navigation.guiding.Guidance",
+          "guidanceState",
+          "INACTIVE",
+        );
+      nav = msg.value;
+    } else if (msg.t === "assist") {
+      // the same for the assistance block: "all off" once, then nothing
+      if (msg.value === null && assist !== null) assistOnce = "off";
+      assist = msg.value;
+    } else if (msg.t === "car") {
       if (msg.value) carSw[msg.key] = msg.value;
       else delete carSw[msg.key];
     }
