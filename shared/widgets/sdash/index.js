@@ -61,21 +61,21 @@ module.exports = {
       ref = x.ref,
       t = hud.theme;
     const pk = hud._cfgPacker(c, ref, "sdash");
-    pk.u("u_size", [w.w, w.h]);
-    pk.u("u_geo", w.geo);
-    pk.u("u_k", w.k);
-    pk.u("u_w", [w.band]);
-    pk.u("u_inner", [w.inner || w.band + 18]);
-    pk.u("u_scale", w.scale || [w.geo[2], w.geo[0]]);
-    pk.u("u_ticks", w.ticks);
+    pk.uniform("u_size", [w.w, w.h]);
+    pk.uniform("u_geo", w.geo);
+    pk.uniform("u_k", w.k);
+    pk.uniform("u_w", [w.band]);
+    pk.uniform("u_inner", [w.inner || w.band + 18]);
+    pk.uniform("u_scale", w.scale || [w.geo[2], w.geo[0]]);
+    pk.uniform("u_ticks", w.ticks);
     const [redFrom, orange] = hud._redMarks(w.rpmMax || 8000);
-    pk.u("u_redFrom", [redFrom]);
-    pk.u("u_orange", [orange]);
-    pk.u("u_fuelSeg", w.fuelSeg);
-    pk.u("u_oilSeg", w.oilSeg);
-    pk.u("u_hole", hud._hole(w));
-    pk.u("u_holeR", [hud._holeRadius(w)]);
-    pk.u(
+    pk.uniform("u_redFrom", [redFrom]);
+    pk.uniform("u_orange", [orange]);
+    pk.uniform("u_fuelSeg", w.fuelSeg);
+    pk.uniform("u_oilSeg", w.oilSeg);
+    pk.uniform("u_hole", hud._hole(w));
+    pk.uniform("u_holeR", [hud._holeRadius(w)]);
+    pk.uniform(
       "u_holeCut",
       Array.isArray(w.holeCut) && w.holeCut.length === 4
         ? w.holeCut
@@ -86,40 +86,43 @@ module.exports = {
       Array.isArray(r) && r.length === 4
         ? [r[0] - w.x, r[1] - w.y, r[2], r[3]]
         : [0, 0, 0, 0];
-    pk.u("u_holeMask", rel(w.holeMask).concat(rel(w.holeOpen)), {
+    pk.uniform("u_holeMask", rel(w.holeMask).concat(rel(w.holeOpen)), {
       type: "vec4",
     });
     const hf =
       Array.isArray(w.holeFade) && w.holeFade.length >= 4 ? w.holeFade : null;
-    pk.u(
+    pk.uniform(
       "u_holeFade",
       hf ? [hf[0] - w.x, hf[1] - w.y, hf[2], hf[3]] : [0, 0, 0, 0],
     );
-    pk.u("u_holeFadeK", [
+    pk.uniform("u_holeFadeK", [
       hf && isNum(hf[4]) ? hf[4] : 30,
       hf && isNum(hf[5]) ? hf[5] : 0.85,
     ]);
-    pk.u("u_strip", w.strip);
+    pk.uniform("u_strip", w.strip);
     const gg =
       w.gapGauge && Array.isArray(w.gapGauge.box) ? w.gapGauge.box : null;
-    pk.u(
+    pk.uniform(
       "u_gapRail",
       gg ? [gg[0] - w.x, gg[1] - w.y, gg[2], gg[3]] : [0, 0, 0, 0],
     );
-    pk.u("u_gapG", [-1, 0]);
+    pk.uniform("u_gapG", [-1, 0]);
     const vb = Array.isArray(w.vbars) ? w.vbars.slice(0, 2) : [];
     [0, 1].forEach((i) => {
       const b = vb[i] && Array.isArray(vb[i].box) ? vb[i] : null;
-      pk.u(
+      pk.uniform(
         "u_vbar" + i,
         b ? [b.box[0] - w.x, b.box[1] - w.y, b.box[2], b.box[3]] : [0, 0, 0, 0],
       );
-      pk.u("u_vbarC" + i, rgb(color(t, (b && b.color) || "fg")));
+      pk.uniform("u_vbarC" + i, rgb(color(t, (b && b.color) || "fg")));
     });
-    pk.u("u_vbarV", [-1, -1]);
-    pk.u("u_stripFill", Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0]);
-    pk.u("u_stripRoute", [-1]);
-    pk.u("u_topEnd", [w.topEnd]);
+    pk.uniform("u_vbarV", [-1, -1]);
+    pk.uniform(
+      "u_stripFill",
+      Array.isArray(w.stripSignals) ? [0, 0, 0] : [-1, 0, 0],
+    );
+    pk.uniform("u_stripRoute", [-1]);
+    pk.uniform("u_topEnd", [w.topEnd]);
     pk.flush();
   },
   /**

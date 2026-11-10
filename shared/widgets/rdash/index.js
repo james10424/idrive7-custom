@@ -77,7 +77,7 @@ module.exports = {
         : [0, 0, 0, 0];
     const sp = w.spd || [0, 0, 0, 0],
       sv = w.spdVirt || [300, 45];
-    pk.u("u_size", [w.w, w.h]);
+    pk.uniform("u_size", [w.w, w.h]);
     [
       "podL",
       "podWin",
@@ -91,24 +91,24 @@ module.exports = {
       "gearBox",
       "lampB",
     ].forEach((k) => {
-      pk.u("u_" + k, o4(w[k]));
+      pk.uniform("u_" + k, o4(w[k]));
     });
-    pk.u("u_spd", [sp[0] - w.x, sp[1] - w.y, sp[2] - w.y, sp[3] - w.y]);
-    pk.u("u_spdVirt", [sv[0], (sv[1] * Math.PI) / 180]);
-    pk.u("u_spdK", [w.spdMid || 55, w.spdMax || 85, w.spdStep || 5]);
+    pk.uniform("u_spd", [sp[0] - w.x, sp[1] - w.y, sp[2] - w.y, sp[3] - w.y]);
+    pk.uniform("u_spdVirt", [sv[0], (sv[1] * Math.PI) / 180]);
+    pk.uniform("u_spdK", [w.spdMid || 55, w.spdMax || 85, w.spdStep || 5]);
     const fg = w.fuelG || [0, 0, 0, 0],
       pg = w.podG || [0, 0, 0, 0],
       ar = w.arrow || [0, 0, 0],
       bi = w.batIcon || [-99, -99];
-    pk.u("u_fuelG", [fg[0] - w.x, fg[1] - w.y, fg[2], fg[3]]);
-    pk.u("u_podG", [pg[0] - w.x, pg[1] - w.y, pg[2], pg[3]]);
-    pk.u("u_arrow", [ar[0] - w.x, ar[1] - w.y, ar[2]]);
-    pk.u("u_batIcon", [bi[0] - w.x, bi[1] - w.y]);
+    pk.uniform("u_fuelG", [fg[0] - w.x, fg[1] - w.y, fg[2], fg[3]]);
+    pk.uniform("u_podG", [pg[0] - w.x, pg[1] - w.y, pg[2], pg[3]]);
+    pk.uniform("u_arrow", [ar[0] - w.x, ar[1] - w.y, ar[2]]);
+    pk.uniform("u_batIcon", [bi[0] - w.x, bi[1] - w.y]);
     if (w.needleOnly)
-      pk.u("u_speedV", [0]); // the needle's own layer: only the speed changes
+      pk.uniform("u_speedV", [0]); // the needle's own layer: only the speed changes
     else {
-      pk.u("u_gearV", [w.gearPitch || 0, -1]);
-      pk.u("u_lamps", [0, 0, 0, 0]);
+      pk.uniform("u_gearV", [w.gearPitch || 0, -1]);
+      pk.uniform("u_lamps", [0, 0, 0, 0]);
     }
     pk.flush();
   },

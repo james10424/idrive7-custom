@@ -29,12 +29,12 @@ function changes(was, now, w, h) {
   /** @type {(y: number) => boolean} */
   const sameRow = (y) =>
     now.compare(was, y * row, (y + 1) * row, y * row, (y + 1) * row) === 0;
-  /** @type {(o: number) => boolean} */
-  const samePx = (o) =>
-    now[o] === was[o] &&
-    now[o + 1] === was[o + 1] &&
-    now[o + 2] === was[o + 2] &&
-    now[o + 3] === was[o + 3];
+  /** @type {(offset: number) => boolean} */
+  const samePx = (offset) =>
+    now[offset] === was[offset] &&
+    now[offset + 1] === was[offset + 1] &&
+    now[offset + 2] === was[offset + 2] &&
+    now[offset + 3] === was[offset + 3];
   let top = 0;
   while (top < h && sameRow(top)) top++;
   if (top === h) return null;
@@ -44,28 +44,28 @@ function changes(was, now, w, h) {
     right = -1;
   for (let y = top; y <= bottom; y++) {
     if (sameRow(y)) continue;
-    const o = y * row;
+    const rowStart = y * row;
     for (let x = 0; x < left; x++)
-      if (!samePx(o + x * 4)) {
+      if (!samePx(rowStart + x * 4)) {
         left = x;
         break;
       }
     for (let x = w - 1; x > right; x--)
-      if (!samePx(o + x * 4)) {
+      if (!samePx(rowStart + x * 4)) {
         right = x;
         break;
       }
   }
   const rect = { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
-  const px = Buffer.allocUnsafe(rect.w * rect.h * 4);
+  const pixels = Buffer.allocUnsafe(rect.w * rect.h * 4);
   for (let y = 0; y < rect.h; y++)
     now.copy(
-      px,
+      pixels,
       y * rect.w * 4,
       (top + y) * row + left * 4,
       (top + y) * row + (right + 1) * 4,
     );
-  return { rect, px };
+  return { rect, px: pixels };
 }
 
 module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
@@ -85,58 +85,63 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
     /** @type {(a: Rect, b: Rect) => boolean} */
     const hit = (a, b) =>
       a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-    /** @type {(s: Rect, w: Rect) => Rect} */
-    const union = (s, w) => {
-      const x = Math.min(s.x, w.x),
-        y = Math.min(s.y, w.y);
+    /** @type {(sheet: Rect, rect: Rect) => Rect} */
+    const union = (sheet, rect) => {
+      const x = Math.min(sheet.x, rect.x),
+        y = Math.min(sheet.y, rect.y);
       return {
         x,
         y,
-        w: Math.max(s.x + s.w, w.x + w.w) - x,
-        h: Math.max(s.y + s.h, w.y + w.h) - y,
+        w: Math.max(sheet.x + sheet.w, rect.x + rect.w) - x,
+        h: Math.max(sheet.y + sheet.h, rect.y + rect.h) - y,
       };
     };
-    widgets.forEach((w) => {
-      const klass = w.class || "content",
-        z = w.z || 0,
-        conn = this._connOf(w);
-      if (!isImage(w.type) || w.own === true) {
-        plan.push({ kind: "layer", w, klass, z, conn });
+    widgets.forEach((widget) => {
+      const klass = widget.class || "content",
+        layerZ = widget.z || 0,
+        conn = this._connOf(widget);
+      if (!isImage(widget.type) || widget.own === true) {
+        plan.push({ kind: "layer", w: widget, klass, z: layerZ, conn });
         return;
       }
       let after = -1;
-      plan.forEach((e, i) => {
-        if (e.klass !== klass || e.z !== z || e.conn !== conn) return;
-        if (e.kind === "layer" ? hit(e.w, w) : e.members.some((m) => hit(m, w)))
+      plan.forEach((entry, i) => {
+        if (entry.klass !== klass || entry.z !== layerZ || entry.conn !== conn)
+          return;
+        if (
+          entry.kind === "layer"
+            ? hit(entry.w, widget)
+            : entry.members.some((member) => hit(member, widget))
+        )
           after = i;
       });
       let sheet = null,
         box = null;
       for (let i = after + 1; i < plan.length && !sheet; i++) {
-        const s = plan[i];
+        const candidate = plan[i];
         if (
-          s.kind !== "sheet" ||
-          s.klass !== klass ||
-          s.z !== z ||
-          s.conn !== conn
+          candidate.kind !== "sheet" ||
+          candidate.klass !== klass ||
+          candidate.z !== layerZ ||
+          candidate.conn !== conn
         )
           continue;
-        const u = union(s, w);
-        if (u.w * u.h <= maxPx) {
-          sheet = s;
-          box = u;
+        const merged = union(candidate, widget);
+        if (merged.w * merged.h <= maxPx) {
+          sheet = candidate;
+          box = merged;
         }
       }
       if (!sheet) {
         sheet = {
           kind: "sheet",
           klass,
-          z,
+          z: layerZ,
           conn,
-          x: w.x,
-          y: w.y,
-          w: w.w,
-          h: w.h,
+          x: widget.x,
+          y: widget.y,
+          w: widget.w,
+          h: widget.h,
           members: [],
           ref: 0,
           c: null,
@@ -150,89 +155,102 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
         sheet.w = box.w;
         sheet.h = box.h;
       }
-      sheet.members.push(w);
+      sheet.members.push(widget);
     });
     return plan;
   },
 
   /**
    * One image layer for a sheet: every member painted into a local buffer, then sent whole once.
-   * @param {Sheet} s
+   * @param {Sheet} sheet
    * @returns {void}
    */
-  _createSheet(s) {
-    const c = this._clientAt(s.conn);
-    const ref = c.image({
+  _createSheet(sheet) {
+    const client = this._clientAt(sheet.conn);
+    const ref = client.image({
       target: this.target,
-      klass: s.klass,
-      z: s.z,
-      x: s.x,
-      y: s.y,
-      w: s.w,
-      h: s.h,
-      iw: s.w,
-      ih: s.h,
+      klass: sheet.klass,
+      z: sheet.z,
+      x: sheet.x,
+      y: sheet.y,
+      w: sheet.w,
+      h: sheet.h,
+      iw: sheet.w,
+      ih: sheet.h,
     });
     if (!ref) {
       this.log.warn(
         "sheet " +
-          s.klass +
+          sheet.klass +
           "/" +
-          s.z +
+          sheet.z +
           " at " +
-          s.x +
+          sheet.x +
           "," +
-          s.y +
+          sheet.y +
           " " +
-          s.w +
+          sheet.w +
           "x" +
-          s.h +
+          sheet.h +
           ": layer refused",
       );
       return;
     }
-    s.ref = ref;
-    s.c = c;
-    s.ci = s.conn;
-    s.buf = Buffer.alloc(s.w * s.h * 4, 0);
-    this.sheets.push(s);
-    s.members.forEach((w) =>
-      this._guard("widget " + w.id, () => this._create(w, s)),
+    sheet.ref = ref;
+    sheet.c = client;
+    sheet.ci = sheet.conn;
+    sheet.buf = Buffer.alloc(sheet.w * sheet.h * 4, 0);
+    this.sheets.push(sheet);
+    sheet.members.forEach((widget) =>
+      this._guard("widget " + widget.id, () => this._create(widget, sheet)),
     );
-    const buf = s.buf;
-    s.buf = null; // from here on _blit sends dirty rects
-    c.pixels(ref, null, buf);
+    const buf = sheet.buf;
+    sheet.buf = null; // from here on _blit sends dirty rects
+    client.pixels(ref, null, buf);
   },
 
   /**
    * Every pixel painter goes through here: the widget's pixels (rects in the widget's own px, or null for
    * the whole widget) to its own layer, or into its sheet: the local buffer while the sheet is being
    * filled on create, else dirty rects translated by the sheet's offset.
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {?Rect[]} rects
    * @param {Buffer} buf
    * @returns {void}
    */
-  _blit(x, rects, buf) {
-    const w = x.w,
-      s = x.sheet;
-    if (!s) {
-      x.c.pixels(x.ref, rects, buf);
+  _blit(state, rects, buf) {
+    const widget = state.w,
+      sheet = state.sheet;
+    if (!sheet) {
+      state.c.pixels(state.ref, rects, buf);
       return;
     }
-    const rs = rects && rects.length ? rects : [{ x: 0, y: 0, w: w.w, h: w.h }];
-    const dx = w.x - s.x,
-      dy = w.y - s.y;
-    const moved = rs.map((r) => ({ x: r.x + dx, y: r.y + dy, w: r.w, h: r.h }));
-    if (!s.buf) {
-      s.c.pixels(s.ref, moved, buf);
+    const ownRects =
+      rects && rects.length
+        ? rects
+        : [{ x: 0, y: 0, w: widget.w, h: widget.h }];
+    const dx = widget.x - sheet.x,
+      dy = widget.y - sheet.y;
+    const moved = ownRects.map((rect) => ({
+      x: rect.x + dx,
+      y: rect.y + dy,
+      w: rect.w,
+      h: rect.h,
+    }));
+    if (!sheet.buf) {
+      sheet.c.pixels(sheet.ref, moved, buf);
       return;
     }
     let off = 0;
-    moved.forEach((r) => {
-      for (let y = 0; y < r.h; y++) {
-        buf.copy(s.buf, ((r.y + y) * s.w + r.x) * 4, off, off + r.w * 4);
-        off += r.w * 4;
+    moved.forEach((rect) => {
+      for (let y = 0; y < rect.h; y++) {
+        buf.copy(
+          sheet.buf,
+          ((rect.y + y) * sheet.w + rect.x) * 4,
+          off,
+          off + rect.w * 4,
+        );
+        off += rect.w * 4;
       }
     });
   },
@@ -240,38 +258,38 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /**
    * A whole repaint of an image widget: the first time (or while its sheet is being filled) the whole widget
    * goes up; after that only the one rectangle around the pixels that changed, or nothing at all.
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {Buffer} buf
    * @returns {void}
    */
-  _blitDiff(x, buf) {
-    const w = x.w,
-      was = x.px;
-    x.px = buf;
-    if (!was || (x.sheet && x.sheet.buf)) {
-      this._blit(x, null, buf);
+  _blitDiff(state, buf) {
+    const widget = state.w,
+      was = state.px;
+    state.px = buf;
+    if (!was || (state.sheet && state.sheet.buf)) {
+      this._blit(state, null, buf);
       return;
     }
-    const c = changes(was, buf, w.w, w.h);
-    if (c) this._blit(x, [c.rect], c.px);
+    const change = changes(was, buf, widget.w, widget.h);
+    if (change) this._blit(state, [change.rect], change.px);
   },
 
   /**
    * The first widget on that layer, for the logs; a sheet is named by its first member plus how many more it holds.
-   * @param {number} ci
+   * @param {number} connIndex
    * @param {number} ref
    * @returns {?string}
    */
-  _widgetOf(ci, ref) {
-    let id = null,
-      n = 0;
-    this.widgets.forEach((x) => {
-      if (x.ci === ci && x.ref === ref) {
-        if (!id) id = x.w.id;
-        n++;
+  _widgetOf(connIndex, ref) {
+    let firstId = null,
+      count = 0;
+    this.widgets.forEach((state) => {
+      if (state.ci === connIndex && state.ref === ref) {
+        if (!firstId) firstId = state.w.id;
+        count++;
       }
     });
-    return n > 1 ? id + " +" + (n - 1) : id;
+    return count > 1 ? firstId + " +" + (count - 1) : firstId;
   },
 
   /**
@@ -281,11 +299,11 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   _layerRefs() {
     const refs = [],
       seen = {};
-    this.widgets.forEach((x) => {
-      const key = x.ci + ":" + x.ref;
+    this.widgets.forEach((state) => {
+      const key = state.ci + ":" + state.ref;
       if (!seen[key]) {
         seen[key] = true;
-        refs.push({ c: x.c, ci: x.ci, ref: x.ref, key });
+        refs.push({ c: state.c, ci: state.ci, ref: state.ref, key });
       }
     });
     return refs;
@@ -297,20 +315,20 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    */
   _connCount() {
     const seen = {};
-    this.widgets.forEach((x) => {
-      seen[x.ci] = true;
+    this.widgets.forEach((state) => {
+      seen[state.ci] = true;
     });
     return Object.keys(seen).length;
   },
 
   /**
    * The connection a widget asks for ("conn", 0..3; 0 the app's own).
-   * @param {Widget} w
+   * @param {Widget} widget
    * @returns {number}
    */
-  _connOf(w) {
-    const n = isNum(w.conn) ? Math.floor(w.conn) : 0;
-    return Math.max(0, Math.min(MAX_CONN - 1, n));
+  _connOf(widget) {
+    const conn = isNum(widget.conn) ? Math.floor(widget.conn) : 0;
+    return Math.max(0, Math.min(MAX_CONN - 1, conn));
   },
 
   /**
@@ -320,8 +338,8 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    */
   _connCounts(plan) {
     const counts = [];
-    plan.forEach((e) => {
-      counts[e.conn] = (counts[e.conn] || 0) + 1;
+    plan.forEach((entry) => {
+      counts[entry.conn] = (counts[entry.conn] || 0) + 1;
     });
     for (let i = 0; i < counts.length; i++) counts[i] = counts[i] || 0;
     return counts;
@@ -329,10 +347,10 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
 
   /**
    * "1 layer" or "n layers".
-   * @param {number} n
+   * @param {number} count
    * @returns {string}
    */
-  _layerCount(n) {
-    return n === 1 ? "1 layer" : n + " layers";
+  _layerCount(count) {
+    return count === 1 ? "1 layer" : count + " layers";
   },
 });

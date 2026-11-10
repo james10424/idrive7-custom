@@ -37,27 +37,33 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {string}
    */
   _drawnNote() {
-    const ts = this.targetState;
+    const targetState = this.targetState;
     // cluster-render's mapping guard turned this target off (two display restarts right after its mappings); it stays
     // off, even across reboots, until cluster-render's guard-reset as root (cluster-render README, the mapping guard;
     // the full command is in the log line above). The vendored client passes the flag since 0.1.13
-    if (ts && ts.disabled)
+    if (targetState && targetState.disabled)
       return ", off: cluster-render's guard disabled this display after 2 strikes (reset it as root: guard-reset)";
-    if (ts && (ts.state === "waiting" || ts.state === "parked") && ts.holder) {
+    if (
+      targetState &&
+      (targetState.state === "waiting" || targetState.state === "parked") &&
+      targetState.holder
+    ) {
       // holder "none" is no BMW content: on iDrive 7 it is the cluster panel holding the scene id the HUD shares
       // ("scene id in use by another target"); a stock holder says which wait it is (a pop-up or guidance, or the slot)
-      if (ts.holder === "foreign")
+      if (targetState.holder === "foreign")
         return ", waiting: another app has this display";
-      if (ts.holder === "stock")
+      if (targetState.holder === "stock")
         return (
           ", waiting: BMW is using this display" +
-          (ts.reason && ts.reason !== "slot in use"
-            ? " (" + ts.reason + ")"
+          (targetState.reason && targetState.reason !== "slot in use"
+            ? " (" + targetState.reason + ")"
             : "")
         );
-      if (/scene id in use/.test(ts.reason || ""))
+      if (/scene id in use/.test(targetState.reason || ""))
         return ", waiting: the cluster layout has the scene the HUD shares";
-      return ", waiting" + (ts.reason ? ": " + ts.reason : "");
+      return (
+        ", waiting" + (targetState.reason ? ": " + targetState.reason : "")
+      );
     }
     const refused = this.refused ? ", refused " + this.refused : "";
     const refs = this._layerRefs();
@@ -65,12 +71,15 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
     let shown = 0,
       why = null,
       whyN = 0;
-    refs.forEach((r) => {
-      const st = this.layerStates.get(r.key);
-      if (st && st.state === "shown") shown++;
-      else if (st) {
+    refs.forEach((layerRef) => {
+      const layerState = this.layerStates.get(layerRef.key);
+      if (layerState && layerState.state === "shown") shown++;
+      else if (layerState) {
         whyN++;
-        if (!why) why = st.state + (st.reason ? ": " + st.reason : "");
+        if (!why)
+          why =
+            layerState.state +
+            (layerState.reason ? ": " + layerState.reason : "");
       }
     });
     if (shown === refs.length || (!why && !shown)) return refused;
@@ -94,7 +103,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
       let there = false;
       try {
         there = fs.existsSync(this.socketPath);
-      } catch (e) {
+      } catch (err) {
         /* treat as missing */
       }
       return there
@@ -122,8 +131,8 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
     if (this.activeName === "off")
       return this.label + " off" + mode + ": BMW's own " + what + " shows";
     const name = this._layoutLabel(this.activeName);
-    const d = this.car.data();
-    const demo = d.demo ? ", demo data" : "";
+    const data = this.car.data();
+    const demo = data.demo ? ", demo data" : "";
     const conns = this._connCount();
     const layers =
       ", " +
@@ -161,8 +170,8 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   statusDetail() {
     if (!this.client.ready || this.problem || this.activeName === "off")
       return "";
-    const n = this._drawnNote().replace(/^, /, "");
-    return n ? n.charAt(0).toUpperCase() + n.slice(1) : "";
+    const note = this._drawnNote().replace(/^, /, "");
+    return note ? note.charAt(0).toUpperCase() + note.slice(1) : "";
   },
 
   /**
@@ -170,16 +179,16 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {void}
    */
   _status() {
-    const s = this.statusText(),
-      d = this.statusDetail();
-    if (s === this.lastStatus && d === this.lastDetail) return;
-    this.lastStatus = s;
-    this.lastDetail = d;
+    const text = this.statusText(),
+      detail = this.statusDetail();
+    if (text === this.lastStatus && detail === this.lastDetail) return;
+    this.lastStatus = text;
+    this.lastDetail = detail;
     this.statusListeners.forEach((fn) => {
       try {
-        fn(s, d);
-      } catch (e) {
-        this.log.warn("status listener: " + e);
+        fn(text, detail);
+      } catch (err) {
+        this.log.warn("status listener: " + err);
       }
     });
   },

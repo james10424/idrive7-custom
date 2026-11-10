@@ -17,16 +17,16 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * rows), made on first use and kept while the connection lives (the client re-sends it by itself after a
    * reconnect). A widget's effect layer samples it; nothing is drawn by the asset itself.
    * @param {string} fontName
-   * @param {number} ci connection index
+   * @param {number} connIndex connection index
    * @returns {GlyphAtlas}
    */
-  _atlas(fontName, ci) {
-    const key = ci + ":" + fontName;
+  _atlas(fontName, connIndex) {
+    const key = connIndex + ":" + fontName;
     if (this.atlases.has(key)) return this.atlases.get(key);
     const font = textRaster.loadFont(fontName),
       glyphs = font.metrics.glyphs;
     const chars = Object.keys(glyphs)
-      .filter((ch) => ch.length === 1 && ch >= " " && ch <= "~")
+      .filter((char) => char.length === 1 && char >= " " && char <= "~")
       .sort()
       .slice(0, 64);
     if (!chars.length)
@@ -39,7 +39,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
         Math.ceil(
           Math.max.apply(
             null,
-            chars.map((ch) => glyphs[ch].advance),
+            chars.map((char) => glyphs[char].advance),
           ),
         ),
       ) + 2;
@@ -49,18 +49,18 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
     const w = cols * cellW,
       h = rows * cellH;
     const buf = Buffer.alloc(w * h, 0);
-    chars.forEach((ch, i) => {
-      const cell = textRaster.mask(cellW, cellH, ch, {
+    chars.forEach((char, i) => {
+      const cell = textRaster.mask(cellW, cellH, char, {
         font: fontName,
         align: "center",
       });
-      const cx = (i % cols) * cellW,
-        cy = Math.floor(i / cols) * cellH;
+      const cellX = (i % cols) * cellW,
+        cellY = Math.floor(i / cols) * cellH;
       for (let y = 0; y < cellH; y++)
-        cell.copy(buf, (cy + y) * w + cx, y * cellW, (y + 1) * cellW);
+        cell.copy(buf, (cellY + y) * w + cellX, y * cellW, (y + 1) * cellW);
     });
-    const c = this._clientAt(ci);
-    const ref = c.asset({
+    const client = this._clientAt(connIndex);
+    const ref = client.asset({
       target: this.target,
       format: "r8",
       w,
@@ -71,14 +71,24 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
       throw new Error(
         'font "' + fontName + '": atlas asset refused (' + w + "x" + h + ")",
       );
-    c.pixels(ref, null, buf);
-    const a = { ref, c, ci, cols, rows, cellW, cellH, chars, bytes: w * h * 2 };
-    this.atlases.set(key, a);
+    client.pixels(ref, null, buf);
+    const atlas = {
+      ref,
+      c: client,
+      ci: connIndex,
+      cols,
+      rows,
+      cellW,
+      cellH,
+      chars,
+      bytes: w * h * 2,
+    };
+    this.atlases.set(key, atlas);
     this.log.info(
       'glyph atlas "' +
         fontName +
         '"' +
-        (ci ? " on connection " + (ci + 1) : "") +
+        (connIndex ? " on connection " + (connIndex + 1) : "") +
         ": " +
         chars.length +
         " glyphs in " +
@@ -90,10 +100,10 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
         "x" +
         h +
         " R8 asset, " +
-        mib(a.bytes) +
+        mib(atlas.bytes) +
         " of pixel memory",
     );
-    return a;
+    return atlas;
   },
 
   /**
@@ -101,11 +111,11 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {number}
    */
   _atlasBytes() {
-    let n = 0;
-    this.atlases.forEach((a) => {
-      n += a.bytes;
+    let total = 0;
+    this.atlases.forEach((atlas) => {
+      total += atlas.bytes;
     });
-    return n;
+    return total;
   },
 
   /** The car's own font for text in any script (app.json config.music.fonts: paths tried in order, a fallback chain);
@@ -115,27 +125,29 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   _sysFont() {
     if (this.sysFontTried) return this.sysFont;
     this.sysFontTried = true;
-    const m = this.config.music || {};
+    const music = this.config.music || {};
     const sysfont = require("../sysfont"); // only in apps that ship it (app.json "shared")
-    this.sysFont = sysfont.open(m.fonts || [], this.log);
-    if (!this.sysFont && Array.isArray(m.searchIn)) {
+    this.sysFont = sysfont.open(music.fonts || [], this.log);
+    if (!this.sysFont && Array.isArray(music.searchIn)) {
       // none of the listed files: look for the car's own fonts, and log them all so the paths can go in config
-      const r = sysfont.find(
-        m.searchIn,
-        m.searchMax,
-        m.searchMaxBytes,
+      const found = sysfont.find(
+        music.searchIn,
+        music.searchMax,
+        music.searchMaxBytes,
         this.log,
       );
       this.log.info(
         "font files found (" +
-          r.all.length +
+          found.all.length +
           "): " +
-          r.all
+          found.all
             .slice(0, 60)
-            .map((f) => f.path + " " + Math.round(f.size / 1024) + " KiB")
+            .map(
+              (font) => font.path + " " + Math.round(font.size / 1024) + " KiB",
+            )
             .join(", "),
       );
-      this.sysFont = r.fonts;
+      this.sysFont = found.fonts;
     }
     if (!this.sysFont)
       this.log.info(
@@ -147,27 +159,27 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /** {{token}} -> display text. */
   /** Collects a big shader's set-once uniforms (its module's "cfg") into its one u_cfg vec4 array, sent by flush(); any
    *  other uniform goes straight through. cluster-render keeps at most 32 uniform names a layer.
-   * @param {Client} c
+   * @param {Client} client
    * @param {number} ref
    * @param {string} type the widget type
    * @returns {CfgPacker}
    */
-  _cfgPacker(c, ref, type) {
+  _cfgPacker(client, ref, type) {
     const names = (widgetTypes[type] && widgetTypes[type].cfg) || [],
       vals = {};
     return {
-      u: (name, v, opts) => {
-        if (names.indexOf(name) >= 0) vals[name] = v;
-        else c.uniform(ref, name, v, opts);
+      uniform: (name, value, opts) => {
+        if (names.indexOf(name) >= 0) vals[name] = value;
+        else client.uniform(ref, name, value, opts);
       },
       flush: () => {
         const flat = [];
-        names.forEach((n) => {
-          const v = (vals[n] || []).slice(0, 4);
-          while (v.length < 4) v.push(0);
-          flat.push(...v);
+        names.forEach((name) => {
+          const slot = (vals[name] || []).slice(0, 4);
+          while (slot.length < 4) slot.push(0);
+          flat.push(...slot);
         });
-        c.uniform(ref, "u_cfg", flat, { type: "vec4" });
+        client.uniform(ref, "u_cfg", flat, { type: "vec4" });
       },
     };
   },

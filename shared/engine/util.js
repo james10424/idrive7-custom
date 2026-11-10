@@ -7,42 +7,42 @@ const TEXT_MS = 200; // text re-draws at most 5 times a second (what BMW's own r
 
 /**
  * A finite number.
- * @param {*} v
- * @returns {v is number}
+ * @param {*} value
+ * @returns {value is number}
  */
-function isNum(v) {
-  return typeof v === "number" && isFinite(v);
+function isNum(value) {
+  return typeof value === "number" && isFinite(value);
 }
 
 /**
  * A 0..255 colour as 0..1 RGB.
- * @param {number[]} c
+ * @param {number[]} color
  * @returns {number[]}
  */
-function rgb(c) {
-  return [c[0] / 255, c[1] / 255, c[2] / 255];
+function rgb(color) {
+  return [color[0] / 255, color[1] / 255, color[2] / 255];
 }
 
 /**
  * A 0..255 colour (alpha optional) as 0..1 RGBA.
- * @param {number[]} c
+ * @param {number[]} color
  * @returns {number[]}
  */
-function rgba(c) {
+function rgba(color) {
   return [
-    c[0] / 255,
-    c[1] / 255,
-    c[2] / 255,
-    (c[3] === undefined ? 255 : c[3]) / 255,
+    color[0] / 255,
+    color[1] / 255,
+    color[2] / 255,
+    (color[3] === undefined ? 255 : color[3]) / 255,
   ];
 }
 
 /**
- * @param {number} n
+ * @param {number} num
  * @returns {string}
  */
-function pad2(n) {
-  return n < 10 ? "0" + n : String(n);
+function pad2(num) {
+  return num < 10 ? "0" + num : String(num);
 }
 
 /**

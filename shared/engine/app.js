@@ -251,7 +251,7 @@ const { isNum, mib } = require("./util");
 /**
  * _cfgPacker's result.
  * @typedef {object} CfgPacker
- * @property {(name: string, v: number[], opts?: object) => void} u
+ * @property {(name: string, value: number[], opts?: object) => void} uniform
  * @property {() => void} flush
  */
 
@@ -327,24 +327,25 @@ class HudApp {
   setting(key) {
     // while the "navLayout" switch is in force the map window is open, whatever "mapWindow" says
     if (key === "mapWindow" && this._navSwitch()) return true;
-    const s = this.ctx.settings.item(key);
-    const v = this.ctx.settings.get(key);
-    if (!s) return v;
+    const item = this.ctx.settings.item(key);
+    const value = this.ctx.settings.get(key);
+    if (!item) return value;
     // a choice that was renamed or replaced (app.json config.choiceAliases, e.g. a layout that was renamed)
     const alias =
-      s.type === "choice" &&
+      item.type === "choice" &&
       this.config.choiceAliases &&
-      this.config.choiceAliases[v];
-    if (alias && (s.options || []).some((o) => o[0] === alias)) return alias;
-    const ok =
-      s.type === "bool"
-        ? typeof v === "boolean"
-        : s.type === "choice"
-          ? (s.options || []).some((o) => o[0] === v)
-          : s.type === "number"
-            ? isNum(v) && (!s.steps || s.steps.indexOf(v) >= 0)
+      this.config.choiceAliases[value];
+    if (alias && (item.options || []).some((option) => option[0] === alias))
+      return alias;
+    const valid =
+      item.type === "bool"
+        ? typeof value === "boolean"
+        : item.type === "choice"
+          ? (item.options || []).some((option) => option[0] === value)
+          : item.type === "number"
+            ? isNum(value) && (!item.steps || item.steps.indexOf(value) >= 0)
             : true;
-    return ok ? v : s.default;
+    return valid ? value : item.default;
   }
 
   /**
@@ -357,16 +358,16 @@ class HudApp {
    */
   _clientAt(i) {
     while (this.clients.length <= i) {
-      const ci = this.clients.length;
-      const c = new ClusterRender(
-        ci ? this.ctx.spec.id + "_" + (ci + 1) : this.ctx.spec.id,
+      const connIndex = this.clients.length;
+      const client = new ClusterRender(
+        connIndex ? this.ctx.spec.id + "_" + (connIndex + 1) : this.ctx.spec.id,
         this.socketPath,
       );
-      this.clients.push(c);
-      this._wireClientEvents(c, ci);
+      this.clients.push(client);
+      this._wireClientEvents(client, connIndex);
       if (this.started) {
-        this.log.info("connection " + (ci + 1) + " to cluster-render");
-        c.connect();
+        this.log.info("connection " + (connIndex + 1) + " to cluster-render");
+        client.connect();
       }
     }
     return this.clients[i];
@@ -374,28 +375,28 @@ class HudApp {
 
   /**
    * Logs a connection's events and updates the status from them.
-   * @param {Client} c
-   * @param {number} ci connection index
+   * @param {Client} client
+   * @param {number} connIndex connection index
    * @returns {void}
    * @this {App}
    */
-  _wireClientEvents(c, ci) {
-    const tag = ci ? " [connection " + (ci + 1) + "]" : "";
-    c.on("ready", () => {
+  _wireClientEvents(client, connIndex) {
+    const tag = connIndex ? " [connection " + (connIndex + 1) + "]" : "";
+    client.on("ready", () => {
       this.log.info(
-        "cluster-render ready" + tag + " (backend=" + c.backend + ")",
+        "cluster-render ready" + tag + " (backend=" + client.backend + ")",
       );
-      if (ci === 0) this._rebuild();
+      if (connIndex === 0) this._rebuild();
       else this._status();
     });
-    c.on("disconnected", () => {
+    client.on("disconnected", () => {
       this.log.warn(
         "cluster-render disconnected" + tag + ", client will retry",
       );
       this._status();
     });
-    c.on("layer", (ref, state, reason) => {
-      const key = ci + ":" + ref;
+    client.on("layer", (ref, state, reason) => {
+      const key = connIndex + ":" + ref;
       const old = this.layerStates.get(key);
       this.layerStates.set(key, { state, reason });
       if (
@@ -403,12 +404,12 @@ class HudApp {
         ((state === "waiting" || state === "stalled") &&
           (!old || old.state !== state))
       ) {
-        const w = this._widgetOf(ci, ref);
+        const widgetId = this._widgetOf(connIndex, ref);
         this.log.warn(
           "layer " +
             ref +
             tag +
-            (w ? " (" + w + ")" : "") +
+            (widgetId ? " (" + widgetId + ")" : "") +
             " " +
             state +
             (reason ? ": " + reason : ""),
@@ -416,7 +417,7 @@ class HudApp {
       }
       this._statusSoon();
     });
-    c.on("target", (name, state, holder, reason, guideOff, disabled) => {
+    client.on("target", (name, state, holder, reason, guideOff, disabled) => {
       if (name !== this.target) return;
       this.targetState = { state, holder, reason, disabled: !!disabled };
       this.log.info(
@@ -433,27 +434,29 @@ class HudApp {
       );
       this._statusSoon();
     });
-    c.on("refused", (op, ref, reason) => {
-      const w = this._widgetOf(ci, ref);
+    client.on("refused", (operation, ref, reason) => {
+      const widgetId = this._widgetOf(connIndex, ref);
       this.log.warn(
         "refused " +
-          op +
+          operation +
           " on " +
           ref +
           tag +
-          (w ? " (" + w + ")" : "") +
+          (widgetId ? " (" + widgetId + ")" : "") +
           ": " +
           reason,
       );
-      if (!this.refused) this.refused = (w || op) + ": " + reason; // the first one, until the next rebuild
+      if (!this.refused) this.refused = (widgetId || operation) + ": " + reason; // the first one, until the next rebuild
       this._statusSoon();
     });
-    c.on("budget", (capKb, maxKb, reason) =>
+    client.on("budget", (capKb, maxKb, reason) =>
       this.log.info(
         "budget" + tag + " " + capKb + "/" + maxKb + " kb/s (" + reason + ")",
       ),
     );
-    c.on("status", (text) => this.log.info("cluster-render status: " + text));
+    client.on("status", (text) =>
+      this.log.info("cluster-render status: " + text),
+    );
   }
 
   /**
@@ -464,7 +467,7 @@ class HudApp {
   start() {
     this.log.info("connecting to cluster-render at " + this.socketPath);
     this.started = true;
-    this.clients.forEach((c) => c.connect());
+    this.clients.forEach((client) => client.connect());
     this.tickTimer = setInterval(
       () => this._guard("tick", () => this._tick()),
       TICK_MS,
@@ -502,10 +505,10 @@ class HudApp {
     if (this.navSub) this.navSub.shutdown();
     if (this.mediaSub) this.mediaSub.shutdown();
     clearTimeout(this.fontT);
-    this.widgets.forEach((x) => {
-      if (x.timer) clearInterval(x.timer);
+    this.widgets.forEach((state) => {
+      if (state.timer) clearInterval(state.timer);
     });
-    this.clients.forEach((c) => c.close());
+    this.clients.forEach((client) => client.close());
     this.atlases.clear();
   }
 
@@ -519,8 +522,8 @@ class HudApp {
   _guard(what, fn) {
     try {
       fn();
-    } catch (e) {
-      this.log.error("hud " + what + ": " + ((e && e.stack) || e));
+    } catch (err) {
+      this.log.error("hud " + what + ": " + ((err && err.stack) || err));
     }
   }
 
@@ -547,9 +550,9 @@ class HudApp {
    */
   _rebuildInner() {
     if (!this.client.ready) return; // the 'ready' handler calls us again
-    this._layerRefs().forEach((r) => r.c.drop(r.ref));
-    this.widgets.forEach((x) => {
-      if (x.timer) clearInterval(x.timer);
+    this._layerRefs().forEach((layerRef) => layerRef.c.drop(layerRef.ref));
+    this.widgets.forEach((state) => {
+      if (state.timer) clearInterval(state.timer);
     });
     this.widgets.clear();
     this.sheets = [];
@@ -580,10 +583,10 @@ class HudApp {
     let layout;
     try {
       layout = this.layouts.load(name);
-    } catch (e) {
-      this.problem = e.message;
+    } catch (err) {
+      this.problem = err.message;
       this.log.warn(
-        'layout "' + name + '" unusable (' + e.message + "); showing nothing",
+        'layout "' + name + '" unusable (' + err.message + "); showing nothing",
       );
       return;
     }
@@ -620,12 +623,12 @@ class HudApp {
         (mode !== "normal" ? ", " + mode + " mode" : ""),
     );
     const shown = layout.widgets
-      .map((w) => this._inMode(w, mode))
+      .map((widget) => this._inMode(widget, mode))
       .filter(
-        (w) =>
-          w &&
-          !(w.toggle && !this._toggleOn(w.toggle)) &&
-          !(w.themes && w.themes.indexOf(this.themeName) < 0),
+        (widget) =>
+          widget &&
+          !(widget.toggle && !this._toggleOn(widget.toggle)) &&
+          !(widget.themes && widget.themes.indexOf(this.themeName) < 0),
       );
     this.needsBoost = /boost/.test(JSON.stringify(shown));
     this.needsVolt = /volt12/.test(JSON.stringify(shown));
@@ -634,8 +637,9 @@ class HudApp {
     // in that order: within a class and z, cluster-render puts the newer layer on top. Small sheets
     // first; a bigger limit only when the layer budget needs it (see the header).
     const area = this.size[0] * this.size[1];
-    /** @type {(p: PlanEntry[]) => boolean} */
-    const over = (p) => this._connCounts(p).some((k) => k > LAYER_BUDGET);
+    /** @type {(entries: PlanEntry[]) => boolean} */
+    const over = (entries) =>
+      this._connCounts(entries).some((k) => k > LAYER_BUDGET);
     let maxPx = Math.floor(area / SHEET_AREA_FRAC),
       plan = this._plan(shown, maxPx);
     while (over(plan) && maxPx !== Infinity) {
@@ -646,25 +650,27 @@ class HudApp {
       own = 0,
       sheets = 0,
       bytes = 0,
-      px = 0;
-    plan.forEach((e) => {
-      if (e.kind === "sheet") {
+      pixelBytes = 0;
+    plan.forEach((entry) => {
+      if (entry.kind === "sheet") {
         sheets++;
-        bytes += e.w * e.h * 4;
-        px += e.w * e.h * 8;
-        this._guard("sheet " + e.members[0].id, () => this._createSheet(e));
+        bytes += entry.w * entry.h * 4;
+        pixelBytes += entry.w * entry.h * 8;
+        this._guard("sheet " + entry.members[0].id, () =>
+          this._createSheet(entry),
+        );
       } else {
-        if (isImage(e.w.type)) {
+        if (isImage(entry.w.type)) {
           own++;
-          px += e.w.w * e.w.h * 8;
+          pixelBytes += entry.w.w * entry.w.h * 8;
         } else effects++;
-        this._guard("widget " + e.w.id, () => this._create(e.w, null));
+        this._guard("widget " + entry.w.id, () => this._create(entry.w, null));
       }
     });
     const atlasBytes = this._atlasBytes();
-    px += atlasBytes;
-    this.pixelBytes = px;
-    const n = this._layerRefs().length,
+    pixelBytes += atlasBytes;
+    this.pixelBytes = pixelBytes;
+    const layerCount = this._layerRefs().length,
       counts = this._connCounts(plan);
     this.log.info(
       'layout "' +
@@ -672,7 +678,7 @@ class HudApp {
         '": ' +
         shown.length +
         " widgets, " +
-        this._layerCount(n) +
+        this._layerCount(layerCount) +
         " (" +
         effects +
         " effects, " +
@@ -688,7 +694,7 @@ class HudApp {
         ", whole-sheet writes " +
         bytes +
         " bytes, pixel memory " +
-        mib(px) +
+        mib(pixelBytes) +
         " of 16 MiB" +
         (atlasBytes
           ? " (" +
@@ -700,7 +706,7 @@ class HudApp {
             ")"
           : ""),
     );
-    counts.forEach((k, ci) => {
+    counts.forEach((k, connIndex) => {
       if (k > LAYER_BUDGET)
         this.log.warn(
           'layout "' +
@@ -708,18 +714,18 @@ class HudApp {
             '" needs ' +
             k +
             " layers on connection " +
-            (ci + 1) +
+            (connIndex + 1) +
             ", cluster-render draws at most " +
             LAYER_BUDGET +
             " per connection",
         );
     });
-    if (px > PIXEL_BYTES)
+    if (pixelBytes > PIXEL_BYTES)
       this.log.warn(
         'layout "' +
           layout.name +
           '" needs ' +
-          mib(px) +
+          mib(pixelBytes) +
           " of pixel memory; cluster-render has 16 MiB for every app together (each image counts twice)",
       );
     this.statusAskT = setTimeout(() => {
@@ -730,38 +736,38 @@ class HudApp {
 
   /**
    * A widget: on its own layer (sheet null: an effect, or an image widget with "own": true), or a member of a sheet.
-   * @param {Widget} w
+   * @param {Widget} widget
    * @param {?Sheet} sheet
    * @returns {void}
    * @this {App}
    */
-  _create(w, sheet) {
-    const mod = widgetTypes[w.type];
-    let ref, c;
+  _create(widget, sheet) {
+    const mod = widgetTypes[widget.type];
+    let ref, client;
     if (sheet) {
       ref = sheet.ref;
-      c = sheet.c;
+      client = sheet.c;
     } else {
-      c = this._clientAt(this._connOf(w));
+      client = this._clientAt(this._connOf(widget));
       const base = {
         target: this.target,
-        klass: w.class || "content",
-        z: w.z || 0,
-        x: w.x,
-        y: w.y,
-        w: w.w,
-        h: w.h,
+        klass: widget.class || "content",
+        z: widget.z || 0,
+        x: widget.x,
+        y: widget.y,
+        w: widget.w,
+        h: widget.h,
       };
-      if (isImage(w.type))
-        ref = c.image(Object.assign({ iw: w.w, ih: w.h }, base));
+      if (isImage(widget.type))
+        ref = client.image(Object.assign({ iw: widget.w, ih: widget.h }, base));
       else {
         // a widget module's shader; null: it can't draw now (it said why)
-        const fs = mod.shader(this, w, this._connOf(w));
-        if (fs === null) return;
-        ref = c.effect(
+        const fragmentShader = mod.shader(this, widget, this._connOf(widget));
+        if (fragmentShader === null) return;
+        ref = client.effect(
           Object.assign(
             {
-              fs,
+              fs: fragmentShader,
               time: mod.time || undefined,
             },
             base,
@@ -769,23 +775,23 @@ class HudApp {
         );
       }
       if (!ref) {
-        this.log.warn('widget "' + w.id + '": layer refused');
+        this.log.warn('widget "' + widget.id + '": layer refused');
         return;
       }
     }
-    const x = {
-      w,
+    const state = {
+      w: widget,
       ref,
-      c,
-      ci: sheet ? sheet.ci : this._connOf(w),
+      c: client,
+      ci: sheet ? sheet.ci : this._connOf(widget),
       sheet: sheet || null,
       last: null,
       lastPaint: 0,
       px: null,
     };
-    this.widgets.set(w.id, x);
-    mod.create(this, w, x);
-    this._update(x, Date.now(), true);
+    this.widgets.set(widget.id, state);
+    mod.create(this, widget, state);
+    this._update(state, Date.now(), true);
   }
 
   /**
@@ -802,23 +808,25 @@ class HudApp {
     const rpm = this._raw("rpm");
     const flashing = isNum(rpm) && rpm >= this.setting("redline") - 150;
     this.flash = flashing ? Math.floor(now / 62.5) % 2 === 0 : false;
-    this.widgets.forEach((x) => {
-      if (!x.timer)
-        this._guard("widget " + x.w.id, () => this._update(x, now, false));
+    this.widgets.forEach((state) => {
+      if (!state.timer)
+        this._guard("widget " + state.w.id, () =>
+          this._update(state, now, false),
+        );
     });
   }
 
   /**
    * Sends a widget's new values (uniforms or pixels) when they changed;
    * force: always.
-   * @param {WidgetState} x
+   * @param {WidgetState} state
    * @param {number} now
    * @param {boolean} force
    * @returns {void}
    * @this {App}
    */
-  _update(x, now, force) {
-    widgetTypes[x.w.type].update(this, x, now, force);
+  _update(state, now, force) {
+    widgetTypes[state.w.type].update(this, state, now, force);
   }
 }
 

@@ -39,22 +39,23 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {void}
    */
   _modeChanged() {
-    const m = this._mode();
-    if (m === this.activeMode) return;
-    this.log.info("HUD mode " + m);
+    const mode = this._mode();
+    if (mode === this.activeMode) return;
+    this.log.info("HUD mode " + mode);
     this._rebuild();
   },
 
   /**
    * A widget as it is in a mode: its "in"[mode] fields over its own, or null when that is false.
-   * @param {Widget} w
+   * @param {Widget} widget
    * @param {string} mode
    * @returns {?Widget}
    */
-  _inMode(w, mode) {
-    if (!w.in || !Object.prototype.hasOwnProperty.call(w.in, mode)) return w;
-    const o = w.in[mode];
-    return o === false ? null : Object.assign({}, w, o);
+  _inMode(widget, mode) {
+    if (!widget.in || !Object.prototype.hasOwnProperty.call(widget.in, mode))
+      return widget;
+    const override = widget.in[mode];
+    return override === false ? null : Object.assign({}, widget, override);
   },
 
   /**
@@ -63,8 +64,8 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    */
   _navSwitch() {
     if (!this.navActive || !this.ctx.settings.item("navLayout")) return false;
-    const v = this.setting("navLayout");
-    return !!v && v !== "same";
+    const value = this.setting("navLayout");
+    return !!value && value !== "same";
   },
 
   /** The layout name to show now: the "navLayout" one while guiding, else per drive mode when that's on and known (apps
@@ -78,8 +79,8 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
       this.driveMode &&
       MODE_KEY[this.driveMode]
     ) {
-      const v = this.setting(MODE_KEY[this.driveMode]);
-      if (v) return v;
+      const value = this.setting(MODE_KEY[this.driveMode]);
+      if (value) return value;
     }
     return this.setting("hudLayout");
   },
@@ -91,8 +92,8 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    */
   _layoutLabel(name) {
     const lay = this.ctx.settings.item("hudLayout");
-    const o = lay && (lay.options || []).find((x) => x[0] === name);
-    return o ? o[1] : name;
+    const option = lay && (lay.options || []).find((opt) => opt[0] === name);
+    return option ? option[1] : name;
   },
 
   /**
@@ -102,8 +103,8 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    */
   _themeName() {
     if (this.layoutTheme) return this.layoutTheme;
-    const t = this.setting("hudTheme");
-    if (t !== "auto") return t;
+    const theme = this.setting("hudTheme");
+    if (theme !== "auto") return theme;
     return sun.isNight(Date.now(), this.location.lat, this.location.lon)
       ? "night"
       : this.setting("dayTheme");
@@ -111,44 +112,46 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
 
   /**
    * "key" is on while that bool setting is on; "!key" while it is off.
-   * @param {string} t
+   * @param {string} toggle
    * @returns {boolean}
    */
-  _toggleOn(t) {
-    const not = t.charAt(0) === "!";
-    const k = not ? t.slice(1) : t,
-      eq = k.indexOf("=");
-    const on =
-      eq > 0
-        ? String(this.setting(k.slice(0, eq))) === k.slice(eq + 1)
+  _toggleOn(toggle) {
+    const not = toggle.charAt(0) === "!";
+    const k = not ? toggle.slice(1) : toggle,
+      eqAt = k.indexOf("=");
+    const isOn =
+      eqAt > 0
+        ? String(this.setting(k.slice(0, eqAt))) === k.slice(eqAt + 1)
         : this.setting(k) !== false;
-    return not ? !on : on;
+    return not ? !isOn : isOn;
   },
 
   /**
    * A widget's map hole in layer px, inset by "holeInset" (6) a side, while "holeWhen" is on; else no hole.
-   * @param {Widget} w
+   * @param {Widget} widget
    * @returns {number[]} [x, y, w, h]
    */
-  _hole(w) {
-    const h =
-      w.hole && w.holeWhen && this.setting(w.holeWhen) === true ? w.hole : null;
-    if (!h) return [0, 0, 0, 0];
-    const inset = isNum(w.holeInset) ? w.holeInset : 6;
+  _hole(widget) {
+    const hole =
+      widget.hole && widget.holeWhen && this.setting(widget.holeWhen) === true
+        ? widget.hole
+        : null;
+    if (!hole) return [0, 0, 0, 0];
+    const inset = isNum(widget.holeInset) ? widget.holeInset : 6;
     return [
-      h[0] + inset - w.x,
-      h[1] + inset - w.y,
-      Math.max(0, h[2] - 2 * inset),
-      Math.max(0, h[3] - 2 * inset),
+      hole[0] + inset - widget.x,
+      hole[1] + inset - widget.y,
+      Math.max(0, hole[2] - 2 * inset),
+      Math.max(0, hole[3] - 2 * inset),
     ];
   },
 
   /**
    * A widget's map hole corner radius, px ("holeRadius", 28).
-   * @param {Widget} w
+   * @param {Widget} widget
    * @returns {number}
    */
-  _holeRadius(w) {
-    return isNum(w.holeRadius) ? w.holeRadius : 28;
+  _holeRadius(widget) {
+    return isNum(widget.holeRadius) ? widget.holeRadius : 28;
   },
 });
