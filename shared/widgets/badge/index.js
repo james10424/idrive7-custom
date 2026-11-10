@@ -6,9 +6,9 @@ const { VERDICT } = require("../../hud_themes");
 const textRaster = require("../../hud_text");
 const { TEXT_MS } = require("../../engine/util");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `image layer; a rounded tag with text: "tone" verdict (the last shift's grade colour) or cold. Updates send only the one rectangle around the pixels that changed since the last paint.`;
 

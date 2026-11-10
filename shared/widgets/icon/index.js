@@ -5,9 +5,9 @@
 const { color } = require("../../hud_themes");
 const { paintIcon } = require("./icons");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `image layer; a line icon from icons.js ("icon": gauge, shock, wheel, cog, stack, therm, oilcan, fuel)`;
 

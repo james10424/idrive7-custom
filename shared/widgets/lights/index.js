@@ -6,9 +6,9 @@ const { LIGHTS } = require("../../hud_themes");
 const { isNum, rgb } = require("../../engine/util");
 const SHADER = require("./shader");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `effect layer; lights/shader.js, shift lights filling from "from" rpm (3000) up to the shift point. "count" (12), "from" rpm (3000) where the first light comes on, "tail" (0): the last "tail" lights are blue (the GT3 look); "round": true for dots; "off" the alpha of an unlit light (0.14).`;
 

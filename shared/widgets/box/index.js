@@ -6,9 +6,9 @@ const { color } = require("../../hud_themes");
 const { rgba } = require("../../engine/util");
 const BOX = require("./shader");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `effect layer; a framed box: "fill" and "line" roles, "border" px, "radius" px, and a header strip "head" px tall in role "headColor" (its label is a text widget on top)`;
 

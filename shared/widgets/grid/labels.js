@@ -4,9 +4,9 @@
  */
 const textRaster = require("../../hud_text");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `calibration: image layer, "x/y" at every "step" px (only the labels are uploaded)`;
 

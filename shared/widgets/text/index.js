@@ -6,9 +6,34 @@ const { VERDICT, color } = require("../../hud_themes");
 const textRaster = require("../../hud_text");
 const { isNum, TEXT_MS } = require("../../engine/util");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/**
+ * A text widget's own fields (see DOCS).
+ * @typedef {object} TextFields
+ * @property {string} [font] a hud/fonts name, or "@sys"
+ * @property {string} [color] colour role
+ * @property {string} [color2]
+ * @property {string} [align] left | right | center
+ * @property {number} [spacing]
+ * @property {number} [size] "@sys" text px
+ * @property {boolean} [glow]
+ * @property {number} [rate] ms between text paints
+ * @property {string} [needs] a token; blank while it is "--"
+ * @property {string} [colorBy]
+ * @property {Array<*>} [near] ["speed" | "rpm", label index]
+ * @property {number} [nearFade]
+ * @property {string} [nearColor]
+ * @property {number} [litGear]
+ * @property {string} [litColor]
+ * @property {string} [hotWhen]
+ * @property {string} [coldWhen]
+ * @property {string} [hotColor]
+ * @property {{ signal: string, min?: number, max?: number,
+ *   yTop: number, yBottom: number }} [slide]
+ * @property {string} [tone]
+ */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `image layer; template tokens below, a font from hud/fonts, colour role. "color2": a second role, the colour at the bottom of the box (a top-to-bottom gradient, the chrome look). "hotWhen": "now" turns it the shift red at the shift point; "coldWhen": "cold" turns it blue while the cold guard lowers the shift point. "litGear": the Regal gear row slot (P 0 R 1 N 2 D 3, number 5) turns it "litColor" (fg) while lit. "slide": { signal ("accGap" = the car ahead in m), max, yTop, yBottom }: the text's middle rides from yBottom (0) to yTop (max) inside its box, blank without a value; "hotWhen": "closing" turns it red while the car ahead closes fast. "colorBy": "verdict" colours it by the last shift's grade. "near": ["speed" | "rpm", i] turns it "nearColor" (fg) while scale label i is the one nearest the value (BMW lights up the label by the needle); with "nearFade": n it fades instead, from its own colour n label steps away to "nearColor" at the label (iDrive 8). "font": "@sys" draws in the car's own font (any script, sysfont.js), "size" px. "needs": "<token>" draws nothing while that token is "--". Updates send only the one rectangle around the pixels that changed since the last paint.`;
 

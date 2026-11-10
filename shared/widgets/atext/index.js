@@ -6,9 +6,15 @@ const { color } = require("../../hud_themes");
 const { isNum, rgba, TEXT_MS } = require("../../engine/util");
 const ATEXT = require("./shader");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/**
+ * This type's own state on its WidgetState.
+ * @typedef {object} AtextState
+ * @property {import("../../engine/app").GlyphAtlas} [atlas]
+ * @property {number} [cells]
+ */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `effect layer (atext/shader.js): text drawn by the GPU from a glyph atlas, the probe for the path that needs no pixel writes. The font's glyphs go up once per connection as an R8 asset (one byte a pixel, not a layer, shared by every atext widget on that font); the widget is "cells" equal cells across its width ("w" / cells wide each; the glyphs keep their shape when w = cells x the font's widest advance and h = its cell height, logged at creation), and a new value is one uniform message of glyph codes. "text" tokens as text, "font", "color" role, "align" left | right | center. Up to 32 cells; only the characters the font has.`;
 

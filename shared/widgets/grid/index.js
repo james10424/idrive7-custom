@@ -5,9 +5,9 @@
 const { rgba } = require("../../engine/util");
 const GRID = require("./shader");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `calibration: effect layer of lines every "step" px (brighter every "major" steps)`;
 

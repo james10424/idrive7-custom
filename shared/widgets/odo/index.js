@@ -6,9 +6,15 @@ const { color } = require("../../hud_themes");
 const { isNum, rgba } = require("../../engine/util");
 const ODO = require("./shader");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/**
+ * This type's own state on its WidgetState.
+ * @typedef {object} OdoState
+ * @property {import("../../engine/app").GlyphAtlas} [atlas]
+ * @property {number} [drums]
+ */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `effect layer (odo/shader.js): a mechanical odometer, "drums" (6) digit drums of "font"'s glyph atlas (r_gl), "color" role, "gap" px between drums (2), "frame" px (1); the car's KombiIF mileageKilometre in the units setting's unit, the last drum turning with the distance (from the speed between whole km) and the others rolling over as the real gears do. Blank drums without a reading.`;
 

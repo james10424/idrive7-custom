@@ -5,9 +5,15 @@
 const { isNum, rgb } = require("../../engine/util");
 const MDASH = require("./shader");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/**
+ * This type's own state on its WidgetState.
+ * @typedef {object} MdashState
+ * @property {Array<Array<*>>} [gauges] [uniform, gauge]
+ * @property {Array<Record<string, *>>} [bars] the segbars
+ */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `effect layer; the M theme's whole backdrop (mdash/shader.js): "card" [x, yBottom, rBottom, rTop] (the left card, traced off the M8 photo: outer edge x, bottom y, the big round at the bottom outer corner, the rounding where the top curve meets the outer edge; the right card is its mirror), "cardTop" [a, b, c] (the card's top edge, y = a x^2 + b x + c), "cardCutR" [cx, cy, r] (the right card's lower outer corner cut on that circle, in the mirrored left frame), "cardFill" 0..1 (grey level, 0 = black: outline only), "blade" { xm, ym, kTop, kBot, round } (the left rev blade's outer edge, as mtach; the card ends "bladeGap" px before it), "line" [x0, y, x1, cap], "tyres" [cx, cy, scale] (the tyre block's car glyph and dividers; the eight readouts are text widgets with {{tyreP:FL}} .. {{tyreT:RR}} and {{u:pressure}}), "gaugeL" / "gaugeR" { cx, cy, r, (a dial as the M8's: a thin glass bracket whose outer edge is the circle cx, cy, r, lit from the bottom up to the value, drawn over the card; the right one is the left one's mirror) signal, min, max }, "mark" [x, y, scale], "segbars" [{ x, y, w, h, max, signal } x up to 4] (the setup level bars, "segSlant" px; the segment at round(signal) is red). Positions in target px.`;
 

@@ -4,7 +4,7 @@
  */
 const { isNum } = require("../../engine/util");
 
-/** @typedef {import("../../hud").WidgetState} WidgetState */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
 
 const MIKU_IDLE_G = 0.03; // below this |longitudinal g| the car idles: she glances around (the lean is not gated)
 const MIKU_GLANCE_AFTER_MS = 1000; // the first glance this long after the car goes idle

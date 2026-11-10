@@ -7,9 +7,29 @@ const MIKU = require("./shader");
 const { sprite } = require("./sprite");
 const { idle } = require("./idle");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/**
+ * This type's own state on its WidgetState.
+ * @typedef {object} MikuState
+ * @property {number} [lean] eased -1..1
+ * @property {number} [spd] eased 0..1
+ * @property {number} [point] -1..1
+ * @property {number} [pointV]
+ * @property {number} [look] glance -1..1
+ * @property {number} [lookV]
+ * @property {number} [lookT] the glance's target
+ * @property {number} [lookUntil] ms
+ * @property {number} [lookN] glance frames
+ * @property {number} [doze] 0..1
+ * @property {number} [dozeV]
+ * @property {number} [dozeN] doze frames
+ * @property {number} [idleMs]
+ * @property {number} [stillMs]
+ * @property {boolean} [wokeUp]
+ * @property {string} [lastI] the last u_idle key
+ */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `effect layer; the Miku layout's standing character, from frames baked offline
 (tools/live2d_bake) and kept in the app's data folder (miku/, see sprite.js); animated by the renderer's

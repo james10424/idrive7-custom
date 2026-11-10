@@ -6,9 +6,9 @@ const { color } = require("../../hud_themes");
 const { isNum, rgb, rgba } = require("../../engine/util");
 const ARC = require("./shader");
 
-/** @typedef {import("../../hud").Widget} Widget */
-/** @typedef {import("../../hud").WidgetState} WidgetState */
-/** @typedef {import("../../hud").HudApp} HudApp */
+/** @typedef {import("../../engine/app").Widget} Widget */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {InstanceType<typeof import("../../engine/app")>} HudApp */
 
 const DOCS = `effect layer; arc/shader.js, lit by a signal between min and max. Also "start" and "sweep" in degrees (clockwise from 12 o'clock; negative = anticlockwise).`;
 
