@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 11 2026
 
+- **Shaders in .glsl files:** every widget's shader moved out of its JS string into its own .glsl file (Miku's camera is one file both her shaders include), loaded when the widget loads. The text sent to cluster-render is byte for byte what it was. `node tools/shader_budget.js` now also compiles each one with glslangValidator and fails on an error. Not in a release yet.
 - **Custom HUD 0.1.26:** no box around Miku's eyes while she blinks in her close-up. The eye crops sit edge to edge in her atlas, and the GPU's filtered read at a crop's edge took in a row of the next crop, drawing thin dark lines along the top and bottom of the eyes' rect. The reads now stay half a pixel inside. The README's zoom GIF is re-recorded.
 - **README:** GIFs in place of the screenshots: Regal and Sport pulling away, Miku leaning as the car pulls away and brakes, and Miku zooming into her close-up at a stop. The bench records them: POST /shot with a frame number writes frames to bench/.data/clips/<name>/, and tools/clip_gif.sh turns them into docs/images/<name>.gif.
 - **Custom Cluster 0.1.49:** with the 12-hour clock, Sport's am/pm no longer runs into the time ("12:26am"); the range moves right to make room, into the space the consumption readout left.

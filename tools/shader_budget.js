@@ -17,8 +17,10 @@
  * counts 6 times), after the #ifdefs. Loops count their body once (none of the shaders that matter loop over reads).
  *
  * Used by bench/server.js on every effect layer, and from the command line on every widget type's shaders
- * (shared/widgets, each module's "shaders"):
- *   node tools/shader_budget.js        (exits 1 if any shader reaches the crash mark)
+ * (shared/widgets, each module's "shaders", read from the widgets' .glsl files):
+ *   node tools/shader_budget.js        (exits 1 if any shader reaches the crash mark or doesn't compile)
+ * The command line also compiles each one as GLSL ES 1.00 with Khronos' glslangValidator (brew install glslang),
+ * which catches type and syntax errors before a shader reaches the car; without it the compile step is skipped.
  */
 
 // Texture reads: over GOOD is untested on the car, at CRASH or over is what restarted it.
@@ -197,7 +199,32 @@ function check(src) {
   return { level: "ok", text: summary, ...measured };
 }
 
+/**
+ * Compiles a fragment shader as GLSL ES 1.00 with glslangValidator.
+ * @param {string} src
+ * @returns {{ ok: boolean, missing?: boolean, errors: string }} errors: the compiler's ERROR lines
+ */
+function compile(src) {
+  const run = require("child_process").spawnSync(
+    "glslangValidator",
+    ["--stdin", "-S", "frag"],
+    { input: src, encoding: "utf8" },
+  );
+  if (run.error)
+    return { ok: false, missing: true, errors: String(run.error.message) };
+  const errors = (run.stdout + run.stderr)
+    .split("\n")
+    .filter(
+      (line) =>
+        /^(ERROR|WARNING):/.test(line) &&
+        !/compilation (terminated|errors)/.test(line),
+    )
+    .join("\n");
+  return { ok: run.status === 0, errors };
+}
+
 module.exports = {
+  compile,
   measure,
   check,
   READS_GOOD,
@@ -236,16 +263,32 @@ if (require.main === module) {
   Object.keys(widgets).forEach((type) =>
     Object.assign(all, widgets[type].shaders || {}),
   );
-  let worst = "ok";
+  let worst = "ok",
+    compiler = true;
   for (const name of Object.keys(all)) {
     const result = check(all[name]);
+    const built = compiler ? compile(all[name]) : { ok: true, errors: "" };
+    if (built.missing) {
+      compiler = false;
+      console.log(
+        "! glslangValidator not found (brew install glslang): shaders not compiled",
+      );
+    }
+    const broken = !built.ok && !built.missing;
     console.log(
-      (result.level === "ok" ? "  " : result.level === "warn" ? "! " : "X ") +
+      (broken || result.level === "crash"
+        ? "X "
+        : result.level === "warn"
+          ? "! "
+          : "  ") +
         name.padEnd(16) +
-        result.text,
+        result.text +
+        (broken ? ", does not compile" : ""),
     );
-    if (result.level === "crash" || (result.level === "warn" && worst === "ok"))
-      worst = result.level;
+    if (built.errors && !built.missing)
+      console.log(built.errors.replace(/^/gm, "      "));
+    if (broken || result.level === "crash") worst = "crash";
+    else if (result.level === "warn" && worst === "ok") worst = "warn";
   }
   process.exit(worst === "crash" ? 1 : 0);
 }
