@@ -167,23 +167,19 @@ module.exports = {
       return quantize((value - range[0]) / (range[1] - range[0]));
     });
     const ledN = widget.ledN || 16;
-    const led = isNum(rpm)
-      ? Math.floor((Math.max(0, rpm) / max) * ledN + 0.5) / ledN
-      : 0;
+    // the bars' levels 0..1, in sixteenths of a segment: the segment the level is partway into lights partway (the
+    // shader fades it), so the bar moves smoothly instead of a whole segment at a time
+    /** @type {(frac: number, n: number) => number} */
+    const ledLevel = (frac, n) =>
+      Math.round(Math.min(1, Math.max(0, frac)) * n * 16) / (n * 16);
+    const led = isNum(rpm) ? ledLevel(Math.max(0, rpm) / max, ledN) : 0;
     const shiftAt = Math.floor((hud._shift().rpm / max) * ledN) / ledN;
     // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
     const led2N = widget.led2N || 15,
       led2Range = widget.led2Range || [0, 1.5],
       boost = hud._raw(widget.led2Signal || "boost");
     const led2 = isNum(boost)
-      ? Math.floor(
-          Math.min(
-            1,
-            Math.max(0, (boost - led2Range[0]) / (led2Range[1] - led2Range[0])),
-          ) *
-            led2N +
-            0.5,
-        ) / led2N
+      ? ledLevel((boost - led2Range[0]) / (led2Range[1] - led2Range[0]), led2N)
       : 0;
     const gear = hud._regalGear();
     const brakeLamp = hud._brakeLamp(),

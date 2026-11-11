@@ -28,7 +28,7 @@ uniform float u_fuelV;    // 0..1
 uniform vec4 u_podG;      // the left pod's needle: pivot x, y, tick inner r, outer r (right: mirrored)
 uniform vec2 u_podV;      // left (battery), right (coolant) 0..1, bottom to top
 uniform vec4 u_led;       // LED rev bar x, y, w, h
-uniform vec3 u_ledV;      // segments, lit 0..1, yellow from 0..1 (the shift point)
+uniform vec3 u_ledV;      // segments, lit 0..1 (a segment partway lit fades in), yellow from 0..1 (the shift point)
 uniform vec4 u_led2;      // the boost LED bar x, y, w, h (w 0 = none), all yellow
 uniform vec2 u_led2V;     // its segments, lit 0..1
 uniform vec4 u_gearBox;   // the lit gear box: first letter's box x, y, w, h
@@ -188,8 +188,9 @@ void main() {
         float n = u_ledV.x, pitch = u_led.z / n, i = floor((p.x - u_led.x) / pitch);
         float lx = p.x - u_led.x - i * pitch;
         float d = rbox(vec2(lx, p.y), vec4(1.5, u_led.y, pitch - 4.5, u_led.w), 1.5);
-        bool lit = (i + 0.5) / n <= u_ledV.y;
-        vec3 col = lit ? ((i + 0.5) / n >= u_ledV.z ? LED_Y : LED_ON) : LED_OFF;
+        // lit up to the level; the segment it is partway into fades in by how far
+        float lit = clamp(u_ledV.y * n - i, 0.0, 1.0);
+        vec3 col = mix(LED_OFF, (i + 0.5) / n >= u_ledV.z ? LED_Y : LED_ON, lit);
         c = mix(c, col, cov(d));
     }
 
@@ -198,7 +199,7 @@ void main() {
         float n = u_led2V.x, pitch = u_led2.z / n, i = floor((p.x - u_led2.x) / pitch);
         float lx = p.x - u_led2.x - i * pitch;
         float d = rbox(vec2(lx, p.y), vec4(1.5, u_led2.y, pitch - 4.5, u_led2.w), 1.5);
-        c = mix(c, (i + 0.5) / n <= u_led2V.y ? LED_Y : LED_YOFF, cov(d));
+        c = mix(c, mix(LED_YOFF, LED_Y, clamp(u_led2V.y * n - i, 0.0, 1.0)), cov(d));
     }
 
     // the lit gear letter's box

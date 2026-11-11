@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 10 2026
 
+- **Custom Cluster 0.1.47:** Regal's rev and boost LED bars move smoothly: the LED the reading is partway into lights partway (at 1750 rpm, three LEDs and the fourth at half), instead of the bar rounding to whole LEDs.
 - **Custom HUD 0.1.23:** standing, Miku no longer points toward the indicator; only her close-up turns its head that way. And a signal switched on before she zooms in now turns her head: the app dropped the car's indicator report after 5 s (it sends one only when the indicators change), so a signal already on when she stopped read as off. Both apps keep the car's last report until the next.
 - **Custom Cluster 0.1.46:** Regal's range shows its hundreds digit whole (the box was 86 px for three 30 px digits; now 96, the right edge where it was). The turn lamps no longer go dark 5 s into a signal.
 - **Bench:** the car switches (indicators, brake lights, parking brake...) go to the apps when they change, as the car's do, not every 0.5 s, which had hidden the 5 s timeout.
