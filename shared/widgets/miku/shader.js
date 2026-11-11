@@ -202,7 +202,9 @@ const MIKU_CLOSE =
 // u_zoom = (zoom 0 .. 1, turn -1 .. 1, brightness, ready): the app ramps zoom over 1 s when the car stops (and back when it
 // pulls away) and eases turn toward the indicator. The camera (camera(), as MIKU's) zooms in; the standing layer under
 // this one fades out by the first zoom step, then this layer blends the two nearest steps, each drawn through its own
-// baked camera. Zoomed in, on the renderer's clock (u_time): she blinks every 2 s and sways (the head about u_pose.xy,
+// baked camera. Zoomed in, on u_clock (seconds 0 .. 4, sent by the app while she is zoomed in: the renderer's u_time
+// didn't drive this layer on the car, Nov 10 2026, where a large u_time loses its fractions in a mediump float):
+// she blinks every 2 s and sways (the head about u_pose.xy,
 // -1 .. 1 over 4 s; the two nearest baked sways each turned onto the sway between, as the bake measured their turn,
 // so they don't double); with the indicator on she turns her head that way (the nearest baked turns each slid onto
 // the head's place between them) and doesn't sway.
@@ -213,7 +215,7 @@ precision mediump float;
 #endif
 varying vec2 v_uv;
 uniform vec2 u_size;
-uniform float u_time;
+uniform float u_clock;   // seconds 0 .. 4, from the app while zoomed in (blink 2 s, sway 4 s)
 uniform sampler2D u_atlas;
 uniform vec2 u_atlasSize;
 uniform vec4 u_zoom;     // zoom 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there (0: draw nothing)
@@ -280,7 +282,7 @@ void main() {
     vec4 c = vec4(0.0);
     if (k > steps - 1.0) {
         vec2 q = (f - close.xy) * u_frames.xy / close.zw;   // close-up frame px
-        float t = mod(u_time, 1200.0);
+        float t = u_clock;
         float turn = clamp(u_zoom.y, -1.0, 1.0) * zin;
         float bt = mod(t, 2.0);
         float eh = (smoothstep(0.0, 0.06, bt) * (1.0 - smoothstep(0.1, 0.22, bt))) * zin;

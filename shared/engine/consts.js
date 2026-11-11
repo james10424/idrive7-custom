@@ -13,7 +13,7 @@ const isImage = (type) => !!(widgetTypes[type] && widgetTypes[type].image);
 const STATUS_ASK_MS = 2000; // after a rebuild: ask cluster-render for its own status text
 const LAYER_BUDGET = 64; // cluster-render's limit per client connection (CompositorLimits.per_client: 8 until 0.4.2, 64 since)
 const MAX_CONN = 4; // connections a layout may ask for ("conn"); 96 layers service-wide, 64 per connection
-const PIXEL_BYTES = 16 * 1024 * 1024; // cluster-render's pixel memory for every app's images together (CompositorLimits.pixel_bytes)
+const PIXEL_BYTES = 32 * 1024 * 1024; // cluster-render's pixel memory for every app's images together: pixel_mib, 32 MiB in our fork from 0.5.4 (upstream a fixed 16)
 const SHEET_AREA_FRAC = 4; // the first sheet size limit: 1/4 of the target area (see the header)
 const TICK_MS = 50; // 20 Hz: shift bar and gauges
 const DEFAULT_LOCATION = { lat: 35.2271, lon: -80.8431 }; // Charlotte, NC: for the Auto theme's sunset

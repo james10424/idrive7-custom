@@ -64,7 +64,7 @@
  *   sockets on his car, Nov 5 2026; the calibration grids probe it here: L5..L16 on connections 2..4). 0 (the
  *   default) is the app's own connection; a layout never asks for more than it needs, each extra one is opened
  *   on first use and named <app id>_<n>. Sheets never span connections.
- * Pixel memory: cluster-render has 16 MiB for every app's images together and counts each image twice
+ * Pixel memory: cluster-render has 32 MiB (our fork's pixel_mib, 0.5.4; upstream 16) for every app's images together and counts each image twice
  *   (Compositor::add_image; a layer past it is refused with "the service's pixel memory is full"), so every
  *   image layer costs w*h*8 bytes. The rebuild log and the status row say what a layout costs.
  * An image widget's repaint (_blitDiff) sends only the one rectangle around the pixels that changed since the last
@@ -706,7 +706,7 @@ class HudApp {
         bytes +
         " bytes, pixel memory " +
         mib(pixelBytes) +
-        " of 16 MiB" +
+        " of 32 MiB" +
         (atlasBytes
           ? " (" +
             this.atlases.size +
@@ -737,7 +737,7 @@ class HudApp {
           layout.name +
           '" needs ' +
           mib(pixelBytes) +
-          " of pixel memory; cluster-render has 16 MiB for every app together (each image counts twice)",
+          " of pixel memory; cluster-render (0.5.4 from james10424/idrive-apps-lib) has 32 MiB for every app together, each image counted twice (16 in upstream's)",
       );
     this.statusAskT = setTimeout(() => {
       this.statusAskT = null;

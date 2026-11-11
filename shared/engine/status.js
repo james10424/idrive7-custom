@@ -139,7 +139,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
       this._layerCount(this._layerRefs().length) +
       (conns > 1 ? " on " + conns + " connections" : "") +
       (this.pixelBytes
-        ? ", " + mib(this.pixelBytes) + " of 16 MiB pixels"
+        ? ", " + mib(this.pixelBytes) + " of 32 MiB pixels"
         : "") +
       (this.activeMode !== "normal" ? ", " + this.activeMode + " mode" : "");
     if (this.layoutTheme)

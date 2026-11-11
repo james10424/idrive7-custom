@@ -21,6 +21,7 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {number} [firstStep] the close-up's first zoom step, 0..1 of the eased zoom
  * @property {string} [lastZ] the last u_zoom key
  * @property {number[]} [zoomVals] the close-up layer's u_zoom, last sent
+ * @property {number} [clockAt] when the close-up's u_clock last went up (ms)
  * @property {boolean} [blanked] (the close-up layer) told to draw nothing after a refusal
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
@@ -40,6 +41,7 @@ const MIKU_LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly (no s
 const MIKU_POINT_K = 70; // the pointing arm's spring (1/s^2): about 1.3 Hz
 const MIKU_POINT_C = 16.7; // critically damped: it rises and settles without bouncing
 const MIKU_STILL_MS = 1000; // stood still (speed 0) this long: she zooms into her close-up
+const MIKU_CLOCK_MS = 33; // the close-up's own clock (u_clock) goes up this often while she is zoomed in
 const MIKU_ZOOM_MS = 1000; // the zoom, in or out
 const MIKU_ZOOM_OUT_KMH = 10; // past this she zooms back out to standing
 
@@ -412,6 +414,18 @@ module.exports = {
       state.lastZ = keyZ;
       state.zoomVals = zoomVals;
       if (close) close.c.uniform(close.ref, "u_zoom", zoomVals);
+    }
+    // the close-up's blink and sway clock, seconds 0 .. 4, about 30 times a second while she is (partly) zoomed in;
+    // the renderer's u_time didn't drive that layer on the car (a large u_time keeps no fractions in a mediump float)
+    if (
+      close &&
+      state.zoom > 0 &&
+      (force || now - (state.clockAt || 0) >= MIKU_CLOCK_MS)
+    ) {
+      state.clockAt = now;
+      close.c.uniform(close.ref, "u_clock", [
+        (((now % 4000) + 4000) % 4000) / 1000,
+      ]);
     }
     const key = drive.join("|");
     if (!force && key === state.last) return;
