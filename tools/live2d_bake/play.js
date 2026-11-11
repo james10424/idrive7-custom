@@ -62,7 +62,7 @@ async function borrowPage() {
     const names = /** @type {string[]} */ (
       await (await fetch("/expressions.json")).json()
     );
-    const renderer = new (/** @type {*} */ (window).eval("Renderer"))(loaded);
+    const renderer = new /** @type {*} */ (window.eval("Renderer"))(loaded);
     /** @type {Record<string, number>} */
     const values = {};
     /** @type {Set<string>} */
@@ -74,12 +74,10 @@ async function borrowPage() {
     const pad = (b[3] - b[1]) * 0.04;
     const box = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
     const big = /** @type {HTMLCanvasElement} */ (
-        document.getElementById("big")
-      ),
-      hud = /** @type {HTMLCanvasElement} */ (document.getElementById("hud"));
+      document.getElementById("big")
+    );
     const aspect = (box[2] - box[0]) / (box[3] - box[1]);
     big.width = Math.round(big.height * aspect);
-    hud.width = Math.round(hud.height * aspect);
     let pending = false;
     const draw = async () => {
       if (pending) return;
@@ -87,20 +85,13 @@ async function borrowPage() {
       const exp = await g.expressionParams(Array.from(on));
       g.setParams(loaded, Object.assign({}, exp, values));
       loaded.model.update();
-      const canvas = renderer.draw(big.width * 2, big.height * 2, box);
+      const canvas = renderer.draw(big.width, big.height, box);
       const bctx = /** @type {CanvasRenderingContext2D} */ (
         big.getContext("2d")
       );
       bctx.clearRect(0, 0, big.width, big.height);
       bctx.imageSmoothingQuality = "high";
       bctx.drawImage(canvas, 0, 0, big.width, big.height);
-      const hctx = /** @type {CanvasRenderingContext2D} */ (
-        hud.getContext("2d")
-      );
-      hctx.fillStyle = "#000";
-      hctx.fillRect(0, 0, hud.width, hud.height);
-      hctx.imageSmoothingQuality = "high";
-      hctx.drawImage(canvas, 0, 0, hud.width, hud.height);
       pending = false;
       logLine(
         (on.size
@@ -169,9 +160,7 @@ async function borrowPage() {
       on.clear();
       toggles
         .querySelectorAll("input")
-        .forEach(
-          (el) => /** @type {HTMLInputElement} */ ((el).checked = false),
-        );
+        .forEach((el) => /** @type {HTMLInputElement} */ (el.checked = false));
     };
     /** @type {HTMLElement} */ (document.getElementById("clear")).onclick =
       () => {
