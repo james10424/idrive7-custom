@@ -37,7 +37,10 @@
  *               the knee to step. Two legs may name the same part: its drawables then go to the leg on their side of
  *               her middle. knee and ankle are fractions down the leg (from the top of its mesh, under the skirt, to
  *               the sole); below (a fraction too): any other drawable lying wholly below it (a shoe's decoration)
- *               goes with the leg on its side
+ *               goes with the leg on its side. The step frames: our own rig on the leg's meshes (the model has no leg
+ *               parameters) flexes the knee toward you, thigh forward and shin back, so in front view both get
+ *               shorter and the foot lifts; nothing moves sideways. LEG_STEPS frames from straight to "bend" (deg,
+ *               60: the knee's flex at the top of a step)
  *   hide        ["part id"]: left out entirely
  *   cut         { "drawable id": model y }: that drawable's triangles wholly below the y left out (in the idle pose)
  *   heightPx    her height on the HUD in px (200), or pxPerUnit: HUD px per model unit
@@ -67,7 +70,7 @@ const cubismCore = window.Live2DCubismCore;
  * @property {[number, number]} [anchor]
  * @property {[number, number]} [anchorPx]
  * @property {{ parts?: string[] }[]} [arms]
- * @property {{ parts?: string[], drawables?: string[], knee?: number, ankle?: number, below?: number }[]} [legs]
+ * @property {{ parts?: string[], drawables?: string[], knee?: number, ankle?: number, below?: number, bend?: number }[]} [legs]
  * @property {string[]} [hide]
  * @property {Record<string, number>} [cut] drawable id to model y
  * @property {number} [heightPx]
@@ -85,7 +88,10 @@ const cubismCore = window.Live2DCubismCore;
  * @property {any} cdi the cdi3.json, or null
  * @property {Map<number, Uint16Array>} [cut] drawable index to the triangles it keeps (makeCuts)
  */
-/** @typedef {{ only?: DrawablePick, skip?: DrawablePick }} DrawOpts */
+/**
+ * Which drawables to draw, and warp: a bake's own rig, drawable i's vertices moved (model units) or null to keep them.
+ * @typedef {{ only?: DrawablePick, skip?: DrawablePick, warp?: (i: number, v: Float32Array) => ?Float32Array }} DrawOpts
+ */
 /**
  * An arm at one pose: its shoulder P in frame px and the angle from it to the arm's middle.
  * @typedef {{ P: number[], ang: number }} ArmPose
@@ -115,7 +121,7 @@ const cubismCore = window.Live2DCubismCore;
  * @property {number[][]} [dozeShift]
  * @property {{ rect: number[], at: number[], rootY: number, length: number }} [tails]
  * @property {{ rect: number[], at: number[], shoulder: number[], side: number, left: number[], right: number[] }[]} [arms]
- * @property {{ rect: number[], at: number[], hip: number[], knee: number[], ankle: number[], side: number }[]} [legs]
+ * @property {{ rect: number[], at: number[], hip: number[], knee: number[], ankle: number[], side: number, steps: number[][], lift: number }[]} [legs]
  * @property {number[]} [hipShift] where the hips go at each lean angle (x px against idle)
  */
 
@@ -180,6 +186,7 @@ const log = (line) => {
   logEl.textContent += "\n" + line;
 };
 const SUPERSAMPLE = 4; // render this many times bigger than the frame, then scale down
+const LEG_STEPS = 6; // each leg's step frames, straight to its full bend (the HUD blends the two nearest)
 
 /**
  * @param {string} url
@@ -310,6 +317,7 @@ class Renderer {
     const gl = this.gl,
       drawables = this.L.model.drawables,
       options = opts || {};
+    this.warp = options.warp || null;
     this.canvas.width = w;
     this.canvas.height = h;
     gl.viewport(0, 0, w, h);
@@ -409,7 +417,10 @@ class Renderer {
   _mesh(i) {
     const gl = this.gl,
       drawables = this.L.model.drawables;
-    const pos = drawables.vertexPositions[i];
+    // a bake's own rig (the legs' step frames) can move the vertices before they're drawn
+    const pos =
+      (this.warp && this.warp(i, drawables.vertexPositions[i])) ||
+      drawables.vertexPositions[i];
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.tex[drawables.textureIndices[i]]);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.bufPos);
@@ -1137,7 +1148,7 @@ async function bake(loaded, cfg) {
   });
   // each leg at rest: its sprite, and the hip (the top of its mesh), knee and ankle in frame px, each at the middle
   // of the leg's drawn width on that row
-  /** @type {{ j: number, cv: HTMLCanvasElement, bb: Rect, hip: number[], knee: number[], ankle: number[] }[]} */
+  /** @type {{ j: number, cvs: HTMLCanvasElement[], bb: Rect, hip: number[], knee: number[], ankle: number[], lift: number }[]} */
   const legs = [];
   legsIn.forEach((inLeg, j) => {
     const drawables = loaded.model.drawables,
@@ -1159,8 +1170,68 @@ async function bake(loaded, cfg) {
     }
     if (!isFinite(top)) return;
     const canvas = render({ only: (i) => inLeg(i) && !hidden(i) }),
-      rect = alphaBox(canvas);
-    if (!rect) return;
+      rest = alphaBox(canvas);
+    if (!rest) return;
+    // the step frames: the knee flexed toward you, the thigh turned forward by 0.6 of the bend and the shin back by
+    // 0.4 (so the shin leans back under the knee); seen from the front each just gets shorter by its cosine, the
+    // thigh from the hip down, the shin from the knee down, and the foot rises by what both lost. x stays: the knee
+    // never bends sideways
+    const kneeM = top - (isFinite(leg.knee) ? leg.knee : 0.5) * (top - bottom),
+      ankleM = top - (isFinite(leg.ankle) ? leg.ankle : 0.85) * (top - bottom),
+      bend =
+        ((isFinite(leg.bend) ? /** @type {number} */ (leg.bend) : 60) *
+          Math.PI) /
+        180;
+    /**
+     * The rig at flex f (0 straight .. 1 the full bend).
+     * @param {number} f
+     * @returns {{ warp: (i: number, v: Float32Array) => ?Float32Array, lift: number }}
+     */
+    const rig = (f) => {
+      const thigh = Math.cos(0.6 * bend * f),
+        shin = Math.cos(0.4 * bend * f),
+        kneeTo = top - (top - kneeM) * thigh,
+        ankleTo = kneeTo - (kneeM - ankleM) * shin;
+      return {
+        lift: ankleTo - ankleM,
+        warp: (i, v) => {
+          if (!inLeg(i)) return null;
+          const out = new Float32Array(v);
+          for (let k = 1; k < v.length; k += 2) {
+            const y = v[k];
+            out[k] =
+              y >= kneeM
+                ? top - (top - y) * thigh
+                : y >= ankleM
+                  ? kneeTo - (kneeM - y) * shin
+                  : y + (ankleTo - ankleM);
+          }
+          return out;
+        },
+      };
+    };
+    const cvs = [],
+      /** @type {Rect} */
+      rect = [rest[0], rest[1], rest[2], rest[3]];
+    let lift = 0;
+    for (let k = 0; k < LEG_STEPS; k++) {
+      const pose = rig(k / (LEG_STEPS - 1));
+      const frame = k
+        ? render({ only: (i) => inLeg(i) && !hidden(i), warp: pose.warp })
+        : canvas;
+      // render reuses its canvas: keep a copy of each frame
+      const copy = document.createElement("canvas");
+      copy.width = frameW;
+      copy.height = frameH;
+      /** @type {CanvasRenderingContext2D} */ (copy.getContext("2d")).drawImage(
+        frame,
+        0,
+        0,
+      );
+      cvs.push(copy);
+      lift = pose.lift * ppu;
+    }
+    // every frame cropped to the same rect (the straight leg's: the bent ones are shorter and within it)
     const pixels = canvas
       .getContext("2d")
       .getImageData(0, 0, frameW, frameH).data;
@@ -1187,11 +1258,12 @@ async function bake(loaded, cfg) {
       ankleY = yAt(isFinite(leg.ankle) ? leg.ankle : 0.85);
     legs.push({
       j,
-      cv: canvas,
+      cvs,
       bb: rect,
       hip: [mid(hipY + 3), hipY],
       knee: [mid(kneeY), kneeY],
       ankle: [mid(ankleY), ankleY],
+      lift: Math.round(lift * 10) / 10,
     });
     log(
       "  leg " +
@@ -1207,7 +1279,12 @@ async function bake(loaded, cfg) {
         " ankle " +
         mid(ankleY).toFixed(1) +
         "," +
-        ankleY.toFixed(1),
+        ankleY.toFixed(1) +
+        ", " +
+        LEG_STEPS +
+        " step frames, the foot lifted " +
+        lift.toFixed(1) +
+        " px at the full bend",
     );
   });
   /** @type {{ cv: HTMLCanvasElement, bb: Rect } | null} */
@@ -1287,7 +1364,9 @@ async function bake(loaded, cfg) {
     items.push({ n: "arm" + arm.j, cv: arm.cv, bb: arm.bb }),
   );
   legs.forEach((leg) =>
-    items.push({ n: "leg" + leg.j, cv: leg.cv, bb: leg.bb }),
+    leg.cvs.forEach((canvas, k) =>
+      items.push({ n: "leg" + leg.j + "s" + k, cv: canvas, bb: leg.bb }),
+    ),
   );
   // a skyline: tallest first, each where its top lands lowest (then leftmost)
   const MAX = 1024,
@@ -1539,10 +1618,13 @@ async function bake(loaded, cfg) {
       /** @type {(x: number) => number} */
       round1 = (x) => Math.round(x * 10) / 10;
     info.legs = legs.map((leg) => {
-      const legItem = byN["leg" + leg.j];
+      const legItem = byN["leg" + leg.j + "s0"];
       return {
         rect: [legItem.at[0], legItem.at[1], legItem.bb[2], legItem.bb[3]],
         at: [legItem.bb[0], legItem.bb[1]],
+        // the step frames' atlas top-lefts, straight first; the foot rises "lift" px at the last
+        steps: leg.cvs.map((_, k) => byN["leg" + leg.j + "s" + k].at),
+        lift: leg.lift,
         hip: leg.hip.map(round1),
         knee: leg.knee.map(round1),
         ankle: leg.ankle.map(round1),

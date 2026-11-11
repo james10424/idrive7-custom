@@ -20,8 +20,10 @@ const MIKU = `// The Miku layout's character (GLSL ES 1.00), from frames baked o
 // 2026), so she is drawn by three layers stacked, each this source with one part defined, every one sent the same
 // pose uniforms in the same tick: MIKU_BACK the tails and the legs, MIKU_MID the body (lean blend, blink, glances,
 // doze), MIKU_FRONT the arms.
-// The legs are their own sprites (the bake leaves them out of the body frames): the hips go where the lean frames put
-// them (hip shift table), each thigh turns at the hip and each shin at the knee to put the ankle where the foot is.
+// The legs are their own sprites (the bake leaves them out of the body frames), each baked straight and at 5 more knee
+// flexes (our own mesh rig: the knee comes toward you, so thigh and shin get shorter and the foot lifts; never
+// sideways). The hips go where the lean frames put them (hip shift table); each leg blends its two nearest flexes and
+// turns as a whole at the hip to put its foot where the gait has it.
 // u_step = (gait, stride px, press 0..1, 0): a full lean held topples her: she stumbles sideways in shuffles (the foot
 // on that side steps out, the other follows; gait 0 .. 2 x shuffles, one foot a unit, stride px a shuffle, its sign
 // the way she goes), the whole figure sliding over the planted feet, until she is pressed against a wall (press);
@@ -67,13 +69,9 @@ uniform vec4 u_arm[8];   // cluster-render takes at most 32 uniform names a laye
 #define u_arm1R u_arm[7]
 #endif
 #ifdef MIKU_BACK
-uniform vec4 u_leg[6];   // the legs' fixed values as one array
-#define u_leg0 u_leg[0]   // atlas rect of a leg sprite (w = 0: none)
-#define u_leg0A u_leg[1]   // its top-left and its hip (frame px, at rest)
-#define u_leg0B u_leg[2]   // its knee and ankle (frame px, at rest)
-#define u_leg1 u_leg[3]
-#define u_leg1A u_leg[4]
-#define u_leg1B u_leg[5]
+uniform vec4 u_leg[12];   // the legs' fixed values as one array, 6 a leg
+// [0]: the sprite's w, h (w = 0: none) and its top-left in the frame; [1]: hip and ankle (frame px, straight);
+// [2] .. [4]: the 6 flex frames' atlas top-lefts, straight first; [5].x: how far the foot lifts at the last
 #endif
 
 // a sprite pixel: atlas rect r, point p in sprite px; premultiplied; transparent outside the rect
@@ -127,27 +125,27 @@ vec4 leanAt(float i, vec2 fb, vec4 upright) {
 #ifdef MIKU_BACK
 // the angle that turns a straight-down vector onto v (rot's sense)
 float ang(vec2 v) { return atan(-v.x, v.y); }
-// a leg: the hip moved by hm and the ankle by am (frame px against rest). The whole leg turns at the hip toward the
-// ankle; where the ankle is nearer than the leg is long, the knee bends outward (side) so thigh and shin still meet.
-// The foot (below the ankle) is carried level; the thigh fades into the shin over a few px past the knee and the
-// foot is drawn over the shin's end, so the joints show no seam
-vec4 leg(vec4 r, vec4 A, vec4 B, float side, vec2 hm, vec2 am, vec2 p) {
-    if (r.z <= 0.0) return vec4(0.0);
-    vec2 hip0 = A.zw, knee0 = B.xy, ank0 = B.zw;
-    vec2 d0 = ank0 - hip0, hip = hip0 + hm, d = ank0 + am - hip;
-    float len0 = length(d0), phi = ang(d) - ang(d0);
-    float th = 2.0 * acos(clamp(length(d) / max(1.0, len0), 0.0, 1.0));
-    float a = phi - side * th * 0.5, b = phi + side * th * 0.5;
-    vec2 knee = hip + rot(knee0 - hip0, a), ank = knee + rot(ank0 - knee0, b);
-    vec4 c = vec4(0.0);
-    vec2 qs = ank0 + rot(p - ank, -b);
-    if (qs.y >= knee0.y - 6.0 && qs.y <= ank0.y + 2.0) c = tap(r, qs - A.xy);
-    vec2 qf = p - ank + ank0;
-    if (qf.y >= ank0.y) c = over(tap(r, qf - A.xy), c);
-    vec2 qt = hip0 + rot(p - hip, -a);
-    float wt = 1.0 - smoothstep(knee0.y - 4.0, knee0.y + 4.0, qt.y);
-    if (wt > 0.0) c = over(tap(r, qt - A.xy) * wt, c);
-    return c;
+// a leg: the hip moved by hm, the foot's planted x by footX (frame px against rest), the knee flexed by flex (0..1,
+// the baked frames: the foot lifts with it). The whole leg turns at the hip toward where the foot goes, one piece, so
+// nothing seams
+// Neighbouring flexes differ in height, so each is first stretched onto the blended one's (the leg about the hip, the
+// foot moved with it; a flex lifts the foot about lift x f^2) and the two no longer show a double outline
+vec4 leg(vec4 L0, vec4 L1, vec4 S0, vec4 S1, vec4 S2, float lift, vec2 hm, float footX, float flex, vec2 p) {
+    if (L0.x <= 0.0) return vec4(0.0);
+    vec2 hip0 = L1.xy, ank0 = L1.zw, hip = hip0 + hm;
+    float phi = ang(ank0 + vec2(footX, 0.0) - hip) - ang(ank0 - hip0);
+    vec2 q = hip0 + rot(p - hip, -phi);
+    float k = clamp(flex, 0.0, 1.0) * 5.0, k0 = min(floor(k), 4.0), fk = k - k0;
+    vec2 a = k0 < 0.5 ? S0.xy : k0 < 1.5 ? S0.zw : k0 < 2.5 ? S1.xy : k0 < 3.5 ? S1.zw : S2.xy;
+    vec2 b = k0 < 0.5 ? S0.zw : k0 < 1.5 ? S1.xy : k0 < 2.5 ? S1.zw : k0 < 3.5 ? S2.xy : S2.zw;
+    float len = max(1.0, ank0.y - hip0.y), la = lift * k0 * k0 / 25.0, lb = lift * (k0 + 1.0) * (k0 + 1.0) / 25.0;
+    float l = mix(la, lb, fk);
+    vec2 qa = q, qb = q;
+    if (q.y < ank0.y - l) {
+        float r = (q.y - hip0.y) / (len - l);
+        qa.y = hip0.y + r * (len - la); qb.y = hip0.y + r * (len - lb);
+    } else { qa.y = q.y + l - la; qb.y = q.y + l - lb; }
+    return mix(tap(vec4(a, L0.xy), qa - L0.zw), tap(vec4(b, L0.xy), qb - L0.zw), fk);
 }
 #endif
 
@@ -163,6 +161,7 @@ void main() {
     float lead = s * (full + smoothstep(0.0, 1.0, uL)), trail = s * (full + smoothstep(0.0, 1.0, uT));
     float liftL = sin(3.14159 * uL), liftT = sin(3.14159 * uT);
     vec2 body = vec2(dir * ((lead + trail) * 0.5 + 2.0 * clamp(u_step.z, 0.0, 1.0)), -1.5 * (liftL + liftT));
+    if (s <= 0.0) { liftL = 0.0; liftT = 0.0; }
     vec2 f0 = px - u_origin;                        // frame px, where she stands
     vec2 f = f0 - body;                             // frame px, as her body has moved
     float spd = clamp(u_drive.y, 0.0, 1.0);
@@ -265,15 +264,14 @@ void main() {
 #endif
     // the legs, over the tails (under the body, the next layer up): hips where the lean frames put them and as her
     // body has moved; feet planted where the gait has them, the swinging one lifted
-    if (u_leg0.z > 0.0 || u_leg1.z > 0.0) {
+    if (u_leg[0].x > 0.0 || u_leg[6].x > 0.0) {
         vec2 hm = body + vec2(u_counts.x < 2.5 ? 0.0 : mix(dat(56.0 + i0).x, dat(56.0 + i1).x, fr), 0.0);
-        float side0 = u_leg0A.z < u_frame.x * 0.5 ? -1.0 : 1.0, side1 = u_leg1A.z < u_frame.x * 0.5 ? -1.0 : 1.0;
-        // the leg on her way leads
-        vec2 a0 = side0 == dir ? vec2(dir * lead, -6.0 * liftL) : vec2(dir * trail, -6.0 * liftT);
-        vec2 a1 = side1 == dir ? vec2(dir * lead, -6.0 * liftL) : vec2(dir * trail, -6.0 * liftT);
-        if (s <= 0.0) { a0 = vec2(0.0); a1 = vec2(0.0); }
-        c = over(leg(u_leg0, u_leg0A, u_leg0B, side0, hm, a0, f0), c);
-        c = over(leg(u_leg1, u_leg1A, u_leg1B, side1, hm, a1, f0), c);
+        // each leg's side: its hip left or right of the frame's middle; the leg on her way leads
+        bool lead0 = (u_leg[1].x < u_frame.x * 0.5 ? -1.0 : 1.0) == dir, lead1 = (u_leg[7].x < u_frame.x * 0.5 ? -1.0 : 1.0) == dir;
+        float x0 = dir * (lead0 ? lead : trail), x1 = dir * (lead1 ? lead : trail);
+        float k0 = lead0 ? liftL : liftT, k1 = lead1 ? liftL : liftT;
+        c = over(leg(u_leg[0], u_leg[1], u_leg[2], u_leg[3], u_leg[4], u_leg[5].x, hm, x0, k0, f0), c);
+        c = over(leg(u_leg[6], u_leg[7], u_leg[8], u_leg[9], u_leg[10], u_leg[11].x, hm, x1, k1, f0), c);
     }
 #endif
 

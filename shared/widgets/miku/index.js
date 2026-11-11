@@ -329,19 +329,38 @@ module.exports = {
         ? 0
         : ((isNum(widget.balance) ? widget.balance : 50) * Math.PI) / 180,
     );
-    // the legs (up to 2): sprites the back layer swings and bends at the knee to step
+    // the legs (up to 2): sprites the back layer turns at the hip, blending the baked knee flexes, to step
     const legs = Array.isArray(info.legs) ? info.legs.slice(0, 2) : [],
       legF = [];
     [0, 1].forEach((i) => {
       const leg = legs[i];
+      if (!leg) {
+        legF.push(...new Array(24).fill(0));
+        return;
+      }
+      // the 6 flex frames' atlas top-lefts (a bake without them: the straight leg for each)
+      const steps = [];
+      for (let k = 0; k < 6; k++) {
+        const at =
+          Array.isArray(leg.steps) && leg.steps.length
+            ? leg.steps[Math.min(k, leg.steps.length - 1)]
+            : leg.rect;
+        steps.push(at[0], at[1]);
+      }
       legF.push(
-        ...(leg ? leg.rect : [0, 0, 0, 0]),
-        ...(leg
-          ? [leg.at[0], leg.at[1], leg.hip[0], leg.hip[1]]
-          : [0, 0, 0, 0]),
-        ...(leg
-          ? [leg.knee[0], leg.knee[1], leg.ankle[0], leg.ankle[1]]
-          : [0, 0, 0, 0]),
+        leg.rect[2],
+        leg.rect[3],
+        leg.at[0],
+        leg.at[1],
+        leg.hip[0],
+        leg.hip[1],
+        leg.ankle[0],
+        leg.ankle[1],
+        ...steps,
+        isNum(leg.lift) && Array.isArray(leg.steps) ? leg.lift : 0,
+        0,
+        0,
+        0,
       );
     });
     if (part === "back") client.uniform(ref, "u_leg", legF, { type: "vec4" });
