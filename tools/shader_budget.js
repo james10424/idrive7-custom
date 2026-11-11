@@ -241,7 +241,7 @@ if (require.main === module) {
     const result = check(all[name]);
     console.log(
       (result.level === "ok" ? "  " : result.level === "warn" ? "! " : "X ") +
-        name.padEnd(22) +
+        name.padEnd(16) +
         result.text,
     );
     if (result.level === "crash" || (result.level === "warn" && worst === "ok"))

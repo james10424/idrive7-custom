@@ -12,7 +12,6 @@ Turns a Live2D model you own into the frames Custom HUD's **Miku** layout draws 
 
 1. Copy [`example.json`](example.json) next to your model and adjust it (every field is described at the top of `page.js`). As it is, it uses Live2D's standard parameter names, which most models have, so many models bake with it unchanged: a 200 px figure, blinking and smiling, leaning with its body and head, the braking and happy faces at the ends of the lean. A parameter your model doesn't have is skipped, with a note in the bake log. What you will most likely change:
    - `tails`: the part ids of long hair or ribbons to swing in their own sprite (find them on the inspect page). Leave it empty and the hair simply leans with her.
-   - `legs`: each leg's part or drawable ids, left leg first (find them on the inspect page), so the HUD can make her step when she topples. Two legs may name the same part (both legs in one): its drawables are split by which side of her middle they are on. `below` (a fraction down the leg, e.g. 0.8) also takes along anything lying wholly under that, such as a shoe's decoration. Each leg is baked straight and at 5 more knee flexes up to `bend` degrees (60), by our own rig on its meshes (the knee comes toward you: thigh and shin shorter, the foot lifted); the HUD blends them for the steps. Leave it empty and the legs stay in the body frames: she still topples, but slides instead of stepping.
    - `lean.left` and `lean.right`: your model's own expressions for braking and pulling away hard (its `.exp3.json` files show which parameters they set).
    - `params`: toggles to set on every frame, such as an outfit.
    - `heightPx`, `anchor`, `headY`, `waist`: her size, the point between her feet, her face and waist (by default 15% and 40% down the figure).
@@ -56,7 +55,7 @@ Both files must be there, under exactly those names, straight from the bake (`at
 
 2. Make the app load them. It reads the frames only when it builds the layout, and does not watch the folder, so on the center screen open **Custom HUD**, pick another layout, then **Miku** again (or restart the app).
 
-3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "3 layers" and about "4.4 MiB of 16 MiB pixels" (it depends on the bake). The app's log has a line like `miku frames: 23 of 144x278, tails, legs, 1024x624 RGBA asset, 4.9 MiB of pixel memory`.
+3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "1 layer" and about "4.4 MiB of 16 MiB pixels" (it depends on the bake). The app's log has a line like `miku frames: 23 of 144x278, tails, 1024x564 RGBA asset, 4.4 MiB of pixel memory`.
 
 ### By hand
 
@@ -118,7 +117,7 @@ Not yet checked on a car: the app folder path (from the Store's docs) and SSH as
 
 ## What it makes
 
-One image, at most 1024 px a side: her upright with eyes open, half shut and shut and with a smile, the same standing pose at 11 lean angles from a full lean left (braking face) to a full lean right (happy face), glancing left and right (head and eyes, 3 angles each way, from `look`), dozing (head drooping, eyes shut, 3 frames, from `doze`), the twin tails on their own, the legs on their own at 6 knee flexes each (from `legs`, which the HUD blends and turns at the hip to step), and (with `arms` in the config) each arm on its own, which the HUD swings up from the shoulder to point toward the indicator. The angles are close enough that the HUD blends between neighbours without a double image. The face, glance and doze frames differ from upright only around her head, so each keeps just that crop (one rect for all of them); the HUD draws the upright frame round it. The model itself is never changed.
+One image, at most 1024 px a side: her upright with eyes open, half shut and shut and with a smile, the same standing pose at 11 lean angles from a full lean left (braking face) to a full lean right (happy face), glancing left and right (head and eyes, 3 angles each way, from `look`), dozing (head drooping, eyes shut, 3 frames, from `doze`), the twin tails on their own, and (with `arms` in the config) each arm on its own, which the HUD swings up from the shoulder to point toward the indicator. The angles are close enough that the HUD blends between neighbours without a double image. The face, glance and doze frames differ from upright only around her head, so each keeps just that crop (one rect for all of them); the HUD draws the upright frame round it. The model itself is never changed.
 
 With your model the atlas is 1024x564 (4.4 MiB of pixel memory). On the car the GPU animates these: blinks, breathing, the lean as on a bus, glances and dozing, and the tails following her head and streaming out with speed.
 
@@ -131,13 +130,12 @@ What we found on a 2020 M340i (cluster-render 0.4.5, Nov 9 2026):
 - **The shader is the limit, not the image.** Custom HUD 0.1.9 to 0.1.15 all restarted the KOMBI, even with the atlas cut from 1024x1128 to 1024x564, below the 1024x846 that had run fine. Cutting the shader's uniforms from 55 vectors to 29 and removing its loops (0.1.14) wasn't enough either.
 - **The parts ran alone but not together.** With the "Miku parts" setting (0.1.15), every subset held: no legs, no glances or dozing, and only the lean. All of her at once (legs plus glances and dozing) restarted it straight away.
 - **What runs now (0.1.16):** the lean with its faces, blinks and the smile, breathing, the arms, the tails, glances and dozing. The legs as their own bending sprites are gone; her legs are part of the body frames again.
-- **The limits are per shader (Nov 10 2026).** Custom Cluster's M theme crashed the display as one 8724-token shader and holds as two of about 4400. So from Custom HUD 0.1.21 Miku is three layers, each the same source with one part defined: back (tails and legs, 13 reads), mid (body, faces, glances, dozing, 23 reads) and front (arms, 2 reads). That brings the stepping legs back. Not yet run on the car.
 
 - **What sets the crash apart is the texture reads.** Counted as the GPU compiler sees them (every function inlined into `main`, so a sprite drawn 6 times counts 6 reads), 0.1.15 with all parts made **38** reads of the atlas and 0.1.16 makes **32**. Size alone isn't it: Custom Cluster's Sport shader is bigger than the one that crashed (7835 tokens against 7008) and runs, but reads no textures.
 
 **Caught on the bench:** [tools/shader_budget.js](../shader_budget.js) measures every effect shader. The bench refuses a layer at 38 reads or more ("shader 38 texture reads ...: 38 reads restarted the instrument cluster"), and logs a warning over 32 reads or over Sport's size, which no shader has tried on the car. `node tools/shader_budget.js` lists every shader in shared/shaders.js, the Miku parts included, and exits 1 if one reaches the crash mark. Where the limit really sits between 32 and 38 is unknown.
 
-So treat 32 reads as about the ceiling for any one shader. Anything new goes in the layer with room, or a layer of its own. Put it behind the "Miku parts" setting so the car can test it without a new release.
+So treat today's shader as about the ceiling. Anything new needs code taken out first, for example per-pixel maths moved into the app and sent as a few uniforms. Put it behind the "Miku parts" setting so the car can test it without a new release.
 
 We still refuse an atlas over 1024 px a side, in the bake and in the app. It cost nothing to keep, though the 1024x1128 crash was most likely the shader too.
 

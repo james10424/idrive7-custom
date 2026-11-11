@@ -26,8 +26,6 @@ const { isNum, mib } = require("../../engine/util");
  * @property {number[]} [lookShift]
  * @property {Array<number[]>} [dozeShift]
  * @property {Array<Record<string, *>>} [arms]
- * @property {Array<Record<string, *>>} [legs]
- * @property {number[]} [hipShift]
  * @property {Record<string, *>} [tails]
  * @property {number[]} [crop]
  * @property {number} [hipY]
@@ -47,17 +45,15 @@ const { isNum, mib } = require("../../engine/util");
  * @property {number} dataY where the table rows start
  * @property {MikuCounts} counts
  * @property {number} bytes pixel memory
- * @property {{ left: number, right: number }} reach how far her body (not the arms) reaches out at a full lean each
- *   way (frame px from the anchor: left negative)
  */
 
 /**
- * The Miku shader's tables as pixel rows to go under the atlas art: 72 entries of two values each, each entry a 3x3 px
+ * The Miku shader's tables as pixel rows to go under the atlas art: 56 entries of two values each, each entry a 3x3 px
  * block (so a bilinear read at its middle gets it whole), opaque (alpha 255: a canvas or driver that premultiplies
  * leaves it alone), each value 12 bits: (v + 1024) * 2 in R (high 8) and B's high or low nibble, in G likewise:
  * -1024 .. 1023.5 px in half px. Entries: 0-15 the lean frames' atlas x, y; 16-31 each lean frame's head shift x, y
  * (y: the forward/back lean's head drop; 0 sideways); 32-39 the glance frames' x, y; 40-47 each glance's head shift; 48-51 the doze frames' x, y; 52-55 each doze
- * frame's head shift x, y; 56-71 each lean frame's hip shift x (where the legs hang from), 0. Returns { px, rows, counts: { lean, look, doze } }.
+ * frame's head shift x, y. Returns { px, rows, counts: { lean, look, doze } }.
  * @param {MikuInfo} info atlas.json
  * @param {number} atlasWidth the atlas width, px
  * @returns {{ px: Buffer, rows: number, counts: MikuCounts }}
@@ -93,7 +89,6 @@ function mikuData(info, atlasWidth) {
       Array.isArray(info.dozeShift) ? info.dozeShift[i] : null,
     );
   }
-  for (let i = 0; i < 16; i++) entries[56 + i] = [num(info.hipShift, i), 0];
   const per = Math.floor(atlasWidth / 3),
     rows = Math.ceil(entries.length / per) * 3,
     pixels = Buffer.alloc(atlasWidth * rows * 4, 0);
@@ -118,34 +113,6 @@ function mikuData(info, atlasWidth) {
     px: pixels,
     rows,
     counts: { lean: lean.length, look: look.length, doze: doze.length },
-  };
-}
-
-/**
- * How far her body reaches out at a full lean each way: the outermost solid column of the first lean frame (left)
- * and the last (right), against the anchor (frame px). The arms are their own sprites (index.js adds them).
- * @param {MikuInfo} info
- * @param {Buffer} art the atlas, straight RGBA
- * @param {number} atlasWidth
- * @returns {{ left: number, right: number }}
- */
-function reachOf(info, art, atlasWidth) {
-  const [frameW, frameH] = info.frame,
-    lean = Array.isArray(info.lean) && info.lean.length ? info.lean : null;
-  /** @type {(at: number[], fromLeft: boolean) => number} */
-  const edge = (at, fromLeft) => {
-    for (let k = 0; k < frameW; k++) {
-      const x = fromLeft ? k : frameW - 1 - k;
-      for (let y = 0; y < frameH; y++)
-        if (art[((at[1] + y) * atlasWidth + at[0] + x) * 4 + 3] > 100) return x;
-    }
-    return fromLeft ? 0 : frameW - 1;
-  };
-  const first = lean ? lean[0] : info.frames.idle,
-    last = lean ? lean[lean.length - 1] : info.frames.idle;
-  return {
-    left: edge(first, true) - info.anchor[0],
-    right: edge(last, false) + 1 - info.anchor[0],
   };
 }
 
@@ -267,7 +234,6 @@ function sprite(hud, widget, connIndex) {
       dataY: atlasHeight,
       counts: data.counts,
       bytes: atlasWidth * height * 8,
-      reach: reachOf(info, art, atlasWidth),
     };
     hud.atlases.set(key, atlas);
     hud.log.info(
@@ -277,7 +243,6 @@ function sprite(hud, widget, connIndex) {
         info.frame.join("x") +
         ", " +
         (info.tails ? "tails, " : "") +
-        (Array.isArray(info.legs) && info.legs.length ? "legs, " : "") +
         atlasWidth +
         "x" +
         height +

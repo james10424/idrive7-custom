@@ -58,7 +58,6 @@
     },
     "lead": ["ParamEyeBallX", "ParamEyeBallY"]
   },
-  "legs": [],
   "doze": {
     "steps": 3,
     "params": {
