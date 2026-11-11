@@ -1,8 +1,8 @@
 {
   "id": "custom_cluster",
   "title": "Custom Cluster",
-  "description": "Redraws the instrument cluster: a 1987 Regal dash, an M-style dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.47",
+  "description": "Redraws the instrument cluster: a 1987 Regal dash, or a Sport view round BMW's map while navigating",
+  "version": "0.1.48",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -143,10 +143,6 @@
           "Sport"
         ],
         [
-          "m",
-          "M"
-        ],
-        [
           "grid",
           "Calibration grid"
         ]
@@ -175,12 +171,6 @@
           "No change (the theme above)"
         ]
       ]
-    },
-    {
-      "key": "mapWindow",
-      "label": "Leave room for the map (always on while navigating)",
-      "type": "bool",
-      "default": false
     },
     {
       "key": "units",
@@ -216,7 +206,7 @@
     },
     {
       "key": "redline",
-      "label": "Redline (shift light)",
+      "label": "Redline (the rev lights turn yellow from here)",
       "type": "number",
       "unit": "rpm",
       "default": 7000,
@@ -227,34 +217,6 @@
         7000,
         7500
       ]
-    },
-    {
-      "key": "shiftBefore",
-      "label": "Shift point before redline",
-      "type": "number",
-      "unit": "rpm",
-      "default": 300,
-      "steps": [
-        0,
-        100,
-        200,
-        300,
-        500,
-        800,
-        1000
-      ]
-    },
-    {
-      "key": "coldGuard",
-      "label": "Cold-engine rev guard",
-      "type": "bool",
-      "default": true
-    },
-    {
-      "key": "showBoost",
-      "label": "Show boost",
-      "type": "bool",
-      "default": true
     },
     {
       "key": "demo",
@@ -447,6 +409,16 @@
         "factor": 1,
         "offset": 0
       }
+    },
+    "choiceAliases": {
+      "m": "regal"
+    },
+    "fixedSettings": {
+      "_comment": "Settings no longer offered (0.1.48): the values the engine reads for them. The rev lights turn yellow from the redline itself.",
+      "mapWindow": false,
+      "shiftBefore": 0,
+      "coldGuard": false,
+      "showBoost": true
     }
   }
 }

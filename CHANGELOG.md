@@ -4,6 +4,10 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 10 2026
 
+- **Custom HUD 0.1.24:** Miku only. The Daily and Sport layouts are gone (a HUD set to either shows Miku), and with them the drive-mode switching, the theme and daytime theme, units, clock, redline, shift point, cold-engine rev guard and the four "show" switches. The settings left: Layout (Off, Miku, calibration grid), Make room for BMW's guidance and cruise display, Miku parts, Reset Miku and demo data. Miku still dims after sunset.
+- **Custom Cluster 0.1.48:** the M theme is gone again (a cluster set to M shows Regal), and so are Show boost, Leave room for the map, Shift point before redline and Cold-engine rev guard. Redline stays: Regal's rev lights turn yellow from it.
+- The engine reads a setting the app no longer offers from app.json config.fixedSettings, never from a value saved before.
+
 - **Custom Cluster 0.1.47:** Regal's rev and boost LED bars move smoothly: the LED the reading is partway into lights partway (at 1750 rpm, three LEDs and the fourth at half), instead of the bar rounding to whole LEDs.
 - **Custom HUD 0.1.23:** standing, Miku no longer points toward the indicator; only her close-up turns its head that way. And a signal switched on before she zooms in now turns her head: the app dropped the car's indicator report after 5 s (it sends one only when the indicators change), so a signal already on when she stopped read as off. Both apps keep the car's last report until the next.
 - **Custom Cluster 0.1.46:** Regal's range shows its hundreds digit whole (the box was 86 px for three 30 px digits; now 96, the right edge where it was). The turn lamps no longer go dark 5 s into a signal.

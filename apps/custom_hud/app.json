@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -96,21 +96,13 @@
   "settings": [
     {
       "key": "hudLayout",
-      "label": "Layout (when not by drive mode)",
+      "label": "Layout",
       "type": "choice",
-      "default": "daily",
+      "default": "miku",
       "options": [
         [
           "off",
           "Off (BMW's own HUD)"
-        ],
-        [
-          "daily",
-          "Daily"
-        ],
-        [
-          "sport",
-          "Sport"
         ],
         [
           "miku",
@@ -123,218 +115,8 @@
       ]
     },
     {
-      "key": "byMode",
-      "label": "Change with SPORT / COMFORT / ECO PRO",
-      "type": "bool",
-      "default": true
-    },
-    {
-      "key": "inComfort",
-      "label": "In Comfort (Daily by default; BMW keeps its speed bottom-left)",
-      "type": "choice",
-      "default": "daily",
-      "options": [
-        [
-          "off",
-          "Off (BMW's own HUD)"
-        ],
-        [
-          "daily",
-          "Daily"
-        ],
-        [
-          "sport",
-          "Sport"
-        ],
-        [
-          "miku",
-          "Miku"
-        ]
-      ]
-    },
-    {
-      "key": "inSport",
-      "label": "In Sport (off by default: BMW's Sport HUD takes the middle)",
-      "type": "choice",
-      "default": "off",
-      "options": [
-        [
-          "off",
-          "Off (BMW's own HUD)"
-        ],
-        [
-          "daily",
-          "Daily"
-        ],
-        [
-          "sport",
-          "Sport"
-        ],
-        [
-          "miku",
-          "Miku"
-        ]
-      ]
-    },
-    {
-      "key": "inEco",
-      "label": "In Eco Pro (off by default: BMW's own HUD)",
-      "type": "choice",
-      "default": "off",
-      "options": [
-        [
-          "off",
-          "Off (BMW's own HUD)"
-        ],
-        [
-          "daily",
-          "Daily"
-        ],
-        [
-          "sport",
-          "Sport"
-        ],
-        [
-          "miku",
-          "Miku"
-        ]
-      ]
-    },
-    {
       "key": "makeRoom",
       "label": "Make room for BMW's guidance and cruise display",
-      "type": "bool",
-      "default": true
-    },
-    {
-      "key": "hudTheme",
-      "label": "Theme",
-      "type": "choice",
-      "default": "auto",
-      "options": [
-        [
-          "auto",
-          "Auto (Night after sunset)"
-        ],
-        [
-          "classic",
-          "Classic"
-        ],
-        [
-          "m",
-          "M"
-        ],
-        [
-          "night",
-          "Night"
-        ]
-      ]
-    },
-    {
-      "key": "dayTheme",
-      "label": "Daytime theme for Auto",
-      "type": "choice",
-      "default": "classic",
-      "options": [
-        [
-          "classic",
-          "Classic"
-        ],
-        [
-          "m",
-          "M"
-        ]
-      ]
-    },
-    {
-      "key": "units",
-      "label": "Units",
-      "type": "choice",
-      "default": "us",
-      "options": [
-        [
-          "us",
-          "mph, °F, psi"
-        ],
-        [
-          "metric",
-          "km/h, °C, bar"
-        ]
-      ]
-    },
-    {
-      "key": "clock",
-      "label": "Clock",
-      "type": "choice",
-      "default": "12h",
-      "options": [
-        [
-          "12h",
-          "12-hour"
-        ],
-        [
-          "24h",
-          "24-hour"
-        ]
-      ]
-    },
-    {
-      "key": "redline",
-      "label": "Redline (shift light)",
-      "type": "number",
-      "unit": "rpm",
-      "default": 7000,
-      "steps": [
-        5500,
-        6000,
-        6500,
-        7000,
-        7500
-      ]
-    },
-    {
-      "key": "shiftBefore",
-      "label": "Shift point before redline",
-      "type": "number",
-      "unit": "rpm",
-      "default": 300,
-      "steps": [
-        0,
-        100,
-        200,
-        300,
-        500,
-        800,
-        1000
-      ]
-    },
-    {
-      "key": "coldGuard",
-      "label": "Cold-engine rev guard",
-      "type": "bool",
-      "default": true
-    },
-    {
-      "key": "showClock",
-      "label": "Show clock",
-      "type": "bool",
-      "default": true
-    },
-    {
-      "key": "showOil",
-      "label": "Show oil temperature",
-      "type": "bool",
-      "default": true
-    },
-    {
-      "key": "showCoolant",
-      "label": "Show coolant temperature",
-      "type": "bool",
-      "default": true
-    },
-    {
-      "key": "showBoost",
-      "label": "Show boost (Sport layout)",
       "type": "bool",
       "default": true
     },
@@ -465,7 +247,9 @@
     },
     "choiceAliases": {
       "redline": "miku",
-      "perch": "miku"
+      "perch": "miku",
+      "daily": "miku",
+      "sport": "miku"
     },
     "indicators": true,
     "tankLitres": 65,
@@ -483,6 +267,21 @@
         "factor": 1,
         "offset": 0
       }
+    },
+    "fixedSettings": {
+      "_comment": "Settings no longer offered (Daily and Sport removed in 0.1.24): the values the engine reads for them. Miku dims after sunset (Auto theme).",
+      "byMode": false,
+      "hudTheme": "auto",
+      "dayTheme": "classic",
+      "units": "us",
+      "clock": "12h",
+      "redline": 7000,
+      "shiftBefore": 300,
+      "coldGuard": true,
+      "showClock": true,
+      "showOil": true,
+      "showCoolant": true,
+      "showBoost": true
     }
   }
 }

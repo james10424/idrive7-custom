@@ -36,7 +36,7 @@ The two sources differ in what the HUD gives way to:
 - `robertnisipeanu/idrive-apps`: BMW's HUD lists (media source list, playlists, recent calls). Calls and apps' pop-ups only with `hud_yield_slots = 0x321,0x322` in the local conf.
 - `james10424/idrive-apps-lib`: those lists, calls and apps' pop-ups, and BMW's route guidance.
 
-Either way Custom HUD's own "Make room for BMW's guidance and cruise display" setting moves Daily out of the way of BMW's guidance and turns Miku off while BMW guides.
+Either way Custom HUD's own "Make room for BMW's guidance and cruise display" setting turns Miku off while BMW guides.
 
 If the panel keeps falling back, `james10424/idrive-apps-lib` (0.4.5 or later) can move the HUD instead. The HUD then takes turns with cluster-render's `map` target (the Waze map on the cluster), not with the panel:
 

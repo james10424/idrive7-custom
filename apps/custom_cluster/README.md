@@ -10,7 +10,7 @@ The look of BMW's newer Live Cockpit Sport view.
 
 - **Left:** speed as a blue bracket on BMW's 0 to 200 mph scale (0 to 320 km/h), with the digital speed and a fuel bar inside it.
 - **Right:** revs as a red bracket on the M40i's 0 to 7000 rpm scale, with yellow and red marks around your redline, with the gear and an oil temperature bar inside it.
-- **Middle:** BMW's map while navigating (or with "Leave room for the map" on), else black.
+- **Middle:** BMW's map while navigating, else black.
 - **Bottom:** boost and coolant in the blue and red strip, plus the clock, range and outside temperature.
 - **While navigating:** the strip becomes the route's progress, filling from the right, with the distance left and the time left at its ends.
 
@@ -25,12 +25,8 @@ The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needle
 - **Left pod:** a 12 V voltmeter (8 to 16 V), with the parking brake lamp (red PARK BRAKE, or green AUTO HOLD while Auto Hold holds the car), the range (in orange VFD digits), and under it P R N D with the gear number, the lit one boxed.
 - **Right pod:** oil temperature (50 / 110 / 150 °C), with the CRUISE lamp (lit green while ACC is on), the clock and the outside temperature under it.
 - **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. Over the 55, the speed in big orange VFD digits (mph or km/h by the units setting); under it, a rolling odometer: six drums of white digits that turn as a real one's do (miles or km by the units setting; the last drum turns with the distance driven), and the needle sweeps over it. No turn signals: BMW's own indicator sound stays.
-- **Middle, bottom:** the fuel needle in the middle, a yellow LED boost bar (0 to 1.5 bar) on its left and an LED rev bar that turns yellow from your shift point on its right.
+- **Middle, bottom:** the fuel needle in the middle, a yellow LED boost bar (0 to 1.5 bar) on its left and an LED rev bar that turns yellow from your redline on its right.
 - **Bottom:** BMW's belt light and gear letter. There is no map window.
-
-### M
-
-The look of a current M8's cluster: black, glass rev blades either side with a red marker riding the rpm, the gear and speed in white over the centre line, the tyre pressures and temperatures on the left, the setup rows on the right, and the fuel and oil dials over the lower corners. Its backdrop is drawn by two shaders, not one: drawn as one shader it crashed the display on the car (0.1.43 brings it back split; not yet checked on the car).
 
 More themes are on the way.
 
@@ -44,17 +40,13 @@ More themes are on the way.
 
 - **Theme:** Regal or Sport (or Off).
 - **While navigating:** Sport with the map, Regal, Off, or no change.
-- **Leave room for the map:** keeps Sport's map window open even when not navigating. Regal has no map window.
 - **Units:** mph, °F, psi or km/h, °C, bar.
 - **Clock:** 12-hour or 24-hour.
-- **Redline:** where the red marks start on the rev scales (they always cover at least the last 500 rpm, and the yellow marks sit in the 700 rpm before them).
-- **Shift point before redline:** how far below the redline the shift lights peak (300 rpm by default).
-- **Cold-engine rev guard:** until the oil reaches 80°C, the shift point starts at 4500 rpm and climbs as the oil warms up.
-- **Show boost.**
+- **Redline:** where Regal's rev LEDs turn yellow, and where the red marks start on Sport's rev scale (they always cover at least the last 500 rpm, and the yellow marks sit in the 700 rpm before them).
 - **Demo data:** fake driving data for trying it out parked.
 - **Calibration grid:** a theme that draws lines every 50 px with labels, for checking on a photo where things land on the real screen. It also carries a few test marks used to measure cluster-render's limits on the car.
 
-**Shift grades:** every upshift is graded on its peak rpm. EARLY means more than 250 rpm under the shift point, LATE more than 200 over it, COLD REV the same while the cold guard is on, LIMITER within 60 rpm of the redline, and anything in between is SPOT ON.
+**Shift grades:** every upshift is graded on its peak rpm. EARLY means more than 250 rpm under the shift point, LATE more than 200 over it, LIMITER within 60 rpm of the redline, and anything in between is SPOT ON.
 
 ## Requirements
 

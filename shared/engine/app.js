@@ -136,6 +136,7 @@ const { isNum, mib } = require("./util");
  * @property {string} [socketPath]
  * @property {{ lat: number, lon: number }} [location]
  * @property {Record<string, string>} [choiceAliases]
+ * @property {Record<string, *>} [fixedSettings] values for settings the app no longer offers (a saved value is ignored)
  * @property {Record<string, *>} [acc] gap / rel / set: { factor, offset }
  * @property {Record<string, *>} [pedal]
  * @property {{ factor?: number, offset?: number }} [battery]
@@ -331,6 +332,10 @@ class HudApp {
     // while the "navLayout" switch is in force the map window is open, whatever "mapWindow" says
     if (key === "mapWindow" && this._navSwitch()) return true;
     const item = this.ctx.settings.item(key);
+    // a setting the app no longer offers: its fixed value (app.json config.fixedSettings), never a value saved before
+    const fixed = this.config.fixedSettings;
+    if (!item && fixed && Object.prototype.hasOwnProperty.call(fixed, key))
+      return fixed[key];
     const value = this.ctx.settings.get(key);
     if (!item) return value;
     // a choice that was renamed or replaced (app.json config.choiceAliases, e.g. a layout that was renamed)
