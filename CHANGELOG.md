@@ -4,6 +4,27 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 11 2026
 
+- **Custom Cluster 0.1.50: Regal's lower window as the Turbo Regal's.**
+  - **Fuel gauge:** UNLEADED FUEL ONLY over it and PREMIUM FUEL under it. Its five marks are rays from a pivot just under PREMIUM FUEL, evenly spaced where they cross one horizontal line and wide enough that PREMIUM FUEL sits between the outer two; below the line every mark's lower part ends at the same height, the two between E, the pump and F thinner; E, the pump and F stand on that line where the end and middle marks' upper parts were, in one row with the two middle marks' upper parts, all the same height (21 px: E and F 20% smaller than the scale numbers, in their own font, r_ef).
+  - **Rev bar:** 0 to 7000 rpm in 28 smaller segments, green with each 1000's segment orange. A red mark beside RPM X 100 runs from the Redline setting to the end; the lit segments no longer turn yellow.
+  - **Speed scale:** 5 to 85 spread evenly, as the Turbo Regal's, instead of 0 to 55 squeezed into the left half; 55 stays amber, now right of the middle. The ends sit a little wider apart, and the marks and the needle follow the same spacing.
+  - **Speed needle pivot:** moved down, out of sight under the speed window, to where the needles of two photos cross (a museum car's at rest and a replica's at about 38 mph): 0.84 of the number row's half width below it. The needle rises from the window's bottom edge, keeps one length (slightly above the numbers when it points straight up), and its rest matches the museum car's angle.
+  - **Left pod and drum row:** P R N D spread around the pod's inner box (each in the middle of its quarter). The gear number has the range's old place, big in VFD digits under GEAR (a dash when there is none, as in P, R and N); in M the D lights. The range moved to the drum row as a second counter (three drums, its unit beside, at most 999), with the odometer: the two sit a quarter of the speed window in from each end.
+  - **Fuel needle:** drawn on the speed needle's layer, over PREMIUM FUEL. It follows the marks' spacing and keeps one length: at half a tank its tip is the top of the pump. That layer now spans both of the centre panel's windows.
+  - **Boost:** TURBO BOOST - BAR or TURBO BOOST - PSI over the bar. With US units the bar runs 0 to 20 psi, labelled 0 5 10 15 20; metric stays 0 to 1.5 bar.
+  - **Redline setting:** 5500, 6000 or 6500, default 6000; a saved 7000 or 7500 reads as 6000. Sport's marks around the redline follow it too.
+
+- **Custom HUD 0.1.27 / Custom Cluster 0.1.50: less work on the car's CPU**, nothing that shows differently:
+  - A uniform goes to cluster-render only when its value changed. The dashes sent all of theirs whenever any one moved, and the rpm moves on almost every tick, so Sport sent about four times what it needed.
+  - Text built only from fixed words and setting-bound labels (units, scale numbers, fuel marks) is painted once per build: 38 of Regal's 49 text widgets and 16 of Sport's 50. A setting or theme change rebuilds and repaints them. The rest are looked at every 200 ms instead of on every 50 ms tick.
+  - The car's values are copied once per tick instead of 20 to 40 times, and setting lookups are kept until a setting changes.
+  - The Miku character's timer runs at 30 Hz, cluster-render's frame rate, instead of 60.
+  - While the display isn't ours (BMW or another app holds it, or it is parked behind BMW's content), widgets don't update and the engine unit isn't asked for pedal, battery or boost; cluster-render keeps our layers, and the next update sends what changed meanwhile.
+  - The engine-unit timer checks whether a shown widget needs one of its readouts before anything else.
+  - A pixel update is built in one buffer: the changed rows copy straight into the message, where they were copied three times before.
+  - Text and badge widgets keep no second copy of their pixels: a repaint is compared against the layer's own copy in the cluster-render client.
+  - Miku's shaders skip reads that have no weight: standing, the half-shut and shut eye frames only while she blinks; in the close-up, the zoom frame once she is zoomed in all the way, the second sway pose while she turns, and the sway poses when the turn is between two turned frames.
+
 - **Shaders in .glsl files:** every widget's shader moved out of its JS string into its own .glsl file (Miku's camera is one file both her shaders include), loaded when the widget loads. The text sent to cluster-render is byte for byte what it was. `node tools/shader_budget.js` now also compiles each one with glslangValidator and fails on an error. Not in a release yet.
 - **Custom HUD 0.1.26:** no box around Miku's eyes while she blinks in her close-up. The eye crops sit edge to edge in her atlas, and the GPU's filtered read at a crop's edge took in a row of the next crop, drawing thin dark lines along the top and bottom of the eyes' rect. The reads now stay half a pixel inside. The README's zoom GIF is re-recorded.
 - **README:** GIFs in place of the screenshots: Regal and Sport pulling away, Miku leaning as the car pulls away and brakes, and Miku zooming into her close-up at a stop. The bench records them: POST /shot with a frame number writes frames to bench/.data/clips/<name>/, and tools/clip_gif.sh turns them into docs/images/<name>.gif.

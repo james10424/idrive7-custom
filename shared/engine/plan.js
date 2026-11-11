@@ -17,24 +17,41 @@ const { isNum } = require("./util");
 /**
  * The one rectangle around what differs between two RGBA images of the same size, with its pixels, or null
  * when they are the same (after idrive7-EVAHUD's eva_canvas.js, MIT). The link is what is short, not the CPU:
- * comparing a widget costs about a tenth of painting it.
+ * comparing a widget costs about a tenth of painting it. "was" may be a region of a bigger image (the layer's own copy
+ * in the cluster-render client, so the widget keeps no copy of its own): its row length in bytes and where the
+ * region starts.
  * @param {Buffer} was
  * @param {Buffer} now
  * @param {number} w
  * @param {number} h
+ * @param {number} [wasStride] bytes per row of was (default w * 4)
+ * @param {number} [wasStart] byte offset of the region's top-left in was (default 0)
  * @returns {?{ rect: Rect, px: Buffer }}
  */
-function changes(was, now, w, h) {
-  const row = w * 4;
+function changes(was, now, w, h, wasStride, wasStart) {
+  const row = w * 4,
+    stride = wasStride || row,
+    base = wasStart || 0;
   /** @type {(y: number) => boolean} */
   const sameRow = (y) =>
-    now.compare(was, y * row, (y + 1) * row, y * row, (y + 1) * row) === 0;
-  /** @type {(offset: number) => boolean} */
-  const samePx = (offset) =>
-    now[offset] === was[offset] &&
-    now[offset + 1] === was[offset + 1] &&
-    now[offset + 2] === was[offset + 2] &&
-    now[offset + 3] === was[offset + 3];
+    now.compare(
+      was,
+      base + y * stride,
+      base + y * stride + row,
+      y * row,
+      (y + 1) * row,
+    ) === 0;
+  /** @type {(y: number, x: number) => boolean} */
+  const samePx = (y, x) => {
+    const at = y * row + x * 4,
+      from = base + y * stride + x * 4;
+    return (
+      now[at] === was[from] &&
+      now[at + 1] === was[from + 1] &&
+      now[at + 2] === was[from + 2] &&
+      now[at + 3] === was[from + 3]
+    );
+  };
   let top = 0;
   while (top < h && sameRow(top)) top++;
   if (top === h) return null;
@@ -44,14 +61,13 @@ function changes(was, now, w, h) {
     right = -1;
   for (let y = top; y <= bottom; y++) {
     if (sameRow(y)) continue;
-    const rowStart = y * row;
     for (let x = 0; x < left; x++)
-      if (!samePx(rowStart + x * 4)) {
+      if (!samePx(y, x)) {
         left = x;
         break;
       }
     for (let x = w - 1; x > right; x--)
-      if (!samePx(rowStart + x * 4)) {
+      if (!samePx(y, x)) {
         right = x;
         break;
       }
@@ -264,13 +280,27 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    */
   _blitDiff(state, buf) {
     const widget = state.w,
-      was = state.px;
-    state.px = buf;
-    if (!was || (state.sheet && state.sheet.buf)) {
+      sheet = state.sheet;
+    // what the layer shows now: the client's own copy of its pixels (the sheet's, at the widget's place)
+    const shown =
+      state.px && !(sheet && sheet.buf)
+        ? state.c.imageOf(sheet ? sheet.ref : state.ref)
+        : null;
+    state.px = true;
+    if (!shown || shown.bpp !== 4) {
       this._blit(state, null, buf);
       return;
     }
-    const change = changes(was, buf, widget.w, widget.h);
+    const dx = sheet ? widget.x - sheet.x : 0,
+      dy = sheet ? widget.y - sheet.y : 0;
+    const change = changes(
+      shown.image,
+      buf,
+      widget.w,
+      widget.h,
+      shown.iw * 4,
+      (dy * shown.iw + dx) * 4,
+    );
     if (change) this._blit(state, [change.rect], change.px);
   },
 

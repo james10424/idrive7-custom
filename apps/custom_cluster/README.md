@@ -25,7 +25,7 @@ The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needle
 - **Left pod:** a 12 V voltmeter (8 to 16 V), with the parking brake lamp (red PARK BRAKE, or green AUTO HOLD while Auto Hold holds the car), the range (in orange VFD digits), and under it P R N D with the gear number, the lit one boxed.
 - **Right pod:** oil temperature (50 / 110 / 150 °C), with the CRUISE lamp (lit green while ACC is on), the clock and the outside temperature under it.
 - **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. Over the 55, the speed in big orange VFD digits (mph or km/h by the units setting); under it, a rolling odometer: six drums of white digits that turn as a real one's do (miles or km by the units setting; the last drum turns with the distance driven), and the needle sweeps over it. No turn signals: BMW's own indicator sound stays.
-- **Middle, bottom:** the fuel needle in the middle, a yellow LED boost bar (0 to 1.5 bar) on its left and an LED rev bar that turns yellow from your redline on its right.
+- **Middle, bottom:** the fuel gauge in the middle as the Turbo Regal's (UNLEADED FUEL ONLY over it, PREMIUM FUEL under it, E, the pump and F standing on the line its marks split at), a yellow LED boost bar (0 to 1.5 bar) on its left, and on its right an LED rev bar from 0 to 7000 rpm, green with each 1000's segment orange, under a red mark from your redline to the end.
 - **Bottom:** BMW's belt light and gear letter. There is no map window.
 
 More themes are on the way.

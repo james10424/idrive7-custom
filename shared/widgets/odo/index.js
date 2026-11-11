@@ -16,7 +16,7 @@ const ODO = require("./shader");
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
-const DOCS = `effect layer (odo/shader.js): a mechanical odometer, "drums" (6) digit drums of "font"'s glyph atlas (r_gl), "color" role, "gap" px between drums (2), "frame" px (1); the car's KombiIF mileageKilometre in the units setting's unit, the last drum turning with the distance (from the speed between whole km) and the others rolling over as the real gears do. Blank drums without a reading.`;
+const DOCS = `effect layer (odo/shader.js): a mechanical odometer, "drums" (6) digit drums of "font"'s glyph atlas (r_gl), "color" role, "gap" px between drums (2), "frame" px (1); the car's KombiIF mileageKilometre in the units setting's unit, the last drum turning with the distance (from the speed between whole km) and the others rolling over as the real gears do. "source": "range" shows the range instead (the car's own km, in the units setting's unit, whole, at most all nines). Blank drums without a reading.`;
 
 module.exports = {
   type: "odo",
@@ -66,13 +66,24 @@ module.exports = {
     const widget = state.w;
     // the drums of a mechanical odometer in the units setting's unit: the last turns with the distance, each other
     // rolls over only through its lower neighbours' last unit (9 -> 0), as the gears of a real one
-    const km = hud._odometer(now),
-      useMiles = hud.setting("units") === "us";
     const drumCount = state.drums,
-      drums = [0, 0, 0, 0, 0, 0, 0, 0];
-    if (isNum(km)) {
-      const distance =
-        (useMiles ? km * 0.621371 : km) % Math.pow(10, drumCount);
+      useMiles = hud.setting("units") === "us";
+    // "source": "range": the range instead, whole, capped at all nines, already in the display unit
+    let distanceNow = null;
+    if (widget.source === "range") {
+      const range = hud._raw("range");
+      if (isNum(range))
+        distanceNow = Math.min(
+          Math.pow(10, drumCount) - 1,
+          Math.max(0, Math.round(useMiles ? range * 0.621371 : range)),
+        );
+    } else {
+      const km = hud._odometer(now);
+      if (isNum(km)) distanceNow = useMiles ? km * 0.621371 : km;
+    }
+    const drums = [0, 0, 0, 0, 0, 0, 0, 0];
+    if (isNum(distanceNow)) {
+      const distance = distanceNow % Math.pow(10, drumCount);
       for (let k = 0; k < drumCount; k++) {
         const place = Math.pow(10, k),
           lower = distance % place;
@@ -81,13 +92,13 @@ module.exports = {
           Math.round(((Math.floor(distance / place) % 10) + roll) * 50) / 50;
       }
     }
-    const key = isNum(km) + "|" + drums.join(",");
+    const key = isNum(distanceNow) + "|" + drums.join(",");
     if (!force && key === state.last) return;
     state.last = key;
     state.c.uniform(state.ref, "u_odo", [
       drumCount,
       isNum(widget.gap) ? widget.gap : 2,
-      isNum(km) ? 1 : 0,
+      isNum(distanceNow) ? 1 : 0,
       isNum(widget.frame) ? widget.frame : 1,
     ]);
     state.c.uniform(state.ref, "u_drum", drums, { type: "vec4" });

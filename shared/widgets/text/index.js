@@ -35,6 +35,32 @@ const { isNum, TEXT_MS } = require("../../engine/util");
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
+// tokens whose text changes only with the settings, the theme or the layout, each of which rebuilds every widget
+const STATIC_TOKEN =
+  /^(u:.+|spd:\d+|temp:-?\d+|boostTick:\w+|fuelFull|fuelHalf|boostHi|boostMid)$/;
+// options that make a text's colour, place or blanking follow the car
+const LIVE_FIELDS = [
+  "near",
+  "litGear",
+  "hotWhen",
+  "coldWhen",
+  "colorBy",
+  "slide",
+  "needs",
+  "tone",
+];
+
+/**
+ * Painted once per build: only fixed text and static tokens, nothing that follows the car.
+ * @param {Widget & TextFields} widget
+ * @returns {boolean}
+ */
+function isStatic(widget) {
+  if (LIVE_FIELDS.some((field) => widget[field] !== undefined)) return false;
+  const tokens = String(widget.text || "").match(/{{[^}]*}}/g) || [];
+  return tokens.every((token) => STATIC_TOKEN.test(token.slice(2, -2)));
+}
+
 const DOCS = `image layer; template tokens below, a font from hud/fonts, colour role. "color2": a second role, the colour at the bottom of the box (a top-to-bottom gradient, the chrome look). "hotWhen": "now" turns it the shift red at the shift point; "coldWhen": "cold" turns it blue while the cold guard lowers the shift point. "litGear": the Regal gear row slot (P 0 R 1 N 2 D 3, number 5) turns it "litColor" (fg) while lit. "slide": { signal ("accGap" = the car ahead in m), max, yTop, yBottom }: the text's middle rides from yBottom (0) to yTop (max) inside its box, blank without a value; "hotWhen": "closing" turns it red while the car ahead closes fast. "colorBy": "verdict" colours it by the last shift's grade. "near": ["speed" | "rpm", i] turns it "nearColor" (fg) while scale label i is the one nearest the value (BMW lights up the label by the needle); with "nearFade": n it fades instead, from its own colour n label steps away to "nearColor" at the label (iDrive 8). "font": "@sys" draws in the car's own font (any script, sysfont.js), "size" px. "needs": "<token>" draws nothing while that token is "--". Updates send only the one rectangle around the pixels that changed since the last paint.`;
 
 module.exports = {
@@ -47,7 +73,9 @@ module.exports = {
    * @param {Widget} widget
    * @param {WidgetState} state
    */
-  create(hud, widget, state) {},
+  create(hud, widget, state) {
+    state.fixed = isStatic(widget);
+  },
   /**
    * @param {HudApp} hud
    * @param {WidgetState} state
@@ -56,7 +84,11 @@ module.exports = {
    */
   update(hud, state, now, force) {
     const widget = state.w;
-    if (!force && now - state.lastPaint < (widget.rate || TEXT_MS)) return;
+    // fixed text: its first paint is its last until the next build; the rest is looked at most every TEXT_MS
+    if (!force && state.fixed && state.last !== null) return;
+    if (!force && now - (state.lastCheck || 0) < (widget.rate || TEXT_MS))
+      return;
+    state.lastCheck = now;
     const resolved =
       widget.needs && hud._token(widget.needs) === "--"
         ? ""

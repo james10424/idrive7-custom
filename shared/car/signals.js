@@ -515,6 +515,15 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       ["rpm", "speed", "temps", "accel", "gear", "torque"],
       extra,
     );
+    // one copy of the car's values per tick: data() copies them every call, and a tick asks 20 to 40 times
+    // (_freshData() at the start of each tick and of the Miku character's timer; up to one tick old in between)
+    const carData = this.car.data.bind(this.car);
+    /** @type {?Record<string, *>} */
+    let snapshot = null;
+    this.car.data = () => snapshot || (snapshot = carData());
+    this._freshData = () => {
+      snapshot = null;
+    };
     this.car.setRedline(this.setting("redline"));
     this.score = new ShiftScore(
       this.car,
@@ -566,7 +575,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       () =>
         this._guard("engine unit boost", () => {
           const now = Date.now();
-          if (busy || this.car.data().demo) return;
+          if (busy || this._offScreen()) return;
           // one question per tick, the pedal first (it moves the most), each only while a shown widget uses it
           const wantPedal =
             this.needsPedal &&
@@ -585,6 +594,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             now - this.boostFesAt >= FRESH_MS &&
             now - boostAskAt >= 400;
           if (!wantPedal && !wantVolt && !wantBoost) return;
+          if (this.car.data().demo) return;
           busy = true;
           (async () => {
             if (wantPedal) {

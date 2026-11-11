@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Regal dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.49",
+  "version": "0.1.50",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -206,17 +206,11 @@
     },
     {
       "key": "redline",
-      "label": "Redline (the rev lights turn yellow from here)",
+      "label": "Redline (a red mark over the rev scale from here)",
       "type": "number",
       "unit": "rpm",
-      "default": 7000,
-      "steps": [
-        5500,
-        6000,
-        6500,
-        7000,
-        7500
-      ]
+      "default": 6000,
+      "steps": [5500, 6000, 6500]
     },
     {
       "key": "demo",
@@ -414,7 +408,7 @@
       "m": "regal"
     },
     "fixedSettings": {
-      "_comment": "Settings no longer offered (0.1.48): the values the engine reads for them. The rev lights turn yellow from the redline itself.",
+      "_comment": "Settings no longer offered (0.1.48): the values the engine reads for them. Regal's red mark over the rev scale starts at the Redline setting.",
       "mapWindow": false,
       "shiftBefore": 0,
       "coldGuard": false,

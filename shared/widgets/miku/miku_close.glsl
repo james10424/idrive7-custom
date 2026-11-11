@@ -96,12 +96,17 @@ void main() {
         float s = sin(t * 1.5708) * zin * (1.0 - smoothstep(0.0, 0.4, abs(turn)));
         float i0 = min(floor(s + 1.0), 1.0), sf = s + 1.0 - i0;
         float a0 = i0 < 0.5 ? u_pose.z : 0.0, a1 = i0 > 0.5 ? u_pose.w : 0.0, a = mix(a0, a1, sf);
-        c = mix(pose(i0, rot(q - u_pose.xy, a0 - a) + u_pose.xy, eh),
-            pose(i0 + 1.0, rot(q - u_pose.xy, a1 - a) + u_pose.xy, eh), sf);
+        // the turn's two nearest along the chain; the sway pose is only needed when one of them is the middle
+        bool turning = abs(turn) > 0.001;
+        float n = 2.0 * u_frames.w, kt = (turn + 1.0) * u_frames.w;
+        float t0 = min(floor(kt), n - 1.0), tf = kt - t0, t1 = t0 + 1.0;
+        if (!turning || abs(t0 - u_frames.w) < 0.5 || abs(t1 - u_frames.w) < 0.5) {
+            // the second sway pose only while it has weight (none while she turns: the sway is 0 then)
+            c = pose(i0, rot(q - u_pose.xy, a0 - a) + u_pose.xy, eh);
+            if (sf > 0.001) c = mix(c, pose(i0 + 1.0, rot(q - u_pose.xy, a1 - a) + u_pose.xy, eh), sf);
+        }
         // the turn: the two nearest along the chain, each slid so the heads meet (above the shoulders)
-        if (abs(turn) > 0.001) {
-            float n = 2.0 * u_frames.w, kt = (turn + 1.0) * u_frames.w;
-            float t0 = min(floor(kt), n - 1.0), tf = kt - t0, t1 = t0 + 1.0;
+        if (turning) {
             float h0 = turnShift(t0), h1 = turnShift(t1), hc = mix(h0, h1, tf);
             float wy = 1.0 - smoothstep(u_pose.y - 20.0, u_pose.y + 30.0, q.y);
             vec4 ca = abs(t0 - u_frames.w) < 0.5 ? c : pose(turnPose(t0), q + vec2((h0 - hc) * wy, 0.0), eh);
@@ -114,9 +119,12 @@ void main() {
     // (the nearer step sees less: where the view reaches past it, the wider step's pixels stand in)
     vec4 r0 = rectAt(max(j0, 0.0)), r1 = rectAt(j0 + 1.0);
     vec2 q1 = (f - r1.xy) * u_frames.xy / r1.zw;
-    vec4 a = j0 < -0.5 ? vec4(0.0) : tap(slot(max(j0, 0.0)), u_frames.xy, (f - r0.xy) * u_frames.xy / r0.zw);
+    bool past = q1.x < 0.5 || q1.y < 0.5 || q1.x > u_frames.x - 0.5 || q1.y > u_frames.y - 0.5;
+    // step j0 not read once it has no weight (zoomed in all the way), unless it stands in past j0 + 1's edge
+    vec4 a = j0 < -0.5 || (jf > 0.999 && !past) ? vec4(0.0)
+        : tap(slot(max(j0, 0.0)), u_frames.xy, (f - r0.xy) * u_frames.xy / r0.zw);
     vec4 b = j0 + 1.0 > steps - 0.5 ? c : tap(slot(j0 + 1.0), u_frames.xy, q1);
-    if (j0 > -0.5 && (q1.x < 0.5 || q1.y < 0.5 || q1.x > u_frames.x - 0.5 || q1.y > u_frames.y - 0.5)) b = a;
+    if (j0 > -0.5 && past) b = a;
     c = mix(a, b, jf);
     vec3 rgb = c.rgb / max(c.a, 0.0001);
     gl_FragColor = vec4(rgb * u_zoom.z, c.a);

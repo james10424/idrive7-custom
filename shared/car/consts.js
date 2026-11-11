@@ -181,7 +181,7 @@ const HAND_BRAKE = {
   SIGNAL_UNGUELTIG: 3,
 };
 /** @type {Record<string, number>} */
-const REGAL_GEARS = { P: 0, R: 1, N: 2, D: 3, S: 3, M: 5 };
+const REGAL_GEARS = { P: 0, R: 1, N: 2, D: 3, S: 3, M: 3 }; // M lights D: the gear number has its own place
 const PEDAL_OK = {
   SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1,
 }; // AngleAcceleratorPedal's qualifier: valid

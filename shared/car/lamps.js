@@ -84,7 +84,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
-   * The Regal gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D and S 3, M 5 the gear number), -1 for none.
+   * The Regal gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D, S and M 3), -1 for none.
    * @returns {number}
    */
   _regalGear() {

@@ -234,7 +234,7 @@ const { isNum, mib } = require("./util");
  * @property {?Sheet} sheet
  * @property {*} last the last values sent (a key)
  * @property {number} lastPaint ms
- * @property {?Buffer} px the last painted pixels (_blitDiff)
+ * @property {?boolean} px painted at least once (_blitDiff; the pixels themselves are the client's layer copy)
  * @property {ReturnType<typeof setInterval>} [timer] its own update timer (a module that sets one: the tick skips it)
  * @property {number} [at] ms of the last eased update
  * @property {boolean} [refused] cluster-render refused something it sent (its layer, a bind, a uniform)
@@ -313,9 +313,12 @@ class HudApp {
     /** @type {?string} */
     this.lastStatus = null;
 
+    /** @type {Map<string, *>} setting() values, cleared when any setting changes */
+    this.settingCache = new Map();
     app._setupVehicleData();
     this.layouts.onChange(() => this._rebuild());
     ctx.settings.onChange((key) => {
+      this.settingCache.clear();
       if (key === "mikuReset") this._resetAnim(key);
       else if (key !== "demo") this._rebuild();
       else app._status();
@@ -331,6 +334,20 @@ class HudApp {
   setting(key) {
     // while the "navLayout" switch is in force the map window is open, whatever "mapWindow" says
     if (key === "mapWindow" && this._navSwitch()) return true;
+    // looked up once per change: tokens ask for the units on every one, a tick asks hundreds of times
+    if (this.settingCache.has(key)) return this.settingCache.get(key);
+    const value = this._settingNow(key);
+    this.settingCache.set(key, value);
+    return value;
+  }
+
+  /**
+   * setting() without the cache.
+   * @param {string} key
+   * @returns {*}
+   * @this {App}
+   */
+  _settingNow(key) {
     const item = this.ctx.settings.item(key);
     // a setting the app no longer offers: its fixed value (app.json config.fixedSettings), never a value saved before
     const fixed = this.config.fixedSettings;
@@ -836,8 +853,9 @@ class HudApp {
    */
   _tick() {
     const now = Date.now();
+    if (this._freshData) this._freshData();
     this._smoothRpm(now);
-    if (!this.client.ready) return;
+    if (!this.client.ready || this._offScreen()) return;
     // shift light: blink the whole bar at 8 Hz once the rpm reaches the redline
     const rpm = this._raw("rpm");
     const flashing = isNum(rpm) && rpm >= this.setting("redline") - 150;
@@ -848,6 +866,18 @@ class HudApp {
           this._update(state, now, false),
         );
     });
+  }
+
+  /**
+   * Our display isn't showing us (another app or BMW holds it, or it is parked behind BMW's content): widgets
+   * don't update. cluster-render keeps our layers meanwhile, so the next update sends only what changed since.
+   * Before cluster-render has said anything about the target, it counts as shown.
+   * @returns {boolean}
+   * @this {App}
+   */
+  _offScreen() {
+    const target = this.targetState;
+    return !!target && target.state !== "shown" && target.state !== "lingering";
   }
 
   /**

@@ -20,13 +20,13 @@ uniform vec4 u_vfdR;
 uniform vec4 u_spd;       // speed needle: pivot x, y, the number row's middle y, the mark row's y
 uniform vec2 u_spdVirt;   // where the numbers sit: a far pivot's height below the number row, its half sweep (rad)
 uniform float u_speedV;   // 0..1 along the scale, below 0 under the first mark (the rest position at 0)
-uniform vec3 u_spdK;      // the speed scale: mph at the middle, mph at the end, mph between marks
-uniform vec4 u_fuelG;     // fuel: pivot x, y, tick inner r, outer r
-uniform float u_fuelV;    // 0..1
+uniform vec4 u_spdK;      // the speed scale: mph at the middle, mph at the end, mph between marks, the amber mark's mph
+uniform vec4 u_fuelG;     // fuel: pivot x, y, where the end marks cross the line (+-x from the pivot), the lower band's height
+uniform vec3 u_fuelV;     // 0..1, the line the marks split at (y): E, the pump and F sit on it, the row's height above it
 uniform vec4 u_podG;      // the left pod's needle: pivot x, y, tick inner r, outer r (right: mirrored)
 uniform vec2 u_podV;      // left (battery), right (coolant) 0..1, bottom to top
 uniform vec4 u_led;       // LED rev bar x, y, w, h
-uniform vec3 u_ledV;      // segments, lit 0..1 (a segment partway lit fades in), yellow from 0..1 (the shift point)
+uniform vec3 u_ledV;      // segments, lit 0..1 (a segment partway lit fades in), the redline 0..1 (a red mark above the labels from there)
 uniform vec4 u_led2;      // the boost LED bar x, y, w, h (w 0 = none), all yellow
 uniform vec2 u_led2V;     // its segments, lit 0..1
 uniform vec4 u_gearBox;   // the lit gear box: first letter's box x, y, w, h
@@ -41,9 +41,13 @@ const vec3 CHROME2 = vec3(0.32, 0.33, 0.36);
 const vec3 TICK = vec3(0.95, 0.95, 0.95);
 const vec3 AMBER = vec3(1.0, 0.63, 0.16);
 const vec3 NEEDLE = vec3(1.0, 0.8, 0.78);
-const vec3 LED_ON = vec3(1.0, 0.24, 0.06);
 const vec3 LED_Y = vec3(1.0, 0.86, 0.16);
-const vec3 LED_OFF = vec3(0.16, 0.03, 0.02);
+// the rev bar as the Turbo Regal's: green, every fourth (each 1000 rpm) orange, the redline mark red
+const vec3 LED_G = vec3(0.62, 0.86, 0.16);
+const vec3 LED_O = vec3(1.0, 0.42, 0.08);
+const vec3 LED_GOFF = vec3(0.07, 0.11, 0.02);
+const vec3 LED_OOFF = vec3(0.14, 0.05, 0.01);
+const vec3 LED_RED = vec3(0.92, 0.08, 0.06);
 const vec3 LED_YOFF = vec3(0.15, 0.12, 0.02);
 const vec3 GEAR_BOX = vec3(0.78, 0.13, 0.04);
 const vec3 LAMP_R = vec3(1.0, 0.27, 0.08);
@@ -96,13 +100,15 @@ vec3 podGauge(vec2 p, vec2 pv, float r0, float r1, float sgn, float v, vec4 win,
 void main() {
     vec2 p = v_uv * u_size;
 #ifdef NEEDLE_LAYER
-    // the speed needle alone, transparent round it (straight alpha): a layer of its own over the text sheets, so it
-    // sweeps over the PRND row under the 55 (shaders.js rdashNeedle; the widget's box is the speed window)
+    // the needles alone, transparent round them (straight alpha): a layer of its own over the text sheets, so the
+    // speed needle sweeps over the odometer under the 55 and the fuel needle over PREMIUM FUEL (shaders.js
+    // rdashNeedle; the widget's box spans the centre panel's two windows)
     {
         vec2 sp = u_spd.xy;
         float numY = u_spd.z, Hv = u_spdVirt.x, S = u_spdVirt.y;
-        // it points at the speed's place on the number row; one length at every angle: straight up it reaches a little
-        // above the numbers (the 55). u_speedV < 0: below the first mark, down to the rest position under the row at 0
+        // it points at the speed's place on the number row; one fixed length: straight up it reaches slightly above the
+        // numbers, so toward the ends it stops short of the row. u_speedV < 0: below the first mark, down to the rest
+        // position under the row at 0
         float xs = sp.x + Hv * tan(-S + 2.0 * S * clamp(u_speedV, -0.5, 1.0));
         float a = atan(xs - sp.x, sp.y - numY), r0 = 0.0, r1 = sp.y - numY + 40.0, w0 = 5.5, w1 = 3.0;
         vec2 dir = vec2(sin(a), -cos(a)), q = p - sp, n = vec2(-dir.y, dir.x);
@@ -112,6 +118,20 @@ void main() {
         float sh = 0.5 * cov(max(abs(dot(q - vec2(2.0, 3.0), n)) - hw - 2.0, max(r0 - al, al - r1)) / 3.0);
         float na = cov(d), inWin = rbox(p, u_win1, 8.0) < 0.0 ? 1.0 : 0.0;
         vec3 col = mix(NEEDLE, NEEDLE * 0.72, smoothstep(0.0, hw, pe));
+        if (rbox(p, u_win2, 8.0) < 0.0) {
+            // the fuel needle, as needle() draws it in the main pass, its shadow included
+            // it points along the marks' spacing (where it crosses the line, linear in the fuel), one length: at half a
+            // tank its tip is the top of the pump (u_fuelV.y: the line, .z: the row over it)
+            float fdepth = u_fuelG.y - u_fuelV.y;
+            vec2 fdir = normalize(vec2((clamp(u_fuelV.x, -0.03, 1.03) * 2.0 - 1.0) * u_fuelG.z, -fdepth));
+            vec2 fq = p - u_fuelG.xy, fn = vec2(-fdir.y, fdir.x);
+            float fr0 = 0.0, fr1 = fdepth + 4.0 + u_fuelV.z, fal = dot(fq, fdir), fpe = abs(dot(fq, fn));
+            float fhw = mix(4.5, 2.5, clamp((fal - fr0) / (fr1 - fr0), 0.0, 1.0));
+            na = cov(max(fpe - fhw, max(fr0 - fal, fal - fr1)));
+            sh = 0.5 * cov(max(abs(dot(fq - vec2(2.0, 3.0), fn)) - fhw - 2.0, max(fr0 - fal, fal - fr1)) / 3.0);
+            col = mix(NEEDLE, NEEDLE * 0.72, smoothstep(0.0, fhw, fpe));
+            inWin = 1.0;
+        }
         float aa = (na + sh * (1.0 - na)) * inWin;
         gl_FragColor = aa > 0.0 ? vec4(col * na / max(na + sh * (1.0 - na), 1e-4), aa) : vec4(0.0);
         return;
@@ -153,20 +173,27 @@ void main() {
             vec2 dir = vec2(sin(a), -cos(a));
             float pe = abs(dot(p - sp, vec2(-dir.y, dir.x)));
             float d = max(pe - mix(2.0, 4.5, major), max(y0 - p.y, p.y - y1));
-            c = mix(c, m == u_spdK.x ? AMBER : TICK, cov(d));
+            c = mix(c, m == u_spdK.w ? AMBER : TICK, cov(d));
         }
         // the speed needle is its own layer over the text (NEEDLE_LAYER below), so it sweeps over the PRND row
     }
 
-    // fuel: 5 marks over +-55 deg round a pivot under the lower window, and its needle
+    // fuel, as the Turbo Regal's: 5 marks on rays from a pivot just under PREMIUM FUEL, crossing a horizontal line
+    // (u_fuelV.y) evenly spaced out to +-u_fuelG.z, each cut by two bands along it: under the line every mark's lower part
+    // (u_fuelG.w tall), over it a row as tall as E, the pump and F (u_fuelV.z), where only the two marks between show (E,
+    // the pump and F, text and icon widgets, stand in the others' place). Its needle is on the needle layer
     vec2 fp = u_fuelG.xy;
     if (rbox(p, u_win2, 8.0) < 0.0) {
+        float ly = u_fuelV.y, depth = fp.y - ly;
+        float below = cov(ly + 4.0 - p.y) * cov(p.y - ly - 4.0 - u_fuelG.w);
+        float above = cov(p.y - ly + 4.0) * cov(ly - 4.0 - u_fuelV.z - p.y);
         for (int i = 0; i < 5; i++) {
-            float a = (float(i) / 4.0 - 0.5) * 1.92;
-            float lg = (i == 0 || i == 2 || i == 4) ? 1.0 : 0.0;
-            c = mix(c, TICK, mark(p, fp, a, u_fuelG.z + (1.0 - lg) * 8.0, u_fuelG.w, 3.0));
+            float a = atan((float(i) / 2.0 - 1.0) * u_fuelG.z, depth);
+            // the two marks between (no E, pump or F over them) thinner, as the Turbo Regal's
+            bool between = i == 1 || i == 3;
+            float part = between ? max(below, above) : below;
+            c = mix(c, TICK, mark(p, fp, a, 0.0, depth + 80.0, between ? 1.8 : 3.0) * part);
         }
-        c = needle(p, fp, (clamp(u_fuelV, -0.03, 1.03) - 0.5) * 1.92, u_fuelG.z * 0.4, u_fuelG.w + 12.0, 4.5, 2.5, c);
     }
 
     // the side pods' gauges (the pivots sit behind each pod's inner edge)
@@ -181,16 +208,21 @@ void main() {
     bat = min(bat, rbox(bq, vec4(5.0, -12.0, 5.0, 4.0), 0.5));
     c = mix(c, TICK, cov(bat));
 
-    // LED rev bar: segments with a gap, lit red-orange up to the revs, yellow from the shift point
+    // LED rev bar: segments with a gap, lit up to the revs, green with every fourth orange
     if (p.x >= u_led.x && p.x < u_led.x + u_led.z && p.y >= u_led.y && p.y < u_led.y + u_led.w) {
         float n = u_ledV.x, pitch = u_led.z / n, i = floor((p.x - u_led.x) / pitch);
         float lx = p.x - u_led.x - i * pitch;
-        float d = rbox(vec2(lx, p.y), vec4(1.5, u_led.y, pitch - 4.5, u_led.w), 1.5);
+        float d = rbox(vec2(lx, p.y), vec4(1.0, u_led.y, pitch - 3.0, u_led.w), 1.0);
         // lit up to the level; the segment it is partway into fades in by how far
         float lit = clamp(u_ledV.y * n - i, 0.0, 1.0);
-        vec3 col = mix(LED_OFF, (i + 0.5) / n >= u_ledV.z ? LED_Y : LED_ON, lit);
+        bool o = mod(i, 4.0) < 0.5;
+        vec3 col = mix(o ? LED_OOFF : LED_GOFF, o ? LED_O : LED_G, lit);
         c = mix(c, col, cov(d));
     }
+    // the redline: a red mark from it to the scale's end, level with "RPM X 100" above the labels
+    if (u_ledV.z < 0.999 && abs(p.y - u_led.y + 46.0) < 6.0)
+        c = mix(c, LED_RED, cov(rbox(p, vec4(u_led.x + u_led.z * u_ledV.z, u_led.y - 50.0,
+            u_led.z * (1.0 - u_ledV.z), 8.0), 1.0)));
 
     // boost LED bar: the same segments, yellow
     if (u_led2.z > 0.0 && p.x >= u_led2.x && p.x < u_led2.x + u_led2.z && p.y >= u_led2.y && p.y < u_led2.y + u_led2.w) {

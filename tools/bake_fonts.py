@@ -51,7 +51,8 @@ CLUSTER_FONTS = [
     # Regal (1987 Buick Regal dash): tall condensed white numbers, small print, and the orange VFD's seven segments
     ('r_num', 'BarlowCondensed-SemiBold.ttf', 50, DIGITS),
     ('r_gl', 'BarlowCondensed-SemiBold.ttf', 34, DIGITS + 'EF'),
-    ('r_lbl', 'Barlow-Medium.ttf', 21, UPPER + DIGITS + ' ./°'),
+    ('r_ef', 'BarlowCondensed-SemiBold.ttf', 27, 'EF'),   # the fuel gauge's E and F, 80% of r_gl
+    ('r_lbl', 'Barlow-Medium.ttf', 21, UPPER + DIGITS + ' ./°-'),
     ('r_tiny', 'Barlow-Medium.ttf', 16, UPPER + ' .'),
     ('r_vfd', 'BarlowSemiCondensed-SemiBold.ttf', 25, UPPER + DIGITS + ' '),
     ('r_seg', 'SEG', 44, DIGITS + '- '),

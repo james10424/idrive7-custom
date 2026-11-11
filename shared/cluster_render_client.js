@@ -67,26 +67,38 @@ function message(type, body) {
     return m;
 }
 
+// (idrive7-custom change, not upstream's: jsonMessage and frameMessage build the message in one buffer, written in
+// place, where upstream's built the body and copied it again into the message; frameMessage can take a fill function
+// that copies the pixels straight in)
 function jsonMessage(obj) {
-    return message(JSON_T, Buffer.from(JSON.stringify(obj), 'utf8'));
+    const text = JSON.stringify(obj), n = Buffer.byteLength(text, 'utf8');
+    const m = Buffer.allocUnsafe(5 + n);
+    m.writeUInt32LE(n + 1, 0);
+    m[4] = JSON_T;
+    m.write(text, 5, n, 'utf8');
+    return m;
 }
 
-/* A frame message: u32 ref, u64 id, u16 rect count, rects, pixels. */
-function frameMessage(ref, id, rects, pixels) {
-    const head = 14 + rects.length * 8;
-    const body = Buffer.alloc(head + pixels.length);
-    body.writeUInt32LE(ref >>> 0, 0);
-    body.writeUInt32LE(id % 0x100000000, 4);
-    body.writeUInt32LE(Math.floor(id / 0x100000000), 8);
-    body.writeUInt16LE(rects.length, 12);
+/* A frame message: u32 ref, u64 id, u16 rect count, rects, pixels. pixels: a
+ * Buffer, or with fill the pixels' byte count, fill(m, at) writing them at at. */
+function frameMessage(ref, id, rects, pixels, fill) {
+    const head = 14 + rects.length * 8, n = fill ? pixels : pixels.length;
+    const m = Buffer.allocUnsafe(5 + head + n), b = 5;
+    m.writeUInt32LE(head + n + 1, 0);
+    m[4] = FRAME_T;
+    m.writeUInt32LE(ref >>> 0, b);
+    m.writeUInt32LE(id % 0x100000000, b + 4);
+    m.writeUInt32LE(Math.floor(id / 0x100000000), b + 8);
+    m.writeUInt16LE(rects.length, b + 12);
     rects.forEach((r, i) => {
-        body.writeUInt16LE(r.x, 14 + i * 8);
-        body.writeUInt16LE(r.y, 16 + i * 8);
-        body.writeUInt16LE(r.w, 18 + i * 8);
-        body.writeUInt16LE(r.h, 20 + i * 8);
+        m.writeUInt16LE(r.x, b + 14 + i * 8);
+        m.writeUInt16LE(r.y, b + 16 + i * 8);
+        m.writeUInt16LE(r.w, b + 18 + i * 8);
+        m.writeUInt16LE(r.h, b + 20 + i * 8);
     });
-    pixels.copy(body, head);
-    return message(FRAME_T, body);
+    if (fill) fill(m, b + head);
+    else pixels.copy(m, b + head);
+    return m;
 }
 
 /* A mesh message: u32 ref, part, vertices, indices, u8 mask, then the
@@ -258,23 +270,27 @@ class ClusterRender extends EventEmitter {
         this.layers.forEach((l, ref) => {
             if (this.blocked || (l.kind !== 'image' && l.kind !== 'asset') || !(l.whole || l.dirty.length)) return;
             const rects = l.whole ? [] : l.dirty;
-            let px;
+            let msg;
             if (l.whole) {
-                px = l.image;
+                msg = frameMessage(ref, 0, rects, l.image);
             } else {
-                const parts = [];
-                rects.forEach((r) => {
-                    for (let y = 0; y < r.h; y++) {
-                        const start = ((r.y + y) * l.iw + r.x) * l.bpp;
-                        parts.push(l.image.slice(start, start + r.w * l.bpp));
-                    }
+                // each dirty rect's rows copied straight from the image into the message
+                const bytes = rects.reduce((sum, r) => sum + r.w * r.h * l.bpp, 0);
+                msg = frameMessage(ref, 0, rects, bytes, (m, at) => {
+                    rects.forEach((r) => {
+                        const row = r.w * l.bpp;
+                        for (let y = 0; y < r.h; y++) {
+                            const start = ((r.y + y) * l.iw + r.x) * l.bpp;
+                            l.image.copy(m, at, start, start + row);
+                            at += row;
+                        }
+                    });
                 });
-                px = Buffer.concat(parts);
             }
             l.whole = false;
             l.dirty = [];
             l.dirtyBytes = 0;
-            if (!this.sock.write(frameMessage(ref, 0, rects, px))) this.blocked = true;
+            if (!this.sock.write(msg)) this.blocked = true;
         });
         for (const ref of Array.from(this.pendingFrames.keys())) {
             if (this.blocked) break;
@@ -427,7 +443,11 @@ class ClusterRender extends EventEmitter {
             m.type = o.type;
         } else if ((l.kind !== 'effect' && l.kind !== 'mesh') || values.length > 4) return;
         if (o.part) m.part = o.part;
-        l.uniforms[(o.part || 0) + ':' + name] = m;
+        // (idrive7-custom change, not upstream's: the same value as the last one sent is not sent again; widgets set
+        // all their uniforms when any one moves, and replay after a reconnect still sends the stored copy)
+        const key = (o.part || 0) + ':' + name, prev = l.uniforms[key];
+        if (prev && prev.v === m.v && prev.type === m.type) return;
+        l.uniforms[key] = m;
         this._send(m);
     }
 
@@ -548,6 +568,14 @@ class ClusterRender extends EventEmitter {
     /* An image or asset update: rects ([{x, y, w, h}]) with their rows
      * packed one rect after another in px, or no rects (null) and the whole
      * image. */
+    /* (idrive7-custom change, not upstream's) An image layer's pixels as the
+     * client last set them, { image, iw, ih, bpp }, for diffing without a
+     * second copy; null for another kind of layer. Read only. */
+    imageOf(ref) {
+        const l = this.layers.get(ref);
+        return l && l.image ? { image: l.image, iw: l.iw, ih: l.ih, bpp: l.bpp } : null;
+    }
+
     pixels(ref, rects, px) {
         const l = this.layers.get(ref);
         if (!l || !l.image) return false;

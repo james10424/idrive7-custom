@@ -35,7 +35,7 @@ for 1 s (out again past 10 km/h), from the bake's close.rgba (none baked: she ju
 where the bake's "anchor" (between her feet) goes ([480, 377]). Nothing is drawn without frames (the status row says
 so)`;
 
-const MIKU_MS = 16; // the Miku character's own update rate (60 Hz)
+const MIKU_MS = 33; // the Miku character's own update rate (30 Hz: cluster-render draws at most 30 frames a second)
 const MIKU_TAU_MS = 450; // the Miku character's speed follows the car this smoothly
 const MIKU_LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly (no spring: no sway back past upright)
 const MIKU_POINT_K = 70; // the pointing arm's spring (1/s^2): about 1.3 Hz
@@ -254,13 +254,16 @@ module.exports = {
       info.breathe === false ? 0 : 1,
       0,
     ]);
-    // her lean and zoom on their own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a
-    // lean that moved only every third frame would step. A message goes up only when one changes a step
+    // her lean and zoom on their own timer at the renderer's frame rate, not the 20 Hz tick, where a lean would move
+    // only every other frame and step; faster than the renderer draws would send frames it never shows. A message
+    // goes up only when one changes a step
     state.timer = setInterval(
       () =>
-        hud._guard("widget " + widget.id, () =>
-          hud._update(state, Date.now(), false),
-        ),
+        hud._guard("widget " + widget.id, () => {
+          if (hud._offScreen()) return;
+          if (hud._freshData) hud._freshData();
+          hud._update(state, Date.now(), false);
+        }),
       MIKU_MS,
     );
     const tails = info.tails || null;

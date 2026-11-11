@@ -126,8 +126,13 @@ void main() {
 #ifdef MIKU_BARE
     vec4 upright = cIdle;
 #else
-    vec4 cHalf = cropTap(u_fA.zw, fb, cIdle), cShut = cropTap(u_fB.xy, fb, cIdle);
-    vec4 upright = blink < 0.5 ? mix(cIdle, cHalf, blink * 2.0) : mix(cHalf, cShut, blink * 2.0 - 1.0);
+    // the half-shut and shut frames read only while she blinks (about 7% of the time), the shut one only past half
+    vec4 upright = cIdle;
+    if (blink > 0.001) {
+        vec4 cHalf = cropTap(u_fA.zw, fb, cIdle);
+        upright = blink < 0.5 ? mix(cIdle, cHalf, blink * 2.0)
+            : mix(cHalf, cropTap(u_fB.xy, fb, cIdle), blink * 2.0 - 1.0);
+    }
     float talk = smoothstep(0.85, 1.0, sin(t * 0.37)) * (1.0 - smoothstep(0.0, 0.3, abs(lean)));
     if (talk > 0.001) upright = mix(upright, cropTap(u_fB.zw, fb, cIdle), talk);
 #endif

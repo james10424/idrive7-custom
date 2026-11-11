@@ -30,7 +30,7 @@ const CFG = [
   "u_batIcon",
 ];
 const PACKED = packCfg(RDASH, CFG);
-// "needleOnly": the speed needle on its own layer, over the text
+// "needleOnly": the speed and fuel needles on their own layer, over the text
 const NEEDLE = packCfg(
   RDASH.replace("#endif\nvarying", "#endif\n#define NEEDLE_LAYER\nvarying"),
   CFG,
@@ -45,7 +45,7 @@ const NEEDLE = packCfg(
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
-const DOCS = `effect layer; the whole Regal theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMid" (55, the middle), "spdStep" (5, between marks; the first mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" / "podG" [pivot x, y, tick r0, r1], "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "led" with "ledN" and "rpmMax", "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]) in "led2N" (15) segments), "gearBox" + "gearPitch" (the lit box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "arrow" [x, y, size], "batIcon" [x, y]`;
+const DOCS = `effect layer; the whole Regal theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMid" (55, the middle; half of spdMax makes the scale linear), "spdStep" (5, between marks; the first mark), "spdAmber" (55, the amber mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" [pivot x, y, the end marks' crossing of fuelLine (+-x), the lower band's height], "podG" [pivot x, y, tick r0, r1], "fuelLine" (y: where the fuel marks split, E, the pump and F sitting on it) and "fuelRowH" (the row above it: E, the pump, F and the marks' upper parts this tall, 21), "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "led" with "ledN" and "rpmMax" (green segments, every fourth orange; a red mark above from the Redline setting to the end), "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]), or "led2RangeUs" with US units, in "led2N" (15) segments), "gearBox" + "gearPitch" (the lit box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "arrow" [x, y, size], "batIcon" [x, y]`;
 
 module.exports = {
   type: "rdash",
@@ -104,6 +104,7 @@ module.exports = {
       widget.spdMid || 55,
       widget.spdMax || 85,
       widget.spdStep || 5,
+      widget.spdAmber || 55,
     ]);
     const fuelG = widget.fuelG || [0, 0, 0, 0],
       podG = widget.podG || [0, 0, 0, 0],
@@ -128,7 +129,7 @@ module.exports = {
     ]);
     packer.uniform("u_batIcon", [batIcon[0] - widget.x, batIcon[1] - widget.y]);
     if (widget.needleOnly)
-      packer.uniform("u_speedV", [0]); // the needle's own layer: only the speed changes
+      packer.uniform("u_speedV", [0]); // the needles' own layer: only the speed and the fuel change
     else {
       packer.uniform("u_gearV", [widget.gearPitch || 0, -1]);
       packer.uniform("u_lamps", [0, 0, 0, 0]);
@@ -173,10 +174,13 @@ module.exports = {
     const ledLevel = (frac, n) =>
       Math.round(Math.min(1, Math.max(0, frac)) * n * 16) / (n * 16);
     const led = isNum(rpm) ? ledLevel(Math.max(0, rpm) / max, ledN) : 0;
-    const shiftAt = Math.floor((hud._shift().rpm / max) * ledN) / ledN;
+    // the red mark above the labels: from the Redline setting to the scale's end
+    const redAt = Math.min(1, Math.max(0, hud.setting("redline") / max));
     // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
     const led2N = widget.led2N || 15,
-      led2Range = widget.led2Range || [0, 1.5],
+      // "led2RangeUs": the range with US units (Regal's 0 .. 20 psi, in bar)
+      led2Range = (hud.setting("units") === "us" && widget.led2RangeUs) ||
+        widget.led2Range || [0, 1.5],
       boost = hud._raw(widget.led2Signal || "boost");
     const led2 = isNum(boost)
       ? ledLevel((boost - led2Range[0]) / (led2Range[1] - led2Range[0]), led2N)
@@ -226,10 +230,16 @@ module.exports = {
     pods.splice(0, 2, quantize(state.ez.pods[0]), quantize(state.ez.pods[1]));
     const vals = [Math.round(state.ez.f * 500) / 500, quantize(state.ez.fuel)];
     if (widget.needleOnly) {
-      // the speed needle's own layer (over the text): only its speed
-      if (!force && vals[0] === state.last) return;
-      state.last = vals[0];
+      // the needles' own layer (over the text): only the speed and the fuel
+      const needles = vals[0] + "|" + vals[1];
+      if (!force && needles === state.last) return;
+      state.last = needles;
       state.c.uniform(state.ref, "u_speedV", [vals[0]]);
+      state.c.uniform(state.ref, "u_fuelV", [
+        vals[1],
+        (widget.fuelLine || 0) - widget.y,
+        widget.fuelRowH || 21,
+      ]);
       return;
     }
     const key =
@@ -239,7 +249,7 @@ module.exports = {
       "|" +
       led +
       "|" +
-      shiftAt +
+      redAt +
       "|" +
       led2 +
       "|" +
@@ -249,9 +259,13 @@ module.exports = {
     if (!force && key === state.last) return;
     state.last = key;
     state.c.uniform(state.ref, "u_speedV", [vals[0]]);
-    state.c.uniform(state.ref, "u_fuelV", [vals[1]]);
+    state.c.uniform(state.ref, "u_fuelV", [
+      vals[1],
+      (widget.fuelLine || 0) - widget.y,
+      widget.fuelRowH || 21,
+    ]);
     state.c.uniform(state.ref, "u_podV", pods);
-    state.c.uniform(state.ref, "u_ledV", [ledN, led, shiftAt]);
+    state.c.uniform(state.ref, "u_ledV", [ledN, led, redAt]);
     state.c.uniform(state.ref, "u_led2V", [led2N, led2]);
     state.c.uniform(state.ref, "u_gearV", [widget.gearPitch || 0, gear]);
     state.c.uniform(state.ref, "u_lamps", lamps);
