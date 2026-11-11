@@ -29,6 +29,23 @@ const SLIDERS = [
   "ParamBreath",
 ];
 
+/** The model's own switches the pose and outfit expressions set (0 off, 1 on), to mix them by hand. */
+const SWITCHES = [
+  "armshiddenR",
+  "armshidden2",
+  "Pose1",
+  "Pose2",
+  "Pose3",
+  "pose4",
+  "pose5",
+  "pose6",
+  "pose7",
+  "pose8",
+  "xf22",
+  "SchoolUniform",
+  "UniformMagicEyes",
+];
+
 /**
  * Runs page.js's definitions (everything but its closing bake call) as a classic script, so its classes and
  * functions are globals here.
@@ -128,7 +145,8 @@ async function borrowPage() {
     );
     /** @type {{ input: HTMLInputElement, out: HTMLOutputElement, def: number }[]} */
     const inputs = [];
-    SLIDERS.forEach((id) => {
+    /** @type {(id: string, into: HTMLElement) => void} */
+    const addSlider = (id, into) => {
       const i = params.ids.indexOf(id);
       if (i < 0) return;
       const row = document.createElement("label"),
@@ -146,16 +164,21 @@ async function borrowPage() {
       input.addEventListener("input", () => {
         const v = Number(input.value);
         out.textContent = v.toFixed(2);
-        if (Math.abs(v - def) < 1e-6) delete values[id];
-        else values[id] = Math.round(v * 100) / 100;
+        // kept even at the default, so a slider can override what an expression sets
+        values[id] = Math.round(v * 100) / 100;
         draw();
       });
       row.appendChild(document.createTextNode(id.replace(/^Param/, "")));
       row.appendChild(input);
       row.appendChild(out);
-      sliders.appendChild(row);
+      into.appendChild(row);
       inputs.push({ input, out, def });
-    });
+    };
+    SLIDERS.forEach((id) => addSlider(id, sliders));
+    const switches = /** @type {HTMLElement} */ (
+      document.getElementById("switches")
+    );
+    SWITCHES.forEach((id) => addSlider(id, switches));
     const clearExpressions = () => {
       on.clear();
       toggles
