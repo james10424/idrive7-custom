@@ -9,9 +9,11 @@
  *   Custom Cluster M (mdash, removed in 0.1.43)           0 texture reads, 8724 tokens   crashed the display (Nov 10 2026)
  *   Custom HUD 0.1.16/0.1.17, Miku (8eeadc1, 181e2ae)   32 texture reads, 5340 tokens   holds
  *   Custom Cluster Sport (sdash, 0.1.35)                  0 texture reads, 7835 tokens   holds
+ *   Custom Cluster M split (mdash parts, 0.1.43)        0 reads, 4413 + 4361 tokens   holds (Nov 10 2026)
  *
  * Either can crash it: the crashed Miku is smaller than Sport but reads more textures, and M reads none but is
- * bigger than Sport. Both are counted as the compiler sees them, with every function inlined into main (a function called 6 times
+ * bigger than Sport. The limits are per shader, not per screen: M's backdrop split over two layers holds, so a
+ * shader past them can be split into smaller ones. Both are counted as the compiler sees them, with every function inlined into main (a function called 6 times
  * counts 6 times), after the #ifdefs. Loops count their body once (none of the shaders that matter loop over reads).
  *
  * Used by bench/server.js on every effect layer, and from the command line on every widget type's shaders
