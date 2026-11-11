@@ -1,0 +1,47 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miku toggles</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #111; color: #ddd; font: 13px -apple-system, Helvetica, sans-serif; }
+  #log { white-space: pre-wrap; font: 12px ui-monospace, Menlo, monospace; color: #9c9; max-height: 3.6em; overflow: auto; }
+  #view { display: none; }
+  .wrap { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+  .stage { position: sticky; top: 16px; }
+  .stage canvas { display: block; background: repeating-conic-gradient(#2a2a2a 0 25%, #333 0 50%) 0 0 / 16px 16px; border-radius: 6px; }
+  .stage .hud { margin-top: 10px; background: #000; image-rendering: auto; }
+  .stage .cap { color: #888; font-size: 11px; margin: 4px 0 0; }
+  .panel { flex: 1; min-width: 300px; }
+  h2 { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 6px; }
+  .toggles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
+  .toggles label { display: flex; gap: 6px; align-items: center; cursor: pointer; padding: 2px 0; }
+  .sliders label { display: grid; grid-template-columns: 150px 1fr 48px; gap: 8px; align-items: center; padding: 2px 0; }
+  .sliders output { color: #9c9; font: 12px ui-monospace, Menlo, monospace; text-align: right; }
+  button { background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div id="log">loading…</div>
+<div id="view"></div>
+<div class="wrap">
+  <div class="stage">
+    <canvas id="big" width="360" height="640"></canvas>
+    <canvas id="hud" class="hud" width="144" height="278"></canvas>
+    <p class="cap">top: full size; bottom: about her size on the HUD (144 x 278 px)</p>
+  </div>
+  <div class="panel">
+    <div class="row"><button id="reset">Reset all</button><button id="clear">Expressions off</button></div>
+    <h2>Expressions</h2>
+    <div class="toggles" id="toggles"></div>
+    <h2>Face and body (what the HUD bake uses)</h2>
+    <div class="sliders" id="sliders"></div>
+  </div>
+</div>
+<script src="/core.js"></script>
+<script src="/play.js"></script>
+</body>
+</html>

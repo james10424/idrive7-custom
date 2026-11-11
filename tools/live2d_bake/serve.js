@@ -9,7 +9,8 @@
  * then open http://localhost:8095/ in a browser: the page renders the model, standing, with Live2D's Cubism Core (which
  * you get from Live2D's Cubism SDK for Web under their license; it is not in this repo) and writes <out>/atlas.json,
  * atlas.rgba and preview.png. Push them with scripts/deploy.sh <car> --miku <out>.
- * http://localhost:8095/?inspect shows the model with its parts, parameters and drawables, to write the config.
+ * http://localhost:8095/?inspect shows the model with its parts, parameters and drawables, to write the config;
+ * http://localhost:8095/play is a playground: toggle the model's expressions and move its face and body parameters.
  *
  * Nothing of the model ever goes in this repo: keep the config and the output next to the model.
  * The config's fields are described in page.js (CONFIG).
@@ -99,6 +100,22 @@ http
       return;
     }
     if (urlPath === "/") return send(res, path.join(__dirname, "page.html"));
+    // the toggles playground: play.html, and the model's expressions (its .exp3.json files) for it to list
+    if (urlPath === "/play")
+      return send(res, path.join(__dirname, "play.html"));
+    if (urlPath === "/play.js")
+      return send(res, path.join(__dirname, "play.js"));
+    if (urlPath === "/expressions.json") {
+      const names = fs
+        .readdirSync(modelDir)
+        .filter((file) => /\.exp3\.json$/.test(file))
+        .sort();
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      });
+      return res.end(JSON.stringify(names));
+    }
     if (urlPath === "/page.js")
       return send(res, path.join(__dirname, "page.js"));
     if (urlPath === "/core.js") return send(res, path.resolve(core));
