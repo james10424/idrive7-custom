@@ -28,6 +28,10 @@ The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needle
 - **Middle, bottom:** the fuel needle in the middle, a yellow LED boost bar (0 to 1.5 bar) on its left and an LED rev bar that turns yellow from your shift point on its right.
 - **Bottom:** BMW's belt light and gear letter. There is no map window.
 
+### M
+
+The look of a current M8's cluster: black, glass rev blades either side with a red marker riding the rpm, the gear and speed in white over the centre line, the tyre pressures and temperatures on the left, the setup rows on the right, and the fuel and oil dials over the lower corners. Its backdrop is drawn by two shaders, not one: drawn as one shader it crashed the display on the car (0.1.43 brings it back split; not yet checked on the car).
+
 More themes are on the way.
 
 ## Navigation and Off

@@ -137,6 +137,37 @@ const THEMES = {
     sgreen: [47, 210, 122, 255],
     syellow: [255, 194, 26, 255],
   },
+  // M cluster look (layout m.json, after design/photos/ref-m8-cluster.png): black, white numbers with a chrome
+  // fade, M red needles and setup bars. Extra roles: redTrack, chrome (bottom of a chrome fade), grey / grey2
+  // (the dim gear number's fade), faint.
+  mdash: {
+    name: "M",
+    fg: [238, 241, 246, 255],
+    dim: [132, 140, 152, 255],
+    track: [104, 110, 120, 255],
+    arc: [226, 36, 44, 255],
+    glow: 0,
+    stripe: false,
+    bar: {
+      low: [226, 36, 44],
+      mid: [226, 36, 44],
+      high: [255, 42, 42],
+      midAt: "shift",
+    },
+    rev: { from: [226, 36, 44], to: [226, 36, 44] },
+    bg: [0, 0, 0, 255],
+    panel: [0, 0, 0, 255],
+    line: [196, 202, 212, 255],
+    head: [226, 228, 232, 255],
+    ink: [12, 12, 14, 255],
+    accent: [226, 36, 44, 255],
+    well: [0, 0, 0, 255],
+    redTrack: [90, 16, 20, 255],
+    chrome: [182, 188, 198, 255],
+    grey: [160, 166, 176, 255],
+    grey2: [104, 110, 122, 255],
+    faint: [96, 104, 118, 255],
+  },
   // Regal (layout regal.json, after a 1987 Buick Regal's dash): white numbers, the orange VFD, green lamps. Extra roles:
   // vfd (the VFD's orange), kmh (the km/h row), lampText (on the lit BRAKE lamp), green (turn and cruise lamps).
   regal: {

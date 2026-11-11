@@ -26,6 +26,8 @@ const TYPES = {
   box: require("./box"),
   grid: require("./grid"),
   segbar: require("./segbar"),
+  mdash: require("./mdash"),
+  mtach: require("./mtach"),
   sdash: require("./sdash"),
   boxes: require("./boxes"),
   atext: require("./atext"),

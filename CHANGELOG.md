@@ -4,7 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 10 2026
 
-- **Custom Cluster 0.1.43:** the M theme's leftover code is gone: the `mdash` and `mtach` widgets (the M dashboard shader, 8724 tokens, the largest we had) and its colours. The M layout itself left in 0.1.23, but an older install still offered it and it crashed the display on the car. Only Regal and Sport (and the calibration grid) remain.
+- **Custom Cluster 0.1.43:** the M theme is back (Theme: M), its backdrop split over two shaders. The old M (removed in 0.1.23, but an older install still offered it) crashed the display on the car: its backdrop was one shader of 8724 tokens, bigger than Sport's 7835, the largest known to hold, with no texture reads, so a shader's size alone can crash the KOMBI. Now the cards, centre line, tyre block, setup bars and mark are one layer (4413 tokens) and the two side dials a second (4361), each picked out of the same source by #defines (mdash "parts"); the rev blades are unchanged (mtach, 1462). Looks as before on the bench; on the car it is the test of whether splitting a shader keeps the KOMBI up. tools/shader_budget.js now treats 8724 tokens as a crash.
 - **Custom Cluster 0.1.42 and Custom HUD 0.1.20:** a code refactor, nothing meant to change on the displays. shared/hud.js is split into shared/engine (the generic core) and shared/car (the car's data); each widget type is its own module under shared/widgets (Miku, the gauges, the frames, the images, the theme dashboards); shared/shaders.js is gone. Our JavaScript is formatted with Prettier, typed with JSDoc and uses descriptive names. Built output parses as ES2017 for the car's Node 8, and the shader budget shows no shader past the crash mark. Not yet run on the car.
 
 ## Nov 9 2026
