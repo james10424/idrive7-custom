@@ -255,6 +255,9 @@ vec4 pose(float p, vec2 q, float eh) {
     vec4 c = tap(slot(u_frames.z + p), u_frames.xy, q);
     vec2 e = q - u_crop.xy;
     if (eh > 0.001 && e.x >= 0.0 && e.y >= 0.0 && e.x <= u_crop.z && e.y <= u_crop.w) {
+        // half a pixel inside the crop: the crops sit edge to edge in the atlas, and the filtered read at the very
+        // edge took in the next crop's row (a dark line along the eyes' rect while she blinked)
+        e = clamp(e, vec2(0.5), u_crop.zw - 0.5);
         c = mix(c, tap(cropAt(2.0 * p), u_crop.zw, e), min(1.0, eh * 2.0));              // half shut
         c = mix(c, tap(cropAt(2.0 * p + 1.0), u_crop.zw, e), max(0.0, eh * 2.0 - 1.0));   // shut
     }
