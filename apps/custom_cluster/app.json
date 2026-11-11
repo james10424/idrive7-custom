@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Regal dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.42",
+  "version": "0.1.43",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
