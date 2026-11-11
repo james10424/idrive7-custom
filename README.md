@@ -20,7 +20,7 @@ Puts your own Live2D character on the windshield HUD, standing beside BMW's spee
 
 ## Install
 
-1. Install **cluster-render** first. Both apps draw through it. It comes from the `robertnisipeanu/idrive-apps` Store source. To run both apps at once you need 0.4.5 or later, which for now is only in the `james10424/idrive-apps-lib` source (see [Both apps at once](#both-apps-at-once)).
+1. Install **cluster-render** first. Both apps draw through it. Use 0.5.1 or later so both apps can show at once: either the `robertnisipeanu/idrive-apps` Store source or `james10424/idrive-apps-lib` (see [Both apps at once](#both-apps-at-once)).
 2. In the Store, go to **Settings, Add source**, enter **`james10424/idrive7-custom`**, and install the apps you want.
 3. Open the app from the apps menu on the center screen to pick a theme or layout.
 4. For the Miku layout, bake your own Live2D model and copy it to the car: see [Your own Live2D character](#your-own-live2d-character).
@@ -29,7 +29,16 @@ The Store builds each app on the car from this repo. No BMW code is in it. Both 
 
 ## Both apps at once
 
-By default cluster-render gives the HUD and the cluster panel the same scene id (0x01000400), so only one can show at a time: whichever asks first keeps it, and the other waits ("waiting: the cluster layout has the scene the HUD shares" on Custom HUD's page). One setting gives the HUD its own scene id so Custom HUD and Custom Cluster show together (verified on a 2020 M340i, Nov 8 2026). It needs cluster-render 0.4.5 or later.
+From cluster-render 0.5.1 on, the cluster panel has a scene id of its own (0x010004f8) and the HUD keeps 0x01000400, so Custom HUD and Custom Cluster show together with nothing to set. Before 0.5.1 they shared 0x01000400 and only one showed at a time: whichever asked first kept it, and the other waited ("waiting: the cluster layout has the scene the HUD shares" on Custom HUD's page). That message can still come back if the KOMBI refuses the panel's own id: cluster-render then falls back to the shared one for the rest of the boot and logs it.
+
+The two sources differ in what the HUD gives way to:
+
+- `robertnisipeanu/idrive-apps`: BMW's HUD lists (media source list, playlists, recent calls). Calls and apps' pop-ups only with `hud_yield_slots = 0x321,0x322` in the local conf.
+- `james10424/idrive-apps-lib`: those lists, calls and apps' pop-ups, and BMW's route guidance.
+
+Either way Custom HUD's own "Make room for BMW's guidance and cruise display" setting moves Daily out of the way of BMW's guidance and turns Miku off while BMW guides.
+
+If the panel keeps falling back, `james10424/idrive-apps-lib` (0.4.5 or later) can move the HUD instead. The HUD then takes turns with cluster-render's `map` target (the Waze map on the cluster), not with the panel:
 
 1. Over SSH as root, add the line to cluster-render's local conf (updates keep this file) and restart it:
 
@@ -40,12 +49,10 @@ By default cluster-render gives the HUD and the cluster panel the same scene id 
 2. Check it took:
 
    ```bash
-   ssh root@<car> 'grep "its own scene id" /var/opt/cluster-render/log/cluster-render.log | tail -1'
+   ssh root@<car> 'grep "target hud: .*0x10004f0" /var/opt/cluster-render/log/cluster-render.log | tail -1'
    ```
 
-   It should print `target hud: its own scene id 0x10004f0, ...`.
-
-The HUD then shares its scene id with cluster-render's `map` target instead (the Waze map on the cluster), so those two take turns. To undo, delete the line and restart cluster-render.
+To undo, delete the line and restart cluster-render.
 
 ## Your own Live2D character
 

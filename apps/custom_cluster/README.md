@@ -34,7 +34,7 @@ More themes are on the way.
 
 - **While navigating:** while BMW's route guidance is on, the cluster switches to this theme (Sport by default, with the map window open), and back to your theme when the route ends.
 - **Off (BMW's own cluster):** pick it as the theme and the app draws nothing, so BMW's cluster comes back.
-- **With Custom HUD:** by default the cluster theme and the HUD take turns, because cluster-render gives them one scene id: whichever shows first keeps it. Set `hud_scene_id = 0x010004f0` in cluster-render (0.4.5 or later) and both show together; see [Both apps at once](../../README.md#both-apps-at-once).
+- **With Custom HUD:** both show together on cluster-render 0.5.1 or later (the panel has its own scene id). On older versions, or if the KOMBI refuses the panel's id, they take turns; see [Both apps at once](../../README.md#both-apps-at-once).
 
 ## Settings
 
@@ -54,7 +54,7 @@ More themes are on the way.
 
 ## Requirements
 
-[cluster-render](https://github.com/robertnisipeanu/idrive-apps), installed from the `robertnisipeanu/idrive-apps` Store source (0.4.5 or later, from `james10424/idrive-apps-lib` for now, to show together with the other app).
+[cluster-render](https://github.com/robertnisipeanu/idrive-apps), installed from the `robertnisipeanu/idrive-apps` Store source or `james10424/idrive-apps-lib`, 0.5.1 or later to show together with the other app.
 
 ## On the car
 
