@@ -333,6 +333,7 @@ function helloMsg() {
       readsGood: shaderBudget.READS_GOOD,
       readsCrash: shaderBudget.READS_CRASH,
       tokensGood: shaderBudget.TOKENS_GOOD,
+      tokensCrash: shaderBudget.TOKENS_CRASH,
     },
     t: "hello",
     targets: TARGETS,
@@ -683,7 +684,7 @@ const renderServer = net.createServer((sock) => {
           newLayer.image = Buffer.alloc(msg.iw * msg.ih * 4);
         } else if (msg.kind === "effect") {
           if (!msg.fs) return refuse("layer", msg.ref, "effect without fs");
-          // the car's KOMBI restarted on a shader with 38 texture reads (Custom HUD 0.1.15); refuse that here first
+          // shaders that crashed the car's KOMBI (38 texture reads, Custom HUD 0.1.15; 8724 tokens, the M theme): refused here first
           const budget = shaderBudget.check(msg.fs);
           if (budget.level === "crash")
             return refuse("layer", msg.ref, "shader " + budget.text);

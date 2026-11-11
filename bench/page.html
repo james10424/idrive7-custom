@@ -561,9 +561,9 @@
 
   const esc = (text) => String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
   // the shader budget's marks, from the server's hello (tools/shader_budget.js)
-  let budgetLimits = { readsGood: 32, readsCrash: 38, tokensGood: 7835 };
+  let budgetLimits = { readsGood: 32, readsCrash: 38, tokensGood: 7835, tokensCrash: 8724 };
   /** @param {{ reads: number, tokens: number }} b */
-  const budgetLevel = (b) => (b.reads >= budgetLimits.readsCrash ? 'bad' : b.reads > budgetLimits.readsGood || b.tokens > budgetLimits.tokensGood ? 'warn' : 'ok');
+  const budgetLevel = (b) => (b.reads >= budgetLimits.readsCrash || b.tokens >= budgetLimits.tokensCrash ? 'bad' : b.reads > budgetLimits.readsGood || b.tokens > budgetLimits.tokensGood ? 'warn' : 'ok');
   /** The header's shaders pill: the effect layer with the most texture reads (then the most tokens). */
   function renderShaderPill() {
     const el = document.getElementById('shaders');
@@ -571,7 +571,7 @@
     if (!effects.length) { el.textContent = 'shaders: none'; el.className = 'pill'; return; }
     const worst = effects.reduce((a, b) => (b.budget.reads > a.budget.reads || (b.budget.reads === a.budget.reads && b.budget.tokens > a.budget.tokens) ? b : a));
     const big = effects.reduce((a, b) => (b.budget.tokens > a.budget.tokens ? b : a));
-    el.textContent = 'shaders: ' + worst.budget.reads + ' of ' + budgetLimits.readsCrash + ' reads (' + worst.app + '), ' + big.budget.tokens + ' of ' + budgetLimits.tokensGood + ' tokens (' + big.app + ')';
+    el.textContent = 'shaders: ' + worst.budget.reads + ' of ' + budgetLimits.readsCrash + ' reads (' + worst.app + '), ' + big.budget.tokens + ' of ' + budgetLimits.tokensCrash + ' tokens (' + big.app + ')';
     const levels = effects.map((layer) => budgetLevel(layer.budget));
     el.className = 'pill ' + (levels.indexOf('bad') >= 0 ? 'bad' : levels.indexOf('warn') >= 0 ? 'warn' : 'ok');
   }
