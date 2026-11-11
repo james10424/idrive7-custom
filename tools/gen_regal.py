@@ -107,7 +107,8 @@ wd.append(centred('lamp_brake', 180, 496, 112, 17, '{{lampBrake}}', 'r_tiny', 'l
 # the range where the left turn signal was: its label, then four VFD digits and the unit, bottoms aligned
 wd.append(centred('pod_rlabel', 180, 530, 80, 17, 'RANGE', 'r_tiny', 'vfd'))
 # up to three digits (999 past it, no leading zeros), right-aligned: the group (3 digits, the unit) centred in the pod
-wd.append(text('pod_range', 180 - 58, 545, 86, 36, '{{range3}}', 'r_seg_m', 'vfd', 'right'))
+# 96 px: three r_seg_m digits advance 30 each and the first overhangs 2 px left (86 cut the hundreds digit)
+wd.append(text('pod_range', 180 - 68, 545, 96, 36, '{{range3}}', 'r_seg_m', 'vfd', 'right'))
 wd.append(text('pod_runit', 180 + 32, 559, 30, 21, '{{u:distUc}}', 'r_lbl', 'vfd', 'left'))
 # under the right turn lamp, in the VFD's seven segments: the outside temperature
 wd.append(centred('pod_tlabel', W - 180, 600, 80, 17, 'OUTSIDE', 'r_tiny', 'vfd'))

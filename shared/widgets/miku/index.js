@@ -380,7 +380,7 @@ module.exports = {
     const drive = [
       step(Math.tanh(state.lean * 1.15)),
       step(state.spd),
-      step(state.point),
+      0, // standing she doesn't point toward the indicator; only the close-up turns her head (state.point)
       brightness,
     ];
     // the zoom to both layers, the head's turn to the close-up's; its w says the close-up's atlas is there (a close-up

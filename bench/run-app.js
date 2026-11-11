@@ -557,10 +557,17 @@ const CAR_SW = {
             : "D_PROGRAMM",
     }),
 };
+// sent when a switch changes (and once when the app starts), as the car's subscriptions report changes, not on a
+// timer: a timer here hid an app that forgot a signal held longer than a few seconds
+/** @type {Record<string, string>} */
+const carSwSent = {};
 setInterval(
   () =>
     Object.keys(carSw).forEach((k) => {
-      if (CAR_SW[k] && carSw[k]) CAR_SW[k](carSw[k]);
+      if (CAR_SW[k] && carSw[k] && carSwSent[k] !== carSw[k]) {
+        carSwSent[k] = carSw[k];
+        CAR_SW[k](carSw[k]);
+      }
     }),
   500,
 );

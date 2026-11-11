@@ -44,8 +44,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _turnSide() {
     if (this.config.indicators !== true) return 0;
     const now = Date.now();
-    let turn =
-      this.turn !== null && now - (this.turnAt || 0) < 5000 ? this.turn : null;
+    // the car's last report, kept until the next: the car sends the indicators when they change, so a signal on for more
+    // than a few seconds is still on (a 5 s timeout dropped it, and Miku's close-up turned back to straight ahead)
+    let turn = this.turn;
     if (turn === null && this.car.data().demo)
       turn =
         Math.floor(now / 6000) % 4 === 1
@@ -63,8 +64,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _turnLit(side) {
     const now = Date.now();
-    let turn =
-      this.turn !== null && now - (this.turnAt || 0) < 5000 ? this.turn : null;
+    // the car's last report, kept until the next: the car sends the indicators when they change, so a signal on for more
+    // than a few seconds is still on (a 5 s timeout dropped it, and Miku's close-up turned back to straight ahead)
+    let turn = this.turn;
     if (turn === null && this.car.data().demo)
       turn = Math.floor(now / 6000) % 4 === 1 ? "L" : "";
     return !!turn && turn.indexOf(side) >= 0 && Math.floor(now / 400) % 2 === 0;
