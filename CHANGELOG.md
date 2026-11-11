@@ -4,6 +4,8 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 11 2026
 
+- **Custom Cluster 0.1.51: Regal's redline mark follows the oil.** Below 60 °C oil it starts at 4500 rpm; between 60 and 80 °C it glides to the Redline setting, in 50 rpm steps; from 80 °C, and without an oil reading, it is the setting. The mark now runs to the end of the 70 label, and RPM X 100 sits left of the bar's middle, clear of it. The speed scale runs 5 to 85 with 45 in the middle, as the Turbo Regal's: the 45's mark points straight down at the needle's pivot (it leaned before, the middle being 42.5), the rest leaning out evenly either side.
+
 - **Custom Cluster 0.1.50: Regal's lower window as the Turbo Regal's.**
   - **Fuel gauge:** UNLEADED FUEL ONLY over it and PREMIUM FUEL under it. Its five marks are rays from a pivot just under PREMIUM FUEL, evenly spaced where they cross one horizontal line and wide enough that PREMIUM FUEL sits between the outer two; below the line every mark's lower part ends at the same height, the two between E, the pump and F thinner; E, the pump and F stand on that line where the end and middle marks' upper parts were, in one row with the two middle marks' upper parts, all the same height (21 px: E and F 20% smaller than the scale numbers, in their own font, r_ef).
   - **Rev bar:** 0 to 7000 rpm in 28 smaller segments, green with each 1000's segment orange. A red mark beside RPM X 100 runs from the Redline setting to the end; the lit segments no longer turn yellow.

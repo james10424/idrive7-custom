@@ -11,7 +11,8 @@ PIVOT = (912, 502)                 # the speed needle's pivot, hidden under the 
 VIRT = (584, 28.7)                 # the numbers' places: rays of a far pivot this far below the number row, half sweep deg
                                    # (evenly spread, the ends a little wider apart, as the photo's 5 and 85)
 TICK_Y = 295
-SPD_MAX, SPD_MID = 85, 42.5        # mph: 0..85, linear (the middle at half), as the Turbo 3.8's
+SPD_MIN, SPD_MAX, SPD_MID = 5, 85, 45   # mph: 5..85, linear, 45 in the middle: its mark points straight down at the pivot,
+                                        # as the Turbo 3.8's
 SPD_AMBER = 55                     # the amber number and mark, right of the middle as on the Turbo 3.8
 NUM_Y, KMH_Y = 252, 212            # middle of the number row and of the km/h row
 FUEL = (933, 528, 110, 20)         # fuel: the pivot just under PREMIUM FUEL (centred in the lower window), the end marks
@@ -34,7 +35,7 @@ def ray_x(deg, y=None):
 
 
 def mph_deg(mph):
-    f = 0.5 * mph / SPD_MID if mph <= SPD_MID else 0.5 + 0.5 * (mph - SPD_MID) / (SPD_MAX - SPD_MID)
+    f = 0.5 * (mph - SPD_MIN) / (SPD_MID - SPD_MIN) if mph <= SPD_MID else 0.5 + 0.5 * (mph - SPD_MID) / (SPD_MAX - SPD_MID)
     return -VIRT[1] + 2 * VIRT[1] * f
 
 
@@ -54,9 +55,9 @@ wd = [{
     'podL': [90, 110, 180, 553], 'podWin': [104, 124, 152, 336],
     'ctr': [397, 110, 1072, 429], 'win1': [413, 122, 1040, 270], 'win2': [413, 400, 1040, 128],
     'vfdL': [0, 0, 0, 0], 'vfdR': [0, 0, 0, 0],   # no VFD boxes: the speed sits over the scale, the clock and range in the pods
-    'spd': [PIVOT[0], PIVOT[1], NUM_Y, TICK_Y], 'spdVirt': list(VIRT), 'spdMax': SPD_MAX, 'spdMid': SPD_MID, 'spdAmber': SPD_AMBER, 'spdStep': 5, 'spdRest': 12, 'fuelG': list(FUEL), 'podG': list(POD),
+    'spd': [PIVOT[0], PIVOT[1], NUM_Y, TICK_Y], 'spdVirt': list(VIRT), 'spdMax': SPD_MAX, 'spdMin': SPD_MIN, 'spdMid': SPD_MID, 'spdAmber': SPD_AMBER, 'spdStep': 5, 'spdRest': 12, 'fuelG': list(FUEL), 'podG': list(POD),
     'podSignals': [{'signal': 'volt12', 'range': [8, 16]}, {'signal': 'oil', 'range': [50, 150], 'mid': 110}],
-    'fuelLine': FUEL_LINE, 'fuelRowH': 21, 'led': list(LED), 'ledN': 28, 'rpmMax': 7000,
+    'fuelLine': FUEL_LINE, 'fuelRowH': 21, 'coldRedline': [4500, 60, 80], 'led': list(LED), 'ledN': 28, 'rpmMax': 7000,
     'led2': list(LED2), 'led2N': 15, 'led2Signal': 'boost', 'led2Range': [0, 1.5], 'led2RangeUs': [0, round(20 / 14.5038, 4)],
     'gearBox': [GEAR_X0 - 10, GEAR_Y - 14, 20, 28], 'gearPitch': GEAR_P,
     'lampB': [120, 478, 120, 36], 'arrow': [0, 0, 0], 'batIcon': [132, 328],   # arrow size 0: no turn arrows
@@ -105,7 +106,8 @@ wd.append({'id': 'fuel_icon', 'type': 'icon', 'icon': 'fuel', 'z': 5, 'x': round
            'y': round(FUEL_LINE - GAP - 0.94 * ICON_H), 'w': round(ICON_H * 26 / 30), 'h': ICON_H, 'color': 'fg'})
 wd.append(centred('fuel_top', FUEL[0], 414, 200, 17, 'UNLEADED FUEL ONLY', 'r_tiny'))
 wd.append(centred('fuel_bottom', FUEL[0], 516, 130, 17, 'PREMIUM FUEL', 'r_tiny'))
-wd.append(centred('rpm_label', LED[0] + LED[2] / 2, 418, 104, 21, 'RPM X 100', 'r_lbl'))
+# left of the bar's middle: clear of the red mark, which starts as low as 4500 rpm (64% along) on a cold engine
+wd.append(centred('rpm_label', LED[0] + LED[2] * 0.4, 418, 104, 21, 'RPM X 100', 'r_lbl'))
 wd.append(centred('boost_label', LED2[0] + LED2[2] / 2, 418, 200, 21, 'TURBO BOOST - {{u:boost}}', 'r_lbl'))
 # its scale: 0 .. 1.5 bar in thirds, or with US units 0 .. 20 psi in quarters (the Turbo Regal's 0 5 10 15); the ends are
 # shared, the slots between belong to one unit and are empty in the other

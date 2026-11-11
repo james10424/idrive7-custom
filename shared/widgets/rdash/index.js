@@ -45,7 +45,7 @@ const NEEDLE = packCfg(
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
-const DOCS = `effect layer; the whole Regal theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMid" (55, the middle; half of spdMax makes the scale linear), "spdStep" (5, between marks; the first mark), "spdAmber" (55, the amber mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" [pivot x, y, the end marks' crossing of fuelLine (+-x), the lower band's height], "podG" [pivot x, y, tick r0, r1], "fuelLine" (y: where the fuel marks split, E, the pump and F sitting on it) and "fuelRowH" (the row above it: E, the pump, F and the marks' upper parts this tall, 21), "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "led" with "ledN" and "rpmMax" (green segments, every fourth orange; a red mark above from the Redline setting to the end), "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]), or "led2RangeUs" with US units, in "led2N" (15) segments), "gearBox" + "gearPitch" (the lit box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "arrow" [x, y, size], "batIcon" [x, y]`;
+const DOCS = `effect layer; the whole Regal theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMin" (0, the mph at the scale's start), "spdMid" (55, the middle; halfway between spdMin and spdMax makes the scale linear), "spdStep" (5, between marks; the first mark), "spdAmber" (55, the amber mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" [pivot x, y, the end marks' crossing of fuelLine (+-x), the lower band's height], "podG" [pivot x, y, tick r0, r1], "fuelLine" (y: where the fuel marks split, E, the pump and F sitting on it) and "fuelRowH" (the row above it: E, the pump, F and the marks' upper parts this tall, 21), "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "led" with "ledN" and "rpmMax" (green segments, every fourth orange; a red mark above from the Redline setting to the end, from "coldRedline" [rpm, cold C, warm C] while the oil is cold, gliding to the setting as it warms), "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]), or "led2RangeUs" with US units, in "led2N" (15) segments), "gearBox" + "gearPitch" (the lit box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "arrow" [x, y, size], "batIcon" [x, y]`;
 
 module.exports = {
   type: "rdash",
@@ -99,7 +99,11 @@ module.exports = {
       spdBox[2] - widget.y,
       spdBox[3] - widget.y,
     ]);
-    packer.uniform("u_spdVirt", [spdVirt[0], (spdVirt[1] * Math.PI) / 180]);
+    packer.uniform("u_spdVirt", [
+      spdVirt[0],
+      (spdVirt[1] * Math.PI) / 180,
+      widget.spdMin || 0,
+    ]);
     packer.uniform("u_spdK", [
       widget.spdMid || 55,
       widget.spdMax || 85,
@@ -174,8 +178,23 @@ module.exports = {
     const ledLevel = (frac, n) =>
       Math.round(Math.min(1, Math.max(0, frac)) * n * 16) / (n * 16);
     const led = isNum(rpm) ? ledLevel(Math.max(0, rpm) / max, ledN) : 0;
-    // the red mark above the labels: from the Redline setting to the scale's end
-    const redAt = Math.min(1, Math.max(0, hud.setting("redline") / max));
+    // the red mark above the labels: from the Redline setting to the scale's end; with "coldRedline" [rpm, cold C,
+    // warm C] it starts at that rpm while the oil is cold and glides to the setting as the oil warms (in 50 rpm steps,
+    // so it moves only as the oil does); without an oil reading, the setting
+    const redline = hud.setting("redline"),
+      coldRedline = widget.coldRedline,
+      oil = hud._raw("oil");
+    let redRpm = redline;
+    if (coldRedline && isNum(oil)) {
+      const warm = Math.min(
+        1,
+        Math.max(0, (oil - coldRedline[1]) / (coldRedline[2] - coldRedline[1])),
+      );
+      redRpm =
+        Math.round((coldRedline[0] + (redline - coldRedline[0]) * warm) / 50) *
+        50;
+    }
+    const redAt = Math.min(1, Math.max(0, redRpm / max));
     // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
     const led2N = widget.led2N || 15,
       // "led2RangeUs": the range with US units (Regal's 0 .. 20 psi, in bar)
@@ -193,17 +212,20 @@ module.exports = {
         hud._turnLit("R") ? 1 : 0,
         hud._cruiseLit() ? 1 : 0,
       ];
-    // speed on the 0..spdMax mph scale with spdMid at its middle, each half linear
-    const mid = widget.spdMid || 55,
+    // speed on the spdMin..spdMax mph scale with spdMid at its middle, each half linear
+    const lo = widget.spdMin || 0,
+      mid = widget.spdMid || 55,
       top = widget.spdMax || 85,
       mph = isNum(speed) ? Math.max(0, speed * 0.621371) : 0;
     // below the first mark ("spdStep", 5 mph) the needle drops to its rest under the row ("spdRest" deg past the 0, 12)
     const spdStep = widget.spdStep || 5,
       half = (widget.spdVirt || [300, 45])[1],
       rest = -(isNum(widget.spdRest) ? widget.spdRest : 12) / (2 * half);
-    const stepFrac = (0.5 * spdStep) / mid;
+    const stepFrac = (0.5 * (spdStep - lo)) / (mid - lo);
     let needleFrac =
-      mph <= mid ? (0.5 * mph) / mid : 0.5 + (0.5 * (mph - mid)) / (top - mid);
+      mph <= mid
+        ? (0.5 * (mph - lo)) / (mid - lo)
+        : 0.5 + (0.5 * (mph - mid)) / (top - mid);
     if (mph < spdStep) needleFrac = rest + ((stepFrac - rest) * mph) / spdStep;
     // the needles ease toward their readings (as Miku's lean: 1 - exp(-dt / tau), the same at any tick rate), so
     // they sweep instead of jumping, down to their rest when a reading goes (the car off) and up from it at the start

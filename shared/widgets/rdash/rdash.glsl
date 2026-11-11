@@ -18,7 +18,7 @@ uniform vec4 u_win2;      // its lower window (fuel, revs)
 uniform vec4 u_vfdL;      // the VFD windows
 uniform vec4 u_vfdR;
 uniform vec4 u_spd;       // speed needle: pivot x, y, the number row's middle y, the mark row's y
-uniform vec2 u_spdVirt;   // where the numbers sit: a far pivot's height below the number row, its half sweep (rad)
+uniform vec3 u_spdVirt;   // where the numbers sit: a far pivot's height below the number row, its half sweep (rad); the mph at the scale's start
 uniform float u_speedV;   // 0..1 along the scale, below 0 under the first mark (the rest position at 0)
 uniform vec4 u_spdK;      // the speed scale: mph at the middle, mph at the end, mph between marks, the amber mark's mph
 uniform vec4 u_fuelG;     // fuel: pivot x, y, where the end marks cross the line (+-x from the pivot), the lower band's height
@@ -159,14 +159,16 @@ void main() {
     vec2 sp = u_spd.xy;
     float numY = u_spd.z, tickY = u_spd.w, Hv = u_spdVirt.x, S = u_spdVirt.y;
     if (rbox(p, u_win1, 8.0) < 0.0) {
-        // the scale runs 0..u_spdK.y mph, u_spdK.x at the middle (each half linear); a mark every u_spdK.z mph, the long ones
-        // on the labelled speeds (5, 15, 25 ...: odd multiples of the step)
+        // the scale runs u_spdVirt.z..u_spdK.y mph, u_spdK.x at the middle (each half linear: 5..85 with 45 there, so the
+        // 45's mark points straight at the pivot); a mark every u_spdK.z mph, the long ones on the labelled speeds (5, 15,
+        // 25 ...: odd multiples of the step)
         float xr = sp.x + (p.x - sp.x) * (sp.y - numY) / max(sp.y - p.y, 1.0);   // where this pixel's ray meets the number row
         float f = (atan((xr - sp.x) / Hv) + S) / (2.0 * S);
-        float mph = f <= 0.5 ? 2.0 * f * u_spdK.x : u_spdK.x + (f - 0.5) * 2.0 * (u_spdK.y - u_spdK.x);
+        float lo = u_spdVirt.z;
+        float mph = f <= 0.5 ? lo + 2.0 * f * (u_spdK.x - lo) : u_spdK.x + (f - 0.5) * 2.0 * (u_spdK.y - u_spdK.x);
         float m = floor(mph / u_spdK.z + 0.5) * u_spdK.z;
         if (m >= u_spdK.z && m <= u_spdK.y) {
-            float mf = m <= u_spdK.x ? 0.5 * m / u_spdK.x : 0.5 + 0.5 * (m - u_spdK.x) / (u_spdK.y - u_spdK.x);
+            float mf = m <= u_spdK.x ? 0.5 * (m - lo) / (u_spdK.x - lo) : 0.5 + 0.5 * (m - u_spdK.x) / (u_spdK.y - u_spdK.x);
             float xm = sp.x + Hv * tan(-S + 2.0 * S * mf), major = mod(m / u_spdK.z, 2.0) > 0.5 ? 1.0 : 0.0;
             float a = atan(xm - sp.x, sp.y - numY);
             float y0 = tickY - mix(8.0, 13.0, major), y1 = tickY + mix(3.0, 9.0, major);
@@ -219,10 +221,11 @@ void main() {
         vec3 col = mix(o ? LED_OOFF : LED_GOFF, o ? LED_O : LED_G, lit);
         c = mix(c, col, cov(d));
     }
-    // the redline: a red mark from it to the scale's end, level with "RPM X 100" above the labels
+    // the redline: a red mark from it to the end of the last label ("70", centred half a segment past the bar's end,
+    // 24 px wide: 18 px past the end), level with "RPM X 100" above the labels
     if (u_ledV.z < 0.999 && abs(p.y - u_led.y + 46.0) < 6.0)
         c = mix(c, LED_RED, cov(rbox(p, vec4(u_led.x + u_led.z * u_ledV.z, u_led.y - 50.0,
-            u_led.z * (1.0 - u_ledV.z), 8.0), 1.0)));
+            u_led.z * (1.0 - u_ledV.z) + 0.5 * u_led.z / u_ledV.x + 12.0, 8.0), 1.0)));
 
     // boost LED bar: the same segments, yellow
     if (u_led2.z > 0.0 && p.x >= u_led2.x && p.x < u_led2.x + u_led2.z && p.y >= u_led2.y && p.y < u_led2.y + u_led2.w) {
