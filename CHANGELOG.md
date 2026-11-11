@@ -2,6 +2,12 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 11 2026
+
+- **Custom Cluster 0.1.49:** with the 12-hour clock, Sport's am/pm no longer runs into the time ("12:26am"); the range moves right to make room, into the space the consumption readout left.
+- **README:** new screenshots, Miku's close-up among them. The images of the old HUD layouts and themes are gone.
+- **Bench:** the page fits the window. The displays and log stay on the left, and the right column has tabs (Center screen, Vehicle signals, Layers), so the settings and sliders no longer scroll the displays away.
+
 ## Nov 10 2026
 
 - **Custom HUD 0.1.25:** the Miku parts setting is gone: all of her runs on the car, split over two shaders.
