@@ -32,6 +32,12 @@
  *               the Miku widget's "feet" point; anchorPx [x, y] px added to it on the HUD (right, down)
  *   arms        [{ parts: ["part id"] }, ...] (up to 2): her arms, each its own sprite that the HUD turns from the
  *               shoulder (to point toward the indicator); left out of the body frames
+ *   legs        [{ parts: ["part id"], drawables: ["drawable id"], knee: 0.5, ankle: 0.85 }, ...] (up to 2, left leg
+ *               first): her legs, each its own sprite, left out of the body frames, which the HUD swings and bends at
+ *               the knee to step. Two legs may name the same part: its drawables then go to the leg on their side of
+ *               her middle. knee and ankle are fractions down the leg (from the top of its mesh, under the skirt, to
+ *               the sole); below (a fraction too): any other drawable lying wholly below it (a shoe's decoration)
+ *               goes with the leg on its side
  *   hide        ["part id"]: left out entirely
  *   cut         { "drawable id": model y }: that drawable's triangles wholly below the y left out (in the idle pose)
  *   heightPx    her height on the HUD in px (200), or pxPerUnit: HUD px per model unit
@@ -61,6 +67,7 @@ const cubismCore = window.Live2DCubismCore;
  * @property {[number, number]} [anchor]
  * @property {[number, number]} [anchorPx]
  * @property {{ parts?: string[] }[]} [arms]
+ * @property {{ parts?: string[], drawables?: string[], knee?: number, ankle?: number, below?: number }[]} [legs]
  * @property {string[]} [hide]
  * @property {Record<string, number>} [cut] drawable id to model y
  * @property {number} [heightPx]
@@ -108,6 +115,8 @@ const cubismCore = window.Live2DCubismCore;
  * @property {number[][]} [dozeShift]
  * @property {{ rect: number[], at: number[], rootY: number, length: number }} [tails]
  * @property {{ rect: number[], at: number[], shoulder: number[], side: number, left: number[], right: number[] }[]} [arms]
+ * @property {{ rect: number[], at: number[], hip: number[], knee: number[], ankle: number[], side: number }[]} [legs]
+ * @property {number[]} [hipShift] where the hips go at each lean angle (x px against idle)
  */
 
 /* What a config leaves out: Live2D's standard parameter ids (most models use them; a missing one is skipped with a
@@ -472,6 +481,88 @@ async function expressionParams(names) {
   }
   return out;
 }
+/**
+ * Each leg's drawables (config "legs"): its parts' and its own drawables. Legs that name the same part split it: a
+ * drawable goes to the leg on its side of her middle (centreX, model units; leg 0 the left one), by the middle of its
+ * vertices as posed now (call it at idle).
+ * @param {Loaded} loaded
+ * @param {NonNullable<BakeConfig["legs"]>} legs
+ * @param {number} centreX
+ * @returns {DrawablePick[]}
+ */
+function legPicks(loaded, legs, centreX) {
+  const drawables = loaded.model.drawables;
+  const sets = legs.map((leg) => {
+    const byPart = inParts(loaded, leg.parts || []),
+      /** @type {Set<number>} */
+      ids = new Set();
+    (leg.drawables || []).forEach((id) => {
+      const i = drawables.ids.indexOf(id);
+      if (i >= 0) ids.add(i);
+      else log('  (no drawable "' + id + '")');
+    });
+    return { byPart, ids };
+  });
+  /** @type {Set<number>[]} */
+  const picked = legs.map(() => new Set());
+  /** @type {(i: number) => { midX: number, top: number, bottom: number }} */
+  const extent = (i) => {
+    const v = drawables.vertexPositions[i];
+    let sumX = 0,
+      top = -Infinity,
+      bottom = Infinity;
+    for (let k = 0; k < v.length; k += 2) {
+      sumX += v[k];
+      top = Math.max(top, v[k + 1]);
+      bottom = Math.min(bottom, v[k + 1]);
+    }
+    return { midX: sumX / (v.length / 2), top, bottom };
+  };
+  /** @type {(i: number, owners: number[]) => void} */
+  const give = (i, owners) => {
+    // leg 0 is the left one: shared drawables right of her middle go to the last owner, the rest to the first
+    picked[
+      owners.length === 1 || extent(i).midX <= centreX
+        ? owners[0]
+        : owners[owners.length - 1]
+    ].add(i);
+  };
+  for (let i = 0; i < drawables.count; i++) {
+    const owners = [];
+    sets.forEach((set, j) => {
+      if (set.ids.has(i) || set.byPart(i)) owners.push(j);
+    });
+    if (owners.length) give(i, owners);
+  }
+  // "below": the drawables wholly under that fraction of a leg (a shoe's decoration) go with the leg on their side
+  const lines = legs.map((leg, j) => {
+    if (!isFinite(leg.below)) return null;
+    let top = -Infinity,
+      bottom = Infinity;
+    picked[j].forEach((i) => {
+      const e = extent(i);
+      top = Math.max(top, e.top);
+      bottom = Math.min(bottom, e.bottom);
+    });
+    return isFinite(top)
+      ? top - /** @type {number} */ (leg.below) * (top - bottom)
+      : null;
+  });
+  for (let i = 0; i < drawables.count; i++) {
+    if (picked.some((set) => set.has(i))) continue;
+    if (!cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i])) continue;
+    const e = extent(i),
+      owners = [];
+    lines.forEach((line, j) => {
+      if (line !== null && e.top < line) owners.push(j);
+    });
+    if (owners.length) give(i, owners);
+  }
+  picked.forEach((set, j) =>
+    log("  leg " + j + ": " + set.size + " drawables"),
+  );
+  return picked.map((set) => (i) => set.has(i));
+}
 /* Is drawable i inside one of these parts (by id), at any depth? */
 /**
  * @param {Loaded} loaded
@@ -762,6 +853,11 @@ async function bake(loaded, cfg) {
   // so a model in any units bakes without them
   const figH = box[3] - box[1];
   const centreX = (box[0] + box[2]) / 2;
+  // legs: each its own sprite (the HUD swings and bends them to step); left out of every body frame. Which drawables
+  // are whose is decided here, at idle: legs that share a part split it by each drawable's middle, left or right of hers
+  const legsIn = legPicks(loaded, (cfg.legs || []).slice(0, 2), centreX);
+  /** @type {DrawablePick} */
+  const isLeg = (i) => legsIn.some((inLeg) => inLeg(i));
   const ppu = cfg.pxPerUnit || (cfg.heightPx || 200) / figH;
   const headY = isFinite(cfg.headY) ? cfg.headY : box[3] - 0.15 * figH;
   const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - 0.4 * figH;
@@ -863,7 +959,8 @@ async function bake(loaded, cfg) {
   };
   /** @type {DrawOpts} */
   const body = {
-    skip: (i) => hidden(i) || (tails ? tails(i) : false) || isArm(i),
+    skip: (i) =>
+      hidden(i) || (tails ? tails(i) : false) || isArm(i) || isLeg(i),
   };
   const names = ["idle", "half", "shut", "talk"],
     /** @type {Record<string, HTMLCanvasElement>} */
@@ -1038,6 +1135,81 @@ async function bake(loaded, cfg) {
     if (rect && armPose[j].rest)
       arms.push({ j, cv: canvas, bb: rect, pose: armPose[j] });
   });
+  // each leg at rest: its sprite, and the hip (the top of its mesh), knee and ankle in frame px, each at the middle
+  // of the leg's drawn width on that row
+  /** @type {{ j: number, cv: HTMLCanvasElement, bb: Rect, hip: number[], knee: number[], ankle: number[] }[]} */
+  const legs = [];
+  legsIn.forEach((inLeg, j) => {
+    const drawables = loaded.model.drawables,
+      leg = /** @type {NonNullable<BakeConfig["legs"]>} */ (cfg.legs)[j];
+    let top = -Infinity,
+      bottom = Infinity;
+    for (let i = 0; i < drawables.count; i++) {
+      if (
+        !inLeg(i) ||
+        hidden(i) ||
+        !cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i])
+      )
+        continue;
+      const v = drawables.vertexPositions[i];
+      for (let k = 1; k < v.length; k += 2) {
+        top = Math.max(top, v[k]);
+        bottom = Math.min(bottom, v[k]);
+      }
+    }
+    if (!isFinite(top)) return;
+    const canvas = render({ only: (i) => inLeg(i) && !hidden(i) }),
+      rect = alphaBox(canvas);
+    if (!rect) return;
+    const pixels = canvas
+      .getContext("2d")
+      .getImageData(0, 0, frameW, frameH).data;
+    /**
+     * The middle of the leg's drawn width on row y.
+     * @param {number} y
+     * @returns {number}
+     */
+    const mid = (y) => {
+      const row = Math.max(0, Math.min(frameH - 1, Math.round(y)));
+      let a = -1,
+        b = -1;
+      for (let x = 0; x < frameW; x++)
+        if (pixels[(row * frameW + x) * 4 + 3] > 128) {
+          if (a < 0) a = x;
+          b = x;
+        }
+      return a < 0 ? frameW / 2 : (a + b) / 2;
+    };
+    /** @type {(frac: number) => number} */
+    const yAt = (frac) => toFrame(0, top - frac * (top - bottom))[1];
+    const hipY = Math.max(yAt(0), rect[1] + 2),
+      kneeY = yAt(isFinite(leg.knee) ? leg.knee : 0.5),
+      ankleY = yAt(isFinite(leg.ankle) ? leg.ankle : 0.85);
+    legs.push({
+      j,
+      cv: canvas,
+      bb: rect,
+      hip: [mid(hipY + 3), hipY],
+      knee: [mid(kneeY), kneeY],
+      ankle: [mid(ankleY), ankleY],
+    });
+    log(
+      "  leg " +
+        j +
+        ": hip " +
+        mid(hipY + 3).toFixed(1) +
+        "," +
+        hipY.toFixed(1) +
+        " knee " +
+        mid(kneeY).toFixed(1) +
+        "," +
+        kneeY.toFixed(1) +
+        " ankle " +
+        mid(ankleY).toFixed(1) +
+        "," +
+        ankleY.toFixed(1),
+    );
+  });
   /** @type {{ cv: HTMLCanvasElement, bb: Rect } | null} */
   let tailsSprite = null;
   if (tails) {
@@ -1113,6 +1285,9 @@ async function bake(loaded, cfg) {
     items.push({ n: "tails", cv: tailsSprite.cv, bb: tailsSprite.bb });
   arms.forEach((arm) =>
     items.push({ n: "arm" + arm.j, cv: arm.cv, bb: arm.bb }),
+  );
+  legs.forEach((leg) =>
+    items.push({ n: "leg" + leg.j, cv: leg.cv, bb: leg.bb }),
   );
   // a skyline: tallest first, each where its top lands lowest (then leftmost)
   const MAX = 1024,
@@ -1331,6 +1506,47 @@ async function bake(loaded, cfg) {
         side: Math.sign(rest.P[0] - cx) || 1,
         left: off(arm.pose.left),
         right: off(arm.pose.right),
+      };
+    });
+  }
+  if (legs.length) {
+    // where her hips go at each lean angle: the middle of the body frame (legless) on the row the legs hang from
+    const hipRow = Math.round(legs[0].hip[1] + 4);
+    /**
+     * The alpha centroid x of a few rows at the hips.
+     * @param {HTMLCanvasElement} canvas
+     * @returns {number}
+     */
+    const rowMid = (canvas) => {
+      const pixels = canvas
+        .getContext("2d")
+        .getImageData(0, Math.max(0, hipRow - 2), frameW, 5).data;
+      let sumX = 0,
+        sumAlpha = 0;
+      for (let k = 0; k < pixels.length; k += 4) {
+        const alpha = pixels[k + 3];
+        sumX += ((k / 4) % frameW) * alpha;
+        sumAlpha += alpha;
+      }
+      return sumAlpha ? sumX / sumAlpha : frameW / 2;
+    };
+    const hip0 = rowMid(frames.idle);
+    info.hipShift = leanNames.map(
+      (name) => Math.round((rowMid(frames[name]) - hip0) * 10) / 10,
+    );
+    log("hip shift per lean angle (px): " + info.hipShift.join(", "));
+    const cx = toFrame(centreX, 0)[0],
+      /** @type {(x: number) => number} */
+      round1 = (x) => Math.round(x * 10) / 10;
+    info.legs = legs.map((leg) => {
+      const legItem = byN["leg" + leg.j];
+      return {
+        rect: [legItem.at[0], legItem.at[1], legItem.bb[2], legItem.bb[3]],
+        at: [legItem.bb[0], legItem.bb[1]],
+        hip: leg.hip.map(round1),
+        knee: leg.knee.map(round1),
+        ankle: leg.ankle.map(round1),
+        side: Math.sign(leg.hip[0] - cx) || (leg.j ? 1 : -1),
       };
     });
   }
