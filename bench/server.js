@@ -8,7 +8,7 @@
  * together, as on the car: each its own process and connection to the one fake cluster-render, and the page draws each
  * app's target (its app.json config.target) with its own center-screen panel; the vehicle signals go to all of them.
  * The service's limits are modelled (cluster-render 0.4.2 and later): 64 layers per connection, 96 across every
- * connection and 16 MiB of pixel memory with each image counted twice (always on; see bench/README.md). BENCH_LAYER_CAP
+ * connection and 32 MiB of pixel memory (our cluster-render fork's pixel_mib; upstream 16) with each image counted twice (always on; see bench/README.md). BENCH_LAYER_CAP
  * sets a lower cap to try a layout under, off by default.
  *
  * - Listens on a Unix socket speaking cluster-render protocol v1 (the framing
@@ -132,14 +132,15 @@ const PORT = Number(process.env.BENCH_PORT) || 8078;
 // 2026). 0 = off. Layers past the cap get state 'waiting' and are not drawn. POST /cap sets it live.
 let layerCap = Math.max(0, Number(process.env.BENCH_LAYER_CAP) || 0);
 // The service's own limits, always on (CompositorLimits, 0.4.2 and later): 64 layers a connection and 96 across every
-// connection ("too many layers"), and 16 MiB of
-// pixel memory for every image together, each image counted twice (Compositor::add_image), refused with the
-// service's own words "the service's pixel memory is full". BENCH_PIXEL_MIB overrides the 16 (0 = unlimited).
+// connection ("too many layers"), and 32 MiB of
+// pixel memory for every image together (the fork's pixel_mib default; upstream cluster-render keeps a fixed 16),
+// each image counted twice (Compositor::add_image), refused with the service's own words "the service's pixel memory
+// is full". BENCH_PIXEL_MIB overrides the 32 (16 = upstream's; 0 = unlimited).
 const TOTAL_LAYERS = 96,
   LAYERS_PER_CLIENT = 64;
 const PIXEL_BYTES =
   (process.env.BENCH_PIXEL_MIB === undefined
-    ? 16
+    ? 32
     : Math.max(0, Number(process.env.BENCH_PIXEL_MIB) || 0)) *
   1024 *
   1024;

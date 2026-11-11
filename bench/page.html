@@ -61,7 +61,7 @@
   <span id="appState" class="pill">app: ?</span>
   <span id="conn" class="pill">page: connecting</span>
   <span class="pill" id="target">target: ?</span>
-  <span class="pill" id="pixels" title="cluster-render's pixel memory: 16 MiB for every image of every app together, each image counted twice">pixels: ?</span>
+  <span class="pill" id="pixels" title="cluster-render's pixel memory: 32 MiB (the fork's pixel_mib) for every image of every app together, each image counted twice">pixels: ?</span>
   <span class="pill" id="shaders" title="The heaviest effect shader against what the cluster's GPU took on the car (tools/shader_budget.js): texture reads with every function inlined (32 held; 38 restarted the instrument cluster, and the bench refuses that) and its inlined size in tokens (Sport's held). Per layer in the layers table.">shaders: ?</span>
   <button id="restart">Restart apps</button>
   <label class="chk" title="A lower per-connection cap to try a layout under (cluster-render draws 64 a connection since 0.4.2, 8 before). Layers past the cap get state waiting and are not drawn; 0 = unlimited. Changing it restarts the app."><span>layer cap</span> <input type="number" id="cap" min="0" max="64" step="1" value="0"></label>
@@ -619,7 +619,7 @@
     } catch (err) { addLog({ level: 'error', text: 'bench page: event stream: ' + (err && err.message || err) }); dbgErr = String(err && err.message || err); dirty = true; }
     setConn('bench server gone', 'bad');
   })();
-  let dbgN = 0, dbgLast = '', dbgReads = 0, dbgBuf = 0, dbgErr = '', dbgPx = 0, pixelCap = 16 * 1048576;
+  let dbgN = 0, dbgLast = '', dbgReads = 0, dbgBuf = 0, dbgErr = '', dbgPx = 0, pixelCap = 32 * 1048576;
   function onMessage(msg) {
     dbgN++; dbgLast = msg.t + ':' + (msg.key || '') + ':' + (msg.w === undefined ? 'whole' : 'rect'); dirty = true;
     if (msg.t === 'log') addLog(msg);
