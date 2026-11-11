@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 10 2026
 
+- **Custom HUD 0.1.25:** the Miku parts setting is gone: all of her runs on the car, split over two shaders.
 - **Custom HUD 0.1.24:** Miku only. The Daily and Sport layouts are gone (a HUD set to either shows Miku), and with them the drive-mode switching, the theme and daytime theme, units, clock, redline, shift point, cold-engine rev guard and the four "show" switches. The settings left: Layout (Off, Miku, calibration grid), Make room for BMW's guidance and cruise display, Miku parts, Reset Miku and demo data. Miku still dims after sunset.
 - **Custom Cluster 0.1.48:** the M theme is gone again (a cluster set to M shows Regal), and so are Show boost, Leave room for the map, Shift point before redline and Cold-engine rev guard. Redline stays: Regal's rev lights turn yellow from it.
 - The engine reads a setting the app no longer offers from app.json config.fixedSettings, never from a value saved before.

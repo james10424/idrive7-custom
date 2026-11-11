@@ -16,7 +16,7 @@ Puts your own Live2D character on the windshield HUD, beside BMW's own speed and
   - **Reset Miku** on the app page puts her back to standing upright at once, as if nothing had happened (the close-up out, the lean and timers at rest), and switches itself off again.
   - **During route guidance** she steps aside, because BMW's turn map and street name fill her corner; she comes back when the route ends.
   - The frames go up once as two images (about 4.4 MiB standing and 7.6 MiB for the close-up), and the GPU animates them on cluster-render's own clock: two layers, standing and the close-up over her, and only a tiny update goes up while she moves.
-  - **The cluster's GPU limits her.** A bigger shader restarted the instrument cluster: legs that bend, together with the glances (gone since 0.1.21), were too much, though each ran alone. The close-up is a shader of its own, so neither shader grows. **Miku parts** on the app page (All of her, No close-up when stopped, Bare) leaves parts out, to test on the car without a new release. See [What the cluster can take](../../tools/live2d_bake/README.md#what-the-cluster-can-take) for what was tested and how to recover.
+  - **The cluster's GPU limits her.** A bigger shader restarted the instrument cluster: legs that bend, together with the glances (gone since 0.1.21), were too much, though each ran alone. The close-up is a shader of its own, so neither shader grows. Split over two shaders, all of her runs on the car. See [What the cluster can take](../../tools/live2d_bake/README.md#what-the-cluster-can-take) for what was tested and how to recover.
   - Redline is gone: if you had it picked anywhere, it switches to Miku (so does Perch, its working name).
 
 ## Off
@@ -26,7 +26,7 @@ Puts your own Live2D character on the windshield HUD, beside BMW's own speed and
 
 ## Settings
 
-Layout (Off, Miku or the calibration grid), Make room for BMW's guidance and cruise display, Miku parts, Reset Miku, and demo data. Changes show on the HUD right away, and the HUD keeps running after you leave the page.
+Layout (Off, Miku or the calibration grid), Make room for BMW's guidance and cruise display, Reset Miku, and demo data. Changes show on the HUD right away, and the HUD keeps running after you leave the page.
 
 The page's first row says what the HUD is doing and why anything is not drawn (for example "waiting: another app has this display").
 

@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.24",
+  "version": "0.1.25",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -119,26 +119,6 @@
       "label": "Make room for BMW's guidance and cruise display",
       "type": "bool",
       "default": true
-    },
-    {
-      "key": "mikuParts",
-      "label": "Miku parts (to find what the cluster can't take)",
-      "type": "choice",
-      "default": "full",
-      "options": [
-        [
-          "full",
-          "All of her"
-        ],
-        [
-          "noClose",
-          "No close-up when stopped"
-        ],
-        [
-          "bare",
-          "Bare: only the lean (no blink, arms, tails, close-up)"
-        ]
-      ]
     },
     {
       "key": "mikuReset",
@@ -281,7 +261,8 @@
       "showClock": true,
       "showOil": true,
       "showCoolant": true,
-      "showBoost": true
+      "showBoost": true,
+      "mikuParts": "full"
     }
   }
 }

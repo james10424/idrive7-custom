@@ -149,7 +149,7 @@ So treat today's shader as about the ceiling. Anything new needs code taken out 
 
 We still refuse an atlas over 1024 px a side, in the bake and in the app. It cost nothing to keep, though the 1024x1128 crash was most likely the shader too.
 
-**If the cluster restarts:** park, and on the car's center screen set Custom HUD's layout to Off, or "Miku parts" to Bare. Then, as root on the car:
+**If the cluster restarts:** park, and on the car's center screen set Custom HUD's layout to Off. Then, as root on the car:
 
 ```bash
 cat /var/opt/cluster-render/state/guard.txt
