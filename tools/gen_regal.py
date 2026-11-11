@@ -57,6 +57,9 @@ wd = [{
     'vfdL': [0, 0, 0, 0], 'vfdR': [0, 0, 0, 0],   # no VFD boxes: the speed sits over the scale, the clock and range in the pods
     'spd': [PIVOT[0], PIVOT[1], NUM_Y, TICK_Y], 'spdVirt': list(VIRT), 'spdMax': SPD_MAX, 'spdMin': SPD_MIN, 'spdMid': SPD_MID, 'spdAmber': SPD_AMBER, 'spdStep': 5, 'spdRest': 12, 'fuelG': list(FUEL), 'podG': list(POD),
     'podSignals': [{'signal': 'volt12', 'range': [8, 16]}, {'signal': 'oil', 'range': [50, 150], 'mid': 110}],
+    # coloured zones: the battery red under 11.5 V and over 15.5 V, green 12.5-15 V (running, BMW's smart charging
+    # included); the oil blue while cold (under 60 C, as the cold redline), red over 130 C
+    'podZones': [{'low': 11.5, 'ok': [12.5, 15], 'high': 15.5}, {'low': 60, 'high': 130}],
     'fuelLine': FUEL_LINE, 'fuelRowH': 21, 'coldRedline': [4500, 60, 80], 'led': list(LED), 'ledN': 28, 'rpmMax': 7000,
     'led2': list(LED2), 'led2N': 15, 'led2Signal': 'boost', 'led2Range': [0, 1.5], 'led2RangeUs': [0, round(20 / 14.5038, 4)],
     'gearBox': [GEAR_X0 - 10, GEAR_Y - 14, 20, 28], 'gearPitch': GEAR_P,

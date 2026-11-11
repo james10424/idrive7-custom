@@ -4,6 +4,8 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 11 2026
 
+- **Custom Cluster 0.1.52: Regal's pods have coloured zones,** bands on each scale's outer edge as deep as its short marks, under them, in muted colours that read as paint on the dial rather than backlit (a little see-through, a slightly darker rim). Battery: red up to 11.5 V, green 12.5 to 15 V (running, BMW's smart charging included), red from 15.5 V. Oil: blue under 60 °C (cold, as the cold redline), red over 130 °C, nothing between.
+
 - **Custom Cluster 0.1.51: Regal's redline mark follows the oil.** Below 60 °C oil it starts at 4500 rpm; between 60 and 80 °C it glides to the Redline setting, in 50 rpm steps; from 80 °C, and without an oil reading, it is the setting. The mark now runs to the end of the 70 label, and RPM X 100 sits left of the bar's middle, clear of it. The speed scale runs 5 to 85 with 45 in the middle, as the Turbo Regal's: the 45's mark points straight down at the needle's pivot (it leaned before, the middle being 42.5), the rest leaning out evenly either side.
 
 - **Custom Cluster 0.1.50: Regal's lower window as the Turbo Regal's.**

@@ -25,6 +25,8 @@ uniform vec4 u_fuelG;     // fuel: pivot x, y, where the end marks cross the lin
 uniform vec3 u_fuelV;     // 0..1, the line the marks split at (y): E, the pump and F sit on it, the row's height above it
 uniform vec4 u_podG;      // the left pod's needle: pivot x, y, tick inner r, outer r (right: mirrored)
 uniform vec2 u_podV;      // left (battery), right (coolant) 0..1, bottom to top
+uniform vec4 u_podZL;     // the left pod's zones as scale fractions: low up to x, ok y..z, high from w (red, green, red)
+uniform vec4 u_podZR;     // the right pod's: low (blue) up to x, ok y..z (green), high (red) from w
 uniform vec4 u_led;       // LED rev bar x, y, w, h
 uniform vec3 u_ledV;      // segments, lit 0..1 (a segment partway lit fades in), the redline 0..1 (a red mark above the labels from there)
 uniform vec4 u_led2;      // the boost LED bar x, y, w, h (w 0 = none), all yellow
@@ -48,6 +50,10 @@ const vec3 LED_O = vec3(1.0, 0.42, 0.08);
 const vec3 LED_GOFF = vec3(0.07, 0.11, 0.02);
 const vec3 LED_OOFF = vec3(0.14, 0.05, 0.01);
 const vec3 LED_RED = vec3(0.92, 0.08, 0.06);
+// the pods' zones as paint printed on the dial, not lit: muted, a little see-through, a darker rim
+const vec3 ZONE_RED = vec3(0.6, 0.15, 0.12);
+const vec3 ZONE_GREEN = vec3(0.22, 0.47, 0.25);
+const vec3 ZONE_BLUE = vec3(0.2, 0.34, 0.62);
 const vec3 LED_YOFF = vec3(0.15, 0.12, 0.02);
 const vec3 GEAR_BOX = vec3(0.78, 0.13, 0.04);
 const vec3 LAMP_R = vec3(1.0, 0.27, 0.08);
@@ -86,14 +92,27 @@ float mark(vec2 p, vec2 pv, float a, float r0, float r1, float hw) {
 }
 // a side pod's gauge (sgn -1: the left pod, pointing left; +1 the right): 5 marks over +-50 deg, the long ones at the ends
 // and the middle, and its needle
-vec3 podGauge(vec2 p, vec2 pv, float r0, float r1, float sgn, float v, vec4 win, vec3 c) {
+vec3 podGauge(vec2 p, vec2 pv, float r0, float r1, float sgn, float v, vec4 z, vec3 c) {
+    // the zones: bands on the scale's outer edge as deep as the short marks, under them; low red on the left pod
+    // (the battery) and blue on the right (oil), ok green, high red
+    vec2 q = p - pv;
+    float r = length(q), bw = (r1 - r0) * 0.65;
+    if (r > r1 - bw - 1.0 && r < r1 + 1.0) {
+        float f = 0.5 + (1.5708 - atan(q.x, -q.y) * sgn) / 1.745, k = 1.745 * r;   // the needle's fraction there
+        float bd = max(r1 - bw - r, r - r1), band = 0.85 * cov(bd);
+        // the paint's rim: about 1.5 px darker along the band's edges (radial and at the ends)
+        float lo = max(-f, f - z.x) * k, ok = max(z.y - f, f - z.z) * k, hi = max(z.w - f, f - 1.0) * k;
+        c = mix(c, (sgn < 0.0 ? ZONE_RED : ZONE_BLUE) * mix(1.0, 0.78, smoothstep(-2.5, -1.0, max(bd, lo))), band * cov(lo));
+        c = mix(c, ZONE_GREEN * mix(1.0, 0.78, smoothstep(-2.5, -1.0, max(bd, ok))), band * cov(ok));
+        c = mix(c, ZONE_RED * mix(1.0, 0.78, smoothstep(-2.5, -1.0, max(bd, hi))), band * cov(hi));
+    }
     for (int i = 0; i < 5; i++) {
         float f = float(i) / 4.0, a = sgn * (1.5708 + (f - 0.5) * 1.745);
         float lg = mod(float(i), 2.0) < 0.5 ? 1.0 : 0.0;
         c = mix(c, TICK, mark(p, pv, a, r0 + (1.0 - lg) * (r1 - r0) * 0.35, r1, 3.2));
     }
     float a = sgn * (1.5708 - (clamp(v, -0.03, 1.03) - 0.5) * 1.745);
-    if (rbox(p, win, 6.0) < 0.0) c = needle(p, pv, a, r0 * 0.25, r1 + 14.0, 4.5, 2.5, c);
+    c = needle(p, pv, a, r0 * 0.25, r1 + 14.0, 4.5, 2.5, c);
     return c;
 }
 
@@ -200,8 +219,8 @@ void main() {
 
     // the side pods' gauges (the pivots sit behind each pod's inner edge)
     vec2 pvL = u_podG.xy, pvR = vec2(W - u_podG.x, u_podG.y);
-    if (rbox(p, u_podWin, 8.0) < 0.0) c = podGauge(p, pvL, u_podG.z, u_podG.w, -1.0, u_podV.x, u_podWin, c);
-    if (rbox(p, winR, 8.0) < 0.0) c = podGauge(p, pvR, u_podG.z, u_podG.w, 1.0, u_podV.y, winR, c);
+    if (rbox(p, u_podWin, 8.0) < 0.0) c = podGauge(p, pvL, u_podG.z, u_podG.w, -1.0, u_podV.x, u_podZL, c);
+    if (rbox(p, winR, 8.0) < 0.0) c = podGauge(p, pvR, u_podG.z, u_podG.w, 1.0, u_podV.y, u_podZR, c);
 
     // battery glyph: a box with two terminals
     vec2 bq = p - u_batIcon;
