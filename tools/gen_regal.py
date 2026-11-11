@@ -130,6 +130,17 @@ wd[0]['spd'] = [wd[0]['spd'][0]] + [v + DY for v in wd[0]['spd'][1:]]   # pivot 
 for w in wd[1:]:
     w['y'] += DY
 
+# the centre section (its panel, windows, needles, LED bars and everything between the pods) moves DX px right, so
+# the gaps either side of it are equal: the photo's centre panel sat 27 px left of the middle (gaps 127 and 181 px)
+POD_IN_L = wd[0]['podL'][0] + wd[0]['podL'][2]           # the left pod's inner edge; the right pod is its mirror
+DX = round(W / 2 - (wd[0]['ctr'][0] + wd[0]['ctr'][2] / 2))
+for k in ('ctr', 'win1', 'win2', 'fuelG', 'led', 'led2'):
+    wd[0][k][0] += DX
+wd[0]['spd'][0] += DX                                     # the speed needle's pivot x
+for w in wd[1:]:
+    if POD_IN_L < w['x'] + w['w'] / 2 < W - POD_IN_L:
+        w['x'] += DX
+
 
 # the speed needle as its own layer over the text (so it sweeps over the gear row): the same widget, needle only, its box
 # the speed window

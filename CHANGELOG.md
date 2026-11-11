@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 10 2026
 
+- **Custom Cluster 0.1.45:** Regal's centre section is centred between the pods. Traced off the photo it sat 27 px left of the middle (127 px to the left pod, 181 to the right); the panel, its windows, the needles, the LED bars and everything printed on them move 27 px right, so both gaps are 154 px. tools/gen_regal.py does it (DX).
 - **Custom HUD 0.1.22:** Miku blinks and sways in her close-up on the car. On the car the close-up zoomed and turned toward the indicator but never blinked or swayed: those ran on the renderer's own clock (u_time), which didn't drive that layer there (most likely a large u_time losing its fractions in the KOMBI's mediump floats). The app now sends the close-up a short clock of its own (0 to 4 s, about 30 times a second, only while she is zoomed in). On the bench she blinks every 2 s and sways; not yet seen on the car.
 - **Custom HUD 0.1.22 and Custom Cluster 0.1.44:** the status line's pixel memory reads "of 32 MiB", cluster-render 0.5.4's (our fork's pixel_mib); it said 16 whatever the renderer had.
 
