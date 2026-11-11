@@ -2,9 +2,9 @@
 
 Puts your own Live2D character on the windshield HUD, beside BMW's own speed and speed-limit sign. Open **Custom HUD** from the apps menu on the center screen to turn her on or off.
 
-<p align="center"><img src="../../docs/images/hud-miku.png" width="520" alt="Miku layout"><br><sub>Driving: she leans as the car pulls away, beside BMW's own speed and speed-limit sign (bottom left)</sub></p>
+<p align="center"><img src="../../docs/images/hud-miku-lean.gif" width="485" alt="Miku layout"><br><sub>Driving: she leans as the car pulls away and brakes, beside BMW's own speed and speed-limit sign (bottom left)</sub></p>
 
-<p align="center"><img src="../../docs/images/hud-miku-close.png" width="520" alt="Miku close-up on the HUD"><br><sub>Stopped: the close-up, filling the window from BMW's speed to the right edge</sub></p>
+<p align="center"><img src="../../docs/images/hud-miku-zoom.gif" width="485" alt="Miku close-up on the HUD"><br><sub>Stopped: after 1 s she zooms into the close-up, filling the window from BMW's speed to the right edge, and zooms back out as the car moves off</sub></p>
 
 <p align="center"><sub>Miku in the screenshots: the free Hatsune Miku "いますぐ輪廻" fan model by [Ruby_鸣哔うび](https://ko-fi.com/rubybee) (art) and 慈善小霓 (Live2D rigging), used under its personal, non-commercial terms. No model files are in this repo; you bake and copy your own model to your car.</sub></p>
 

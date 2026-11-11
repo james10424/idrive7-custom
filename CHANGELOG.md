@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 11 2026
 
+- **README:** GIFs in place of the screenshots: Regal and Sport pulling away, Miku leaning as the car pulls away and brakes, and Miku zooming into her close-up at a stop. The bench records them: POST /shot with a frame number writes frames to bench/.data/clips/<name>/, and tools/clip_gif.sh turns them into docs/images/<name>.gif.
 - **Custom Cluster 0.1.49:** with the 12-hour clock, Sport's am/pm no longer runs into the time ("12:26am"); the range moves right to make room, into the space the consumption readout left.
 - **README:** new screenshots, Miku's close-up among them. The images of the old HUD layouts and themes are gone.
 - **Bench:** the page fits the window. The displays and log stay on the left, and the right column has tabs (Center screen, Vehicle signals, Layers), so the settings and sliders no longer scroll the displays away.

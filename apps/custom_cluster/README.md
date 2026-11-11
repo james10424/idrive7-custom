@@ -14,13 +14,13 @@ The look of BMW's newer Live Cockpit Sport view.
 - **Bottom:** boost and coolant in the blue and red strip, plus the clock, range and outside temperature.
 - **While navigating:** the strip becomes the route's progress, filling from the right, with the distance left and the time left at its ends.
 
-<p align="center"><img src="../../docs/images/cluster-sport.png" width="900" alt="Sport theme while navigating"><br><sub>While navigating: BMW's map shows in the middle (black here)</sub></p>
+<p align="center"><img src="../../docs/images/cluster-sport.gif" width="900" alt="Sport theme while navigating"><br><sub>While navigating: BMW's map shows in the middle (black here)</sub></p>
 
 ### Regal (1987)
 
 The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needles and an orange VFD.
 
-<p align="center"><img src="../../docs/images/cluster-regal.png" width="900" alt="Regal theme"></p>
+<p align="center"><img src="../../docs/images/cluster-regal.gif" width="900" alt="Regal theme"></p>
 
 - **Left pod:** a 12 V voltmeter (8 to 16 V), with the parking brake lamp (red PARK BRAKE, or green AUTO HOLD while Auto Hold holds the car), the range (in orange VFD digits), and under it P R N D with the gear number, the lit one boxed.
 - **Right pod:** oil temperature (50 / 110 / 150 °C), with the CRUISE lamp (lit green while ACC is on), the clock and the outside temperature under it.

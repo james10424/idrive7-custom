@@ -1449,6 +1449,24 @@ const web = http.createServer(async (req, res) => {
           res.writeHead(400);
           return res.end("bad name or data");
         }
+        // with "frame": one frame of a README GIF, written to bench/.data/clips/<name>/<frame>.png
+        // (tools/clip_gif.sh turns the folder into docs/images/<name>.gif)
+        if (reqBody.frame !== undefined) {
+          const frame = Number(reqBody.frame);
+          if (!Number.isInteger(frame) || frame < 0 || frame > 9999) {
+            res.writeHead(400);
+            return res.end("bad frame");
+          }
+          const dir = path.join(__dirname, ".data", "clips", name);
+          if (frame === 0) fs.rmSync(dir, { recursive: true, force: true });
+          fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(
+            path.join(dir, String(frame).padStart(4, "0") + ".png"),
+            Buffer.from(match[1], "base64"),
+          );
+          res.writeHead(204);
+          return res.end();
+        }
         const out = path.join(ROOT, "docs", "images", name + ".png");
         fs.writeFileSync(out, Buffer.from(match[1], "base64"));
         log("info", "screenshot written: " + path.relative(ROOT, out));

@@ -15,7 +15,7 @@ kit/              cauliflowermossgrape's MGU App Kit (MIT, kit/LICENSE): runtime
 bench/            Mac test bench (fake cluster-render + the kit's stub head unit), see bench/README.md
 tools/            bake_fonts.py re-bakes each app's fonts from tools/fonts-src (needs Pillow)
 scripts/          deploy.sh pushes layout files to the car over SSH
-docs/images/      the screenshots and GIFs in the READMEs, taken from the bench
+docs/images/      the GIFs in the READMEs, recorded on the bench (POST /shot with a frame number, then tools/clip_gif.sh)
 mgu-repo.json     tells the Store how to build the apps
 ```
 
