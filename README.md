@@ -12,7 +12,7 @@ Redraws the whole instrument cluster as a 1987 Buick Regal dash, and switches to
 
 ## Custom HUD
 
-Puts your own Live2D character on the windshield HUD, standing beside BMW's speed and speed-limit sign: she leans as the car pulls away and brakes, glances around while you cruise and dozes at a stop. Daily and Sport layouts with your own readouts (speed, gear, a shift bar, boost, oil and coolant) are there too, in Classic, M and Night colours. It makes room for BMW's own HUD content: the layout steps aside while route guidance is up. [Read more](apps/custom_hud/README.md)
+Puts your own Live2D character on the windshield HUD, standing beside BMW's speed and speed-limit sign: she leans as the car pulls away and brakes, and at a stop the view zooms in to a close-up of her, blinking, swaying and looking toward the indicator. Daily and Sport layouts with your own readouts (speed, gear, a shift bar, boost, oil and coolant) are there too, in Classic, M and Night colours. It makes room for BMW's own HUD content: the layout steps aside while route guidance is up. [Read more](apps/custom_hud/README.md)
 
 <p align="center"><img src="docs/images/hud-miku.png" width="520" alt="Miku layout on the HUD"><br><sub>The Miku layout, with BMW's own speed and speed-limit sign (bottom left)</sub></p>
 
@@ -66,7 +66,7 @@ The Miku layout draws a Live2D model you own. Nothing of it ships with the app: 
    node tools/live2d_bake/serve.js --model <model>.model3.json --core <sdk>/Core/live2dcubismcore.min.js --config <bake>.json --out <folder>
    ```
 
-   Open `http://localhost:8095/?inspect` to see every part with its id (to fill in the config), then `http://localhost:8095/` to bake. It writes `atlas.json` and `atlas.rgba` (what the car loads) and `preview.png` (for you) to `<folder>`. The bake refuses an atlas over 1024 px a side.
+   Open `http://localhost:8095/?inspect` to see every part with its id (to fill in the config), then `http://localhost:8095/` to bake. It writes `atlas.json`, `atlas.rgba` and, with `close` in the config, `close.rgba` (what the car loads) and `preview.png` (for you) to `<folder>`. The bake refuses an atlas over 1024 px a side.
 4. **Copy to the car** (Custom HUD installed, SSH as root):
 
    ```bash

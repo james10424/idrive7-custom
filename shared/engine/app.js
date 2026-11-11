@@ -120,6 +120,7 @@ const { isNum, mib } = require("./util");
  * @property {(key: string) => *} settings.get
  * @property {(key: string) => (SettingItem | undefined)} settings.item
  * @property {(fn: (key: string) => void) => void} settings.onChange
+ * @property {(key: string, value: *) => void} settings.set
  * @property {{ watch: (iface: string, instance: string,
  *   handlers: Record<string, (v: *) => void>, log: Log) => *
  * }} signals the car's SOME/IP signals
@@ -235,6 +236,7 @@ const { isNum, mib } = require("./util");
  * @property {?Buffer} px the last painted pixels (_blitDiff)
  * @property {ReturnType<typeof setInterval>} [timer] its own update timer (a module that sets one: the tick skips it)
  * @property {number} [at] ms of the last eased update
+ * @property {boolean} [refused] cluster-render refused something it sent (its layer, a bind, a uniform)
  * A widget module keeps its own state on it too (see its typedef).
  */
 /**
@@ -313,7 +315,8 @@ class HudApp {
     app._setupVehicleData();
     this.layouts.onChange(() => this._rebuild());
     ctx.settings.onChange((key) => {
-      if (key !== "demo") this._rebuild();
+      if (key === "mikuReset") this._resetAnim(key);
+      else if (key !== "demo") this._rebuild();
       else app._status();
     });
   }
@@ -447,6 +450,14 @@ class HudApp {
           reason,
       );
       if (!this.refused) this.refused = (widgetId || operation) + ": " + reason; // the first one, until the next rebuild
+      // the widget knows it can't draw (Miku doesn't zoom into a close-up that isn't there); a refused asset leaves
+      // the cache, so the next rebuild asks again
+      const state = widgetId ? this.widgets.get(widgetId) : null;
+      if (state) state.refused = true;
+      this.atlases.forEach((atlas, key) => {
+        if (atlas.c === client && atlas.ref === ref && operation === "asset")
+          this.atlases.delete(key);
+      });
       this._statusSoon();
     });
     client.on("budget", (capKb, maxKb, reason) =>
@@ -792,6 +803,24 @@ class HudApp {
     this.widgets.set(widget.id, state);
     mod.create(this, widget, state);
     this._update(state, Date.now(), true);
+  }
+
+  /**
+   * A "reset" setting (a bool that acts once): every widget module with a reset() puts its animation back to the
+   * start, then the setting flips back off. Nothing is rebuilt.
+   * @param {string} key
+   * @returns {void}
+   * @this {App}
+   */
+  _resetAnim(key) {
+    if (this.ctx.settings.get(key) !== true) return;
+    this.widgets.forEach((state) => {
+      const mod = widgetTypes[state.w.type];
+      if (mod.reset)
+        this._guard("widget " + state.w.id, () => mod.reset(this, state));
+    });
+    this.log.info("animations reset (" + key + ")");
+    this.ctx.settings.set(key, false);
   }
 
   /**

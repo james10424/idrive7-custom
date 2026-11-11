@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.20",
+  "version": "0.1.21",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -349,14 +349,20 @@
           "All of her"
         ],
         [
-          "noIdle",
-          "No glances or dozing"
+          "noClose",
+          "No close-up when stopped"
         ],
         [
           "bare",
-          "Bare: only the lean (no blink, arms, tails, glances)"
+          "Bare: only the lean (no blink, arms, tails, close-up)"
         ]
       ]
+    },
+    {
+      "key": "mikuReset",
+      "label": "Reset Miku (standing upright, as if nothing happened)",
+      "type": "bool",
+      "default": false
     },
     {
       "key": "demo",
@@ -461,7 +467,7 @@
       "redline": "miku",
       "perch": "miku"
     },
-    "indicators": false,
+    "indicators": true,
     "tankLitres": 65,
     "acc": {
       "comment": "The car ahead and the ACC set speed: raw * factor + offset. gap: the gap's raw value to metres, 0.1 m steps (the 1:1 reading was 10 times BMW's own on the car) (GapVehicleDrivingAhead, or DataFrontVehicle when the car sends it); rel: DataFrontVehicle's speed to km/h (without it the relative speed comes from the gap's rate); set: cruiseCtrlSpeedHUD. The car's catalog gives no units; the app logs 'car ahead raw: ...' when the values change, to calibrate these against BMW's own HUD.",

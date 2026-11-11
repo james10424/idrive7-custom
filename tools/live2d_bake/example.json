@@ -50,18 +50,16 @@
     },
     "face": 0.6
   },
-  "look": {
-    "steps": 3,
-    "params": {
-      "ParamAngleX": 25,
-      "ParamEyeBallX": 1
-    },
-    "lead": ["ParamEyeBallX", "ParamEyeBallY"]
-  },
-  "doze": {
-    "steps": 3,
-    "params": {
-      "ParamAngleY": -30
-    }
+  "close": {
+    "size": [249, 278],
+    "window": [-124, -277, 249, 278],
+    "centre": [0, 1.31],
+    "height": 0.82,
+    "pivot": [0, 1.1],
+    "expressions": [],
+    "zoomSteps": 3,
+    "sway": { "ParamAngleZ": 4 },
+    "turn": { "ParamAngleX": 30 },
+    "turnSteps": 2
   }
 }

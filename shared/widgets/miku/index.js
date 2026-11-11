@@ -1,11 +1,11 @@
 "use strict";
 /**
- * The "miku" widget: the Miku layout's standing character, an effect layer.
+ * The "miku" widget: the Miku layout's character, an effect layer standing and a second one (part "close") for the
+ * close-up she zooms into when the car stops.
  */
 const { isNum } = require("../../engine/util");
-const MIKU = require("./shader");
-const { sprite } = require("./sprite");
-const { idle } = require("./idle");
+const { MIKU, MIKU_CLOSE } = require("./shader");
+const { sprite, closeSprite } = require("./sprite");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /**
@@ -13,52 +13,99 @@ const { idle } = require("./idle");
  * @typedef {object} MikuState
  * @property {number} [lean] eased -1..1
  * @property {number} [spd] eased 0..1
- * @property {number} [point] -1..1
+ * @property {number} [point] -1..1, toward the indicator (the arm standing, the head turn in the close-up)
  * @property {number} [pointV]
- * @property {number} [look] glance -1..1
- * @property {number} [lookV]
- * @property {number} [lookT] the glance's target
- * @property {number} [lookUntil] ms
- * @property {number} [lookN] glance frames
- * @property {number} [doze] 0..1
- * @property {number} [dozeV]
- * @property {number} [dozeN] doze frames
- * @property {number} [idleMs]
- * @property {number} [stillMs]
- * @property {boolean} [wokeUp]
- * @property {string} [lastI] the last u_idle key
+ * @property {number} [zoom] 0..1, linear: the close-up's 1 s ramp
+ * @property {number} [zoomT] where the zoom is going, 0 or 1
+ * @property {number} [stillMs] how long the car has stood still
+ * @property {number} [firstStep] the close-up's first zoom step, 0..1 of the eased zoom
+ * @property {string} [lastZ] the last u_zoom key
+ * @property {number[]} [zoomVals] the close-up layer's u_zoom, last sent
+ * @property {boolean} [blanked] (the close-up layer) told to draw nothing after a refusal
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
-const DOCS = `effect layer; the Miku layout's standing character, from frames baked offline
-(tools/live2d_bake) and kept in the app's data folder (miku/, see sprite.js); animated by the renderer's
-clock (time: true), so only a small u_drive uniform goes up when the smoothed g or the speed moves a step.
-"feet" [x, y] target px where the bake's "anchor" (between her feet) goes ([480, 377]). Nothing is drawn
-without frames (the status row says so)`;
+const DOCS = `effect layer; the Miku layout's character, from frames baked offline (tools/live2d_bake) and kept in the
+app's data folder (miku/, see sprite.js); animated by the renderer's clock (time: true), so only small uniforms go up
+when the smoothed g, the speed or the zoom moves a step. Two widgets of this type, the same rect, in this order: the
+first draws her standing and runs her; "part": "close" draws the close-up she zooms into when the car has stood still
+for 1 s (out again past 10 km/h), from the bake's close.rgba (none baked: she just stands). "feet" [x, y] target px
+where the bake's "anchor" (between her feet) goes ([480, 377]). Nothing is drawn without frames (the status row says
+so)`;
 
 const MIKU_MS = 16; // the Miku character's own update rate (60 Hz)
 const MIKU_TAU_MS = 450; // the Miku character's speed follows the car this smoothly
 const MIKU_LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly (no spring: no sway back past upright)
 const MIKU_POINT_K = 70; // the pointing arm's spring (1/s^2): about 1.3 Hz
 const MIKU_POINT_C = 16.7; // critically damped: it rises and settles without bouncing
+const MIKU_STILL_MS = 1000; // stood still (speed 0) this long: she zooms into her close-up
+const MIKU_ZOOM_MS = 1000; // the zoom, in or out
+const MIKU_ZOOM_OUT_KMH = 10; // past this she zooms back out to standing
 
 /**
- * The Miku shader for a widget and the "Miku parts" setting: leaving the glances and dozing, or (bare) everything
- * but the lean out of the shader altogether, to find what a display can't take. The layout's "idle": false does the
- * same as noIdle.
+ * Whether a widget is the close-up's layer.
  * @param {Widget} widget
- * @param {string} parts the "Miku parts" setting
- * @returns {string} the fragment shader
+ * @returns {boolean}
  */
-function mikuShader(widget, parts) {
-  const noIdle =
-    widget.idle === false || parts === "noIdle" || parts === "bare";
+const isClose = (widget) => widget.part === "close";
+
+/**
+ * Whether the "Miku parts" setting leaves the close-up out ("noIdle", from before 0.1.21, means the same).
+ * @param {string} parts
+ * @returns {boolean}
+ */
+const noClose = (parts) =>
+  parts === "noClose" || parts === "noIdle" || parts === "bare";
+
+/**
+ * The standing or the close-up layer's state, if it was made and nothing it sent was refused.
+ * @param {HudApp} hud
+ * @param {boolean} close
+ * @returns {?(WidgetState & MikuState)}
+ */
+function layerState(hud, close) {
+  let found = null;
+  hud.widgets.forEach((state) => {
+    if (state.w.type === "miku" && isClose(state.w) === close && !state.refused)
+      found = state;
+  });
+  return found;
+}
+
+/**
+ * The close-up layer's u_zoom as the standing layer last sent it (zoom, turn, brightness, ready).
+ * @param {HudApp} hud
+ * @returns {number[]}
+ */
+function zoomNow(hud) {
+  const standing = layerState(hud, false);
   return (
-    (noIdle ? "#define MIKU_NO_IDLE\n" : "") +
-    (parts === "bare" ? "#define MIKU_BARE\n" : "") +
-    MIKU
+    (standing && standing.zoomVals) || [
+      0,
+      0,
+      hud.themeName === "night" ? 0.8 : 1,
+      0,
+    ]
   );
+}
+
+/**
+ * Where the standing frame's top-left sits in a widget's layer (px): the bake's "anchor" (between her feet) on the
+ * widget's "feet" point.
+ * @param {Widget} widget
+ * @param {import("./sprite").MikuInfo} info
+ * @returns {number[]}
+ */
+function originOf(widget, info) {
+  const feet =
+    Array.isArray(widget.feet) && widget.feet.length === 2
+      ? widget.feet
+      : [480, 377];
+  return [
+    feet[0] - widget.x - info.anchor[0],
+    feet[1] - widget.y - info.anchor[1],
+  ];
 }
 
 module.exports = {
@@ -66,22 +113,29 @@ module.exports = {
   fields: [],
   docs: DOCS,
   time: true,
-  /** The shader to draw her with, or null (the reason logged) when her frames are missing or bad.
+  /** The shader to draw her with, or null (the reason logged) when her frames are missing or bad, or (the close-up)
+   * when there is no close-up or the "Miku parts" setting leaves it out.
    * @param {HudApp} hud
    * @param {Widget} widget
    * @param {number} connIndex connection index
    * @returns {?string}
    */
   shader(hud, widget, connIndex) {
-    if (!sprite(hud, widget, connIndex)) return null;
-    return mikuShader(widget, hud.setting("mikuParts"));
+    const atlas = sprite(hud, widget, connIndex);
+    if (!atlas) return null;
+    const parts = hud.setting("mikuParts");
+    if (isClose(widget)) {
+      if (noClose(parts) || !closeSprite(hud, atlas, connIndex)) return null;
+      return MIKU_CLOSE;
+    }
+    return (parts === "bare" ? "#define MIKU_BARE\n" : "") + MIKU;
   },
-  /** For tools/shader_budget.js: every shader the "Miku parts" setting can pick.
+  /** For tools/shader_budget.js: every shader the layers and the "Miku parts" setting can pick.
    * @type {Record<string, string>} */
   shaders: {
     miku: MIKU,
-    "miku (no idle)": "#define MIKU_NO_IDLE\n" + MIKU,
-    "miku (bare)": "#define MIKU_NO_IDLE\n#define MIKU_BARE\n" + MIKU,
+    "miku (bare)": "#define MIKU_BARE\n" + MIKU,
+    "miku close-up": MIKU_CLOSE,
   },
   /**
    * @param {HudApp} hud
@@ -91,13 +145,49 @@ module.exports = {
   create(hud, widget, state) {
     const client = state.c,
       ref = state.ref;
-    // the bake's "anchor" (frame px, between her feet) goes on the widget's "feet" point
     const atlas = sprite(hud, widget, state.ci),
       info = atlas.info,
-      feet =
-        Array.isArray(widget.feet) && widget.feet.length === 2
-          ? widget.feet
-          : [480, 377];
+      origin = originOf(widget, info),
+      close = info.close;
+    if (isClose(widget)) {
+      // the close-up: its own atlas and the bake's fixed values (shader.js MIKU_CLOSE u_cl); the standing layer
+      // sends u_zoom as it moves
+      const closeAtlas = closeSprite(hud, atlas, state.ci);
+      client.bind(ref, "u_atlas", closeAtlas.ref);
+      client.uniform(ref, "u_size", [widget.w, widget.h]);
+      client.uniform(ref, "u_atlasSize", closeAtlas.size);
+      client.uniform(ref, "u_cam", [
+        -origin[0],
+        -origin[1],
+        widget.w,
+        widget.h,
+      ]);
+      const rects = [0, 1, 2, 3].map(
+        (i) => close.rects[Math.min(i, close.rects.length - 1)],
+      );
+      const shift = [0, 1, 2, 3].map((i) => close.turnShift[i] || 0);
+      client.uniform(
+        ref,
+        "u_cl",
+        [].concat(
+          ...rects,
+          close.grid,
+          close.cropGrid,
+          close.crop,
+          [
+            close.pivot[0],
+            close.pivot[1],
+            close.swayAngle[0],
+            close.swayAngle[1],
+          ],
+          shift,
+          [close.frame[0], close.frame[1], close.zoomSteps, close.turnSteps],
+        ),
+        { type: "vec4" },
+      );
+      client.uniform(ref, "u_zoom", zoomNow(hud));
+      return;
+    }
     /** @type {(k: string) => number[]} */
     const frameRect = (k) =>
       (info.frames && info.frames[k]) || info.frames.idle;
@@ -108,14 +198,11 @@ module.exports = {
     client.uniform(ref, "u_size", [widget.w, widget.h]);
     client.uniform(ref, "u_atlasSize", atlas.size);
     client.uniform(ref, "u_frame", info.frame);
-    client.uniform(ref, "u_origin", [
-      feet[0] - widget.x - info.anchor[0],
-      feet[1] - widget.y - info.anchor[1],
-    ]);
+    client.uniform(ref, "u_origin", origin);
     // the fixed sprite values go up as three vec4 arrays (u_spr: the eye frames, the tails, the crop and the
-    // tables' counts; u_arm), which shader.js names back with #define; the per-frame tables (lean,
-    // glance and doze frames, head and hip shifts) are pixel rows under the atlas (_sprite, mikuData). Few
-    // uniforms: the cluster's GPU restarted on the 0.1.9 .. 0.1.12 shader's 55 uniform vectors (or its size)
+    // tables' counts; u_arm), which shader.js names back with #define; the per-frame tables (lean frames, head
+    // shifts) are pixel rows under the atlas (_sprite, mikuData). Few uniforms: the cluster's GPU restarted on the
+    // 0.1.9 .. 0.1.12 shader's 55 uniform vectors (or its size)
     const spr = frameRect("idle").concat(
       frameRect("half"),
       frameRect("shut"),
@@ -149,17 +236,24 @@ module.exports = {
         ? 0
         : ((isNum(widget.balance) ? widget.balance : 50) * Math.PI) / 180,
     ]);
-    state.lookN = atlas.counts.look;
-    state.dozeN = atlas.counts.doze;
-    client.uniform(ref, "u_idle", [0, 0, 0, 0]);
+    // the zoom's end, the close-up's view (none: she never zooms), and where she has faded out by: the close-up's
+    // first zoom step
+    state.firstStep = close ? 1 / (close.zoomSteps + 1) : 0;
+    client.uniform(
+      ref,
+      "u_close",
+      close ? close.rects[close.rects.length - 1] : [0, 0, 0, 0],
+    );
+    client.uniform(ref, "u_first", close ? close.rects[0] : [0, 0, 0, 0]);
+    client.uniform(ref, "u_zoom", [0, state.firstStep, 0, 0]);
     client.uniform(ref, "u_hip", [
       info.hipY,
       isNum(info.headY) ? info.headY : 0,
       info.breathe === false ? 0 : 1,
       0,
     ]);
-    // her lean on its own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a lean that
-    // moved only every third frame would step. A message goes up only when the lean or speed changes a step
+    // her lean and zoom on their own 60 Hz timer, not the 20 Hz tick: the shader draws at the display's rate, and a
+    // lean that moved only every third frame would step. A message goes up only when one changes a step
     state.timer = setInterval(
       () =>
         hud._guard("widget " + widget.id, () =>
@@ -168,7 +262,7 @@ module.exports = {
       MIKU_MS,
     );
     const tails = info.tails || null;
-    // u_spr[4]: the rect the face, glance and doze frames are crops of (none: an older bake's whole frames)
+    // u_spr[4]: the rect the face frames are crops of (none: an older bake's whole frames)
     const crop =
       Array.isArray(info.crop) && info.crop.length === 4
         ? info.crop
@@ -187,18 +281,43 @@ module.exports = {
             ]
           : [0, 0, 0, 1],
         crop,
-        [atlas.counts.lean, atlas.counts.look, atlas.counts.doze, atlas.dataY],
+        [atlas.counts.lean, 0, 0, atlas.dataY],
       ),
       { type: "vec4" },
     );
   },
   /**
+   * The "Reset Miku" setting: back to standing upright, as if nothing had happened: the close-up snaps out (its
+   * expressions off), the lean, the arm and the speed's sway at rest, the still-standing timer at 0. Both layers get
+   * it at once.
+   * @param {HudApp} hud
+   * @param {WidgetState & MikuState} state
+   */
+  reset(hud, state) {
+    if (isClose(state.w)) return;
+    state.lean = 0;
+    state.spd = 0;
+    state.point = 0;
+    state.pointV = 0;
+    state.zoom = 0;
+    state.zoomT = 0;
+    state.stillMs = 0;
+    state.at = Date.now();
+    hud._update(state, state.at, true);
+  },
+  /**
+   * The standing layer runs her: the lean, the arm, the zoom, and the close-up layer's uniforms with them. The
+   * close-up layer only takes its last values when it is (re)made.
    * @param {HudApp} hud
    * @param {WidgetState & MikuState} state
    * @param {number} now
    * @param {boolean} force
    */
   update(hud, state, now, force) {
+    if (isClose(state.w)) {
+      if (force) state.c.uniform(state.ref, "u_zoom", zoomNow(hud));
+      return;
+    }
     // lean: the longitudinal g, -0.4 g .. +0.4 g to -1 .. 1, eased over MIKU_LEAN_TAU_MS; speed 0..130 km/h to
     // 0..1, eased over MIKU_TAU_MS; both sent in steps of 0.002 (a small uniform message, at most one per MIKU_MS, and only while she moves)
     const data = hud.car.data(),
@@ -215,7 +334,7 @@ module.exports = {
         (leanTarget - state.lean) * (1 - Math.exp(-dt / MIKU_LEAN_TAU_MS))
       : leanTarget;
     // pointing: toward the indicator ('L' -1, 'R' 1, hazards or none 0), on a quicker spring (about 1.3 Hz, no
-    // overshoot) so the arm rises and falls smoothly
+    // overshoot) so the arm rises and falls smoothly; in the close-up it turns her head
     const turnSide = hud._turnSide(),
       dtp = dt / 1000;
     if (!isNum(state.point)) {
@@ -237,24 +356,64 @@ module.exports = {
       speedFrac = isNum(speed) ? Math.min(1, Math.max(0, speed / 130)) : 0,
       /** @type {(value: number) => number} */
       step = (value) => Math.round(value * 500) / 500;
-    idle(state, now, dt, data.gLong, speed);
     state.spd = isNum(state.spd)
       ? state.spd + (speedFrac - state.spd) * (1 - Math.exp(-dt / MIKU_TAU_MS))
       : speedFrac;
+    // the close-up: stood still (speed 0) for MIKU_STILL_MS, she zooms in over MIKU_ZOOM_MS; past MIKU_ZOOM_OUT_KMH
+    // back out (in between she stays as she is). Only with a close-up layer: without one she would fade to nothing
+    const close = layerState(hud, true),
+      still = isNum(speed) && speed < 0.5;
+    state.stillMs = still ? (state.stillMs || 0) + dt : 0;
+    if (!close || !isNum(speed) || speed > MIKU_ZOOM_OUT_KMH) state.zoomT = 0;
+    else if (state.stillMs >= MIKU_STILL_MS) state.zoomT = 1;
+    const zoomT = state.zoomT || 0,
+      zoom = isNum(state.zoom) ? state.zoom : 0,
+      move = dt / MIKU_ZOOM_MS;
+    state.zoom =
+      zoomT > zoom
+        ? Math.min(zoomT, zoom + move)
+        : Math.max(zoomT, zoom - move);
+    const brightness = hud.themeName === "night" ? 0.8 : 1;
     // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
     const drive = [
       step(Math.tanh(state.lean * 1.15)),
       step(state.spd),
       step(state.point),
-      hud.themeName === "night" ? 0.8 : 1,
+      brightness,
     ];
-    const idleVals = [step(state.look), step(state.doze), 0, 0];
-    const key = drive.join("|"),
-      keyI = idleVals.join("|");
-    if (force || keyI !== state.lastI) {
-      state.lastI = keyI;
-      state.c.uniform(state.ref, "u_idle", idleVals);
+    // the zoom to both layers, the head's turn to the close-up's; its w says the close-up's atlas is there (a close-up
+    // layer whose atlas or bind was refused gets 0 once and draws nothing, rather than sampling whatever texture is bound)
+    hud.widgets.forEach((other) => {
+      if (
+        other.w.type === "miku" &&
+        isClose(other.w) &&
+        other.refused &&
+        !other.blanked
+      ) {
+        other.blanked = true;
+        other.c.uniform(other.ref, "u_zoom", [0, 0, brightness, 0]);
+      }
+    });
+    const zoomVals = [
+        step(state.zoom),
+        step(state.point),
+        brightness,
+        close ? 1 : 0,
+      ],
+      keyZ = zoomVals.join("|");
+    if (force || zoomVals[0] !== (state.zoomVals || [])[0])
+      state.c.uniform(state.ref, "u_zoom", [
+        zoomVals[0],
+        state.firstStep || 0,
+        0,
+        0,
+      ]);
+    if (force || keyZ !== state.lastZ) {
+      state.lastZ = keyZ;
+      state.zoomVals = zoomVals;
+      if (close) close.c.uniform(close.ref, "u_zoom", zoomVals);
     }
+    const key = drive.join("|");
     if (!force && key === state.last) return;
     state.last = key;
     state.c.uniform(state.ref, "u_drive", drive);

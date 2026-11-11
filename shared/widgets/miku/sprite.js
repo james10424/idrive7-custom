@@ -10,7 +10,7 @@ const { isNum, mib } = require("../../engine/util");
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").App} HudApp */
 /** @typedef {import("../../cluster_render_client.js").ClusterRender} Client */
-/** @typedef {{ lean: number, look: number, doze: number }} MikuCounts */
+/** @typedef {{ lean: number }} MikuCounts */
 /**
  * The Miku bake's atlas.json (tools/live2d_bake); only what is read here.
  * @typedef {object} MikuInfo
@@ -19,12 +19,8 @@ const { isNum, mib } = require("../../engine/util");
  * @property {number[]} anchor frame px between her feet
  * @property {Record<string, number[]>} frames idle, half, shut, talk
  * @property {Array<number[]>} [lean]
- * @property {Array<number[]>} [look]
- * @property {Array<number[]>} [doze]
  * @property {number[]} [leanShift]
  * @property {number[]} [leanShiftY]
- * @property {number[]} [lookShift]
- * @property {Array<number[]>} [dozeShift]
  * @property {Array<Record<string, *>>} [arms]
  * @property {Record<string, *>} [tails]
  * @property {number[]} [crop]
@@ -33,6 +29,22 @@ const { isNum, mib } = require("../../engine/util");
  * @property {boolean} [breathe]
  * @property {string} [leanAxis] "fb" for a forward/back bake
  * @property {string} [pose]
+ * @property {MikuClose} [close] the close-up's atlas, close.rgba
+ */
+/**
+ * The close-up in atlas.json (tools/live2d_bake bakeClose).
+ * @typedef {object} MikuClose
+ * @property {number[]} atlas [w, h] of close.rgba
+ * @property {number[]} frame [w, h]
+ * @property {number} zoomSteps
+ * @property {number} turnSteps
+ * @property {number[]} grid cell w, h, columns, pad
+ * @property {number[]} cropGrid cell w, h, columns, y of the first row
+ * @property {number[]} crop the eyes' rect in a frame
+ * @property {Array<number[]>} rects each zoom step's camera and the close-up's, standing frame px
+ * @property {number[]} pivot
+ * @property {number[]} swayAngle
+ * @property {number[]} turnShift
  */
 /**
  * The Miku frames as an RGBA asset on a connection (_sprite).
@@ -48,12 +60,11 @@ const { isNum, mib } = require("../../engine/util");
  */
 
 /**
- * The Miku shader's tables as pixel rows to go under the atlas art: 56 entries of two values each, each entry a 3x3 px
+ * The Miku shader's tables as pixel rows to go under the atlas art: 32 entries of two values each, each entry a 3x3 px
  * block (so a bilinear read at its middle gets it whole), opaque (alpha 255: a canvas or driver that premultiplies
  * leaves it alone), each value 12 bits: (v + 1024) * 2 in R (high 8) and B's high or low nibble, in G likewise:
  * -1024 .. 1023.5 px in half px. Entries: 0-15 the lean frames' atlas x, y; 16-31 each lean frame's head shift x, y
- * (y: the forward/back lean's head drop; 0 sideways); 32-39 the glance frames' x, y; 40-47 each glance's head shift; 48-51 the doze frames' x, y; 52-55 each doze
- * frame's head shift x, y. Returns { px, rows, counts: { lean, look, doze } }.
+ * (y: the forward/back lean's head drop; 0 sideways). Returns { px, rows, counts: { lean } }.
  * @param {MikuInfo} info atlas.json
  * @param {number} atlasWidth the atlas width, px
  * @returns {{ px: Buffer, rows: number, counts: MikuCounts }}
@@ -70,25 +81,10 @@ function mikuData(info, atlasWidth) {
     Array.isArray(info.lean) && info.lean.length >= 3
       ? info.lean.slice(0, 15)
       : [info.frames.idle];
-  const look =
-    Array.isArray(info.look) && info.look.length >= 3 && info.look.length % 2
-      ? info.look.slice(0, 7)
-      : [];
-  const doze = Array.isArray(info.doze) ? info.doze.slice(0, 4) : [];
   const entries = [];
   for (let i = 0; i < 16; i++) entries[i] = xy(lean[i]);
   for (let i = 0; i < 16; i++)
     entries[16 + i] = [num(info.leanShift, i), num(info.leanShiftY, i)];
-  for (let i = 0; i < 8; i++) {
-    entries[32 + i] = xy(look[i]);
-    entries[40 + i] = [num(info.lookShift, i), 0];
-  }
-  for (let i = 0; i < 4; i++) {
-    entries[48 + i] = xy(doze[i]);
-    entries[52 + i] = xy(
-      Array.isArray(info.dozeShift) ? info.dozeShift[i] : null,
-    );
-  }
   const per = Math.floor(atlasWidth / 3),
     rows = Math.ceil(entries.length / per) * 3,
     pixels = Buffer.alloc(atlasWidth * rows * 4, 0);
@@ -112,7 +108,7 @@ function mikuData(info, atlasWidth) {
   return {
     px: pixels,
     rows,
-    counts: { lean: lean.length, look: look.length, doze: doze.length },
+    counts: { lean: lean.length },
   };
 }
 
@@ -258,4 +254,93 @@ function sprite(hud, widget, connIndex) {
   }
 }
 
-module.exports = { sprite, mikuData };
+/**
+ * The close-up's atlas (<data>/miku/close.rgba, tools/live2d_bake's bakeClose, described by atlas.json's "close"),
+ * uploaded once per connection as an RGBA asset of its own and kept in hud.atlases like the standing one. Null when
+ * the bake has no close-up or close.rgba is missing or bad: the reason is logged and she just stands, no zoom.
+ * @param {HudApp} hud
+ * @param {SpriteAtlas} standing the standing atlas (sprite()), whose atlas.json says what close.rgba holds
+ * @param {number} connIndex connection index
+ * @returns {?SpriteAtlas}
+ */
+function closeSprite(hud, standing, connIndex) {
+  const close = standing.info.close;
+  if (!close) return null;
+  const dir = path.join(hud.ctx.dataDir || ".", "miku"),
+    file = path.join(dir, "close.rgba");
+  let stat;
+  try {
+    stat = fs.statSync(file);
+  } catch (err) {
+    hud.log.warn("miku close-up: no " + file + " (deploy the bake again)");
+    return null;
+  }
+  const pre = "closeup:" + connIndex + ":",
+    key = pre + dir + ":" + stat.mtimeMs;
+  if (hud.atlases.has(key)) return hud.atlases.get(key);
+  hud.atlases.forEach((atlas, k) => {
+    if (k.indexOf(pre) === 0) {
+      atlas.c.drop(atlas.ref);
+      hud.atlases.delete(k);
+    }
+  });
+  try {
+    const [w, h] = close.atlas || [];
+    if (!(w > 0 && h > 0) || w > 1024 || h > 1024)
+      throw new Error("bad close.atlas size " + w + "x" + h);
+    const pixels = fs.readFileSync(file);
+    if (pixels.length !== w * h * 4)
+      throw new Error(
+        "close.rgba is " +
+          pixels.length +
+          " bytes, " +
+          w +
+          "x" +
+          h +
+          " RGBA needs " +
+          w * h * 4,
+      );
+    const client = hud._clientAt(connIndex);
+    const ref = client.asset({
+      target: hud.target,
+      format: "rgba8",
+      w,
+      h,
+      sampling: "bilinear",
+    });
+    if (!ref) throw new Error("asset refused (" + w + "x" + h + ")");
+    client.pixels(ref, null, pixels);
+    const atlas = {
+      ref,
+      c: client,
+      ci: connIndex,
+      info: standing.info,
+      size: [w, h],
+      dataY: h,
+      counts: standing.counts,
+      bytes: w * h * 8,
+    };
+    hud.atlases.set(key, atlas);
+    hud.log.info(
+      "miku close-up: " +
+        close.zoomSteps +
+        " zoom steps, " +
+        (3 + 2 * close.turnSteps) +
+        " poses of " +
+        close.frame.join("x") +
+        ", " +
+        w +
+        "x" +
+        h +
+        " RGBA asset, " +
+        mib(atlas.bytes) +
+        " of pixel memory",
+    );
+    return atlas;
+  } catch (err) {
+    hud.log.warn("miku close-up: " + err.message);
+    return null;
+  }
+}
+
+module.exports = { sprite, closeSprite, mikuData };

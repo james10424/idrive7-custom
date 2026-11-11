@@ -1,6 +1,24 @@
 "use strict";
-/** The Miku character's fragment shader (GLSL ES 1.00) for her cluster-render effect layer; index.js sends its uniforms. */
-const MIKU = `// The Miku layout's character (GLSL ES 1.00), from frames baked offline (tools/live2d_bake) into one RGBA atlas
+/**
+ * The Miku character's fragment shaders (GLSL ES 1.00) for her two cluster-render effect layers; index.js sends their
+ * uniforms. MIKU draws her standing; MIKU_CLOSE the close-up she zooms into when the car stops, on a layer of its
+ * own over her (the KOMBI's limits are per shader, so the two stay apart).
+ */
+
+/* The zoom's camera, in both shaders: z (0..1, the app's 1 s ramp) eased, then the HUD window's view of her (u_cam, in
+ * the standing frame's px) zooming evenly toward the close-up's (r1): the height shrinks geometrically and the centre
+ * moves as the height does, as tools/live2d_bake's bakeClose framed its zoom steps. Returns [x, y, w, h], frame px. */
+const CAMERA = `vec4 camera(float z, vec4 r0, vec4 r1) {
+    float h = r0.w * pow(r1.w / r0.w, z);
+    float along = (r0.w - h) / max(0.001, r0.w - r1.w);
+    vec2 c = mix(r0.xy + r0.zw * 0.5, r1.xy + r1.zw * 0.5, along);
+    vec2 wh = vec2(h * r0.z / r0.w, h);
+    return vec4(c - wh * 0.5, wh);
+}
+`;
+
+const MIKU =
+  `// The Miku layout's character (GLSL ES 1.00), from frames baked offline (tools/live2d_bake) into one RGBA atlas
 // asset (u_atlas, straight alpha, u_atlasSize px). She stands, as on a bus: the bake posed her at u_counts.x lean angles
 // (11) with the model's own body and head rotation, from a full lean left with the braking face to a full lean right
 // with the happy face (a forward/back bake: toward you braking, back pulling away), close enough together
@@ -11,13 +29,12 @@ const MIKU = `// The Miku layout's character (GLSL ES 1.00), from frames baked o
 // down them and speed blows them out. The upper body breathes (a slight stretch above the waist). Nothing is uploaded
 // after the atlas; she is animated on the renderer's clock (u_time). u_drive = (lean, speed, point, brightness): point
 // -1 .. 1 raises the arm on that side to point toward the indicator (the arms are their own sprites).
-// u_idle = (look, doze, glance frames, doze frames): while the car idles she glances around (look -1 .. 1 blends the
-// baked glances, head and eyes, the same way as the lean) and, stopped a while, dozes off (doze 0 .. 1: eyes half
-// shut, shut, then the head drooping over the doze frames). Either takes over from the lean, which fades out under it.
-// The per-frame tables (lean, glance and doze frames, head shifts) are pixel rows under the atlas art (dat,
-// hud.js mikuData), not uniforms, and nothing loops: the cluster's GPU restarted on 0.1.9 .. 0.1.12's 55 uniform
-// vectors and unrolled loops; then on legs and glances together (each alone ran), so the legs are gone again.
-// MIKU_NO_IDLE (the layout's "idle": false) leaves the glances and dozing out, MIKU_BARE all but the lean.
+// u_zoom = (zoom, the first zoom step, 0, 0): stopped, the app ramps zoom 0 .. 1 and the camera zooms in on her
+// (camera()); she fades out by the first of the close-up layer's zoom steps, which takes over from there.
+// The per-frame tables (lean frames, head shifts) are pixel rows under the atlas art (dat, sprite.js mikuData), not
+// uniforms, and nothing loops: the cluster's GPU restarted on 0.1.9 .. 0.1.12's 55 uniform vectors and unrolled loops,
+// then on 38 texture reads.
+// MIKU_BARE leaves out all but the lean.
 // Positions are in frame px; u_origin is where the frame's top-left sits in the layer. v_uv (0,0) is the top-left.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -35,16 +52,17 @@ uniform vec2 u_origin;      // the frame's top-left in layer px
 uniform vec4 u_hip;         // waist y, head y (frame px), breathing 0..1, 0
 uniform vec4 u_armSide;     // x, y: arm 0's and arm 1's side (-1 left, 1 right); z: how far a pointing arm swings up (rad);
                             // w: how far the arm away from the lean swings up and out at a full lean to balance her (rad)
-uniform vec4 u_idle;        // look -1 .. 1, doze 0 .. 1, 0, 0
+uniform vec4 u_zoom;        // zoom 0 .. 1, the close-up's first zoom step (0 .. 1 of the eased zoom), 0, 0
+uniform vec4 u_close;       // the close-up's view, x, y, w, h in frame px
+uniform vec4 u_first;       // the close-up's first zoom step's view, frame px: she fades only where it takes over
 
 uniform vec4 u_spr[6];   // cluster-render takes at most 32 uniform names a layer, u_time among them: these fixed values go up as one array
 #define u_fA u_spr[0]   // idle.xy, half.xy (atlas px of each frame's top-left)
 #define u_fB u_spr[1]   // shut.xy, talk.xy
 #define u_tails u_spr[2]   // atlas rect of the tails sprite (w = 0: none)
 #define u_tailsAt u_spr[3]   // its top-left in frame px, root y in the sprite, length px
-#define u_crop u_spr[4]   // the face, glance and doze frames are crops of this rect (frame px; w = 0: whole frames)
-#define u_counts u_spr[5]   // lean frames (odd, up to 15), glance frames (odd, up to 7, the middle idle), doze frames
-                            // (up to 4), and the y of the table rows in the atlas
+#define u_crop u_spr[4]   // the face frames are crops of this rect (frame px; w = 0: whole frames)
+#define u_counts u_spr[5]   // lean frames (odd, up to 15), 0, 0, and the y of the table rows in the atlas
 uniform vec4 u_arm[8];   // cluster-render takes at most 32 uniform names a layer, u_time among them: these fixed values go up as one array
 #define u_arm0 u_arm[0]   // atlas rect of an arm sprite (w = 0: none)
 #define u_arm0At u_arm[1]   // its top-left and its shoulder (the pivot), frame px, at rest
@@ -63,8 +81,8 @@ vec4 tap(vec4 r, vec2 p) {
 }
 vec4 over(vec4 top, vec4 under) { return top + under * (1.0 - top.a); }
 vec2 rot(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
-// a face, glance or doze frame at atlas px "at": inside the crop rect its own pixels, idle's round it (an older
-// bake's whole frames when there is no crop)
+// a face frame at atlas px "at": inside the crop rect its own pixels, idle's round it (an older bake's whole frames
+// when there is no crop)
 vec4 cropTap(vec2 at, vec2 fb, vec4 idle) {
     if (u_crop.z <= 0.0) return tap(vec4(at, u_frame), fb);
     vec2 q = fb - u_crop.xy;
@@ -72,7 +90,9 @@ vec4 cropTap(vec2 at, vec2 fb, vec4 idle) {
     return tap(vec4(at, u_crop.zw), q);
 }
 float smin(float a, float b, float k) { float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0); return mix(b, a, h) - k * h * (1.0 - h); }
-
+` +
+  CAMERA +
+  `
 // an arm: carried and turned with her lean (as the bake measured it), swung up and out from the shoulder to balance
 // her (the arm away from the lean the most, the other a third as far), and by "raise" (0..1, the indicator on its
 // side) to point that way. Frame px, y down
@@ -86,7 +106,7 @@ vec4 arm(vec4 r, vec4 at, vec4 offL, vec4 offR, float side, float l, float raise
     return tap(r, at.zw + rot(p - sh, -phi) - at.xy);
 }
 
-// table entry i (mikuData in hud.js): a 3x3 px block in the rows under the art, read at its middle, two values of
+// table entry i (mikuData in sprite.js): a 3x3 px block in the rows under the art, read at its middle, two values of
 // 12 bits ((v + 1024) * 2: R and B's high nibble, G and B's low nibble), -1024 .. 1023.5 px
 vec2 dat(float i) {
     float per = floor(u_atlasSize.x / 3.0), row = floor(i / per), col = i - row * per;
@@ -101,19 +121,18 @@ vec4 leanAt(float i, vec2 fb, vec4 upright) {
 }
 
 void main() {
-    vec2 px = vec2(v_uv.x * u_size.x, v_uv.y * u_size.y);
-    vec2 f = px - u_origin;                         // frame px
+    // the zoom: the camera moves in on her as she fades, gone by the close-up's first zoom step
+    float z = smoothstep(0.0, 1.0, clamp(u_zoom.x, 0.0, 1.0));
+    if (u_close.w > 0.0 && z >= u_zoom.y) { gl_FragColor = vec4(0.0); return; }
+    vec4 view = u_close.w > 0.0 ? camera(z, vec4(-u_origin, u_size), u_close) : vec4(-u_origin, u_size);
+    vec2 f = view.xy + v_uv * view.zw;              // frame px
+    // fading as the first zoom step comes in over her, softly at its edges (past them it has nothing to show)
+    vec2 inF = min(f - u_first.xy, u_first.xy + u_first.zw - f);
+    float fade = u_close.w > 0.0
+        ? 1.0 - clamp(z / max(0.01, u_zoom.y), 0.0, 1.0) * smoothstep(0.0, 8.0, min(inF.x, inF.y)) : 1.0;
     float t = mod(u_time, 1200.0);
     float spd = clamp(u_drive.y, 0.0, 1.0);
-    // a glance or a doze takes over from the lean (the app starts either only while the car idles, lean about 0)
-    float look = clamp(u_idle.x, -1.0, 1.0), doze = clamp(u_idle.y, 0.0, 1.0);
-    float lookN = u_counts.y, dozeN = u_counts.z;
-    if (lookN < 2.5) look = 0.0;
-#ifdef MIKU_NO_IDLE
-    look = 0.0; doze = 0.0;
-#endif
-    float calm = 1.0 - smoothstep(0.0, 0.3, max(abs(look), doze));
-    float lean = clamp(u_drive.x, -1.0, 1.0) * calm, sway = 0.05 * sin(t * 0.8) * calm;
+    float lean = clamp(u_drive.x, -1.0, 1.0), sway = 0.05 * sin(t * 0.8);
     float brake = max(0.0, -lean);
     // breathing: a slight stretch above the waist
     float hipY = u_hip.x, up = max(0.0, hipY - f.y);
@@ -130,28 +149,8 @@ void main() {
 #else
     vec4 cHalf = cropTap(u_fA.zw, fb, cIdle), cShut = cropTap(u_fB.xy, fb, cIdle);
     vec4 upright = blink < 0.5 ? mix(cIdle, cHalf, blink * 2.0) : mix(cHalf, cShut, blink * 2.0 - 1.0);
-    float talk = smoothstep(0.85, 1.0, sin(t * 0.37)) * (1.0 - smoothstep(0.0, 0.3, abs(lean))) * calm;
+    float talk = smoothstep(0.85, 1.0, sin(t * 0.37)) * (1.0 - smoothstep(0.0, 0.3, abs(lean)));
     if (talk > 0.001) upright = mix(upright, cropTap(u_fB.zw, fb, cIdle), talk);
-#endif
-    // glancing: the two nearest baked glances, the middle one being upright (blinking) itself
-    float lookMid = (lookN - 1.0) * 0.5, lookHead = 0.0;
-    vec2 dozeHead = vec2(0.0);
-#ifndef MIKU_NO_IDLE
-    if (look != 0.0) {
-        float lk = (look + 1.0) * lookMid, j0 = min(floor(lk), lookN - 2.0), lf = lk - j0;
-        vec4 a = abs(j0 - lookMid) < 0.5 ? upright : cropTap(dat(32.0 + j0), fb, cIdle);
-        vec4 b = abs(j0 + 1.0 - lookMid) < 0.5 ? upright : cropTap(dat(33.0 + j0), fb, cIdle);
-        upright = mix(a, b, lf);
-        lookHead = mix(dat(40.0 + j0).x, dat(41.0 + j0).x, lf);
-    }
-    // dozing: upright -> half -> shut -> the doze frames, the two nearest blended
-    if (doze > 0.0) {
-        float dk = doze * (2.0 + dozeN), d0 = min(floor(dk), 1.0 + dozeN), df = dk - d0, d1 = d0 + 1.0;
-        vec4 a = d0 < 0.5 ? upright : d0 < 1.5 ? cHalf : d0 < 2.5 ? cShut : cropTap(dat(45.0 + d0), fb, cIdle);
-        vec4 b = d1 < 1.5 ? cHalf : d1 < 2.5 ? cShut : cropTap(dat(45.0 + d1), fb, cIdle);
-        upright = mix(a, b, df);
-        dozeHead = mix(d0 < 2.5 ? vec2(0.0) : dat(49.0 + d0), d1 < 2.5 ? vec2(0.0) : dat(49.0 + d1), df);
-    }
 #endif
 
     // the lean: blend the two nearest baked angles (a small idle sway keeps her alive at a standstill)
@@ -175,8 +174,8 @@ void main() {
     if (u_tails.z > 0.0) {
         vec2 tp = f - u_tailsAt.xy;
         float w = clamp((tp.y - u_tailsAt.z) / max(1.0, u_tailsAt.w), 0.0, 1.0);
-        float head = (u_counts.x < 2.5 ? 0.0 : mix(sh0.x, sh1.x, fr)) + lookHead + dozeHead.x;
-        tp.y -= dozeHead.y + (u_counts.x < 2.5 ? 0.0 : mix(sh0.y, sh1.y, fr));   // y: the forward/back lean's head drop
+        float head = u_counts.x < 2.5 ? 0.0 : mix(sh0.x, sh1.x, fr);
+        tp.y -= u_counts.x < 2.5 ? 0.0 : mix(sh0.y, sh1.y, fr);   // y: the forward/back lean's head drop
         // each tail swings out on its own side, fading to nothing across the middle (a hard split would tear it)
         float side = clamp((tp.x - u_tails.z * 0.5) / (u_tails.z * 0.25), -1.0, 1.0);
         float wave = sin(t * 1.6 - w * 2.4) * 2.5 * (1.0 - spd)
@@ -188,9 +187,132 @@ void main() {
     }
 #endif
 
+    c *= fade;
     vec3 rgb = c.rgb / max(c.a, 0.0001);
     gl_FragColor = vec4(rgb * u_drive.w, c.a);
 }
 `;
 
-module.exports = MIKU;
+const MIKU_CLOSE =
+  `// Miku's close-up (GLSL ES 1.00): what she zooms into when the car stops, from its own baked atlas (u_atlas, straight
+// alpha; tools/live2d_bake's bakeClose, close.rgba). Every frame is the layer's size, laid out on a grid (u_grid,
+// u_cropGrid), so nothing reads a table: first the zoom steps (the camera part of the way in, the expressions part of
+// the way on), then the close-up's poses (sway left, middle, sway right, then the turn from the left to the right
+// without the middle), then each pose's eyes half shut and shut, cropped to one rect (u_crop).
+// u_zoom = (zoom 0 .. 1, turn -1 .. 1, brightness, ready): the app ramps zoom over 1 s when the car stops (and back when it
+// pulls away) and eases turn toward the indicator. The camera (camera(), as MIKU's) zooms in; the standing layer under
+// this one fades out by the first zoom step, then this layer blends the two nearest steps, each drawn through its own
+// baked camera. Zoomed in, on the renderer's clock (u_time): she blinks every 2 s and sways (the head about u_pose.xy,
+// -1 .. 1 over 4 s; the two nearest baked sways each turned onto the sway between, as the bake measured their turn,
+// so they don't double); with the indicator on she turns her head that way (the nearest baked turns each slid onto
+// the head's place between them) and doesn't sway.
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+precision highp float;
+#else
+precision mediump float;
+#endif
+varying vec2 v_uv;
+uniform vec2 u_size;
+uniform float u_time;
+uniform sampler2D u_atlas;
+uniform vec2 u_atlasSize;
+uniform vec4 u_zoom;     // zoom 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there (0: draw nothing)
+uniform vec4 u_cam;      // the layer's view of her standing: x, y, w, h in the standing frame's px
+
+uniform vec4 u_cl[10];   // the bake's fixed values, as one array (cluster-render's 32 uniform names a layer)
+                         // u_cl[0 .. 3]: each zoom step's camera and then the close-up's (padded with it), standing frame px
+#define u_grid u_cl[4]   // frame cell w, h, columns, pad
+#define u_cropGrid u_cl[5]   // crop cell w, h, columns, y of the first row
+#define u_crop u_cl[6]   // the eyes' rect in a frame, px
+#define u_pose u_cl[7]   // the sway's pivot x, y (frame px), its turn at the left and right sway (rad, clockwise)
+#define u_shift u_cl[8]   // the turn frames' head shifts (px), left to right
+#define u_frames u_cl[9]   // frame w, h, zoom steps, turn steps each way
+
+vec4 tap(vec2 at, vec2 size, vec2 p) {
+    if (p.x < 0.0 || p.y < 0.0 || p.x > size.x || p.y > size.y) return vec4(0.0);
+    vec4 t = texture2D(u_atlas, (at + p) / u_atlasSize);
+    return vec4(t.rgb * t.a, t.a);
+}
+vec2 rot(vec2 p, float a) { float c = cos(a), s = sin(a); return vec2(c * p.x - s * p.y, s * p.x + c * p.y); }
+` +
+  CAMERA +
+  `
+vec4 rectAt(float i) { return i < 0.5 ? u_cl[0] : i < 1.5 ? u_cl[1] : i < 2.5 ? u_cl[2] : u_cl[3]; }
+// whole frame n's top-left in the atlas
+vec2 slot(float n) {
+    float row = floor((n + 0.5) / u_grid.z);
+    return vec2(n - row * u_grid.z, row) * u_grid.xy + u_grid.w;
+}
+// crop m's top-left in the atlas
+vec2 cropAt(float m) {
+    float row = floor((m + 0.5) / u_cropGrid.z);
+    return vec2(m - row * u_cropGrid.z, row) * u_cropGrid.xy + vec2(0.0, u_cropGrid.w) + u_grid.w;
+}
+// pose p (0 sway left, 1 middle, 2 sway right, then the turns) at frame px q, its eyes eh (0 open, 1 shut)
+vec4 pose(float p, vec2 q, float eh) {
+    vec4 c = tap(slot(u_frames.z + p), u_frames.xy, q);
+    vec2 e = q - u_crop.xy;
+    if (eh > 0.001 && e.x >= 0.0 && e.y >= 0.0 && e.x <= u_crop.z && e.y <= u_crop.w) {
+        c = mix(c, tap(cropAt(2.0 * p), u_crop.zw, e), min(1.0, eh * 2.0));              // half shut
+        c = mix(c, tap(cropAt(2.0 * p + 1.0), u_crop.zw, e), max(0.0, eh * 2.0 - 1.0));   // shut
+    }
+    return c;
+}
+// the turn's chain position j (0 .. 2 * steps; the middle is the sway): its pose and head shift
+float turnPose(float j) { return j < u_frames.w ? 3.0 + j : 2.0 + j; }
+float turnShift(float j) {
+    float i = j < u_frames.w ? j : j - 1.0;
+    float s = i < 0.5 ? u_shift.x : i < 1.5 ? u_shift.y : i < 2.5 ? u_shift.z : u_shift.w;
+    return abs(j - u_frames.w) < 0.5 ? 0.0 : s;
+}
+
+void main() {
+    float z = smoothstep(0.0, 1.0, clamp(u_zoom.x, 0.0, 1.0));
+    if (z <= 0.0 || u_zoom.w < 0.5) { gl_FragColor = vec4(0.0); return; }
+    float steps = u_frames.z;
+    vec4 close = rectAt(steps);
+    vec4 view = camera(z, u_cam, close);
+    vec2 f = view.xy + v_uv * view.zw;   // standing frame px
+    // the zoom steps at k / (steps + 1) of the way in, the close-up at the end: the two nearest
+    float k = z * (steps + 1.0) - 1.0, j0 = min(floor(k), steps - 1.0), jf = k - j0;
+    // zoomed in (from the last zoom step on): the sway, blinks and turn come in
+    float zin = clamp(k - (steps - 1.0), 0.0, 1.0);
+    vec4 c = vec4(0.0);
+    if (k > steps - 1.0) {
+        vec2 q = (f - close.xy) * u_frames.xy / close.zw;   // close-up frame px
+        float t = mod(u_time, 1200.0);
+        float turn = clamp(u_zoom.y, -1.0, 1.0) * zin;
+        float bt = mod(t, 2.0);
+        float eh = (smoothstep(0.0, 0.06, bt) * (1.0 - smoothstep(0.1, 0.22, bt))) * zin;
+        // the sway, -1 .. 1 over 4 s, none while she turns: the two nearest baked sways, each turned to it
+        float s = sin(t * 1.5708) * zin * (1.0 - smoothstep(0.0, 0.4, abs(turn)));
+        float i0 = min(floor(s + 1.0), 1.0), sf = s + 1.0 - i0;
+        float a0 = i0 < 0.5 ? u_pose.z : 0.0, a1 = i0 > 0.5 ? u_pose.w : 0.0, a = mix(a0, a1, sf);
+        c = mix(pose(i0, rot(q - u_pose.xy, a0 - a) + u_pose.xy, eh),
+            pose(i0 + 1.0, rot(q - u_pose.xy, a1 - a) + u_pose.xy, eh), sf);
+        // the turn: the two nearest along the chain, each slid so the heads meet (above the shoulders)
+        if (abs(turn) > 0.001) {
+            float n = 2.0 * u_frames.w, kt = (turn + 1.0) * u_frames.w;
+            float t0 = min(floor(kt), n - 1.0), tf = kt - t0, t1 = t0 + 1.0;
+            float h0 = turnShift(t0), h1 = turnShift(t1), hc = mix(h0, h1, tf);
+            float wy = 1.0 - smoothstep(u_pose.y - 20.0, u_pose.y + 30.0, q.y);
+            vec4 ca = abs(t0 - u_frames.w) < 0.5 ? c : pose(turnPose(t0), q + vec2((h0 - hc) * wy, 0.0), eh);
+            vec4 cb = abs(t1 - u_frames.w) < 0.5 ? c : pose(turnPose(t1), q + vec2((h1 - hc) * wy, 0.0), eh);
+            c = mix(ca, cb, tf);
+        }
+    }
+    // the zoom steps: j0 (none before the first: the standing layer under this one) blended into j0 + 1 (the
+    // close-up past the last)
+    // (the nearer step sees less: where the view reaches past it, the wider step's pixels stand in)
+    vec4 r0 = rectAt(max(j0, 0.0)), r1 = rectAt(j0 + 1.0);
+    vec2 q1 = (f - r1.xy) * u_frames.xy / r1.zw;
+    vec4 a = j0 < -0.5 ? vec4(0.0) : tap(slot(max(j0, 0.0)), u_frames.xy, (f - r0.xy) * u_frames.xy / r0.zw);
+    vec4 b = j0 + 1.0 > steps - 0.5 ? c : tap(slot(j0 + 1.0), u_frames.xy, q1);
+    if (j0 > -0.5 && (q1.x < 0.5 || q1.y < 0.5 || q1.x > u_frames.x - 0.5 || q1.y > u_frames.y - 0.5)) b = a;
+    c = mix(a, b, jf);
+    vec3 rgb = c.rgb / max(c.a, 0.0001);
+    gl_FragColor = vec4(rgb * u_zoom.z, c.a);
+}
+`;
+
+module.exports = { MIKU, MIKU_CLOSE };

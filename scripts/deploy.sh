@@ -5,7 +5,7 @@
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
 #   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
 #
-# --miku copies the folder's atlas.json and atlas.rgba (from tools/live2d_bake) to the app's data folder,
+# --miku copies the folder's atlas.json and atlas.rgba (and close.rgba, the close-up, when the bake made one; from tools/live2d_bake) to the app's data folder,
 # <app>/data/miku/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
 # next time it builds the layout (switch to another layout and back, or restart the app).
 #
@@ -43,6 +43,12 @@ if [ "${1:-}" = "--miku" ]; then
     MIKU_SRC="$2"; shift 2
     [ -f "$MIKU_SRC/atlas.json" ] && [ -f "$MIKU_SRC/atlas.rgba" ] || { echo "No atlas.json and atlas.rgba in $MIKU_SRC" >&2; exit 1; }
     python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$MIKU_SRC/atlas.json" || { echo "Not valid JSON: $MIKU_SRC/atlas.json" >&2; exit 1; }
+    # the close-up she zooms into when the car stops: its own atlas, when the bake made one
+    MIKU_FILES=("$MIKU_SRC/atlas.json" "$MIKU_SRC/atlas.rgba")
+    if python3 -c 'import json,sys; sys.exit(0 if "close" in json.load(open(sys.argv[1])) else 1)' "$MIKU_SRC/atlas.json"; then
+        [ -f "$MIKU_SRC/close.rgba" ] || { echo "atlas.json has a close-up but $MIKU_SRC/close.rgba is missing" >&2; exit 1; }
+        MIKU_FILES+=("$MIKU_SRC/close.rgba")
+    fi
 fi
 LAYOUT_DIR="$(dirname "$SCRIPT_DIR")/apps/${APP_ID}/hud/layouts"
 if [ $# -eq 0 ] && [ -z "$MIKU_SRC" ]; then set -- "$LAYOUT_DIR"/*.json; fi
@@ -63,7 +69,8 @@ echo "App folder on the car: ${APP_DIR}"
 if [ -n "$MIKU_SRC" ]; then
     OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
     ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/${MIKU_DIR}'"
-    scp "$MIKU_SRC/atlas.json" "$MIKU_SRC/atlas.rgba" "${CAR_HOST}:${APP_DIR}/data/${MIKU_DIR}/"
+    ssh "$CAR_HOST" "rm -f '${APP_DIR}/data/${MIKU_DIR}/close.rgba'"
+    scp "${MIKU_FILES[@]}" "${CAR_HOST}:${APP_DIR}/data/${MIKU_DIR}/"
     ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/${MIKU_DIR}'"
     echo "Pushed the Miku frames to ${APP_DIR}/data/${MIKU_DIR}. Switch to another layout and back (or restart the app) to load them."
     exit 0

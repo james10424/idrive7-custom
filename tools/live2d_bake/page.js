@@ -19,12 +19,17 @@
  *               perspective { widen: 0.14, shorten: 0.1 } (fb only): above the waist she tips out of the screen, so
  *               at a full lean her upper body is "shorten" shorter and its top "widen" narrower leaning back (wider
  *               leaning toward you), for depth
- *   look        { steps: 3, params: { id: value at a full glance right }, lead: ["id", ...] }: her glancing around
- *               while the car idles, head turned with the eyes leading: baked at "steps" angles each way ("params"
- *               times -1 .. 1); the "lead" ones (the eyes) get there twice as fast. steps 0: no glances
- *   doze        { steps: 3, params: { id: value fully drooped }, hold: { id: value } }: her dozing off when the car has
- *               stood still a while, head drooping forward over "steps" frames ("params" times 0 .. 1) with "hold" set
- *               on every one (the eyes shut: frames.shut's params by default). steps 0: she only shuts her eyes
+ *   close       { size: [249, 278], window: [-124, -277, 249, 278], centre: [x, y], height, pivot: [x, y],
+ *               expressions: ["X.exp3.json"], params: { id: value }, zoomSteps: 3, sway: { ParamAngleZ: 4 },
+ *               turn: { ParamAngleX: 30 }, turnSteps: 2 }: the close-up the HUD zooms into when the car stops, in its
+ *               own atlas (close.rgba), drawn at "size" px (the HUD window it fills). "window" is that window in HUD px
+ *               from her feet (x, y, w, h), where the zoom starts; "centre" and "height" (model units) frame the
+ *               close-up, its width from "size". On the way in the camera zooms evenly from the window to the
+ *               close-up while "expressions" and "params" blend from the model's defaults to fully on, baked at
+ *               "zoomSteps" points between. Zoomed in she sways ("sway" times -1 and 1) and turns her head toward the
+ *               indicator ("turn": her looking toward the right of the screen, times -1 .. 1 over "turnSteps" each way), every pose with its eyes open, half shut
+ *               and shut (frames.half, frames.shut). "pivot" (model units) is what the sway turns about, which the
+ *               HUD uses to line the baked steps up while it blends them
  *   tails       ["part id", ...]: drawn in their own sprite (swung by the HUD), hidden in the body frames
  *   tailsRoot   0..1: where the tails hang from, as a fraction down the tails sprite (0.15)
  *   anchor      [x, y] the model point between her feet (model units, y up, as ?inspect's grid shows them; the bottom
@@ -54,8 +59,9 @@ const cubismCore = window.Live2DCubismCore;
  * @property {Record<string, FrameConfig>} frames
  * @property {{ steps?: number, params?: Params, left?: Params, right?: Params, face?: number, axis?: string,
  *   perspective?: { widen?: number, shorten?: number } }} lean
- * @property {{ steps?: number, params?: Params, lead?: string[] }} look
- * @property {{ steps?: number, params?: Params, hold?: Params }} doze
+ * @property {{ size?: number[], window?: number[], centre: number[], height: number, pivot: number[],
+ *   expressions?: string[], params?: Params, zoomSteps?: number, sway?: Params, turn?: Params,
+ *   turnSteps?: number }} [close]
  * @property {string[]} [tails]
  * @property {number} [tailsRoot]
  * @property {[number, number]} [anchor]
@@ -102,10 +108,7 @@ const cubismCore = window.Live2DCubismCore;
  * @property {"fb"} [leanAxis]
  * @property {number[]} [leanShiftY]
  * @property {Rect} [crop]
- * @property {number[][]} [look]
- * @property {number[]} [lookShift]
- * @property {number[][]} [doze]
- * @property {number[][]} [dozeShift]
+ * @property {Record<string, *>} [close] the close-up's atlas (bakeClose)
  * @property {{ rect: number[], at: number[], rootY: number, length: number }} [tails]
  * @property {{ rect: number[], at: number[], shoulder: number[], side: number, left: number[], right: number[] }[]} [arms]
  */
@@ -145,12 +148,6 @@ const DEFAULTS = {
     },
     face: 0.6,
   },
-  look: {
-    steps: 3,
-    params: { ParamAngleX: 25, ParamEyeBallX: 1 },
-    lead: ["ParamEyeBallX", "ParamEyeBallY"],
-  },
-  doze: { steps: 3, params: { ParamAngleY: -30 } },
 };
 /**
  * @param {Partial<BakeConfig>} cfg
@@ -160,8 +157,6 @@ function withDefaults(cfg) {
   const merged = Object.assign({}, cfg);
   merged.frames = Object.assign({}, DEFAULTS.frames, cfg.frames || {});
   merged.lean = Object.assign({}, DEFAULTS.lean, cfg.lean || {});
-  merged.look = Object.assign({}, DEFAULTS.look, cfg.look || {});
-  merged.doze = Object.assign({}, DEFAULTS.doze, cfg.doze || {});
   return merged;
 }
 const logEl = /** @type {HTMLElement} */ (document.getElementById("log")),
@@ -730,6 +725,347 @@ function makeCuts(loaded, cut, params) {
   });
 }
 
+/* ---------- the close-up ---------- */
+/**
+ * The close-up's own atlas (close.rgba): what the HUD zooms into when the car stops. Every frame is the window's
+ * size and drawn at that size, so nothing is scaled up on the HUD:
+ *   slots 0 .. zoomSteps - 1   the zoom on its way in: the camera at k / (zoomSteps + 1) of the way from the window
+ *                              (standing) to the close-up, the toggles at the same fraction
+ *   then the close-up's poses  sway left, middle, sway right, then turn -2, -1, 1, 2 (turn "steps" each way)
+ *   then the crops             each pose's eyes half shut and shut, one rect (frame px) for all of them
+ * Frames are laid out on a grid the HUD computes from a few numbers (atlas.json close.grid), so it needs no tables.
+ * @param {Loaded} loaded
+ * @param {BakeConfig} cfg
+ * @param {{ renderer: Renderer, hidden: DrawablePick, ppu: number, box: Box, feet: number[] }} at the standing bake:
+ *   its px per model unit, frame box (model units) and the model point that goes on the widget's "feet"
+ * @returns {Promise<{ canvas: HTMLCanvasElement, info: Record<string, *> } | null>}
+ */
+async function bakeClose(loaded, cfg, at) {
+  const close = cfg.close;
+  if (!close || !Array.isArray(close.size) || !Array.isArray(close.window))
+    return null;
+  const pad = cfg.pad || 2,
+    [frameW, frameH] = close.size,
+    aspect = frameW / frameH,
+    ppu = at.ppu,
+    parameters = loaded.model.parameters;
+  // the two framings, model boxes [x0, y0, x1, y1] (y up): the HUD window round her standing (close.window: x, y,
+  // w, h in HUD px from her feet), and the close-up (close.centre, close.height in model units)
+  const win = close.window,
+    box0 = [
+      at.feet[0] + win[0] / ppu,
+      at.feet[1] - (win[1] + win[3]) / ppu,
+      at.feet[0] + (win[0] + win[2]) / ppu,
+      at.feet[1] - win[1] / ppu,
+    ],
+    h1 = close.height,
+    box1 = [
+      close.centre[0] - (h1 * aspect) / 2,
+      close.centre[1] - h1 / 2,
+      close.centre[0] + (h1 * aspect) / 2,
+      close.centre[1] + h1 / 2,
+    ];
+  const h0 = box0[3] - box0[1],
+    c0 = [(box0[0] + box0[2]) / 2, (box0[1] + box0[3]) / 2],
+    c1 = [(box1[0] + box1[2]) / 2, (box1[1] + box1[3]) / 2];
+  /**
+   * The camera at u (0 the window, 1 the close-up): the height eases geometrically (an even zoom) and the centre
+   * moves as the height does, so it zooms toward a point. Model box.
+   * @param {number} u
+   * @returns {Box}
+   */
+  const camera = (u) => {
+    const h = h0 * Math.pow(h1 / h0, u),
+      w = h * aspect,
+      along = (h0 - h) / (h0 - h1),
+      cx = c0[0] + (c1[0] - c0[0]) * along,
+      cy = c0[1] + (c1[1] - c0[1]) * along;
+    return [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2];
+  };
+  /**
+   * A model box in the standing frame's px: [x, y, w, h] (y down), what the HUD's shader works in.
+   * @param {Box} b
+   * @returns {number[]}
+   */
+  const inFrame = (b) =>
+    [
+      (b[0] - at.box[0]) * ppu,
+      (at.box[3] - b[3]) * ppu,
+      (b[2] - b[0]) * ppu,
+      (b[3] - b[1]) * ppu,
+    ].map((v) => Math.round(v * 100) / 100);
+  // the toggles (expressions and params) blend from the model's defaults at the zoom's start to fully on at its end
+  const full = Object.assign(
+    {},
+    await expressionParams(close.expressions),
+    close.params || {},
+  );
+  /**
+   * The toggles at fraction t.
+   * @param {number} t
+   * @returns {Params}
+   */
+  const toggles = (t) => {
+    /** @type {Params} */
+    const out = {};
+    Object.keys(full).forEach((id) => {
+      const i = parameters.ids.indexOf(id),
+        def = i >= 0 ? parameters.defaultValues[i] : 0;
+      out[id] = def + (full[id] - def) * t;
+    });
+    return out;
+  };
+  const idle = (cfg.frames && cfg.frames.idle && cfg.frames.idle.params) || {},
+    half = (cfg.frames.half && cfg.frames.half.params) || {},
+    shut = (cfg.frames.shut && cfg.frames.shut.params) || {};
+  /** @type {DrawOpts} */
+  const opts = { skip: at.hidden };
+  /**
+   * The model with these params, drawn through camera box b at the frame's size.
+   * @param {Params} params
+   * @param {Box} b
+   * @returns {HTMLCanvasElement}
+   */
+  const shot = (params, b) => {
+    setParams(loaded, Object.assign({}, cfg.params, idle, params));
+    loaded.model.update();
+    return shrink(
+      at.renderer.draw(frameW * SUPERSAMPLE, frameH * SUPERSAMPLE, b, opts),
+      frameW,
+      frameH,
+    );
+  };
+  const zoomSteps = Math.max(1, Math.min(3, Math.round(close.zoomSteps || 3)));
+  /** @type {HTMLCanvasElement[]} */
+  const full_ = [];
+  /** @type {number[][]} */
+  const rects = [];
+  for (let k = 1; k <= zoomSteps; k++) {
+    const u = k / (zoomSteps + 1);
+    full_.push(shot(toggles(u), camera(u)));
+    rects.push(inFrame(camera(u)));
+  }
+  rects.push(inFrame(box1));
+  // the close-up's poses: sway (close.sway at -1, 0, 1) and the turn (close.turn at -1 .. 1 in turnSteps each way)
+  const sway = close.sway || { ParamAngleZ: 4 },
+    turn = close.turn || { ParamAngleX: 30 },
+    turnSteps = Math.max(1, Math.min(2, Math.round(close.turnSteps || 2)));
+  /**
+   * params scaled by k.
+   * @param {Params} params
+   * @param {number} k
+   * @returns {Params}
+   */
+  const times = (params, k) =>
+    Object.fromEntries(Object.keys(params).map((id) => [id, params[id] * k]));
+  /** @type {Params[]} */
+  const poses = [times(sway, -1), {}, times(sway, 1)];
+  for (let k = -turnSteps; k <= turnSteps; k++)
+    if (k) poses.push(times(turn, k / turnSteps));
+  /** @type {HTMLCanvasElement[][]} */
+  const posed = poses.map((pose) => {
+    const base = Object.assign(toggles(1), pose);
+    return [
+      shot(base, box1),
+      shot(Object.assign({}, base, half), box1),
+      shot(Object.assign({}, base, shut), box1),
+    ];
+  });
+  /**
+   * A frame's pixels.
+   * @param {HTMLCanvasElement} canvas
+   * @returns {Uint8ClampedArray}
+   */
+  const px = (canvas) =>
+    canvas.getContext("2d").getImageData(0, 0, frameW, frameH).data;
+  // the eyes: one rect round every pixel any half or shut frame changes from its pose's open one, plus a margin
+  let x0 = frameW,
+    y0 = frameH,
+    x1 = -1,
+    y1 = -1;
+  posed.forEach(([open, ...eyes]) => {
+    const base = px(open);
+    eyes.forEach((canvas) => {
+      const pixels = px(canvas);
+      for (let k = 0; k < pixels.length; k += 4) {
+        let diff = 0;
+        for (let c = 0; c < 4; c++)
+          diff += Math.abs(pixels[k + c] - base[k + c]);
+        if (diff < 6) continue;
+        const x = (k / 4) % frameW,
+          y = (k / 4 - x) / frameW;
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+      }
+    });
+  });
+  if (x1 < 0)
+    throw new Error(
+      "close-up: the eyes don't change with frames.half or frames.shut",
+    );
+  x0 = Math.max(0, x0 - 1);
+  y0 = Math.max(0, y0 - 1);
+  x1 = Math.min(frameW - 1, x1 + 1);
+  y1 = Math.min(frameH - 1, y1 + 1);
+  const crop = [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
+  // the shader's alignment while it blends: the sway's turn on screen (rad, clockwise; measured from how far the top
+  // of her head moves about close.pivot), and each turn frame's head shift (px, the alpha centroid across her eyes)
+  const pivot = [
+    (close.pivot[0] - box1[0]) * (frameW / (box1[2] - box1[0])),
+    (box1[3] - close.pivot[1]) * (frameH / (box1[3] - box1[1])),
+  ];
+  /**
+   * The alpha centroid x of rows y0 .. y1 of a frame.
+   * @param {HTMLCanvasElement} canvas
+   * @param {number} top
+   * @param {number} bottom
+   * @returns {number}
+   */
+  const midX = (canvas, top, bottom) => {
+    const pixels = px(canvas);
+    let sum = 0,
+      weight = 0;
+    for (
+      let y = Math.max(0, Math.round(top));
+      y < Math.min(frameH, Math.round(bottom));
+      y++
+    )
+      for (let x = 0; x < frameW; x++) {
+        const a = pixels[(y * frameW + x) * 4 + 3];
+        sum += x * a;
+        weight += a;
+      }
+    return weight ? sum / weight : frameW / 2;
+  };
+  // the sway's turn: the rotation about the pivot that best lays her middle pose over each sway pose, above the pivot
+  /**
+   * The angle (rad, clockwise on screen) that best turns frame "from" onto frame "to" about the pivot.
+   * @param {HTMLCanvasElement} from
+   * @param {HTMLCanvasElement} to
+   * @returns {number}
+   */
+  const bestTurn = (from, to) => {
+    const target = px(to),
+      turned = document.createElement("canvas");
+    turned.width = frameW;
+    turned.height = frameH;
+    const tctx = turned.getContext("2d");
+    let best = 0,
+      bestErr = Infinity;
+    for (let deg = -8; deg <= 8.001; deg += 0.1) {
+      tctx.setTransform(1, 0, 0, 1, 0, 0);
+      tctx.clearRect(0, 0, frameW, frameH);
+      tctx.translate(pivot[0], pivot[1]);
+      tctx.rotate((deg * Math.PI) / 180);
+      tctx.translate(-pivot[0], -pivot[1]);
+      tctx.drawImage(from, 0, 0);
+      const pixels = tctx.getImageData(0, 0, frameW, frameH).data;
+      let err = 0;
+      for (let y = 0; y < Math.min(frameH, pivot[1]); y += 2)
+        for (let x = 0; x < frameW; x += 2) {
+          const k = (y * frameW + x) * 4;
+          for (let c = 0; c < 4; c++)
+            err += Math.abs(pixels[k + c] - target[k + c]);
+        }
+      if (err < bestErr) {
+        bestErr = err;
+        best = (deg * Math.PI) / 180;
+      }
+    }
+    return Math.round(best * 10000) / 10000;
+  };
+  const swayAngle = [0, 2].map((i) => bestTurn(posed[1][0], posed[i][0]));
+  const eyeMid = midX(posed[1][0], y0, y1 + 1);
+  const turnShift = posed
+    .slice(3)
+    .map(
+      (frames) => Math.round((midX(frames[0], y0, y1 + 1) - eyeMid) * 10) / 10,
+    );
+  log(
+    "close-up " +
+      frameW +
+      "x" +
+      frameH +
+      ": " +
+      zoomSteps +
+      " zoom steps, " +
+      poses.length +
+      " poses, eyes cropped to " +
+      crop[2] +
+      "x" +
+      crop[3] +
+      "; sway " +
+      swayAngle.map((a) => ((a * 180) / Math.PI).toFixed(1)).join(" / ") +
+      " deg, turn head shifts " +
+      turnShift.join(", ") +
+      " px",
+  );
+  // the grid: whole frames first, then the crops
+  const MAX = 1024,
+    cell = [frameW + 2 * pad, frameH + 2 * pad],
+    cols = Math.floor(MAX / cell[0]),
+    wholes = full_.concat(posed.map((frames) => frames[0])),
+    rows = Math.ceil(wholes.length / cols),
+    cropCell = [crop[2] + 2 * pad, crop[3] + 2 * pad],
+    cropCols = Math.floor(MAX / cropCell[0]),
+    crops = [];
+  posed.forEach((frames) => crops.push(frames[1], frames[2]));
+  const cropY = rows * cell[1],
+    atlasH = cropY + Math.ceil(crops.length / cropCols) * cropCell[1];
+  if (atlasH > MAX)
+    throw new Error(
+      "the close-up atlas would be " +
+        atlasH +
+        " px high: over " +
+        MAX +
+        ", which restarts the instrument cluster. Bake a smaller close.size, fewer close.zoomSteps or close.turnSteps",
+    );
+  const atlas = document.createElement("canvas");
+  atlas.width = MAX;
+  atlas.height = atlasH;
+  const ctx = atlas.getContext("2d");
+  wholes.forEach((canvas, n) =>
+    ctx.drawImage(
+      canvas,
+      (n % cols) * cell[0] + pad,
+      Math.floor(n / cols) * cell[1] + pad,
+    ),
+  );
+  crops.forEach((canvas, n) =>
+    ctx.drawImage(
+      canvas,
+      crop[0],
+      crop[1],
+      crop[2],
+      crop[3],
+      (n % cropCols) * cropCell[0] + pad,
+      cropY + Math.floor(n / cropCols) * cropCell[1] + pad,
+      crop[2],
+      crop[3],
+    ),
+  );
+  return {
+    canvas: atlas,
+    info: {
+      atlas: [MAX, atlasH],
+      frame: [frameW, frameH],
+      zoomSteps,
+      turnSteps,
+      // grid: cell w, h, columns, pad; cropGrid: cell w, h, columns, y of the first row
+      grid: [cell[0], cell[1], cols, pad],
+      cropGrid: [cropCell[0], cropCell[1], cropCols, cropY],
+      crop,
+      // each zoom step's camera and the close-up's, [x, y, w, h] in the standing frame's px
+      rects,
+      pivot: pivot.map((v) => Math.round(v * 10) / 10),
+      swayAngle,
+      turnShift,
+    },
+  };
+}
+
 /**
  * Bakes the frames and sprites into the atlas and posts atlas.rgba, atlas.json and preview.png to serve.js.
  * @param {Loaded} loaded
@@ -906,53 +1242,6 @@ async function bake(loaded, cfg) {
     names.push(name);
     leanNames.push(name);
   }
-  // the glances, left to right (the middle one is idle): head and eyes only, so the arms and tails still fit her
-  const lookSteps = Math.max(0, Math.min(3, Math.round(cfg.look.steps || 0))),
-    lkp = cfg.look.params || {},
-    lead = new Set(cfg.look.lead || []);
-  /** @type {string[]} */
-  const lookNames = [];
-  for (let step = -lookSteps; step <= lookSteps && lookSteps; step++) {
-    if (!step) {
-      lookNames.push("idle");
-      continue;
-    }
-    const glance = step / lookSteps,
-      /** @type {Params} */
-      poseParams = {};
-    Object.keys(lkp).forEach((id) => {
-      poseParams[id] =
-        lkp[id] *
-        (lead.has(id)
-          ? Math.sign(glance) * Math.min(1, 2 * Math.abs(glance))
-          : glance);
-    });
-    setParams(loaded, Object.assign({}, cfg.params, idle, poseParams));
-    loaded.model.update();
-    const name = "look" + (step + lookSteps);
-    frames[name] = render(body);
-    names.push(name);
-    lookNames.push(name);
-  }
-  // dozing: the head drooping forward, eyes shut (after the upright half and shut frames on the HUD)
-  const dozeSteps = Math.max(0, Math.min(4, Math.round(cfg.doze.steps || 0))),
-    dzp = cfg.doze.params || {};
-  const hold =
-    cfg.doze.hold || (cfg.frames.shut && cfg.frames.shut.params) || {};
-  /** @type {string[]} */
-  const dozeNames = [];
-  for (let k = 1; k <= dozeSteps; k++) {
-    const poseParams = Object.assign({}, hold);
-    Object.keys(dzp).forEach((id) => {
-      poseParams[id] = (dzp[id] * k) / dozeSteps;
-    });
-    setParams(loaded, Object.assign({}, cfg.params, idle, poseParams));
-    loaded.model.update();
-    const name = "doze" + k;
-    frames[name] = render(body);
-    names.push(name);
-    dozeNames.push(name);
-  }
   // each arm: its shoulder (the middle of its topmost vertices) and its middle, in frame px, at rest and at a full lean
   // each way (the lean's own arm sway included), so the HUD can carry the sprite with her and turn it as she turns it
   /**
@@ -1045,7 +1334,7 @@ async function bake(loaded, cfg) {
       rect = alphaBox(canvas);
     if (rect) tailsSprite = { cv: canvas, bb: rect };
   }
-  // the face, glance and doze frames differ from idle only around her head: each keeps just one crop, the same rect
+  // the face frames differ from idle only around her head: each keeps just one crop, the same rect
   // for all of them (where any of them differs from idle, plus a margin), and the HUD draws idle round it
   const cropped = names.filter(
     (name) => name !== "idle" && name.indexOf("lean") !== 0,
@@ -1090,7 +1379,7 @@ async function bake(loaded, cfg) {
       y1 = Math.min(frameH - 1, y1 + cropMargin);
       crop = [x0, y0, x1 - x0 + 1, y1 - y0 + 1];
       log(
-        "face, glance and doze frames cropped to " +
+        "face frames cropped to " +
           crop[2] +
           "x" +
           crop[3] +
@@ -1161,7 +1450,7 @@ async function bake(loaded, cfg) {
         atlasH +
         ": over " +
         MAX +
-        " px a side, which restarts the instrument cluster. Bake fewer or smaller frames (heightPx, lean.steps, look.steps, doze.steps)",
+        " px a side, which restarts the instrument cluster. Bake fewer or smaller frames (heightPx, lean.steps)",
     );
   const atlas = document.createElement("canvas");
   atlas.width = atlasW;
@@ -1213,11 +1502,8 @@ async function bake(loaded, cfg) {
     (name) => Math.round((headX(frames[name]) - idleHeadX) * 10) / 10,
   );
   log("head shift per lean angle (px): " + shift.join(", "));
-  const lookShift = lookNames.map(
-    (name) => Math.round((headX(frames[name]) - idleHeadX) * 10) / 10,
-  );
-  if (lookSteps) log("head shift per glance (px): " + lookShift.join(", "));
-  // a drooping head also drops: the top of her head (the first row with a few solid pixels) against idle's
+  // the forward/back lean moves her head up and down more than sideways: the tails follow that too. The top row of
+  // her head (the first with a few solid pixels) against idle's
   /**
    * The top row of her head in a frame.
    * @param {HTMLCanvasElement} canvas
@@ -1236,16 +1522,6 @@ async function bake(loaded, cfg) {
     return 0;
   };
   const top0 = headTop(frames.idle);
-  const dozeShift = dozeNames.map((name) => [
-    Math.round((headX(frames[name]) - idleHeadX) * 10) / 10,
-    headTop(frames[name]) - top0,
-  ]);
-  if (dozeSteps)
-    log(
-      "head shift per doze frame (px): " +
-        dozeShift.map((pair) => pair.join("/")).join(", "),
-    );
-  // the forward/back lean moves her head up and down more than sideways: the tails follow that too
   const shiftY = fbLean
     ? leanNames.map((name) => headTop(frames[name]) - top0)
     : null;
@@ -1271,20 +1547,12 @@ async function bake(loaded, cfg) {
     headY: Math.round((bandY0 + bandY1) / 2),
     leanShift: shift,
   };
-  // the face, glance and doze frames are crops of this rect (frame px); their positions are the crops' top-lefts
+  // the face frames are crops of this rect (frame px); their positions are the crops' top-lefts
   if (fbLean) {
     info.leanAxis = "fb";
     info.leanShiftY = shiftY;
   }
   if (crop) info.crop = crop;
-  if (lookSteps) {
-    info.look = lookNames.map((name) => byN[name].at);
-    info.lookShift = lookShift;
-  }
-  if (dozeSteps) {
-    info.doze = dozeNames.map((name) => byN[name].at);
-    info.dozeShift = dozeShift;
-  }
   if (tailsSprite) {
     const tailsItem = byN.tails,
       root = cfg.tailsRoot || 0.15;
@@ -1332,6 +1600,34 @@ async function bake(loaded, cfg) {
         left: off(arm.pose.left),
         right: off(arm.pose.right),
       };
+    });
+  }
+  // the close-up the HUD zooms into when the car stops: its own atlas, close.rgba
+  const feetModel = [
+    anchorModel[0] - anchorOffset[0] / ppu,
+    anchorModel[1] + anchorOffset[1] / ppu,
+  ];
+  const closeUp = await bakeClose(loaded, cfg, {
+    renderer,
+    hidden,
+    ppu,
+    box,
+    feet: feetModel,
+  });
+  if (closeUp) {
+    info.close = closeUp.info;
+    const closeRgba = closeUp.canvas
+      .getContext("2d")
+      .getImageData(0, 0, closeUp.canvas.width, closeUp.canvas.height).data;
+    await fetch("/out/close.rgba", {
+      method: "POST",
+      body: new Blob([closeRgba]),
+    });
+    await fetch("/out/close.png", {
+      method: "POST",
+      body: await new Promise((resolve) =>
+        closeUp.canvas.toBlob(resolve, "image/png"),
+      ),
     });
   }
   // write: raw straight-alpha RGBA (what the HUD uploads), the description, a preview
