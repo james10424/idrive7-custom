@@ -14,7 +14,25 @@
  *   create(hud, w, x)         sets up its layer once made (fixed uniforms, the first paint)
  *   update(hud, x, now, force)  sends what changed (force: everything)
  */
-/** @type {Record<string, *>} */
+/** @typedef {import("../engine/app").App} App */
+/** @typedef {import("../engine/app").Widget} Widget */
+/** @typedef {import("../engine/app").WidgetState} WidgetState */
+/**
+ * A widget type's module (the fields above).
+ * @typedef {object} WidgetModule
+ * @property {string} type
+ * @property {string[]} [fields]
+ * @property {string} [docs]
+ * @property {boolean} [image]
+ * @property {(hud: App, widget: Widget, connIndex: number) => ?string} [shader]
+ * @property {boolean} [time]
+ * @property {string[]} [cfg]
+ * @property {Record<string, string>} [shaders]
+ * @property {(hud: App, widget: Widget, state: WidgetState) => void} [create]
+ * @property {(hud: App, state: WidgetState, now: number, force: boolean) => void} [update]
+ * @property {(hud: App, state: WidgetState) => void} [reset] restarts its animations (the "reset" settings)
+ */
+/** @type {Record<string, WidgetModule>} */
 const TYPES = {
   miku: require("./miku"),
   rdash: require("./rdash"),

@@ -9,6 +9,13 @@ const { MODE_TEXT } = require("./consts");
 const { THEMES } = require("../hud_themes");
 const { mib } = require("./util");
 
+/**
+ * The status row's state on the app (App, through app_type.d.ts).
+ * @typedef {object} StatusState
+ * @property {?ReturnType<typeof setTimeout>} [_statusT] a status update waiting (at most one at a time)
+ * @property {string} [lastDetail] the detail line last shown
+ */
+
 module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /**
    * fn(text) whenever the status line changes.
@@ -69,6 +76,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
     const refs = this._layerRefs();
     if (!refs.length) return refused;
     let shown = 0,
+      /** @type {?string} */
       why = null,
       whyN = 0;
     refs.forEach((layerRef) => {

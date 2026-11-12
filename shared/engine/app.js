@@ -122,10 +122,17 @@ const { isNum, mib } = require("./util");
  * @property {(fn: (key: string) => void) => void} settings.onChange
  * @property {(key: string, value: *) => void} settings.set
  * @property {{ watch: (iface: string, instance: string,
- *   handlers: Record<string, (v: *) => void>, log: Log) => *
- * }} signals the car's SOME/IP signals
+ *   handlers: Record<string, ((msg: never) => void) | number>, log: Log) => Promise<Subscription>
+ * }} signals the car's SOME/IP signals (a handler's payload: someip.d.ts)
  * @property {{ id: string, config?: HudConfig }} spec app.json
  * @property {string} [dataDir] the app's data folder
+ */
+/**
+ * A watch's subscription (kit/runtime/signals.js).
+ * @typedef {object} Subscription
+ * @property {string} [error] why it failed
+ * @property {boolean} [available] the interface's provider is there
+ * @property {() => void} shutdown stops watching
  */
 
 /**
@@ -232,7 +239,7 @@ const { isNum, mib } = require("./util");
  * @property {Client} c
  * @property {number} ci connection index
  * @property {?Sheet} sheet
- * @property {*} last the last values sent (a key)
+ * @property {unknown} last the last values sent (a key, as the widget type makes it)
  * @property {number} lastPaint ms
  * @property {?boolean} px painted at least once (_blitDiff; the pixels themselves are the client's layer copy)
  * @property {ReturnType<typeof setInterval>} [timer] its own update timer (a module that sets one: the tick skips it)
@@ -813,6 +820,7 @@ class HudApp {
         return;
       }
     }
+    /** @type {WidgetState} */
     const state = {
       w: widget,
       ref,

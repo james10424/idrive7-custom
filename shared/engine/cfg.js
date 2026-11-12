@@ -12,6 +12,7 @@
  */
 function packCfg(src, names) {
   // the comment below is part of the GLSL sent to the car; it is kept word for word
+  /** @type {Record<string, string>} */
   const SWIZZLE = { float: ".x", vec2: ".xy", vec3: ".xyz", vec4: "" };
   let defs =
     "uniform vec4 u_cfg[" +

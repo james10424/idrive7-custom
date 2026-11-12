@@ -210,7 +210,7 @@ const M_STRIPE = [
  */
 function color(theme, spec) {
   if (Array.isArray(spec)) return spec;
-  return theme[spec] || theme.fg;
+  return /** @type {Record<string, Rgba | undefined>} */ (/** @type {unknown} */ (theme))[spec] || theme.fg;
 }
 
 module.exports = { THEMES, M_STRIPE, LIGHTS, VERDICT, color };

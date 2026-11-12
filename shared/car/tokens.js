@@ -63,7 +63,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
 
   /**
    * A text template with its {{tokens}} filled in.
-   * @param {*} template
+   * @param {unknown} template its text (anything else as String() writes it)
    * @returns {string}
    */
   _resolve(template) {

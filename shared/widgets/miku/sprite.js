@@ -118,6 +118,7 @@ function mikuData(info, atlasWidth) {
  * scripts/deploy.sh --miku. They are not in the app: the character's art stays with its owner. Uploaded once as an
  * RGBA asset per connection and kept in hud.atlases (so the pixel memory counts it); new files (a later bake)
  * drop the old asset. Null, with hud.problem set, when the files are missing or bad.
+ * @param {import("../../engine/app").App} hud
  * @param {Widget} widget
  * @param {number} connIndex connection index
  * @returns {?SpriteAtlas}

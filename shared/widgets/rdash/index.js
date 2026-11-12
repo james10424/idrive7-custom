@@ -56,7 +56,7 @@ function podFrac(pod, value) {
  * from rest, out only when it was already moving (BMW goes through N, so P to D retargets on the way), and once
  * there it stays put, so the layer's uniforms change only while it moves.
  * @param {Widget} widget
- * @param {*} state
+ * @param {WidgetState & RdashState} state
  * @param {number} slot
  * @param {number} now
  * @returns {number}
@@ -94,6 +94,8 @@ const NEEDLE = packCfg(
  * This type's own state on its WidgetState.
  * @typedef {object} RdashState
  * @property {{ f: number, fuel: number, pods: number[] }} [ez] the eased needles
+ * @property {{ pos: number, from: number, to: number, t0: number, dur: number, out: boolean }} [gn] the gear needle's move:
+ *   where it is and where it goes (in letters), when the move started and how long it takes, ms; out: eased out only
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */

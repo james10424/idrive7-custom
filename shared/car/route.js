@@ -8,10 +8,18 @@ const { isNum } = require("../engine/util");
 
 /** @typedef {import("./consts").Route} Route */
 
+/**
+ * The route on the app (App, through app_type.d.ts).
+ * @typedef {object} RouteState
+ * @property {?Route} [route] while guiding, raw distances; null when a new route starts
+ * @property {Record<string, string>} [routeLogged] the route messages last logged, by kind
+ * @property {Record<string, number>} [routeLogAt]
+ */
+
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * finalDestinationInfo: distance left (formattedDistance: BMW's text, its unit, rawDistance), time left (travelTime, s).
-   * @param {*} msg
+   * @param {import("./someip").Fields["de.bmw.infotainment.navigation.guiding.Guidance"]["finalDestinationInfo"]} msg
    * @returns {void}
    */
   _onRouteInfo(msg) {
@@ -52,7 +60,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
 
   /**
    * travelledDistance (FormattedDistance): how far along the route we are, for the bar's total (travelled + left).
-   * @param {*} msg
+   * @param {import("./someip").Fields["de.bmw.infotainment.navigation.guiding.Guidance"]["travelledDistance"]} msg
    * @returns {void}
    */
   _onTravelled(msg) {
@@ -66,7 +74,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * Route messages as sent, each when it changes, at most every 10 s (to confirm the units on the car).
    * @param {string} kind
-   * @param {*} msg
+   * @param {unknown} msg
    * @returns {void}
    */
   _logRoute(kind, msg) {
@@ -103,7 +111,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
 
   /**
    * guidanceState: INACTIVE 0, CALCULATING_ROUTE 1, ACTIVE 2 (the car's catalog), by name or number; anything else reads as off.
-   * @param {*} raw
+   * @param {import("./someip").Fields["de.bmw.infotainment.navigation.guiding.Guidance"]["guidanceState"] | { guidanceState?: import("./someip").Fields["de.bmw.infotainment.navigation.guiding.Guidance"]["guidanceState"] }} raw the field, or a struct holding it
    * @returns {void}
    */
   _onGuidance(raw) {

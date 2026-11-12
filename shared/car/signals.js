@@ -35,7 +35,92 @@ const {
 const { isNum, pad2 } = require("../engine/util");
 
 /** @typedef {import("./consts").Signals} Signals */
-/** @typedef {import("./consts").Car} Car */
+
+/**
+ * HmiMediaState as last sent (_startMedia).
+ * @typedef {object} MediaState
+ * @property {?import("./someip").Fields["de.bmw.infotainment.hmi.hmimediastate.HmiMediaState"]["playerMetadata"]} pm
+ * @property {?import("./someip").Fields["de.bmw.infotainment.hmi.hmimediastate.HmiMediaState"]["mainMenuMetadata"]} mm
+ * @property {?import("./someip").Fields["de.bmw.infotainment.hmi.hmimediastate.HmiMediaState"]["tracks"]} tracks
+ * @property {?import("./someip").Fields["de.bmw.infotainment.hmi.hmimediastate.HmiMediaState"]["trackSelection"]} sel
+ */
+/** @typedef {import("./consts").Ahead} Ahead */
+/** @typedef {import("./consts").Ahead2} Ahead2 */
+/**
+ * The car's values on the app (App, through app_type.d.ts): set by _initCar (empty until the car sends them) and by the
+ * signal handlers below.
+ * @typedef {object} CarState
+ * @property {?number} boostFes bar, from the sport display signal
+ * @property {number} boostFesAt
+ * @property {?number} boostDme bar, from the engine unit (fallback)
+ * @property {number} boostDmeAt
+ * @property {boolean} needsBoost a shown widget uses boost (the engine unit is only asked then)
+ * @property {?string} driveMode 'comfort' | 'sport' | 'eco', once the car has said
+ * @property {?string} driveVariant 'plus' (Sport+ / Comfort+ / Eco Pro+), 'individual', or null
+ * @property {boolean} navActive BMW's route guidance is on (the HUD shows its own guidance then)
+ * @property {unknown} navRaw the last guidanceState as the car sent it, for the log
+ * @property {boolean} assistActive BMW's HUD shows its driver assistance block (ACC, DCC, STA)
+ * @property {string | undefined} assistRaw the last summary of it, for the log
+ * @property {?Ahead} ahead the car ahead, raw (DataFrontVehicle)
+ * @property {?Ahead2} ahead2 GapVehicleDrivingAhead
+ * @property {?{ v: ?number, gapM: number, at: number }} relFromGap km/h, the gap's smoothed rate of change
+ * @property {?{ raw: number, at: number }} pedal the accelerator pedal as sent, while valid
+ * @property {string} [pedalLine] its last logged message
+ * @property {?boolean} brakeOn the brake lights, null until the car says
+ * @property {?string} turn the indicators: 'L', 'R', 'LR' (hazards) or '' (body.Light StatusFunctionsIndicators)
+ * @property {number} [turnAt] when they last changed
+ * @property {boolean} accOn BMW's HUD has the ACC car or distance bars up (the Grand National CRUISE lamp)
+ * @property {?number} mileage the odometer as sent (MileageSupreme, taken as km)
+ * @property {?boolean} parkBrake the parking brake set, null until the car says
+ * @property {?boolean} parkBrakeCds the same from CDS statusHandBrake (a fallback)
+ * @property {?boolean} [parkBrakeVsm] the same from VehicleStabilizationManagement
+ * @property {?string} autoHold Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
+ * @property {?number} volt12 V, the 12 V system from the engine unit
+ * @property {number} volt12At
+ * @property {boolean} needsVolt a shown widget uses volt12 (the engine unit is only asked then)
+ * @property {number} pedalLogged
+ * @property {?number} pedalObd %, the pedal from the engine unit (OBD PID 0x49)
+ * @property {number} pedalObdAt
+ * @property {?number} pedalObdLogged
+ * @property {boolean} needsPedal a shown widget uses the throttle (the engine unit is only asked then)
+ * @property {?number} decelF g, the smoothed deceleration for the brake bar
+ * @property {number} decelAt
+ * @property {?number} carOffsetMin the car's time zone, minutes from UTC, from the time the cluster shows
+ * @property {?number} battRaw the 12 V battery's charge condition as sent
+ * @property {number} battAt
+ * @property {Record<string, string>} aheadLogged the car-ahead messages last logged, by kind
+ * @property {?number} accSetRaw cruiseCtrlSpeedHUD as sent
+ * @property {Record<string, number>} aheadLogAt
+ * @property {{ press: ?string, temp: ?string, psiSeen: boolean }} carUnits the car's display units, for the TPMS values
+ * @property {?string} program 'S' / 'M' from the MDrive gearbox display, else null (D)
+ * @property {?number} fuelL KombiIF tank, litres
+ * @property {?number} rangeKm KombiIF range
+ * @property {?number} ambient outside temperature, C
+ * @property {?number} odoKm KombiIF odometer (whole km)
+ * @property {number} odoAcc the distance since its last km
+ * @property {number} odoAt
+ * @property {{ p: Record<string, ?number>, t: Record<string, ?number> }} tyres TPMS pressure (bar) and temperature (C) per corner FL FR RL RR
+ * @property {?number} [consAvg] ResetLogic's average consumption, scaled
+ * @property {?number} [consUnit] its unit (CONS_UNIT)
+ * @property {number} [consAt]
+ * @property {unknown} [consPeriod] the trip computer period picked on the center screen
+ * @property {?number} [consBc] the on-board computer's average
+ * @property {?number} [consUnitBc]
+ * @property {number} [consBcAt]
+ * @property {?number} [sportPower] the sport display's power, %
+ * @property {?number} [sportTorque] its torque, %
+ * @property {number} [sportAt]
+ * @property {import("../shift_score").Car} car the kit's Car with the extra signals (its data() a snapshot per tick)
+ * @property {import("../shift_score")} score the shift scorer
+ * @property {() => void} _freshData takes a new snapshot of the car's data (once a tick)
+ * @property {ReturnType<typeof setInterval>} [dmeTimer] the engine unit reads
+ * @property {MediaState} [media]
+ * @property {string} [mediaRaw]
+ * @property {import("../engine/app").Subscription} [mediaSub]
+ * @property {import("../engine/app").Subscription} [navSub]
+ * @property {string} [musicTitle]
+ * @property {ReturnType<typeof setTimeout>} [fontT]
+ */
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
@@ -43,84 +128,52 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {void}
    */
   _initCar() {
-    /** @type {?number} */
     this.boostFes = null;
     this.boostFesAt = 0; // bar, from the sport display signal
-    /** @type {?number} */
     this.boostDme = null;
     this.boostDmeAt = 0; // bar, from the engine unit (fallback)
     this.needsBoost = false; // a shown widget uses boost (the engine unit is only asked then)
-    /** @type {?string} */
     this.driveMode = null; // 'comfort' | 'sport' | 'eco', once the car has said
-    /** @type {?string} */
     this.driveVariant = null; // 'plus' (Sport+ / Comfort+ / Eco Pro+), 'individual', or null
     this.navActive = false; // BMW's route guidance is on (the HUD shows its own guidance then)
-    /** @type {*} */
     this.navRaw = undefined; // the last guidanceState as the car sent it, for the log
     this.assistActive = false; // BMW's HUD shows its driver assistance block (ACC, DCC, STA)
-    /** @type {string | undefined} */
     this.assistRaw = undefined; // the last summary of it, for the log
-    /** @type {?Ahead} */
     this.ahead = null; // the car ahead, raw: { gapX, gapY, speedX, speedY, q, at } (DataFrontVehicle)
-    /** @type {?Ahead2} */
     this.ahead2 = null; // { gap, q, measured, at } (GapVehicleDrivingAhead)
-    /** @type {?{ v: ?number, gapM: number, at: number }} */
     this.relFromGap = null; // km/h, the gap's smoothed rate of change ({ v, gapM, at })
-    /** @type {?{ raw: number, at: number }} */
     this.pedal = null; // { raw, at }: the accelerator pedal as sent, while valid
-    /** @type {?boolean} */
     this.brakeOn = null; // the brake lights (true / false), null until the car says
-    /** @type {?string} */
     this.turn = null; // the indicators: 'L', 'R', 'LR' (hazards) or '' (body.Light StatusFunctionsIndicators)
     this.accOn = false; // BMW's HUD has the ACC car or distance bars up (the Grand National CRUISE lamp)
-    /** @type {?number} */
     this.mileage = null; // the odometer as sent (MileageSupreme, taken as km)
-    /** @type {?boolean} */
     this.parkBrake = null; // the parking brake set (true / false), null until the car says
-    /** @type {?boolean} */
     this.parkBrakeCds = null; // the same from CDS statusHandBrake (a fallback)
-    /** @type {?string} */
     this.autoHold = null; // Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
-    /** @type {?number} */
     this.volt12 = null;
     this.volt12At = 0; // V, the 12 V system from the engine unit
     this.needsVolt = false; // a shown widget uses volt12 (the engine unit is only asked then)
     this.pedalLogged = 0;
-    /** @type {?number} */
     this.pedalObd = null;
     this.pedalObdAt = 0;
-    /** @type {?number} */
     this.pedalObdLogged = null; // %, the pedal from the engine unit (OBD PID 0x49)
     this.needsPedal = false; // a shown widget uses the throttle (the engine unit is only asked then)
-    /** @type {?number} */
     this.decelF = null;
     this.decelAt = 0; // g, the smoothed deceleration for the brake bar
-    /** @type {?number} */
     this.carOffsetMin = null; // the car's time zone, minutes from UTC, from the time the cluster shows
-    /** @type {?number} */
     this.battRaw = null;
     this.battAt = 0; // the 12 V battery's charge condition as sent
-    /** @type {Record<string, string>} */
     this.aheadLogged = {};
-    /** @type {?number} */
     this.accSetRaw = null; // cruiseCtrlSpeedHUD as sent
-    /** @type {Record<string, number>} */
     this.aheadLogAt = {};
-    /** @type {{ press: ?string, temp: ?string, psiSeen: boolean }} */
     this.carUnits = { press: null, temp: null, psiSeen: false }; // the car's display units, for the TPMS values
-    /** @type {?string} */
     this.program = null; // 'S' / 'M' from the MDrive gearbox display, else null (D)
-    /** @type {?number} */
     this.fuelL = null;
-    /** @type {?number} */
     this.rangeKm = null;
-    /** @type {?number} */
     this.ambient = null; // KombiIF tank / range, outside temperature
-    /** @type {?number} */
     this.odoKm = null;
     this.odoAcc = 0;
     this.odoAt = 0; // KombiIF odometer (whole km) and the distance since its last km
-    /** @type {{ p: Record<string, ?number>, t: Record<string, ?number> }} */
     this.tyres = { p: {}, t: {} }; // TPMS pressure (bar) and temperature (C) per corner FL FR RL RR
   },
 
@@ -518,7 +571,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     // one copy of the car's values per tick: data() copies them every call, and a tick asks 20 to 40 times
     // (_freshData() at the start of each tick and of the Miku character's timer; up to one tick old in between)
     const carData = this.car.data.bind(this.car);
-    /** @type {?Record<string, *>} */
+    /** @type {?import("../shift_score").CarData} */
     let snapshot = null;
     this.car.data = () => snapshot || (snapshot = carData());
     this._freshData = () => {
@@ -652,6 +705,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _startNav() {
     if (!this._modesOn() && !this.ctx.settings.item("navLayout")) return;
+    /** @type {import("./someip").HandlersOf<"de.bmw.infotainment.navigation.guiding.Guidance">} */
     const handlers = {
       guidanceState: (msg) =>
         this._guard("guidance", () => this._onGuidance(msg)),
@@ -692,8 +746,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _startMedia() {
     if (!this.config.music) return;
+    /** @type {MediaState} */
     this.media = { pm: null, mm: null, tracks: null, sel: null };
-    /** @type {(k: string) => (msg: *) => void} */
+    /** @type {(k: keyof MediaState) => (msg: MediaState[keyof MediaState]) => void} */
     const handler = (k) => (msg) =>
       this._guard("media", () => {
         this.media[k] = msg && typeof msg === "object" ? msg : null;
@@ -742,12 +797,12 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _pickTitle(changed) {
     const media = this.media,
       player = media.pm || {};
-    /** @type {(text: *) => string} */
+    /** @type {(text: unknown) => string} */
     const clean = (text) =>
       String(text || "")
         .replace(/\s+/g, " ")
         .trim();
-    /** @type {(type: *) => number} a MEDIA_ITEM */
+    /** @type {(type: unknown) => number} a MEDIA_ITEM */
     const kind = (type) => {
       const item = enumNum(type, MEDIA_ITEM);
       if (item >= 0 && item !== null) return item;
@@ -760,6 +815,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             ? MEDIA_ITEM.ALBUM
             : 0;
     };
+    /** @type {Array<[string, number]>} [text, MEDIA_ITEM] */
     const lines = [
       [clean(player.firstLineText), kind(player.firstLineType)],
       [clean(player.secondLineText), kind(player.secondLineType)],
@@ -861,7 +917,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
 
   /** KombiIF statusShowTimeDate: the cluster's displayed local time against UTC now, to the nearest 15 min within
    *  -12..+14 h, is the car's time zone. 255 = not sent.
-   * @param {*} msg
+   * @param {import("./someip").Fields["de.bmw.infotainment.KombiIF"]["statusShowTimeDate"]} msg
    * @returns {void}
    */
   _onCarClock(msg) {

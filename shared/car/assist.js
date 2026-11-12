@@ -21,7 +21,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * functionalLibraryData: BMW's HUD shows its driver assistance block while it has the assist symbol (ldmSym
    * with a colour), the ACC car or distance bars, or a lit (not grey) lane-assist wheel.
-   * @param {*} msg
+   * @param {import("./someip").Fields["de.bmw.infotainment.displaydataserver.DisplayDataServer"]["functionalLibraryData"]} msg
    * @returns {void}
    */
   _onAssist(msg) {
@@ -72,7 +72,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** The car-ahead messages as sent, when they change (an X3 repeats the same one every second), at most once a second,
    *  for calibrating config.acc against what BMW's HUD shows.
    * @param {string} kind
-   * @param {*} msg
+   * @param {unknown} msg
    * @returns {void}
    */
   _logAhead(kind, msg) {

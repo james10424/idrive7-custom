@@ -97,6 +97,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {PlanEntry[]}
    */
   _plan(widgets, maxPx) {
+    /** @type {PlanEntry[]} */
     const plan = [];
     /** @type {(a: Rect, b: Rect) => boolean} */
     const hit = (a, b) =>
@@ -311,6 +312,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {?string}
    */
   _widgetOf(connIndex, ref) {
+    /** @type {?string} */
     let firstId = null,
       count = 0;
     this.widgets.forEach((state) => {
@@ -327,7 +329,9 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {LayerRef[]}
    */
   _layerRefs() {
+    /** @type {LayerRef[]} */
     const refs = [],
+      /** @type {Record<string, boolean>} */
       seen = {};
     this.widgets.forEach((state) => {
       const key = state.ci + ":" + state.ref;
@@ -344,6 +348,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {number}
    */
   _connCount() {
+    /** @type {Record<number, boolean>} */
     const seen = {};
     this.widgets.forEach((state) => {
       seen[state.ci] = true;
@@ -367,6 +372,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {number[]}
    */
   _connCounts(plan) {
+    /** @type {number[]} */
     const counts = [];
     plan.forEach((entry) => {
       counts[entry.conn] = (counts[entry.conn] || 0) + 1;

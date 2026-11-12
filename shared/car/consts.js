@@ -26,24 +26,23 @@
  */
 /**
  * GapVehicleDrivingAhead, raw.
- * @typedef {{ gap: ?number, q: *, measured: boolean, at: number }} Ahead2
+ * @typedef {{ gap: ?number, q: unknown, measured: boolean, at: number }} Ahead2
  */
 /**
  * The route while guiding (Guidance), raw distances.
  * @typedef {object} Route
  * @property {?number} [leftRaw]
  * @property {?string} [leftText] BMW's formatted distance
- * @property {*} [leftUnit]
+ * @property {import("./someip").de.bmw.infotainment.navigation.CommonTypes.DistanceUnit} [leftUnit]
  * @property {?number} [timeLeft] s
  * @property {number} [at]
  * @property {number} [startRaw] the most left seen
  * @property {?number} [doneRaw] travelled
  */
-/** @typedef {(v: *) => void} SignalHandler */
 /**
- * _setupVehicleData's extra signals: interface -> event -> handler
- * ($pollMs: a poll interval).
- * @typedef {Record<string, Record<string, SignalHandler | number>>} Signals
+ * _setupVehicleData's extra signals: interface -> field or event -> handler ($pollMs: a poll interval), each handler's
+ * payload typed from BMW's catalog (someip.d.ts, tools/gen_someip_types.js).
+ * @typedef {import("./someip").Handlers} Signals
  */
 
 const BOOST_SCALE = { factor: 0.01, offset: 0, invalid: 255 }; // see header comment
@@ -56,11 +55,12 @@ const PRESS_TO_BAR = { BAR: 1, KPA: 0.01, PSI: 1 / 14.5038 };
 /**
  * A unit by wire number (map) or by name, else null.
  * @param {Record<string, string>} map
- * @param {*} unit
+ * @param {string | number | undefined} unit the field: a wire number or a name
  * @returns {?string}
  */
 const unitName = (map, unit) =>
-  map[unit] || (Object.values(map).indexOf(unit) >= 0 ? unit : null);
+  (unit !== undefined && map[unit]) ||
+  (typeof unit === "string" && Object.values(map).indexOf(unit) >= 0 ? unit : null);
 // MDrive dataDisplayGearbox.displayProgramGearbox: the programme the cluster shows next to the gear (car_vitals, MIT)
 /** @type {Record<string, string>} */
 const PROGRAMS = {
@@ -192,7 +192,7 @@ const BRAKE_G0 = 0.05,
 const BRAKE_TAU_MS = 150; // the deceleration's smoothing for the brake bar
 /**
  * An enum field as a number: its wire number, or its name looked up in items (unknown names: null).
- * @param {*} value
+ * @param {unknown} value
  * @param {Record<string, number>} items
  * @returns {?number}
  */
@@ -210,7 +210,7 @@ const FRESH_MS = 3000;
  */
 /** The mode's variant: 'plus' (Sport+ / Comfort+ / Eco Pro+: wire 2, 5, 8, or PLUS / EXPERT in the name), 'individual'
  *  (wire 3, 6, 9, or INDIVID in the name), else null.
- * @param {*} raw
+ * @param {unknown} raw
  * @returns {?string}
  */
 function driveVariantOf(raw) {
@@ -276,7 +276,7 @@ const SETUP_LEVEL = {
 };
 /**
  * The drive mode: 'sport', 'comfort' or 'eco' (above), else null.
- * @param {*} raw
+ * @param {unknown} raw
  * @returns {?string}
  */
 function driveModeOf(raw) {

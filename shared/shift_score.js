@@ -31,6 +31,9 @@
  * @property {number} [torque]
  * @property {boolean} [demo] true while the demo drive stands in for the car
  * @property {string} [stage] the selector position: "P", "R", "N" or "D"
+ * @property {string} [program] the shifter programme from the gearbox status: "D", "S" or "M"
+ * @property {number} [throttle] 0..1, the demo drive's own (the car sends none here)
+ * @property {boolean} [gearGuessed] the gear learnt from rpm / speed, the car sent none
  * @property {number} [condition] BMW's vehicle state number (10 = drive-ready)
  */
 /**

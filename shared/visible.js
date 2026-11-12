@@ -95,6 +95,7 @@ function overlaps(rect, box) {
  * @returns {string[]}
  */
 function check(widgets, target) {
+  /** @type {string[]} */
   const out = [];
   if (!Array.isArray(widgets)) return out;
   widgets.forEach((widget) => {
@@ -109,7 +110,9 @@ function check(widgets, target) {
     const id = String(widget.id);
     if (target === "panel") {
       // the top edge: both corners, then a few samples along it (the hood curve is not straight)
+      /** @type {Array<{ d: number, what: string }>} */
       const under = [];
+      /** @type {(x: number, what: string) => void} */
       const tryX = (x, what) => {
         const depth = Math.ceil(hoodY(x) - widget.y);
         if (depth > 0) under.push({ d: depth, what });

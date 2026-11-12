@@ -7,7 +7,7 @@ const TEXT_MS = 200; // text re-draws at most 5 times a second (what BMW's own r
 
 /**
  * A finite number.
- * @param {*} value
+ * @param {unknown} value
  * @returns {value is number}
  */
 function isNum(value) {

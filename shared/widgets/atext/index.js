@@ -21,7 +21,7 @@ const DOCS = `effect layer (atext/shader.js): text drawn by the GPU from a glyph
 /**
  * The glyph codes of a text in an atlas widget's cells, aligned; -1 is an empty cell.
  * @param {WidgetState & AtextState} state
- * @param {*} value
+ * @param {unknown} value
  * @returns {number[]} 32 codes
  */
 function atlasCodes(state, value) {

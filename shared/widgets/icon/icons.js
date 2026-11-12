@@ -47,6 +47,7 @@ function arc(px, py, cx, cy, radius, startAngle, endAngle) {
   let angle = Math.atan2(px - cx, -(py - cy));
   if (angle < startAngle) angle += Math.PI * 2;
   if (angle <= endAngle) return Math.abs(Math.hypot(px - cx, py - cy) - radius);
+  /** @type {(theta: number) => number} */
   const endDist = (theta) =>
     Math.hypot(
       px - (cx + radius * Math.sin(theta)),

@@ -19,8 +19,9 @@ const visible = require("./visible");
  * @property {string} [name]
  * @property {string} [theme]
  * @property {Array<"cruise"|"nav"|"cruiseNav">} [modes] the HUD modes it has variants for
- * @property {import("./hud").Widget[]} widgets
+ * @property {Widget[]} widgets
  */
+/** @typedef {import("./engine/app").Widget} Widget */
 
 const widgetTypes = require("./widgets");
 
@@ -91,6 +92,7 @@ class Layouts {
    * @param {string} name
    */
   _validate(layout, name) {
+    /** @type {(why: string) => never} */
     const bad = (why) => {
       throw new Error('layout "' + name + '": ' + why);
     };
@@ -102,12 +104,13 @@ class Layouts {
       layout.modes !== undefined &&
       !(
         Array.isArray(layout.modes) &&
-        layout.modes.every((mode) => MODES.indexOf(mode) >= 0)
+        layout.modes.every((/** @type {string} */ mode) => MODES.indexOf(mode) >= 0)
       )
     )
       bad('"modes" must list some of ' + MODES.join(", "));
+    /** @type {Record<string, boolean>} */
     const ids = {};
-    layout.widgets.forEach((widget, i) => {
+    layout.widgets.forEach((/** @type {Widget} */ widget, /** @type {number} */ i) => {
       const label = "widgets[" + i + '] ("' + widget.id + '")';
       if (!widget.id) bad("widgets[" + i + "] has no id");
       if (ids[widget.id]) bad('two widgets are called "' + widget.id + '"');
@@ -206,7 +209,7 @@ class Layouts {
         !(
           Array.isArray(widget.hole) &&
           widget.hole.length === 4 &&
-          widget.hole.every((value) => typeof value === "number")
+          widget.hole.every((/** @type {unknown} */ value) => typeof value === "number")
         )
       )
         bad(label + ' "hole" must be [x, y, w, h]');

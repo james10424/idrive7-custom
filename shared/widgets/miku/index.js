@@ -216,6 +216,7 @@ module.exports = {
         Array.isArray(vec)
           ? [vec[0] || 0, vec[1] || 0, vec[2] || 0, 0]
           : [0, 0, 0, 0];
+    /** @type {number[]} */
     const armF = [];
     [0, 1].forEach((i) => {
       const arm = arms[i];

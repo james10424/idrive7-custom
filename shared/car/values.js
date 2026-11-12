@@ -34,6 +34,13 @@ const { isNum } = require("../engine/util");
 /** @typedef {import("./consts").ShiftPoint} ShiftPoint */
 /** @typedef {import("./consts").CarData} CarData */
 
+/** @typedef {import("./consts").SetupRows} SetupRows */
+/**
+ * The consumption log on the app (App, through app_type.d.ts).
+ * @typedef {object} ValuesState
+ * @property {Record<string, string>} [consLines] the consumption messages last logged, by kind
+ */
+
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * BMW-like tach: a 120 ms filter, and a readout that moves in 50 rpm steps, only by 40 rpm or more.
@@ -60,7 +67,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * A signal's value by name: hud's own (boost, fuel, throttle10,
    * setupLevel:<part>, ...) or the car data's.
    * @param {string} name
-   * @returns {*}
+   * @returns {?(number | string | boolean)} a number for every gauge signal; the car data's other fields as they are
    */
   _raw(name) {
     if (name === "boost") return this._boost();
@@ -335,7 +342,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** A tyre's pressure ('p', bar) or temperature ('t', C) at corner FL FR RL RR; steady made-up values on the demo drive. */
   /** A TPMS pressure raw (0.1 x the car's unit, 65532 and up = none) in bar: by the car's unit when known, else by the
    *  unit whose plausible tyre pressures the value falls in (bar 0.5-6, psi 7-60, kPa 60-600; psi also means F).
-   * @param {*} raw
+   * @param {unknown} raw
    * @returns {?number}
    */
   _tyreBar(raw) {
@@ -354,7 +361,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
 
   /**
    * A TPMS temperature raw (the car's degrees + 40, 65535 = none) in C (the car sends F when set to F).
-   * @param {*} raw
+   * @param {unknown} raw
    * @returns {?number}
    */
   _tyreC(raw) {
@@ -461,7 +468,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
    * A consumption message as sent, logged when it changes.
    * @param {string} kind
-   * @param {*} msg
+   * @param {unknown} msg
    * @returns {void}
    */
   _logCons(kind, msg) {

@@ -11,6 +11,13 @@ const { mib } = require("./util");
 /** @typedef {import("./app").CfgPacker} CfgPacker */
 /** @typedef {import("../cluster_render_client.js").ClusterRender} Client */
 
+/**
+ * The car's own font on the app (App, through app_type.d.ts), loaded on first use.
+ * @typedef {object} AssetsState
+ * @property {?import("../sysfont").SysFont} [sysFont] null when none loads
+ * @property {boolean} [sysFontTried]
+ */
+
 module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /**
    * The glyph atlas of a font on a connection: an R8 asset of the font's characters in equal cells (cols x
@@ -165,7 +172,9 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {CfgPacker}
    */
   _cfgPacker(client, ref, type) {
+    /** @type {string[]} */
     const names = (widgetTypes[type] && widgetTypes[type].cfg) || [],
+      /** @type {Record<string, number[]>} */
       vals = {};
     return {
       uniform: (name, value, opts) => {
@@ -173,6 +182,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
         else client.uniform(ref, name, value, opts);
       },
       flush: () => {
+        /** @type {number[]} */
         const flat = [];
         names.forEach((name) => {
           const slot = (vals[name] || []).slice(0, 4);
