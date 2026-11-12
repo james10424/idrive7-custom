@@ -36,7 +36,7 @@ To bake animation from your own face tracking, record the model's parameters fro
 node tools/live2d_bake/vts_record.js 192.168.1.20 --out <folder>/wave.json
 ```
 
-The first argument is VTube Studio's address: the IP of the computer it runs on (`:port` if not 8001). Without it, it asks (Enter for this computer). It connects to its API (in VTube Studio's settings, turn on Start API; port 8001), and the first time asks for access: click Allow in VTube Studio's popup. Then it records, about 30 times a second (`--fps`), until you press Enter, and writes the clip: the parameters' ranges, their names, and one row of values per frame with its time. Ctrl+C quits without saving. Node 22 or newer.
+The first argument is VTube Studio's address: the IP of the computer it runs on (`:port` if not 8001). Without it, it asks (Enter for this computer). It connects to its API (in VTube Studio's settings, turn on Start API; port 8001), and the first time asks for access: click Allow in VTube Studio's popup. Then it records, about 30 times a second (`--fps`), until you press Enter, and writes the clip: the parameters' ranges, their names, and one row of values per frame with its time. Ctrl+C quits without saving.
 
 Keep the clips next to your model, not in this repo.
 
