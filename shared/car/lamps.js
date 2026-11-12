@@ -84,7 +84,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
-   * The Grand National gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D, S and M 3), -1 for none.
+   * The Grand National gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D 3, S and M 4), -1 for none.
    * @returns {number}
    */
   _regalGear() {

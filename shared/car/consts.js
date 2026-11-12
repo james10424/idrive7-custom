@@ -156,7 +156,7 @@ const ROUTE_UNIT = {
   4: "mi",
   6: "yd",
 };
-// the Grand National theme's gear row: P R N D, a gap, the gear number; the lit box for each selector state (S lights D, M the number)
+// the Grand National theme's gear row P R N D S: the letter its needle points at for each selector state (M at S)
 // the parking brake and Auto Hold (Vehicle2 statusStandstillFunctions, VehicleStabilizationManagement StandStillFunction, CDS
 // statusHandBrake; someip-interfaces.json)
 const PARK_BRAKE = {
@@ -181,7 +181,7 @@ const HAND_BRAKE = {
   SIGNAL_UNGUELTIG: 3,
 };
 /** @type {Record<string, number>} */
-const REGAL_GEARS = { P: 0, R: 1, N: 2, D: 3, S: 3, M: 3 }; // M lights D: the gear number has its own place
+const REGAL_GEARS = { P: 0, R: 1, N: 2, D: 3, S: 4, M: 4 }; // M points at S (the stick on the side): the gear number has its own place
 const PEDAL_OK = {
   SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT: 1,
 }; // AngleAcceleratorPedal's qualifier: valid

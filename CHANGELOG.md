@@ -4,6 +4,8 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 11 2026
 
+- **Custom Cluster 0.1.54: Grand National's P R N D S has a needle,** as the 1950s Buicks' selector: white letters (S added; M points at S), a red needle under them on the ray from a far pivot below, instead of the red box. On a change it eases to the new letter, 300 ms a letter (P to D passes N, as BMW's selector reports), and with no gear it stays where it was. Its uniforms are sent only while it moves.
+
 - **Custom Cluster 0.1.53: Regal is now Grand National,** in the Theme and While navigating menus as Grand National (1987) and in the READMEs. A saved Regal choice carries over.
 
 - **Custom Cluster 0.1.52: Regal's pods have coloured zones,** bands on each scale's outer edge as deep as its short marks, under them, in muted colours that read as paint on the dial rather than backlit (a little see-through, a slightly darker rim). Battery: red up to 11.5 V, green 12.5 to 15 V (running, BMW's smart charging included), red from 15.5 V. Oil: blue under 60 °C (cold, as the cold redline), red over 130 °C, nothing between.

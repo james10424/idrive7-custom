@@ -31,8 +31,8 @@ uniform vec4 u_led;       // LED rev bar x, y, w, h
 uniform vec3 u_ledV;      // segments, lit 0..1 (a segment partway lit fades in), the redline 0..1 (a red mark above the labels from there)
 uniform vec4 u_led2;      // the boost LED bar x, y, w, h (w 0 = none), all yellow
 uniform vec2 u_led2V;     // its segments, lit 0..1
-uniform vec4 u_gearBox;   // the lit gear box: first letter's box x, y, w, h
-uniform vec2 u_gearV;     // letter pitch px, which letter (-1 none)
+uniform vec4 u_gearN;     // the gear needle: its far pivot x, y (below the P R N D S row), its tip's y, its bottom's y
+uniform vec2 u_gearV;     // where it points: the row's point from the pivot (x, y; y < 0)
 uniform vec4 u_lampB;     // the parking brake / Auto Hold lamp box (left pod; its mirror in the right pod is the green CRUISE lamp)
 uniform vec3 u_arrow;     // the left turn arrow: centre x, y, size (right: mirrored)
 uniform vec4 u_lamps;     // left lamp (0 off, 1 red: parking brake, 2 green: Auto Hold), left turn, right turn, cruise on (1) / off (0)
@@ -55,7 +55,7 @@ const vec3 ZONE_RED = vec3(0.6, 0.15, 0.12);
 const vec3 ZONE_GREEN = vec3(0.22, 0.47, 0.25);
 const vec3 ZONE_BLUE = vec3(0.2, 0.34, 0.62);
 const vec3 LED_YOFF = vec3(0.15, 0.12, 0.02);
-const vec3 GEAR_BOX = vec3(0.78, 0.13, 0.04);
+const vec3 GEAR_RED = vec3(0.9, 0.1, 0.07);
 const vec3 LAMP_R = vec3(1.0, 0.27, 0.08);
 const vec3 LAMP_OFF = vec3(0.13, 0.04, 0.03);
 const vec3 GREEN = vec3(0.2, 0.92, 0.35);
@@ -254,8 +254,15 @@ void main() {
         c = mix(c, mix(LED_YOFF, LED_Y, clamp(u_led2V.y * n - i, 0.0, 1.0)), cov(d));
     }
 
-    // the lit gear letter's box
-    if (u_gearV.y >= 0.0) c = mix(c, GEAR_BOX, cov(rbox(p, vec4(u_gearBox.x + u_gearV.x * u_gearV.y, u_gearBox.yzw), 3.0)));
+    // the gear needle, red, under the P R N D S row (the text is over this layer): on the ray from a far pivot below the
+    // row to the point it points at, from the pod's bottom up to just under the letters, tapering
+    if (p.y > u_gearN.z - 3.0 && p.y < u_gearN.w + 3.0) {
+        vec2 gd = normalize(u_gearV), gq = p - u_gearN.xy;
+        float gal = dot(gq, gd), gpe = abs(dot(gq, vec2(-gd.y, gd.x)));
+        float gr0 = (u_gearN.w - u_gearN.y) / gd.y, gr1 = (u_gearN.z - u_gearN.y) / gd.y;
+        float ghw = mix(2.4, 1.3, clamp((gal - gr0) / (gr1 - gr0), 0.0, 1.0));
+        c = mix(c, mix(GEAR_RED, GEAR_RED * 0.7, smoothstep(0.0, ghw, gpe)), cov(max(gpe - ghw, max(gr0 - gal, gal - gr1))));
+    }
 
     // lamps: PARK BRAKE (left, red) or AUTO HOLD (left, green), CRUISE (right, green), the turn arrows
     vec4 lampR = vec4(W - u_lampB.x - u_lampB.z, u_lampB.yzw);
