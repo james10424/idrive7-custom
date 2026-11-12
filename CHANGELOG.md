@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 12 2026
 
+- **Calibration (Nov 12 2026 photos of the grid):** the hood line, the seat-belt light and the HUD window measured again from the driver's seat (`shared/visible.js`). The hood now hides less over the middle of each side (x 300 to 700 and 1400 to 1600) and more at the corners (y 157 at x 1800, 200 at x 1900); at x 0 it reaches y 210 instead of 273. The belt light goes down to y 712. The HUD window is x 120, y 100, 560x280 (120 to 680, 100 to 380), 75 px wider on the right than the Nov 5 reading. BMW's gear box and the dash camera read as before.
 - **Bench: less GPU.** The page drew both screens 30 times a second and ran every effect shader each time. Now a screen is drawn only when something on it changed (its layers, their pixels, BMW's stand-ins), an effect's shader runs only when its uniforms, assets or size change (or every frame on the renderer's clock, as Miku), and its picture is kept until then. One WebGL canvas serves every effect without being resized each time, and each program's uniforms are looked up once. In demo the browser's GPU process went from about 64% to 28% of a core; a still car in manual mode draws only the HUD.
 
 ## Nov 11 2026

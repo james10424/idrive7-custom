@@ -1,7 +1,8 @@
 "use strict";
 /**
- * What the driver can actually see of each target, measured from car photos (Nov 5 2026,
- * design/photos/calibration-2026-11-05.json next to the pictures). The renderer draws 1:1,
+ * What the driver can actually see of each target, measured from car photos of the calibration grid from the
+ * driver's seat (Nov 5 2026, design/photos/calibration-2026-11-05.json next to the pictures; the hood line, the belt
+ * light and the HUD window again on Nov 12 2026). The renderer draws 1:1,
  * but parts of the panel are hidden by the car and parts of the HUD fall outside the
  * windshield window. Used by layouts.js (a warning per widget) and the bench (the car view).
  *
@@ -9,31 +10,31 @@
  */
 
 /** Cluster (1920x720): the first visible y along each vertical line [x, y]; the hood hides
- *  everything above it. Linear between points; x 1920 is taken as y 240. Bottom and sides
- *  are fully visible. */
+ *  everything above it. Linear between points. Bottom and sides are fully visible. Read off the grid photo of Nov 12
+ *  2026 (the top of each 100 px line); x 800-1100 are behind the dash camera there, so those stay from Nov 5. */
 /** @type {Array<[number, number]>} */
 const HOOD = [
-  [0, 273],
-  [100, 138],
-  [200, 85],
-  [300, 57],
-  [400, 36],
-  [500, 21],
-  [600, 18],
-  [700, 12],
+  [0, 210],
+  [100, 145],
+  [200, 93],
+  [300, 48],
+  [400, 30],
+  [500, 17],
+  [600, 12],
+  [700, 4],
   [800, 3],
   [900, 2],
   [1000, 1],
   [1100, 2],
-  [1200, 5],
-  [1300, 10],
-  [1400, 19],
-  [1500, 37],
-  [1600, 67],
-  [1700, 84],
-  [1800, 128],
-  [1900, 196],
-  [1920, 240],
+  [1200, 6],
+  [1300, 11],
+  [1400, 15],
+  [1500, 27],
+  [1600, 41],
+  [1700, 81],
+  [1800, 157],
+  [1900, 200],
+  [1920, 232],
 ];
 /** The dash camera hangs in front of the panel's top middle, from the top down to y ~132 (car photo of the Grand National
  *  theme, Nov 8 2026): [x0, y0, x1, y1]. */
@@ -42,15 +43,16 @@ const CAMERA = [760, 0, 1200, 135];
 /** BMW draws a solid black box over our panel here (its gear slot): [x0, y0, x1, y1]. */
 /** @type {[number, number, number, number]} */
 const BLACK_BOX = [1406, 342, 1597, 419];
-/** BMW's seat-belt warning light is drawn over us here: [x0, y0, x1, y1]. */
+/** BMW's seat-belt warning light is drawn over us here: [x0, y0, x1, y1] (its bottom to y 712 on Nov 12 2026). */
 /** @type {[number, number, number, number]} */
-const BELT = [587, 663, 626, 700];
+const BELT = [587, 663, 626, 712];
 /** BMW's gear letter in the bottom row and the black box behind it, drawn over us (P / R / N / D; car photos with the
  *  Sport theme, Nov 7 2026, and Nov 9 2026: the box cut 6 px off the bottom of Sport's route strip). */
 /** @type {[number, number, number, number]} */
 const GEAR = [1380, 668, 1455, 713];
-/** The part of the 800x480 HUD target seen through the windshield (eye-position dependent). */
-const HUD_WINDOW = { x: 120, y: 100, w: 485, h: 278 };
+/** The part of the 800x480 HUD target seen through the windshield (eye-position dependent): x 120..680, y 100..380 on
+ *  Nov 12 2026 (485x278 on Nov 5, from another head position or HUD height). */
+const HUD_WINDOW = { x: 120, y: 100, w: 560, h: 280 };
 
 /**
  * The first visible y at x on the panel (interpolated along HOOD).
