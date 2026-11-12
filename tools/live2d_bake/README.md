@@ -26,6 +26,8 @@ Turns a Live2D model you own into the frames Custom HUD's **Miku** layout draws 
 4. Open `http://localhost:8095/` to bake. It writes `atlas.json`, `atlas.rgba` (what the car loads) and `preview.png` to the folder.
 5. Copy them to the car: see [Deploy to the car](#deploy-to-the-car).
 
+`http://localhost:8095/play` is a playground: a checkbox per expression and a slider per face and body parameter, to try them before writing the config. With `--home play` the server opens on it (its root is the playground, the bake page moves to `/bake`), for a launcher that only opens a server's root.
+
 ## Deploy to the car
 
 ### Where the HUD looks

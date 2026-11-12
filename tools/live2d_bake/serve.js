@@ -11,6 +11,8 @@
  * atlas.rgba and preview.png. Push them with scripts/deploy.sh <car> --miku <out>.
  * http://localhost:8095/?inspect shows the model with its parts, parameters and drawables, to write the config;
  * http://localhost:8095/play is a playground: toggle the model's expressions and move its face and body parameters.
+ * --home play serves the playground at / as well (for a launcher that opens only the root); the bake page is then at
+ * /bake (always there too).
  *
  * Nothing of the model ever goes in this repo: keep the config and the output next to the model.
  * The config's fields are described in page.js (CONFIG).
@@ -36,7 +38,8 @@ const model = arg("model"),
   core = arg("core"),
   config = arg("config"),
   out = arg("out"),
-  port = Number(arg("port", DEFAULT_PORT));
+  port = Number(arg("port", DEFAULT_PORT)),
+  home = arg("home", "bake");
 if (!model || !core || !out) {
   console.error(
     "usage: node tools/live2d_bake/serve.js --model <model3.json> --core <live2dcubismcore.min.js> --config <bake.json> --out <folder> [--port " +
@@ -104,7 +107,9 @@ http
       });
       return;
     }
-    if (urlPath === "/") return send(res, path.join(__dirname, "page.html"));
+    if (urlPath === "/")
+      return send(res, path.join(__dirname, home === "play" ? "play.html" : "page.html"));
+    if (urlPath === "/bake") return send(res, path.join(__dirname, "page.html"));
     // the toggles playground: play.html, and the model's expressions (its .exp3.json files) for it to list
     if (urlPath === "/play")
       return send(res, path.join(__dirname, "play.html"));
@@ -143,10 +148,9 @@ http
   })
   .listen(port, "127.0.0.1", () =>
     console.log(
-      "bake page: http://localhost:" +
+      (home === "play" ? "playground: http://localhost:" + port + "/   (bake page: /bake)" : "bake page: http://localhost:" + port + "/") +
+        "   (inspect: http://localhost:" +
         port +
-        "/   (inspect: http://localhost:" +
-        port +
-        "/?inspect)",
+        "/bake?inspect, playground: /play)",
     ),
   );
