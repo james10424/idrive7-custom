@@ -26,8 +26,8 @@ POD_WIN_X, POD_WIN_W = 104, 152   # the left pod's inner box ('podWin')
 GEAR_P = POD_WIN_W / 5            # the gear row P R N D S spread around the pod's inner box (justify-around: a fifth each,
 GEAR_X0 = POD_WIN_X + GEAR_P / 2  # each letter in the middle of its fifth), under the gear number
 GEAR_Y = 606
-GEAR_NEEDLE = (GEAR_Y - 12, 647, 150)  # the gear needle behind the row: its tip's y pointing straight up (the top of the
-                                        # letters; one length, so a little lower toward P and S), its bottom's y, its far pivot
+GEAR_NEEDLE = (GEAR_Y - 12, 110 + 553 - 8, 150)  # the gear needle behind the row: its tip's y pointing straight up (the top of the
+                                        # letters; one length, so a little lower toward P and S), its bottom's y (on the pod frame's inner rim), its far pivot
                                         # this far below the row (the letters at about +-22 deg), as the 1950s Buicks' P R N D G
 ODO_Y = 347                     # the rolling odometer under the scale's middle, below MPH, where the gear row was
 
