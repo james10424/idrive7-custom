@@ -10,13 +10,15 @@
  */
 
 /** Cluster (1920x720): the first visible y along each vertical line [x, y]; the hood hides
- *  everything above it. Linear between points. Bottom and sides are fully visible. Read off the grid photo of Nov 12
- *  2026 (the top of each 100 px line); x 800-1100 are behind the dash camera there, so those stay from Nov 5. */
+ *  everything above it. Linear between points. Bottom and sides are fully visible. The line moves with the eye: the
+ *  grid photos of Nov 5 and Nov 12 2026 (the top of each 100 px line) were taken from different points, so at each x
+ *  this is the more visible of the two (a Nov 12 driving photo shows Grand National's right pod corner, x 1830 y 155,
+ *  clear, which the Nov 12 grid photo alone would have hidden). x 800-1100 are behind the dash camera on Nov 12. */
 /** @type {Array<[number, number]>} */
 const HOOD = [
   [0, 210],
-  [100, 145],
-  [200, 93],
+  [100, 138],
+  [200, 85],
   [300, 48],
   [400, 30],
   [500, 17],
@@ -26,14 +28,14 @@ const HOOD = [
   [900, 2],
   [1000, 1],
   [1100, 2],
-  [1200, 6],
-  [1300, 11],
+  [1200, 5],
+  [1300, 10],
   [1400, 15],
   [1500, 27],
   [1600, 41],
   [1700, 81],
-  [1800, 157],
-  [1900, 200],
+  [1800, 128],
+  [1900, 196],
   [1920, 232],
 ];
 /** The dash camera hangs in front of the panel's top middle, from the top down to y ~132 (car photo of the Grand National
