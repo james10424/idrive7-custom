@@ -5,6 +5,13 @@
 const { color } = require("../../hud_themes");
 const { isNum, rgba } = require("../../engine/util");
 const ODO = require("./shader");
+const { MI_PER_KM } = require("../../car/consts");
+
+const ODO_DRUMS = 6; // default number of drums
+const ODO_MAX_DRUMS = 8; // the shader's drum slots (u_drum, two vec4)
+const ODO_GAP_PX = 2; // default gap between drums
+const ODO_FRAME_PX = 1; // default drum frame width
+const ODO_ROLL_STEPS = 50; // a drum's turn is resent only in steps of 1/50 of a digit
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /**
@@ -42,7 +49,7 @@ module.exports = {
       .split("")
       .map((char) => Math.max(0, atlas.chars.indexOf(char)))
       .concat([0, 0]);
-    state.drums = Math.max(1, Math.min(8, widget.drums || 6));
+    state.drums = Math.max(1, Math.min(ODO_MAX_DRUMS, widget.drums || ODO_DRUMS));
     client.bind(ref, "u_font", atlas.ref);
     client.uniform(ref, "u_grid", [atlas.cols, atlas.rows]);
     client.uniform(ref, "u_dig", dig, { type: "vec4" });
@@ -50,9 +57,9 @@ module.exports = {
     client.uniform(ref, "u_size", [widget.w, widget.h]);
     client.uniform(ref, "u_odo", [
       state.drums,
-      isNum(widget.gap) ? widget.gap : 2,
+      isNum(widget.gap) ? widget.gap : ODO_GAP_PX,
       0,
-      isNum(widget.frame) ? widget.frame : 1,
+      isNum(widget.frame) ? widget.frame : ODO_FRAME_PX,
     ]);
     client.uniform(ref, "u_drum", [0, 0, 0, 0, 0, 0, 0, 0], { type: "vec4" });
   },
@@ -75,11 +82,11 @@ module.exports = {
       if (isNum(range))
         distanceNow = Math.min(
           Math.pow(10, drumCount) - 1,
-          Math.max(0, Math.round(useMiles ? range * 0.621371 : range)),
+          Math.max(0, Math.round(useMiles ? range * MI_PER_KM : range)),
         );
     } else {
       const km = hud._odometer(now);
-      if (isNum(km)) distanceNow = useMiles ? km * 0.621371 : km;
+      if (isNum(km)) distanceNow = useMiles ? km * MI_PER_KM : km;
     }
     const drums = [0, 0, 0, 0, 0, 0, 0, 0];
     if (isNum(distanceNow)) {
@@ -89,7 +96,7 @@ module.exports = {
           lower = distance % place;
         const roll = k === 0 ? distance % 1 : Math.max(0, lower - (place - 1));
         drums[drumCount - 1 - k] =
-          Math.round(((Math.floor(distance / place) % 10) + roll) * 50) / 50;
+          Math.round(((Math.floor(distance / place) % 10) + roll) * ODO_ROLL_STEPS) / ODO_ROLL_STEPS;
       }
     }
     const key = isNum(distanceNow) + "|" + drums.join(",");
@@ -97,9 +104,9 @@ module.exports = {
     state.last = key;
     state.c.uniform(state.ref, "u_odo", [
       drumCount,
-      isNum(widget.gap) ? widget.gap : 2,
+      isNum(widget.gap) ? widget.gap : ODO_GAP_PX,
       isNum(distanceNow) ? 1 : 0,
-      isNum(widget.frame) ? widget.frame : 1,
+      isNum(widget.frame) ? widget.frame : ODO_FRAME_PX,
     ]);
     state.c.uniform(state.ref, "u_drum", drums, { type: "vec4" });
   },

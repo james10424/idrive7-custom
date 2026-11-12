@@ -44,6 +44,19 @@ const MIKU_STILL_MS = 1000; // stood still (speed 0) this long: she zooms into h
 const MIKU_CLOCK_MS = 33; // the close-up's own clock (u_clock) goes up this often while she is zoomed in
 const MIKU_ZOOM_MS = 1000; // the zoom, in or out
 const MIKU_ZOOM_OUT_KMH = 10; // past this she zooms back out to standing
+const MIKU_STILL_KMH = 0.5; // below this she counts as stood still
+const MIKU_NIGHT_BRIGHTNESS = 0.8; // she is drawn this bright in the night theme
+/** @type {number[]} */
+const MIKU_FEET = [480, 377]; // "feet" default, target px
+const MIKU_POINT_DEG = 60; // "point" default: the arm's raise toward the indicator
+const MIKU_BALANCE_DEG = 50; // "balance" default: the arms' swing against a sideways lean
+const MIKU_MAX_DT_MS = 500; // a longer gap between updates eases as if it were this long
+const MIKU_LEAN_G = 0.4; // this longitudinal g is a full lean
+const MIKU_POINT_STEP_S = 0.01; // the arm's spring is stepped at most this long at a time
+const MIKU_SPEED_KMH = 130; // her speed's full scale
+const MIKU_STEPS = 500; // the lean, speed, zoom and turn are sent in steps of 1/500
+const MIKU_LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
+const MIKU_CLOCK_LOOP_MS = 4000; // the close-up's u_clock runs 0 .. 4 s, then starts again
 
 /**
  * Whether a widget is the close-up's layer.
@@ -86,7 +99,7 @@ function zoomNow(hud) {
     (standing && standing.zoomVals) || [
       0,
       0,
-      hud.themeName === "night" ? 0.8 : 1,
+      hud.themeName === "night" ? MIKU_NIGHT_BRIGHTNESS : 1,
       0,
     ]
   );
@@ -103,7 +116,7 @@ function originOf(widget, info) {
   const feet =
     Array.isArray(widget.feet) && widget.feet.length === 2
       ? widget.feet
-      : [480, 377];
+      : MIKU_FEET;
   return [
     feet[0] - widget.x - info.anchor[0],
     feet[1] - widget.y - info.anchor[1],
@@ -233,11 +246,11 @@ module.exports = {
     client.uniform(ref, "u_armSide", [
       arms[0] ? arms[0].side : -1,
       arms[1] ? arms[1].side : 1,
-      ((isNum(widget.point) ? widget.point : 60) * Math.PI) / 180,
+      ((isNum(widget.point) ? widget.point : MIKU_POINT_DEG) * Math.PI) / 180,
       // the arms balance a sideways lean only: leaning toward or away from you they just ride along
       info.leanAxis === "fb"
         ? 0
-        : ((isNum(widget.balance) ? widget.balance : 50) * Math.PI) / 180,
+        : ((isNum(widget.balance) ? widget.balance : MIKU_BALANCE_DEG) * Math.PI) / 180,
     ]);
     // the zoom's end, the close-up's view (none: she never zooms), and where she has faded out by: the close-up's
     // first zoom step
@@ -327,13 +340,13 @@ module.exports = {
     // lean: the longitudinal g, -0.4 g .. +0.4 g to -1 .. 1, eased over MIKU_LEAN_TAU_MS; speed 0..130 km/h to
     // 0..1, eased over MIKU_TAU_MS; both sent in steps of 0.002 (a small uniform message, at most one per MIKU_MS, and only while she moves)
     const data = hud.car.data(),
-      dt = state.at ? Math.min(500, now - state.at) : 0;
+      dt = state.at ? Math.min(MIKU_MAX_DT_MS, now - state.at) : 0;
     state.at = now;
     // standing on a bus: the lean eases toward the g (as Unreal's FInterpTo, but 1 - exp(-dt / tau), the same at
     // any update rate), so she leans into a pull and straightens when it ends, without swaying back past upright;
     // the ease also smooths the car's steppy, noisy g
     const leanTarget = isNum(data.gLong)
-      ? Math.max(-0.4, Math.min(0.4, data.gLong)) / 0.4
+      ? Math.max(-MIKU_LEAN_G, Math.min(MIKU_LEAN_G, data.gLong)) / MIKU_LEAN_G
       : 0;
     state.lean = isNum(state.lean)
       ? state.lean +
@@ -347,8 +360,8 @@ module.exports = {
       state.point = turnSide;
       state.pointV = 0;
     }
-    for (let left = dtp; left > 0; left -= 0.01) {
-      const stepSec = Math.min(0.01, left);
+    for (let left = dtp; left > 0; left -= MIKU_POINT_STEP_S) {
+      const stepSec = Math.min(MIKU_POINT_STEP_S, left);
       state.pointV +=
         (MIKU_POINT_K * (turnSide - state.point) -
           MIKU_POINT_C * state.pointV) *
@@ -359,16 +372,16 @@ module.exports = {
       );
     }
     const speed = hud._raw("speed"),
-      speedFrac = isNum(speed) ? Math.min(1, Math.max(0, speed / 130)) : 0,
+      speedFrac = isNum(speed) ? Math.min(1, Math.max(0, speed / MIKU_SPEED_KMH)) : 0,
       /** @type {(value: number) => number} */
-      step = (value) => Math.round(value * 500) / 500;
+      step = (value) => Math.round(value * MIKU_STEPS) / MIKU_STEPS;
     state.spd = isNum(state.spd)
       ? state.spd + (speedFrac - state.spd) * (1 - Math.exp(-dt / MIKU_TAU_MS))
       : speedFrac;
     // the close-up: stood still (speed 0) for MIKU_STILL_MS, she zooms in over MIKU_ZOOM_MS; past MIKU_ZOOM_OUT_KMH
     // back out (in between she stays as she is). Only with a close-up layer: without one she would fade to nothing
     const close = layerState(hud, true),
-      still = isNum(speed) && speed < 0.5;
+      still = isNum(speed) && speed < MIKU_STILL_KMH;
     state.stillMs = still ? (state.stillMs || 0) + dt : 0;
     if (!close || !isNum(speed) || speed > MIKU_ZOOM_OUT_KMH) state.zoomT = 0;
     else if (state.stillMs >= MIKU_STILL_MS) state.zoomT = 1;
@@ -379,10 +392,10 @@ module.exports = {
       zoomT > zoom
         ? Math.min(zoomT, zoom + move)
         : Math.max(zoomT, zoom - move);
-    const brightness = hud.themeName === "night" ? 0.8 : 1;
+    const brightness = hud.themeName === "night" ? MIKU_NIGHT_BRIGHTNESS : 1;
     // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
     const drive = [
-      step(Math.tanh(state.lean * 1.15)),
+      step(Math.tanh(state.lean * MIKU_LEAN_SOFT)),
       step(state.spd),
       0, // standing she doesn't point toward the indicator; only the close-up turns her head (state.point)
       brightness,
@@ -428,7 +441,7 @@ module.exports = {
     ) {
       state.clockAt = now;
       close.c.uniform(close.ref, "u_clock", [
-        (((now % 4000) + 4000) % 4000) / 1000,
+        (((now % MIKU_CLOCK_LOOP_MS) + MIKU_CLOCK_LOOP_MS) % MIKU_CLOCK_LOOP_MS) / 1000,
       ]);
     }
     const key = drive.join("|");

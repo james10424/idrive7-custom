@@ -5,6 +5,10 @@
 const { isNum, rgb, rgba } = require("../../engine/util");
 const REVBAR = require("./shader");
 
+const REVBAR_TOP_PX = 8; // default room for the marks above the bar
+const REVBAR_SLANT_PX = 12; // default slant
+const REVBAR_RPM_STEP = 10; // rpm and peak are resent only in 10 rpm steps
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -30,9 +34,9 @@ module.exports = {
       ref = state.ref,
       theme = hud.theme;
     client.uniform(ref, "u_size", [widget.w, widget.h]);
-    client.uniform(ref, "u_top", [widget.top || 8]);
+    client.uniform(ref, "u_top", [widget.top || REVBAR_TOP_PX]);
     client.uniform(ref, "u_barH", [widget.barH]);
-    client.uniform(ref, "u_slant", [widget.slant || 12]);
+    client.uniform(ref, "u_slant", [widget.slant || REVBAR_SLANT_PX]);
     client.uniform(ref, "u_max", [hud._barMax(widget)]);
     client.uniform(ref, "u_red", [hud.setting("redline")]);
     client.uniform(ref, "u_from", rgb(theme.rev.from));
@@ -51,8 +55,8 @@ module.exports = {
   update(hud, state, now, force) {
     const rpm = hud._raw("rpm"),
       shift = hud._shift();
-    const value = isNum(rpm) ? Math.round(Math.max(0, rpm) / 10) * 10 : 0;
-    const peak = Math.round(hud.score.peak / 10) * 10;
+    const value = isNum(rpm) ? Math.round(Math.max(0, rpm) / REVBAR_RPM_STEP) * REVBAR_RPM_STEP : 0;
+    const peak = Math.round(hud.score.peak / REVBAR_RPM_STEP) * REVBAR_RPM_STEP;
     const key = value + "|" + shift.rpm + "|" + peak + "|" + shift.now;
     if (!force && key === state.last) return;
     state.last = key;

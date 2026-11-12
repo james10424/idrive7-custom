@@ -6,6 +6,8 @@ const { color } = require("../../hud_themes");
 const { isNum, rgba } = require("../../engine/util");
 const SEGBAR = require("./shader");
 
+const SEGBAR_GAP_PX = 8; // default gap between segments
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -35,7 +37,7 @@ module.exports = {
     client.uniform(ref, "u_on", rgba(color(theme, widget.color || "hot")));
     client.uniform(ref, "u_offC", rgba(color(theme, "track")));
     client.uniform(ref, "u_slant", [widget.slant || 0]);
-    client.uniform(ref, "u_gap", [isNum(widget.gap) ? widget.gap : 8]);
+    client.uniform(ref, "u_gap", [isNum(widget.gap) ? widget.gap : SEGBAR_GAP_PX]);
     client.uniform(ref, "u_hotSeg", [-1]);
     client.uniform(ref, "u_hotC", rgba(color(theme, widget.hotColor || "hot")));
   },

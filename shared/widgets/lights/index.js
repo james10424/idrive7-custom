@@ -6,6 +6,11 @@ const { LIGHTS } = require("../../hud_themes");
 const { isNum, rgb } = require("../../engine/util");
 const SHADER = require("./shader");
 
+const LIGHTS_COUNT = 12; // default number of lights
+const LIGHTS_OFF_ALPHA = 0.14; // default alpha of an unlit light
+const LIGHTS_FROM_RPM = 3000; // default rpm where the first light comes on
+const LIGHTS_MIN_SPAN_RPM = 500; // the lights fill over at least the last this many rpm before the shift point
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -30,7 +35,7 @@ module.exports = {
     const client = state.c,
       ref = state.ref;
     client.uniform(ref, "u_size", [widget.w, widget.h]);
-    client.uniform(ref, "u_n", [widget.count || 12]);
+    client.uniform(ref, "u_n", [widget.count || LIGHTS_COUNT]);
     client.uniform(ref, "u_tail", [widget.tail || 0]);
     client.uniform(ref, "u_round", [widget.round ? 1 : 0]);
     client.uniform(ref, "u_green", rgb(LIGHTS.green));
@@ -38,7 +43,7 @@ module.exports = {
     client.uniform(ref, "u_red", rgb(LIGHTS.red));
     client.uniform(ref, "u_blue", rgb(LIGHTS.blue));
     client.uniform(ref, "u_off", [
-      widget.off === undefined ? 0.14 : widget.off,
+      widget.off === undefined ? LIGHTS_OFF_ALPHA : widget.off,
     ]);
   },
   /**
@@ -51,11 +56,11 @@ module.exports = {
     const widget = state.w;
     const rpm = hud._raw("rpm"),
       shift = hud._shift(),
-      count = widget.count || 12;
+      count = widget.count || LIGHTS_COUNT;
     // the lights fill from "from" rpm (3000) up to the shift point; a "from" at or past it means the last 500 rpm
     const from = Math.min(
-      isNum(widget.from) ? widget.from : 3000,
-      shift.rpm - 500,
+      isNum(widget.from) ? widget.from : LIGHTS_FROM_RPM,
+      shift.rpm - LIGHTS_MIN_SPAN_RPM,
     );
     const lit = isNum(rpm)
       ? Math.floor(

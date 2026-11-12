@@ -191,6 +191,52 @@ const SCALE = {
  * @returns {number}
  */
 const raw = (k, value) => Math.round((value - SCALE[k][1]) / SCALE[k][0]);
+// how often each feed goes out
+const SLOW_FEED_MS = 1000; // once a second, as the car sends these
+const TRIP_FEED_MS = 2000; // the trip computer
+const SIGNAL_FEED_MS = 50; // the manual signals
+const VALUES_FEED_MS = 250; // what the app sees, to the page
+const CAR_SW_POLL_MS = 500; // a look for a changed car switch
+const SONG_MS = 8000; // how long each demo song plays
+// the made-up route while GUIDING
+const ROUTE_M = 24000; // its length
+const ROUTE_LAP_MS = 240000; // driven in 4 minutes, then again
+const ROUTE_SPEED_MPS = 13.9; // the average speed its time left assumes, about 50 km/h
+const ROUTE_DELAY_S = 120; // the traffic delay, in the time left too
+// the trip computer's average consumption: 9.8 l/100km as scale / 10^digit
+const DEMO_CONSUMPTION_SCALE = 98,
+  DEMO_CONSUMPTION_DIGIT = 1;
+const NO_VALUE_U16 = 65535; // a 16 bit field's "no value"
+// the assistance block with ACC on
+const DEMO_ACC_BARS = 3; // the distance bars
+const DEMO_ACC_SET_SPEED = 152; // cruiseCtrlSpeedHUD
+// the car ahead
+const GAP_SWING_MS = 4000; // sin(t / this): one swing in about 25 s
+const GAP_MEAN_RAW = 200,
+  GAP_SWING_RAW = 50; // 20 m +- 5 m in 0.1 m steps
+const AHEAD_NONE = 253; // the gap and object id with nothing measured
+const FRONT_NO_OBJECT = 4093; // DataFrontVehicle's fields with no object
+const G_MPS2 = 9.80665; // one g, as car.js divides by
+// manual values the page has not sent yet
+const DEMO_COOLANT_C = 90,
+  DEMO_OIL_C = 100,
+  DEMO_FUEL_L = 40,
+  DEMO_RANGE_KM = 450,
+  DEMO_ODO_KM = 23817,
+  DEMO_AMBIENT_C = 22,
+  DEMO_TYRE_BAR = 2.3,
+  DEMO_TYRE_C = 24;
+// ExteriorTemperature temperatureExterior: raw * 0.5 - 40 C
+const AMBIENT_C_PER_BIT = 0.5,
+  AMBIENT_OFFSET_C = 40;
+// statusNewCurrentUnitsStatusExt wire numbers (PRESS_UNITS, TEMP_UNITS in shared/car/consts.js)
+const UNIT_BAR = 1,
+  UNIT_C = 1;
+// TPMS: pressure in 0.1 bar, temperature raw - 40 C; the rear pair a notch higher
+const TYRE_RAW_PER_BAR = 10,
+  TYRE_OFFSET_C = 40;
+const REAR_PRESSURE_STEP = 2, // 0.2 bar
+  REAR_TEMP_STEP = 3; // 3 C
 let mode = "demo",
   /** @type {ManualValues} */
   manual = {},
@@ -210,7 +256,7 @@ setInterval(() => {
       "statusFESVehicleDynamicSwitchHMI",
       { actualValueModeDrivingExperience: drive },
     );
-}, 1000);
+}, SLOW_FEED_MS);
 // route guidance (Guidance guidanceState, the enum names oap-sdk reads), sent once a second
 setInterval(() => {
   if (nav !== null)
@@ -219,7 +265,7 @@ setInterval(() => {
       "guidanceState",
       nav,
     );
-}, 1000);
+}, SLOW_FEED_MS);
 // while GUIDING: a made-up 24 km route, driven in 4 minutes and then again (finalDestinationInfo, travelledDistance)
 let routeT0 = 0;
 setInterval(() => {
@@ -228,15 +274,15 @@ setInterval(() => {
     return;
   }
   if (!routeT0) routeT0 = Date.now();
-  const total = 24000,
-    done = total * (((Date.now() - routeT0) / 240000) % 1),
+  const total = ROUTE_M,
+    done = total * (((Date.now() - routeT0) / ROUTE_LAP_MS) % 1),
     left = total - done;
   stub.feed(
     "de.bmw.infotainment.navigation.guiding.Guidance",
     "finalDestinationInfo",
     {
-      travelTime: Math.round(left / 13.9 + 120),
-      delayTime: 120,
+      travelTime: Math.round(left / ROUTE_SPEED_MPS + ROUTE_DELAY_S),
+      delayTime: ROUTE_DELAY_S,
       delayStatus: "YELLOW",
       formattedDistance: {
         distance: (left / 1000).toFixed(1),
@@ -252,18 +298,18 @@ setInterval(() => {
     "travelledDistance",
     { distance: (done / 1000).toFixed(1), unit: "KM", rawDistance: done },
   );
-}, 1000);
+}, SLOW_FEED_MS);
 // the trip computer (ResetLogic) as the car would send it: 9.8 l/100km since refuelling, scale / 10^digit
 setInterval(() => {
   stub.feed("de.bmw.infotainment.resetlogic.ResetLogic", "averageConsumption", {
-    consumptionCombustionCurrentScale: 98,
-    consumptionCombustionCurrentDigit: 1,
-    consumptionElectricCurrentScale: 65535,
+    consumptionCombustionCurrentScale: DEMO_CONSUMPTION_SCALE,
+    consumptionCombustionCurrentDigit: DEMO_CONSUMPTION_DIGIT,
+    consumptionElectricCurrentScale: NO_VALUE_U16,
     consumptionElectricCurrentDigit: 0,
     combustionUnit: "CONSUMPTION_KM",
     electricUnit: "DEFAULT",
   });
-}, 2000);
+}, TRIP_FEED_MS);
 // now playing (HmiMediaState playerMetadata, as BMW's player fills it: artist then title): manual "music", else a few
 // titles in different scripts, a new one every 8 s
 const DEMO_SONGS = [
@@ -282,7 +328,7 @@ setInterval(() => {
       ? typeof manual.music === "string"
         ? ["", manual.music]
         : null
-      : DEMO_SONGS[Math.floor(Date.now() / 8000) % DEMO_SONGS.length];
+      : DEMO_SONGS[Math.floor(Date.now() / SONG_MS) % DEMO_SONGS.length];
   // as the car's player sends it (Nov 9 2026): playerMetadata holds only the artist and the album; the title is in the
   // track list, found by the playing track's id
   const id = song ? DEMO_SONGS.indexOf(song) + 1 : 0;
@@ -336,7 +382,7 @@ setInterval(() => {
     "trackSelection",
     { sessionId: 1, selectedTrackId: song && song[0] === "" ? 0 : id },
   );
-}, 1000);
+}, SLOW_FEED_MS);
 // BMW's HUD driver assistance block (DisplayDataServer functionalLibraryData, the catalog's enum names): ACC with a car ahead, or all off
 let assistOnce = null; // a single "all off" after "not sent" (see the message handler)
 setInterval(() => {
@@ -353,17 +399,19 @@ setInterval(() => {
       activeCruiseControl: {
         symbolACC: on ? "LDM_CAR_NORMAL" : "LDM_CAR_OFF",
         barsColorACC: on ? "LDM_ACTIVE" : "LDM_OFF",
-        accBarsHUD: on ? 3 : 0,
+        accBarsHUD: on ? DEMO_ACC_BARS : 0,
       },
       trafficJamAssist: { steeringWheel: on ? "LDM_STW_GREEN" : "LDM_STW_OFF" },
-      cruiseCtrlSpeedHUD: on ? 152 : 0,
+      cruiseCtrlSpeedHUD: on ? DEMO_ACC_SET_SPEED : 0,
     },
   );
   // the car ahead (de.bmw.dass.GapVehicleAhead) as an X3 sends it: only GapVehicleDrivingAhead, once a second, 253 and
   // "nothing measured" without a car; with ACC on here a measured car whose gap swings 15..25 m over ~25 s (raw in 0.1 m
   // steps, as the car's reading was 10 times BMW's own at 1:1)
-  const t = Date.now() / 4000,
-    gap = on ? Math.round(200 + 50 * Math.sin(t)) : 253;
+  const t = Date.now() / GAP_SWING_MS,
+    gap = on
+      ? Math.round(GAP_MEAN_RAW + GAP_SWING_RAW * Math.sin(t))
+      : AHEAD_NONE;
   stub.feed("de.bmw.dass.GapVehicleAhead", "GapVehicleDrivingAhead", {
     qualifierFunctionVehicleDrivingAhead: "FUNKTION_VERFUEGBAR",
     statusMeasurementVehicleDrivingAhead: on
@@ -377,15 +425,15 @@ setInterval(() => {
   });
   // DataFrontVehicle as the car sends it with no object: 4093 in every field, object id 253 (its speed is not used)
   stub.feed("de.bmw.dass.GapVehicleAhead", "DataFrontVehicle", {
-    frontVehicleObjectID: 253,
-    frontVehicleSpeedX: 4093,
-    frontVehicleSpeedY: 4093,
-    frontVehicleGapX: 4093,
-    frontVehicleGapY: 4093,
+    frontVehicleObjectID: AHEAD_NONE,
+    frontVehicleSpeedX: FRONT_NO_OBJECT,
+    frontVehicleSpeedY: FRONT_NO_OBJECT,
+    frontVehicleGapX: FRONT_NO_OBJECT,
+    frontVehicleGapY: FRONT_NO_OBJECT,
     qualifierEventDataFunctionFrontVehicle: "EVENT_DATA_AVAILABLE",
     qualifierExtendedFunctionFrontVehicle: "NORMAL_OPERATION_MODE",
   });
-}, 1000);
+}, SLOW_FEED_MS);
 setInterval(() => {
   if (mode !== "manual") return;
   const values = manual,
@@ -412,7 +460,7 @@ setInterval(() => {
     {
       longitudinalAccelerationCentreOfGravity: raw(
         "accel",
-        num("gLong", 0) * 9.80665,
+        num("gLong", 0) * G_MPS2,
       ),
     },
   );
@@ -422,13 +470,13 @@ setInterval(() => {
     {
       lateralAccelerationCentreOfGravity: raw(
         "accel",
-        num("gLat", 0) * 9.80665,
+        num("gLat", 0) * G_MPS2,
       ),
     },
   );
   stub.feed("de.bmw.infotainment.vehicle.CDS", "statusEngineTemperature", {
-    temperatureEngineDrive: raw("temp", num("coolant", 90)),
-    temperatureEngineOilDrive: raw("temp", num("oil", 100)),
+    temperatureEngineDrive: raw("temp", num("coolant", DEMO_COOLANT_C)),
+    temperatureEngineOilDrive: raw("temp", num("oil", DEMO_OIL_C)),
   });
   // the selector switch: P / R / N as the car sends them (no gear; R's own), D / S / M in the gear slider's gear (at
   // least 1); unset, the gear slider alone (in gear: D, else P)
@@ -456,21 +504,28 @@ setInterval(() => {
     { displayBoostPressure: raw("boost", Math.max(0, num("boost", 0))) },
   );
   stub.feed("de.bmw.infotainment.KombiIF", "statusRangeTankStatus", {
-    fluidLevelFuelTank: Math.round(num("fuelL", 40)),
-    range: Math.round(num("range", 450)),
-    mileageKilometre: Math.round(num("odo", 23817)),
+    fluidLevelFuelTank: Math.round(num("fuelL", DEMO_FUEL_L)),
+    range: Math.round(num("range", DEMO_RANGE_KM)),
+    mileageKilometre: Math.round(num("odo", DEMO_ODO_KM)),
   });
   stub.feed(
     "de.bmw.infrastructure.EnvironmentalInformation",
     "ExteriorTemperature",
-    { temperatureExterior: Math.round((num("ambient", 22) + 40) / 0.5) },
+    {
+      temperatureExterior: Math.round(
+        (num("ambient", DEMO_AMBIENT_C) + AMBIENT_OFFSET_C) / AMBIENT_C_PER_BIT,
+      ),
+    },
   );
   // the car's display units (bar, C), so the tyre values below read as 0.1 bar and C + 40; the shifter programme: S / M
   // from the selector switch, else D
   stub.feed(
     "de.bmw.infotainment.vehicle.Vehicle",
     "statusNewCurrentUnitsStatusExt",
-    { unitOfMeasurementAirPressure: 1, unitOfMeasurementTemperature: 1 },
+    {
+      unitOfMeasurementAirPressure: UNIT_BAR,
+      unitOfMeasurementTemperature: UNIT_C,
+    },
   );
   stub.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
     displayProgramGearbox:
@@ -481,21 +536,21 @@ setInterval(() => {
           : "D_PROGRAMM",
   });
   // tyres (TPMS, the fields the car answers a read with): pressure in 0.1 bar, temperature raw - 40 C; the rear pair a notch higher
-  const pressure = Math.round(num("tyreP", 2.3) * 10),
-    temperature = Math.round(num("tyreT", 24) + 40);
+  const pressure = Math.round(num("tyreP", DEMO_TYRE_BAR) * TYRE_RAW_PER_BAR),
+    temperature = Math.round(num("tyreT", DEMO_TYRE_C) + TYRE_OFFSET_C);
   stub.feed("de.bmw.infotainment.vehicle.TPMS", "statusTyrePressure", {
     actualValuePressureTyreFLH: pressure,
     actualValuePressureTyreFRH: pressure,
-    actualValuePressureTyreRLH: pressure + 2,
-    actualValuePressureTyreRRH: pressure + 2,
+    actualValuePressureTyreRLH: pressure + REAR_PRESSURE_STEP,
+    actualValuePressureTyreRRH: pressure + REAR_PRESSURE_STEP,
   });
   stub.feed("de.bmw.infotainment.vehicle.TPMS", "statusTyreTemperature", {
     actualValueTemperatureTyreFLH: temperature,
     actualValueTemperatureTyreFRH: temperature,
-    actualValueTemperatureTyreRLH: temperature + 3,
-    actualValueTemperatureTyreRRH: temperature + 3,
+    actualValueTemperatureTyreRLH: temperature + REAR_TEMP_STEP,
+    actualValueTemperatureTyreRRH: temperature + REAR_TEMP_STEP,
   });
-}, 50);
+}, SIGNAL_FEED_MS);
 
 // what the app actually sees, so the page shows demo values too
 setInterval(() => {
@@ -513,7 +568,7 @@ setInterval(() => {
   out.range = hud.rangeKm;
   out.ambient = hud.ambient;
   send({ t: "values", mode, values: out });
-}, 250);
+}, VALUES_FEED_MS);
 
 // the page's car switches, as the car sends each message (catalog enum names), in demo and manual alike; a switch left at
 // "not sent" sends nothing
@@ -576,7 +631,7 @@ setInterval(
         CAR_SW[k](carSw[k]);
       }
     }),
-  500,
+  CAR_SW_POLL_MS,
 );
 
 process.on(

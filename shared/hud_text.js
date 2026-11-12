@@ -14,6 +14,10 @@
  */
 const data = require("./hud_data");
 
+const GLOW_MIN_RADIUS = 2; // px, the glow's least blur radius
+const GLOW_SIZE_DIV = 24; // the glow's blur radius is the font size over this
+const GLOW_PASSES = 2; // box blur passes for the glow
+
 /**
  * One glyph's cell in a baked font atlas (hud/fonts/<name>.json).
  * @typedef {object} Glyph
@@ -220,10 +224,10 @@ function tint(coverage, boxW, boxH, opts) {
   const glow = opts.glow || 0;
   if (glow > 0) {
     const radius = Math.max(
-      2,
-      Math.round(loadFont(opts.font).metrics.size / 24),
+      GLOW_MIN_RADIUS,
+      Math.round(loadFont(opts.font).metrics.size / GLOW_SIZE_DIV),
     );
-    halo = blur(coverage, boxW, boxH, radius, 2);
+    halo = blur(coverage, boxW, boxH, radius, GLOW_PASSES);
   }
   const out = Buffer.alloc(boxW * boxH * 4, 0);
   const alphaScale = color[3] / 255;

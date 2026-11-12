@@ -45,13 +45,21 @@
  * @typedef {import("./someip").Handlers} Signals
  */
 
+const STANDSTILL_KMH = 1; // under this the car stands still
+// unit conversions for the "units" setting
+const MI_PER_KM = 0.621371;
+const PSI_PER_BAR = 14.5038;
+const FT_PER_M = 3.28084;
+const L_PER_US_GAL = 3.78541;
+const LBFT_PER_NM = 0.737562;
+const DEFAULT_TANK_L = 65; // config.tankLitres when unset
 const BOOST_SCALE = { factor: 0.01, offset: 0, invalid: 255 }; // see header comment
 const TYRE_CORNERS = ["FL", "FR", "RL", "RR"];
 // the car's display units (Vehicle statusNewCurrentUnitsStatusExt, as BMW's own x_call reads them; car_vitals, MIT)
 const PRESS_UNITS = { 1: "BAR", 2: "KPA", 3: "PSI" },
   TEMP_UNITS = { 1: "C", 2: "F" };
 /** @type {Record<string, number>} */
-const PRESS_TO_BAR = { BAR: 1, KPA: 0.01, PSI: 1 / 14.5038 };
+const PRESS_TO_BAR = { BAR: 1, KPA: 0.01, PSI: 1 / PSI_PER_BAR };
 /**
  * A unit by wire number (map) or by name, else null.
  * @param {Record<string, string>} map
@@ -336,6 +344,13 @@ module.exports = {
   BRAKE_TAU_MS,
   enumNum,
   FRESH_MS,
+  STANDSTILL_KMH,
+  MI_PER_KM,
+  PSI_PER_BAR,
+  FT_PER_M,
+  L_PER_US_GAL,
+  LBFT_PER_NM,
+  DEFAULT_TANK_L,
   driveVariantOf,
   SETUP,
   SETUP_LEVEL,

@@ -2,7 +2,7 @@
 /**
  * The "swatch" widget: an effect layer.
  */
-const { SWATCH } = require("./calibration");
+const { SWATCH, SWATCH_STEPS } = require("./calibration");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
@@ -27,7 +27,7 @@ module.exports = {
     const client = state.c,
       ref = state.ref;
     client.uniform(ref, "u_size", [widget.w, widget.h]);
-    client.uniform(ref, "u_n", [widget.steps || 11]);
+    client.uniform(ref, "u_n", [widget.steps || SWATCH_STEPS]);
   },
   /**
    * @param {HudApp} hud

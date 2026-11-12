@@ -64,6 +64,20 @@
 
 const WARM_OIL = 80; // °C
 const COLD_LIMIT = 4500; // rpm at 30 °C oil (Redline's petrol default)
+const COLD_OIL_C = 30; // the oil temperature the cold guard's COLD_LIMIT holds at
+const MIN_SHIFT_RPM = 2500; // the lowest shift point; shifts under it aren't scored
+const SHIFT_STEP_RPM = 50; // the cold shift point climbs in these steps
+const LIMITER_RPM = 60; // within this of the redline is the limiter
+const EARLY_RPM = 250; // over this under the shift point is EARLY
+const LATE_RPM = 200; // over this above the shift point is LATE
+const SHIFT_WINDOW_MS = 600; // a shift is scored on the highest rpm in this window before it
+const RECENT_MS = 1200; // the samples kept
+const DROP_WINDOW_MS = 400; // with no gear signal: the window the rpm drop is looked for in
+const DROP_MIN_SAMPLES = 4; // samples needed before looking for an rpm drop
+const DROP_MIN_KMH = 10; // moving: rpm drops count above this speed
+const DROP_MIN_RPM = 3000; // the peak an rpm drop must start from
+const DROP_FRAC = 0.82; // the rpm falls under this share of the peak (over 18 %)
+const SHIFT_GAP_MS = 800; // the least time between two guessed shifts
 const PEAK_HOLD_MS = 15000;
 /** @type {(value: any) => value is number} */
 const isNum = (value) => typeof value === "number" && isFinite(value);
@@ -102,7 +116,7 @@ class ShiftScore {
   /** @returns {number} the shift point with the oil warm */
   _normal() {
     const opts = this.opts();
-    return Math.max(2500, opts.redline - opts.shiftBefore);
+    return Math.max(MIN_SHIFT_RPM, opts.redline - opts.shiftBefore);
   }
 
   /**
@@ -115,9 +129,9 @@ class ShiftScore {
     if (!this.opts().coldGuard || !isNum(oil) || oil >= WARM_OIL)
       return { rpm: normal, cold: false };
     const cold = Math.min(COLD_LIMIT, normal);
-    const warmth = clamp((oil - 30) / (WARM_OIL - 30), 0, 1);
+    const warmth = clamp((oil - COLD_OIL_C) / (WARM_OIL - COLD_OIL_C), 0, 1);
     return {
-      rpm: Math.round((cold + (normal - cold) * warmth) / 50) * 50,
+      rpm: Math.round((cold + (normal - cold) * warmth) / SHIFT_STEP_RPM) * SHIFT_STEP_RPM,
       cold: true,
     };
   }
@@ -130,11 +144,11 @@ class ShiftScore {
    */
   verdict(rpm, target, cold) {
     const red = this.opts().redline;
-    return rpm >= red - 60
+    return rpm >= red - LIMITER_RPM
       ? "LIMITER"
-      : rpm < target - 250
+      : rpm < target - EARLY_RPM
         ? "EARLY"
-        : rpm > target + 200
+        : rpm > target + LATE_RPM
           ? cold
             ? "COLD REV"
             : "LATE"
@@ -148,13 +162,13 @@ class ShiftScore {
    * @param {number|string} to
    */
   _record(t, from, to) {
-    const win = this.recent.filter((sample) => t - sample[0] < 600);
+    const win = this.recent.filter((sample) => t - sample[0] < SHIFT_WINDOW_MS);
     if (!win.length) return;
     const rpm = Math.max.apply(
       null,
       win.map((sample) => sample[1]),
     );
-    if (!(rpm > 2500)) return;
+    if (!(rpm > MIN_SHIFT_RPM)) return;
     const point = this.shiftPoint(this.car.data().oil);
     this.last = {
       at: Date.now(),
@@ -186,13 +200,13 @@ class ShiftScore {
     if (!isNum(data.rpm)) return;
     const recent = this.recent;
     recent.push([t, data.rpm, data.speed]);
-    while (recent.length && t - recent[0][0] > 1200) recent.shift();
+    while (recent.length && t - recent[0][0] > RECENT_MS) recent.shift();
     const now = Date.now();
     if (data.rpm >= this.peak || now - this.peakT > PEAK_HOLD_MS) {
       this.peak = data.rpm;
       this.peakT = now;
     }
-    const lim = data.rpm >= this.opts().redline - 60;
+    const lim = data.rpm >= this.opts().redline - LIMITER_RPM;
     if (lim && !this.onLimiter) this.limiterHits++;
     this.onLimiter = lim;
     const gear = data.gear;
@@ -204,16 +218,16 @@ class ShiftScore {
       gear === this.lastGear + 1
     )
       this._record(t, this.lastGear, gear);
-    else if (!isNum(gear) && recent.length > 4 && data.speed > 10) {
-      const back = recent.filter((sample) => t - sample[0] < 400);
+    else if (!isNum(gear) && recent.length > DROP_MIN_SAMPLES && data.speed > DROP_MIN_KMH) {
+      const back = recent.filter((sample) => t - sample[0] < DROP_WINDOW_MS);
       const peakRpm = Math.max.apply(
         null,
         back.map((sample) => sample[1]),
       );
       if (
-        peakRpm > 3000 &&
-        data.rpm < peakRpm * 0.82 &&
-        (!this.last || now - this.last.at > 800)
+        peakRpm > DROP_MIN_RPM &&
+        data.rpm < peakRpm * DROP_FRAC &&
+        (!this.last || now - this.last.at > SHIFT_GAP_MS)
       )
         this._record(t, "?", "?");
     }
@@ -221,4 +235,5 @@ class ShiftScore {
   }
 }
 
+ShiftScore.WARM_OIL = WARM_OIL; // the oil warm enough for the full shift point (car/values.js reads it too)
 module.exports = ShiftScore;

@@ -7,6 +7,13 @@ const textRaster = require("../hud_text");
 const widgetTypes = require("../widgets");
 const { mib } = require("./util");
 
+const ATLAS_MAX_CHARS = 64; // printable characters in a glyph atlas at most
+const ATLAS_CELL_PAD_PX = 2; // added to the widest advance for a cell
+const ATLAS_MAX_COLS = 16; // cells per atlas row at most
+const ATLAS_MAX_W_PX = 2048; // an atlas row's width at most
+const ATLAS_PX_BYTES = 2; // pixel memory per atlas pixel: R8, counted twice by cluster-render
+const FONT_LOG_MAX = 60; // font files named in the log at most
+
 /** @typedef {import("./app").GlyphAtlas} GlyphAtlas */
 /** @typedef {import("./app").CfgPacker} CfgPacker */
 /** @typedef {import("../cluster_render_client.js").ClusterRender} Client */
@@ -35,7 +42,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
     const chars = Object.keys(glyphs)
       .filter((char) => char.length === 1 && char >= " " && char <= "~")
       .sort()
-      .slice(0, 64);
+      .slice(0, ATLAS_MAX_CHARS);
     if (!chars.length)
       throw new Error(
         'font "' + fontName + '" has no printable glyphs for an atlas',
@@ -49,9 +56,9 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
             chars.map((char) => glyphs[char].advance),
           ),
         ),
-      ) + 2;
+      ) + ATLAS_CELL_PAD_PX;
     const cellH = font.metrics.cellHeight;
-    const cols = Math.max(1, Math.min(16, Math.floor(2048 / cellW))),
+    const cols = Math.max(1, Math.min(ATLAS_MAX_COLS, Math.floor(ATLAS_MAX_W_PX / cellW))),
       rows = Math.ceil(chars.length / cols);
     const w = cols * cellW,
       h = rows * cellH;
@@ -88,7 +95,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
       cellW,
       cellH,
       chars,
-      bytes: w * h * 2,
+      bytes: w * h * ATLAS_PX_BYTES,
     };
     this.atlases.set(key, atlas);
     this.log.info(
@@ -148,7 +155,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
           found.all.length +
           "): " +
           found.all
-            .slice(0, 60)
+            .slice(0, FONT_LOG_MAX)
             .map(
               (font) => font.path + " " + Math.round(font.size / 1024) + " KiB",
             )

@@ -4,6 +4,11 @@
  */
 const textRaster = require("../../hud_text");
 
+const LABEL_STEP_PX = 100; // default label spacing
+const LABEL_PAD_PX = 2; // each label's inset from its grid point, and its extra width
+/** @type {number[]} */
+const LABEL_RGBA = [255, 230, 0, 255]; // the labels: yellow
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -20,7 +25,7 @@ function paint(hud, state) {
   const widget = state.w,
     width = widget.w,
     height = widget.h,
-    step = widget.step || 100,
+    step = widget.step || LABEL_STEP_PX,
     font = widget.font;
   const cell = textRaster.loadFont(font).metrics.cellHeight;
   const rects = [],
@@ -29,16 +34,16 @@ function paint(hud, state) {
     for (let gx = 0; gx < width; gx += step) {
       const label = widget.x + gx + "/" + (widget.y + gy);
       const labelW = Math.min(
-        width - gx - 2,
-        textRaster.measure(label, font, 0) + 2,
+        width - gx - LABEL_PAD_PX,
+        textRaster.measure(label, font, 0) + LABEL_PAD_PX,
       );
-      const labelH = Math.min(height - gy - 2, cell);
+      const labelH = Math.min(height - gy - LABEL_PAD_PX, cell);
       if (labelW <= 0 || labelH <= 0) continue;
       const buf = textRaster.drawText(labelW, labelH, label, {
         font,
-        color: [255, 230, 0, 255],
+        color: LABEL_RGBA,
       });
-      rects.push({ x: gx + 2, y: gy + 2, w: labelW, h: labelH });
+      rects.push({ x: gx + LABEL_PAD_PX, y: gy + LABEL_PAD_PX, w: labelW, h: labelH });
       parts.push(buf);
     }
   }

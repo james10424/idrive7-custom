@@ -5,6 +5,13 @@
 const { rgba } = require("../../engine/util");
 const GRID = require("./shader");
 
+const GRID_STEP_PX = 50; // default line spacing
+const GRID_MAJOR_EVERY = 2; // default: every second line is a major one
+/** @type {number[]} */
+const GRID_MINOR_RGBA = [255, 255, 255, 90]; // the minor lines: faint white
+/** @type {number[]} */
+const GRID_MAJOR_RGBA = [0, 255, 140, 255]; // the major lines: green
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -29,10 +36,10 @@ module.exports = {
     const client = state.c,
       ref = state.ref;
     client.uniform(ref, "u_size", [widget.w, widget.h]);
-    client.uniform(ref, "u_step", [widget.step || 50]);
-    client.uniform(ref, "u_major", [widget.major || 2]);
-    client.uniform(ref, "u_minor", rgba([255, 255, 255, 90]));
-    client.uniform(ref, "u_majorC", rgba([0, 255, 140, 255]));
+    client.uniform(ref, "u_step", [widget.step || GRID_STEP_PX]);
+    client.uniform(ref, "u_major", [widget.major || GRID_MAJOR_EVERY]);
+    client.uniform(ref, "u_minor", rgba(GRID_MINOR_RGBA));
+    client.uniform(ref, "u_majorC", rgba(GRID_MAJOR_RGBA));
   },
   /**
    * @param {HudApp} hud

@@ -5,6 +5,10 @@
 const { isNum, rgb, rgba } = require("../../engine/util");
 const SHIFTBAR = require("./shader");
 
+const SHIFTBAR_SEGS = 40; // default number of segments
+const SHIFTBAR_MID_BELOW_RPM = 1500; // midAt "shift": the middle colour starts this far below the redline
+const SHIFTBAR_HIGH_BELOW_RPM = 500; // the high colour starts this far below the redline
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -32,14 +36,14 @@ module.exports = {
     const max = hud._barMax(),
       red = hud.setting("redline");
     const midAt =
-      theme.bar.midAt === "shift" ? (red - 1500) / max : theme.bar.midAt;
+      theme.bar.midAt === "shift" ? (red - SHIFTBAR_MID_BELOW_RPM) / max : theme.bar.midAt;
     client.uniform(ref, "u_size", [widget.w, widget.h]);
-    client.uniform(ref, "u_segs", [widget.segments || 40]);
+    client.uniform(ref, "u_segs", [widget.segments || SHIFTBAR_SEGS]);
     client.uniform(ref, "u_low", rgb(theme.bar.low));
     client.uniform(ref, "u_mid", rgb(theme.bar.mid));
     client.uniform(ref, "u_high", rgb(theme.bar.high));
     client.uniform(ref, "u_midAt", [midAt]);
-    client.uniform(ref, "u_highAt", [(red - 500) / max]);
+    client.uniform(ref, "u_highAt", [(red - SHIFTBAR_HIGH_BELOW_RPM) / max]);
     client.uniform(ref, "u_track", rgba(theme.track));
     client.uniform(ref, "u_flash", [0]);
   },
@@ -52,7 +56,7 @@ module.exports = {
   update(hud, state, now, force) {
     const widget = state.w;
     const rpm = hud._raw("rpm");
-    const segs = widget.segments || 40;
+    const segs = widget.segments || SHIFTBAR_SEGS;
     const value = isNum(rpm)
       ? Math.min(1, Math.max(0, rpm / hud._barMax()))
       : 0;

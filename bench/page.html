@@ -127,6 +127,19 @@
 (function () {
   'use strict';
   const CLASS_ORDER = { ambient: 0, content: 1, overlay: 2, alert: 3 };
+  const HUD_W = 800, HUD_H = 480;   // the HUD target's size, the view until the server's hello
+  const MIB = 1048576;
+  const DEFAULT_PIXEL_MIB = 32;     // the pixel memory cap until the server's hello (the fork's pixel_mib)
+  const MI_PER_KM = 0.621371;
+  // BMW's speed-limit sign on the HUD is made up: the high limit above a speed, else the low one
+  const FAKE_LIMIT_OVER_MPH = 45, FAKE_LIMIT_LOW_MPH = 35, FAKE_LIMIT_HIGH_MPH = 65;
+  const FAKE_LIMIT_OVER_KMH = 70, FAKE_LIMIT_LOW_KMH = 50, FAKE_LIMIT_HIGH_KMH = 100;
+  // BMW's guidance map's left edge on the HUD: right of BMW's speed, further right when the ACC block is up
+  const GUIDE_X0 = 312, GUIDE_X0_ACC = 385;
+  const LOG_KEEP = 500;             // log lines the page keeps
+  const LOG_STICK_PX = 4;           // this near the bottom, the log follows new lines
+  const LOG_SNIPPET_CHARS = 60;     // of a message that did not parse, in the log
+  const SSE_PREFIX = 'data: ';      // an event stream line's prefix
   const SIGNALS = [
     ['rpm', 0, 8000, 50, 900], ['speed', 0, 250, 1, 0], ['oil', -20, 150, 1, 95], ['coolant', -20, 130, 1, 90],
     ['boost', 0, 2.5, 0.05, 0], ['gear', 0, 8, 1, 1], ['gLong', -1.5, 1.5, 0.05, 0], ['gLat', -1.5, 1.5, 0.05, 0],
@@ -241,7 +254,7 @@
 
   /* ---------- compositing ---------- */
   // view: the target the app draws on (its app.json config.target), from the server's hello
-  let view = 'hud', VW = 800, VH = 480;
+  let view = 'hud', VW = HUD_W, VH = HUD_H;
   // what the driver sees, from the server's hello (shared/visible.js, measured from car photos Nov 5 2026)
   let geo = null;
   function hoodY(x) {
@@ -312,8 +325,8 @@
   const bmwState = { nav: null, assist: null };   // route guidance and the ACC block, as the server last sent them
   function drawBmwHud() {
     const kmh = lastValues.speed, useMiles = units === 'us';
-    const speed = typeof kmh === 'number' && isFinite(kmh) ? Math.round(useMiles ? kmh * 0.621371 : kmh) : null;
-    const limit = useMiles ? (speed !== null && speed > 45 ? 65 : 35) : (speed !== null && speed > 70 ? 100 : 50);
+    const speed = typeof kmh === 'number' && isFinite(kmh) ? Math.round(useMiles ? kmh * MI_PER_KM : kmh) : null;
+    const limit = useMiles ? (speed !== null && speed > FAKE_LIMIT_OVER_MPH ? FAKE_LIMIT_HIGH_MPH : FAKE_LIMIT_LOW_MPH) : (speed !== null && speed > FAKE_LIMIT_OVER_KMH ? FAKE_LIMIT_HIGH_KMH : FAKE_LIMIT_LOW_KMH);
     // the sign: a light rounded rectangle with the limit, the unit under it (HUD photo, Nov 9 2026: x 155..201, y 316..378)
     ctx.fillStyle = 'rgba(236,230,200,.92)';
     ctx.beginPath(); ctx.roundRect ? ctx.roundRect(155, 316, 46, 62, 5) : ctx.rect(155, 316, 46, 62); ctx.fill();
@@ -331,11 +344,11 @@
     ctx.textAlign = 'left';
     const acc = bmwState.assist === 'acc', nav = bmwState.nav === 'ACTIVE';
     if (acc) drawBmwAcc(useMiles);
-    if (nav) drawBmwGuidance(acc ? 385 : 312);
+    if (nav) drawBmwGuidance(acc ? GUIDE_X0_ACC : GUIDE_X0);
     if (document.getElementById('outlines').checked) {
       labelBox("BMW's speed + limit", 150, 296, '#ff8c1a');
       if (acc) labelBox("BMW's ACC", 212, 222, '#ff8c1a');
-      if (nav) labelBox("BMW's guidance", acc ? 385 : 312, 142, '#ff8c1a');
+      if (nav) labelBox("BMW's guidance", acc ? GUIDE_X0_ACC : GUIDE_X0, 142, '#ff8c1a');
     }
   }
   // BMW's driver assistance block as its HUD draws it (HUD photo on the 401 with ACC on, Nov 9 2026, measured into HUD px):
@@ -426,11 +439,11 @@
   }
   const appBlock = (id) => document.querySelector('#screens .appblock[data-app="' + id + '"]') || document.querySelector('#screens .appblock');
   function drawRoad() {
-    const gradient = ctx.createLinearGradient(0, 0, 0, 480);
+    const gradient = ctx.createLinearGradient(0, 0, 0, HUD_H);
     gradient.addColorStop(0, '#2a3340'); gradient.addColorStop(0.45, '#56606b'); gradient.addColorStop(0.46, '#2b2d30'); gradient.addColorStop(1, '#151618');
-    ctx.fillStyle = gradient; ctx.fillRect(0, 0, 800, 480);
+    ctx.fillStyle = gradient; ctx.fillRect(0, 0, HUD_W, HUD_H);
     ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 4; ctx.setLineDash([30, 30]);
-    ctx.beginPath(); ctx.moveTo(400, 222); ctx.lineTo(400, 480); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(HUD_W / 2, 222); ctx.lineTo(HUD_W / 2, HUD_H); ctx.stroke(); ctx.setLineDash([]);
   }
   // What BMW's own Sport view draws inside the map window (car photo, Nov 7 2026, measured into cluster px): its speed
   // with the line under it and its speed-limit sign on the left (the big gear right of it in that photo is the theme's
@@ -452,7 +465,7 @@
     ctx.beginPath(); ctx.arc(505, 194, 11, Math.PI * 0.9, Math.PI * 2.1); ctx.stroke();                 // gauge icon
     // its speed, right-aligned to the unit at x 546: each digit about 58 px wide, so "04" starts at x ~430 and a hundreds
     // digit reaches left past the window's edge to ~372 (104 km/h read 04, car photo Nov 9 2026); drawn 1.7x wide
-    const speed = lastValues.speed, kmhNow = typeof speed === 'number' ? Math.round(units === 'us' ? speed * 0.621371 : speed) : 0;
+    const speed = lastValues.speed, kmhNow = typeof speed === 'number' ? Math.round(units === 'us' ? speed * MI_PER_KM : speed) : 0;
     ctx.save(); ctx.translate(546, 394); ctx.scale(1.7, 1);
     ctx.fillStyle = fgColor; ctx.font = 'bold 62px -apple-system, Helvetica, sans-serif'; ctx.textAlign = 'right'; ctx.fillText(String(kmhNow), 0, 0);
     ctx.restore(); ctx.textAlign = 'left';
@@ -582,9 +595,9 @@
   function addLog(entry) {
     const div = document.createElement('div');
     div.className = entry.level; div.textContent = entry.text;
-    const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - 4;
+    const atBottom = logEl.scrollTop + logEl.clientHeight >= logEl.scrollHeight - LOG_STICK_PX;
     logEl.appendChild(div);
-    while (logEl.childNodes.length > 500) logEl.removeChild(logEl.firstChild);
+    while (logEl.childNodes.length > LOG_KEEP) logEl.removeChild(logEl.firstChild);
     if (atBottom) logEl.scrollTop = logEl.scrollHeight;
   }
 
@@ -625,7 +638,7 @@
   const connEl = document.getElementById('conn');
   function setConn(text, cls) { connEl.textContent = 'page: ' + text; connEl.className = 'pill ' + cls; }
   function onData(data) {
-    try { onMessage(JSON.parse(data)); } catch (err) { addLog({ level: 'error', text: 'bench page: ' + (err && err.message || err) + ' (' + data.slice(0, 60) + ')' }); }
+    try { onMessage(JSON.parse(data)); } catch (err) { addLog({ level: 'error', text: 'bench page: ' + (err && err.message || err) + ' (' + data.slice(0, LOG_SNIPPET_CHARS) + ')' }); }
   }
   (async function readEvents() {
     try {
@@ -642,13 +655,13 @@
         let i;
         while ((i = buf.indexOf('\n\n')) >= 0) {
           const msg = buf.slice(0, i); buf = buf.slice(i + 2);
-          msg.split('\n').forEach((line) => { if (line.indexOf('data: ') === 0) onData(line.slice(6)); });
+          msg.split('\n').forEach((line) => { if (line.indexOf(SSE_PREFIX) === 0) onData(line.slice(SSE_PREFIX.length)); });
         }
       }
     } catch (err) { addLog({ level: 'error', text: 'bench page: event stream: ' + (err && err.message || err) }); dbgErr = String(err && err.message || err); dirty = true; }
     setConn('bench server gone', 'bad');
   })();
-  let dbgN = 0, dbgLast = '', dbgReads = 0, dbgBuf = 0, dbgErr = '', dbgPx = 0, pixelCap = 32 * 1048576;
+  let dbgN = 0, dbgLast = '', dbgReads = 0, dbgBuf = 0, dbgErr = '', dbgPx = 0, pixelCap = DEFAULT_PIXEL_MIB * MIB;
   function onMessage(msg) {
     dbgN++; dbgLast = msg.t + ':' + (msg.key || '') + ':' + (msg.w === undefined ? 'whole' : 'rect'); dirty = true;
     if (msg.t === 'log') addLog(msg);
@@ -661,7 +674,7 @@
     }
     else if (msg.t === 'scene') {
       scene = msg.layers;
-      if (msg.pixels !== undefined) document.getElementById('pixels').textContent = 'pixels: ' + (msg.pixels / 1048576).toFixed(1) + ' of ' + (pixelCap ? (pixelCap / 1048576).toFixed(0) + ' MiB' : 'unlimited');
+      if (msg.pixels !== undefined) document.getElementById('pixels').textContent = 'pixels: ' + (msg.pixels / MIB).toFixed(1) + ' of ' + (pixelCap ? (pixelCap / MIB).toFixed(0) + ' MiB' : 'unlimited');
       const keys = new Set(scene.map((layer) => layer.key));
       Array.from(images.keys()).forEach((k) => { if (!keys.has(k)) images.delete(k); });
       renderShaderPill();

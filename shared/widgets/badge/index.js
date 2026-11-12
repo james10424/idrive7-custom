@@ -6,6 +6,11 @@ const { VERDICT } = require("../../hud_themes");
 const textRaster = require("../../hud_text");
 const { TEXT_MS } = require("../../engine/util");
 
+const BADGE_RADIUS_PX = 6; // corner radius (at most half the height)
+const BADGE_FILL_FRESH = 0.45; // the fill's alpha for a fresh grade
+const BADGE_FILL = 0.2; // the fill's alpha otherwise
+const BADGE_FRESH_MS = 2500; // a grade stays fresh (bright) this long after the shift
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -26,8 +31,8 @@ function paint(hud, widget, text, tone, fresh) {
     height = widget.h,
     buf = Buffer.alloc(width * height * 4, 0);
   if (!text) return buf;
-  const radius = Math.min(6, height / 2),
-    fillA = fresh ? 0.45 : 0.2;
+  const radius = Math.min(BADGE_RADIUS_PX, height / 2),
+    fillA = fresh ? BADGE_FILL_FRESH : BADGE_FILL;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       // rounded-rect coverage, 1 px soft edge
@@ -102,7 +107,7 @@ module.exports = {
       fresh = false;
     if (widget.tone === "verdict" && hud.score.last) {
       tone = VERDICT[hud.score.last.verdict] || hud.theme.fg;
-      fresh = now - hud.score.last.at < 2500;
+      fresh = now - hud.score.last.at < BADGE_FRESH_MS;
     }
     const key = text + "|" + tone + "|" + fresh;
     if (!force && key === state.last) return;

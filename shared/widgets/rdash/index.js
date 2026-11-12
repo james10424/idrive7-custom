@@ -5,10 +5,33 @@
 const { isNum } = require("../../engine/util");
 const { packCfg } = require("../../engine/cfg");
 const RDASH = require("./shader");
+const { MI_PER_KM } = require("../../car/consts");
 
 const REGAL_NEEDLE_TAU_MS = 170; // Grand National's fuel and pod needles ease toward a reading: settled in about 0.5 s
 const GEAR_MS = 300; // the gear needle's move: this long a letter
 const REGAL_SPEED_TAU_MS = 50; // its speed needle: about 0.15 s, so it keeps up with the digits
+const GEAR_X_STEPS_PER_PX = 10; // the gear needle's x is sent in tenths of a px
+/** @type {number[]} */
+const SPD_VIRT = [300, 45]; // "spdVirt" default: the far pivot's height px, the half sweep deg
+const SPD_MID_MPH = 55; // "spdMid" default: the speed scale's middle
+const SPD_MAX_MPH = 85; // "spdMax" default: its end
+const SPD_STEP_MPH = 5; // "spdStep" default: between marks, and the first mark
+const SPD_AMBER_MPH = 55; // "spdAmber" default: the amber mark
+const SPD_REST_DEG = 12; // "spdRest" default: the needle's rest at 0, past the scale's start
+const SPD_MIN_FRAC = -0.5; // the speed needle never goes further below the scale's start than this
+/** @type {number[]} */
+const BAT_ICON_HIDDEN = [-99, -99]; // "batIcon" default: off the layer, so not drawn
+const NEEDLE_STEPS = 500; // the needles are resent only in steps of 1/500 of their scale
+const NEEDLE_SNAP = 0.001; // within this of the reading (half a step) a needle is there
+const MAX_EASE_DT_MS = 500; // a longer gap between updates eases as if it were this long
+const DEFAULT_RPM_MAX = 8000; // "rpmMax" default: the rpm bar's end
+const LED_N = 16; // "ledN" default: the rpm bar's segments
+const LED_SUBSTEPS = 16; // the bars' levels are sent in sixteenths of a segment
+const COLD_REDLINE_STEP_RPM = 50; // the cold redline glides in steps of this many rpm
+const LED2_N = 15; // "led2N" default: the boost bar's segments
+/** @type {number[]} */
+const LED2_RANGE_BAR = [0, 1.5]; // "led2Range" default
+const FUEL_ROW_H_PX = 21; // "fuelRowH" default
 // the set-once uniforms packed into u_cfg (engine/cfg.js), in slot order
 const CFG = [
   "u_podL",
@@ -80,7 +103,7 @@ function gearNeedleX(widget, state, slot, now) {
     gn.out = moving;
   }
   gn.pos = along();
-  return Math.round((row[0] + row[1] * gn.pos) * 10) / 10;
+  return Math.round((row[0] + row[1] * gn.pos) * GEAR_X_STEPS_PER_PX) / GEAR_X_STEPS_PER_PX;
 }
 
 // "needleOnly": the speed and fuel needles on their own layer, over the text
@@ -131,7 +154,7 @@ module.exports = {
         ? [rect[0] - widget.x, rect[1] - widget.y, rect[2], rect[3]]
         : [0, 0, 0, 0];
     const spdBox = widget.spd || [0, 0, 0, 0],
-      spdVirt = widget.spdVirt || [300, 45];
+      spdVirt = widget.spdVirt || SPD_VIRT;
     packer.uniform("u_size", [widget.w, widget.h]);
     [
       "podL",
@@ -159,15 +182,15 @@ module.exports = {
       widget.spdMin || 0,
     ]);
     packer.uniform("u_spdK", [
-      widget.spdMid || 55,
-      widget.spdMax || 85,
-      widget.spdStep || 5,
-      widget.spdAmber || 55,
+      widget.spdMid || SPD_MID_MPH,
+      widget.spdMax || SPD_MAX_MPH,
+      widget.spdStep || SPD_STEP_MPH,
+      widget.spdAmber || SPD_AMBER_MPH,
     ]);
     const fuelG = widget.fuelG || [0, 0, 0, 0],
       podG = widget.podG || [0, 0, 0, 0],
       arrow = widget.arrow || [0, 0, 0],
-      batIcon = widget.batIcon || [-99, -99];
+      batIcon = widget.batIcon || BAT_ICON_HIDDEN;
     packer.uniform("u_fuelG", [
       fuelG[0] - widget.x,
       fuelG[1] - widget.y,
@@ -226,11 +249,11 @@ module.exports = {
     const widget = state.w;
     /** @type {(value: number) => number} */
     const quantize = (value) =>
-      Math.round(Math.min(1, Math.max(0, value)) * 500) / 500;
+      Math.round(Math.min(1, Math.max(0, value)) * NEEDLE_STEPS) / NEEDLE_STEPS;
     const speed = hud._raw("speed"),
       rpm = hud._raw("rpm"),
       fuel = hud._raw("fuel"),
-      max = widget.rpmMax || 8000;
+      max = widget.rpmMax || DEFAULT_RPM_MAX;
     // the pods' gauges: each "podSignals" entry's signal over its range, bottom to top
     const pods = [0, 1].map((i) => {
       const pod = (widget.podSignals || [])[i],
@@ -238,12 +261,13 @@ module.exports = {
       if (!isNum(value)) return 0; // no reading (the car off): the needle sweeps down to the bottom
       return quantize(podFrac(pod, value));
     });
-    const ledN = widget.ledN || 16;
+    const ledN = widget.ledN || LED_N;
     // the bars' levels 0..1, in sixteenths of a segment: the segment the level is partway into lights partway (the
     // shader fades it), so the bar moves smoothly instead of a whole segment at a time
     /** @type {(frac: number, n: number) => number} */
     const ledLevel = (frac, n) =>
-      Math.round(Math.min(1, Math.max(0, frac)) * n * 16) / (n * 16);
+      Math.round(Math.min(1, Math.max(0, frac)) * n * LED_SUBSTEPS) /
+      (n * LED_SUBSTEPS);
     const led = isNum(rpm) ? ledLevel(Math.max(0, rpm) / max, ledN) : 0;
     // the red mark above the labels: from the Redline setting to the scale's end; with "coldRedline" [rpm, cold C,
     // warm C] it starts at that rpm while the oil is cold and glides to the setting as the oil warms (in 50 rpm steps,
@@ -258,15 +282,17 @@ module.exports = {
         Math.max(0, (oil - coldRedline[1]) / (coldRedline[2] - coldRedline[1])),
       );
       redRpm =
-        Math.round((coldRedline[0] + (redline - coldRedline[0]) * warm) / 50) *
-        50;
+        Math.round(
+          (coldRedline[0] + (redline - coldRedline[0]) * warm) /
+            COLD_REDLINE_STEP_RPM,
+        ) * COLD_REDLINE_STEP_RPM;
     }
     const redAt = Math.min(1, Math.max(0, redRpm / max));
     // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
-    const led2N = widget.led2N || 15,
+    const led2N = widget.led2N || LED2_N,
       // "led2RangeUs": the range with US units (Grand National's 0 .. 20 psi, in bar)
       led2Range = (hud.setting("units") === "us" && widget.led2RangeUs) ||
-        widget.led2Range || [0, 1.5],
+        widget.led2Range || LED2_RANGE_BAR,
       boost = hud._raw(widget.led2Signal || "boost");
     const led2 = isNum(boost)
       ? ledLevel((boost - led2Range[0]) / (led2Range[1] - led2Range[0]), led2N)
@@ -281,13 +307,13 @@ module.exports = {
       ];
     // speed on the spdMin..spdMax mph scale with spdMid at its middle, each half linear
     const lo = widget.spdMin || 0,
-      mid = widget.spdMid || 55,
-      top = widget.spdMax || 85,
-      mph = isNum(speed) ? Math.max(0, speed * 0.621371) : 0;
+      mid = widget.spdMid || SPD_MID_MPH,
+      top = widget.spdMax || SPD_MAX_MPH,
+      mph = isNum(speed) ? Math.max(0, speed * MI_PER_KM) : 0;
     // below the first mark ("spdStep", 5 mph) the needle drops to its rest under the row ("spdRest" deg past the 0, 12)
-    const spdStep = widget.spdStep || 5,
-      half = (widget.spdVirt || [300, 45])[1],
-      rest = -(isNum(widget.spdRest) ? widget.spdRest : 12) / (2 * half);
+    const spdStep = widget.spdStep || SPD_STEP_MPH,
+      half = (widget.spdVirt || SPD_VIRT)[1],
+      rest = -(isNum(widget.spdRest) ? widget.spdRest : SPD_REST_DEG) / (2 * half);
     const stepFrac = (0.5 * (spdStep - lo)) / (mid - lo);
     let needleFrac =
       mph <= mid
@@ -296,12 +322,12 @@ module.exports = {
     if (mph < spdStep) needleFrac = rest + ((stepFrac - rest) * mph) / spdStep;
     // the needles ease toward their readings (as Miku's lean: 1 - exp(-dt / tau), the same at any tick rate), so
     // they sweep instead of jumping, down to their rest when a reading goes (the car off) and up from it at the start
-    const dt = state.at ? Math.min(500, now - state.at) : 0;
+    const dt = state.at ? Math.min(MAX_EASE_DT_MS, now - state.at) : 0;
     state.at = now;
     /** @type {(prev: ?number, target: number, tau: number) => number} */
     const ease = (prev, target, tau) =>
       isNum(prev) ? prev + (target - prev) * (1 - Math.exp(-dt / tau)) : target;
-    const fTo = Math.min(1, Math.max(-0.5, needleFrac)),
+    const fTo = Math.min(1, Math.max(SPD_MIN_FRAC, needleFrac)),
       fuelTo = Math.min(1, Math.max(0, isNum(fuel) ? fuel : 0));
     if (!state.ez) state.ez = { f: rest, fuel: 0, pods: [0, 0] }; // from rest, as a gauge powering up
     state.ez.f = ease(state.ez.f, fTo, REGAL_SPEED_TAU_MS);
@@ -312,12 +338,12 @@ module.exports = {
     // within half a step of the reading: there (so the messages stop once a needle settles)
     /** @type {(eased: number, target: number) => number} */
     const snap = (eased, target) =>
-      Math.abs(eased - target) < 0.001 ? target : eased;
+      Math.abs(eased - target) < NEEDLE_SNAP ? target : eased;
     state.ez.f = snap(state.ez.f, fTo);
     state.ez.fuel = snap(state.ez.fuel, fuelTo);
     state.ez.pods = state.ez.pods.map((eased, i) => snap(eased, pods[i]));
     pods.splice(0, 2, quantize(state.ez.pods[0]), quantize(state.ez.pods[1]));
-    const vals = [Math.round(state.ez.f * 500) / 500, quantize(state.ez.fuel)];
+    const vals = [Math.round(state.ez.f * NEEDLE_STEPS) / NEEDLE_STEPS, quantize(state.ez.fuel)];
     if (widget.needleOnly) {
       // the needles' own layer (over the text): only the speed and the fuel
       const needles = vals[0] + "|" + vals[1];
@@ -327,7 +353,7 @@ module.exports = {
       state.c.uniform(state.ref, "u_fuelV", [
         vals[1],
         (widget.fuelLine || 0) - widget.y,
-        widget.fuelRowH || 21,
+        widget.fuelRowH || FUEL_ROW_H_PX,
       ]);
       return;
     }
@@ -351,7 +377,7 @@ module.exports = {
     state.c.uniform(state.ref, "u_fuelV", [
       vals[1],
       (widget.fuelLine || 0) - widget.y,
-      widget.fuelRowH || 21,
+      widget.fuelRowH || FUEL_ROW_H_PX,
     ]);
     state.c.uniform(state.ref, "u_podV", pods);
     state.c.uniform(state.ref, "u_ledV", [ledN, led, redAt]);

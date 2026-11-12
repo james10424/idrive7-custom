@@ -7,6 +7,15 @@ const fs = require("fs");
 const path = require("path");
 const { isNum, mib } = require("../../engine/util");
 
+const MAX_SIDE_PX = 1024; // the KOMBI restarted on a 1024x1128 asset: nothing over this a side
+const MIN_LEAN_FRAMES = 3; // fewer lean frames than this: only the idle frame
+const MAX_LEAN_FRAMES = 15; // lean frames read from a bake, at most
+const TABLE_ENTRIES = 16; // entries in each of the two tables (lean frames, head shifts)
+const BLOCK_PX = 3; // each entry is a 3x3 px block
+const CODE_OFFSET_PX = 1024; // a table value's code is (v + this) * 2, so -1024 .. 1023.5 px fit
+const CODE_MAX = 4095; // the code's 12 bits
+const PIXEL_MEM_BYTES = 8; // pixel memory counted per asset px (as the engine counts it)
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").App} HudApp */
 /** @typedef {import("../../cluster_render_client.js").ClusterRender} Client */
@@ -78,26 +87,26 @@ function mikuData(info, atlasWidth) {
     /** @type {(list: *, i: number) => number} */
     num = (list, i) => (Array.isArray(list) && isNum(list[i]) ? list[i] : 0);
   const lean =
-    Array.isArray(info.lean) && info.lean.length >= 3
-      ? info.lean.slice(0, 15)
+    Array.isArray(info.lean) && info.lean.length >= MIN_LEAN_FRAMES
+      ? info.lean.slice(0, MAX_LEAN_FRAMES)
       : [info.frames.idle];
   const entries = [];
-  for (let i = 0; i < 16; i++) entries[i] = xy(lean[i]);
-  for (let i = 0; i < 16; i++)
-    entries[16 + i] = [num(info.leanShift, i), num(info.leanShiftY, i)];
-  const per = Math.floor(atlasWidth / 3),
-    rows = Math.ceil(entries.length / per) * 3,
+  for (let i = 0; i < TABLE_ENTRIES; i++) entries[i] = xy(lean[i]);
+  for (let i = 0; i < TABLE_ENTRIES; i++)
+    entries[TABLE_ENTRIES + i] = [num(info.leanShift, i), num(info.leanShiftY, i)];
+  const per = Math.floor(atlasWidth / BLOCK_PX),
+    rows = Math.ceil(entries.length / per) * BLOCK_PX,
     pixels = Buffer.alloc(atlasWidth * rows * 4, 0);
   /** @type {(value: number) => number} */
   const quantize = (value) =>
-    Math.max(0, Math.min(4095, Math.round((value + 1024) * 2)));
+    Math.max(0, Math.min(CODE_MAX, Math.round((value + CODE_OFFSET_PX) * 2)));
   entries.forEach((entry, i) => {
     const codeX = quantize(entry[0]),
       codeY = quantize(entry[1]),
-      x0 = (i % per) * 3,
-      y0 = Math.floor(i / per) * 3;
-    for (let dy = 0; dy < 3; dy++)
-      for (let dx = 0; dx < 3; dx++) {
+      x0 = (i % per) * BLOCK_PX,
+      y0 = Math.floor(i / per) * BLOCK_PX;
+    for (let dy = 0; dy < BLOCK_PX; dy++)
+      for (let dx = 0; dx < BLOCK_PX; dx++) {
         const offset = ((y0 + dy) * atlasWidth + x0 + dx) * 4;
         pixels[offset] = codeX >> 4;
         pixels[offset + 1] = codeY >> 4;
@@ -162,13 +171,15 @@ function sprite(hud, widget, connIndex) {
     if (!(atlasWidth > 0 && atlasHeight > 0))
       throw new Error('atlas.json: bad "atlas" size');
     // the instrument cluster (KOMBI) restarted on a 1024x1128 RGBA asset (Nov 2026): nothing over 1024 a side
-    if (atlasWidth > 1024 || atlasHeight > 1024)
+    if (atlasWidth > MAX_SIDE_PX || atlasHeight > MAX_SIDE_PX)
       throw new Error(
         "atlas " +
           atlasWidth +
           "x" +
           atlasHeight +
-          " is over 1024 px a side, which restarts the instrument cluster; bake again with the current tools/live2d_bake",
+          " is over " +
+          MAX_SIDE_PX +
+          " px a side, which restarts the instrument cluster; bake again with the current tools/live2d_bake",
       );
     if (
       !info.frames ||
@@ -198,13 +209,15 @@ function sprite(hud, widget, connIndex) {
       );
     const data = mikuData(info, atlasWidth),
       height = atlasHeight + data.rows;
-    if (height > 1024)
+    if (height > MAX_SIDE_PX)
       throw new Error(
         "atlas " +
           atlasWidth +
           "x" +
           atlasHeight +
-          " leaves no room under 1024 px for its " +
+          " leaves no room under " +
+          MAX_SIDE_PX +
+          " px for its " +
           data.rows +
           " rows of tables; bake again with the current tools/live2d_bake",
       );
@@ -230,7 +243,7 @@ function sprite(hud, widget, connIndex) {
       size: [atlasWidth, height],
       dataY: atlasHeight,
       counts: data.counts,
-      bytes: atlasWidth * height * 8,
+      bytes: atlasWidth * height * PIXEL_MEM_BYTES,
     };
     hud.atlases.set(key, atlas);
     hud.log.info(
@@ -287,7 +300,7 @@ function closeSprite(hud, standing, connIndex) {
   });
   try {
     const [w, h] = close.atlas || [];
-    if (!(w > 0 && h > 0) || w > 1024 || h > 1024)
+    if (!(w > 0 && h > 0) || w > MAX_SIDE_PX || h > MAX_SIDE_PX)
       throw new Error("bad close.atlas size " + w + "x" + h);
     const pixels = fs.readFileSync(file);
     if (pixels.length !== w * h * 4)
@@ -319,7 +332,7 @@ function closeSprite(hud, standing, connIndex) {
       size: [w, h],
       dataY: h,
       counts: standing.counts,
-      bytes: w * h * 8,
+      bytes: w * h * PIXEL_MEM_BYTES,
     };
     hud.atlases.set(key, atlas);
     hud.log.info(

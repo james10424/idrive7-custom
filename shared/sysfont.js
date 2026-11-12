@@ -13,6 +13,25 @@
  * collection uses its first face. No shaping: scripts that need it (Arabic joining, Indic) draw letter by letter.
  */
 const fs = require("fs");
+
+const TTC_FIRST_FACE_AT = 12; // a collection header's byte offset of its first face's offset table
+const NUM_TABLES_AT = 4; // numTables' byte offset in an offset table
+const OFFSET_TABLE_BYTES = 12; // an offset table's header
+const TABLE_RECORD_BYTES = 16; // one table record in an offset table
+const GLYPH_CACHE_MAX = 4000; // characters cached before the cache is cleared
+const SIZE_OF_BOX = 0.75; // the default size: this share of the box height
+const BASELINE_OF_SIZE = 0.8; // the default baseline: this share of the size, from the top
+const CURVE_STEP_PX = 3; // curves are cut into lines about this long
+const QUAD_MIN_STEPS = 2,
+  QUAD_MAX_STEPS = 16; // lines per quadratic curve
+const CUBIC_MIN_STEPS = 3,
+  CUBIC_MAX_STEPS = 20; // lines per cubic curve
+const WALK_MAX_DEPTH = 6; // find(): folders deep
+const WALK_MAX_ENTRIES = 4000; // find(): entries looked at
+const FONT_MAX_BYTES = 40e6; // find(): larger font files are skipped
+const MAX_CANDIDATES = 40; // find(): font files read at most
+const DEFAULT_READ_BYTES = 120e6; // find(): bytes read at most (maxBytes)
+const DEFAULT_MAX_FONTS = 4; // find(): fonts chosen (max)
 /**
  * An opentype.js Font (the vendored ./opentype), as used here.
  * @typedef {any} OtFont
@@ -53,9 +72,9 @@ function faceBuffer(buf) {
   if (buf.toString("latin1", 0, 4) !== "ttcf") return wholeFile;
   // table offsets in a collection are from the file's start, so keep the file whole and copy the first face's
   // directory over the collection header (the header and the face directories come before any table data)
-  const dirOffset = buf.readUInt32BE(12),
-    numTables = buf.readUInt16BE(dirOffset + 4),
-    dirLength = 12 + 16 * numTables;
+  const dirOffset = buf.readUInt32BE(TTC_FIRST_FACE_AT),
+    numTables = buf.readUInt16BE(dirOffset + NUM_TABLES_AT),
+    dirLength = OFFSET_TABLE_BYTES + TABLE_RECORD_BYTES * numTables;
   const out = Buffer.from(buf);
   buf.copy(out, 0, dirOffset, dirOffset + dirLength);
   return out.buffer.slice(out.byteOffset, out.byteOffset + out.length);
@@ -130,7 +149,7 @@ class SysFont {
         glyph: /\s/.test(char) ? font.charToGlyph(" ") : null,
       };
     }
-    if (this.cache.size > 4000) this.cache.clear();
+    if (this.cache.size > GLYPH_CACHE_MAX) this.cache.clear();
     this.cache.set(char, hit);
     return hit;
   }
@@ -181,8 +200,8 @@ class SysFont {
    * @returns {Buffer} boxW*boxH coverage bytes
    */
   mask(boxW, boxH, text, opts) {
-    const size = opts.size || boxH * 0.75,
-      base = opts.baseline || Math.round(size * 0.8);
+    const size = opts.size || boxH * SIZE_OF_BOX,
+      base = opts.baseline || Math.round(size * BASELINE_OF_SIZE);
     let shown = String(text || "").trim(),
       layout = this._layout(shown, size);
     if (layout.width > boxW && shown) {
@@ -312,8 +331,11 @@ class Raster {
       } else if (cmd.type === "L") lineTo(cmd.x, cmd.y);
       else if (cmd.type === "Q") {
         const steps = Math.max(
-            2,
-            Math.min(16, Math.ceil(Math.hypot(cmd.x - penX, cmd.y - penY) / 3)),
+            QUAD_MIN_STEPS,
+            Math.min(
+              QUAD_MAX_STEPS,
+              Math.ceil(Math.hypot(cmd.x - penX, cmd.y - penY) / CURVE_STEP_PX),
+            ),
           ),
           x0 = penX,
           y0 = penY;
@@ -327,8 +349,11 @@ class Raster {
         }
       } else if (cmd.type === "C") {
         const steps = Math.max(
-            3,
-            Math.min(20, Math.ceil(Math.hypot(cmd.x - penX, cmd.y - penY) / 3)),
+            CUBIC_MIN_STEPS,
+            Math.min(
+              CUBIC_MAX_STEPS,
+              Math.ceil(Math.hypot(cmd.x - penX, cmd.y - penY) / CURVE_STEP_PX),
+            ),
           ),
           x0 = penX,
           y0 = penY;
@@ -402,9 +427,9 @@ const PROBES = [
 function find(roots, max, maxBytes, log) {
   const found = [],
     seen = new Set();
-  let budget = 4000;
+  let budget = WALK_MAX_ENTRIES;
   const walk = (dir, depth) => {
-    if (depth > 6 || budget <= 0 || seen.has(dir)) return;
+    if (depth > WALK_MAX_DEPTH || budget <= 0 || seen.has(dir)) return;
     seen.add(dir);
     let names;
     try {
@@ -437,10 +462,11 @@ function find(roots, max, maxBytes, log) {
   const candidates = [];
   let bytes = 0;
   found
-    .filter((file) => !file.skip && file.size < 40e6)
+    .filter((file) => !file.skip && file.size < FONT_MAX_BYTES)
     .sort((a, b) => b.size - a.size)
     .forEach((file) => {
-      if (candidates.length >= 40 || bytes + file.size > (maxBytes || 120e6))
+      if (candidates.length >= MAX_CANDIDATES ||
+        bytes + file.size > (maxBytes || DEFAULT_READ_BYTES))
         return;
       try {
         const font = lib().parse(faceBuffer(fs.readFileSync(file.path)), {
@@ -457,7 +483,7 @@ function find(roots, max, maxBytes, log) {
     });
   const chosen = [],
     covered = new Set();
-  while (chosen.length < (max || 4)) {
+  while (chosen.length < (max || DEFAULT_MAX_FONTS)) {
     let best = null,
       gain = 0;
     candidates.forEach((candidate) => {

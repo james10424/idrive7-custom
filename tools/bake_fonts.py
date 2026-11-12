@@ -62,6 +62,23 @@ CLUSTER_FONTS = [
 FONTS = {'custom_hud': HUD_FONTS, 'custom_cluster': CLUSTER_FONTS}
 PAD = 2
 ATLAS_W = 1024
+SPACE_W = 0.25                 # a space's advance, of the px size, when the font gives none
+
+# the seven-segment glyphs, as fractions of the px size H unless said
+SEG_SS = 4                     # drawn this many times bigger, then scaled down
+SEG_THICK = 0.14               # segment thickness
+SEG_W = 0.5                    # digit width (segment centre lines)
+SEG_SLANT = 0.07               # x shift per px of height
+SEG_MARGIN = 0.75              # margin round the centre lines, of the thickness
+SEG_GAP = 0.035                # gap at each segment's ends
+SEG_IMG_PAD = 2                # px of spare canvas, at SEG_SS size
+SEG_COLON_W = 2.2              # the colon's width, in thicknesses
+SEG_COLON_X = 1.1              # its dots' middle, in thicknesses
+SEG_COLON_DOTS = (0.32, 0.72)  # its dots' heights, down the cell
+SEG_DOT_W = 1.6                # the point's width, in thicknesses
+SEG_DOT_X0, SEG_DOT_X1 = 0.3, 1.3   # the point's left and right, in thicknesses
+SEG_TAB = 0.16                 # tabular advance: the 8's width plus this
+SEG_ADV = 0.1                  # other glyphs' advance: their width plus this
 
 
 # seven-segment digits (a VFD's): segment a..g as [x0, y0, x1, y1] lines in a 0..1 x 0..2 cell, before slant
@@ -72,13 +89,13 @@ SEG_ON = {'0': 'abcdef', '1': 'bc', '2': 'abged', '3': 'abgcd', '4': 'fgbc', '5'
 
 def seg_glyph(c, H):
     """One glyph drawn at 4x and scaled down: hexagonal segments with small gaps, slanted like a VFD's."""
-    K = 4
-    t = 0.14 * H * K               # segment thickness
-    W = 0.5 * H * K                # digit width (segment centre lines)
-    slant = 0.07
-    m = t * 0.75                   # margin round the centre lines
-    gap = 0.035 * H * K
-    img = Image.new('L', (int(W + 2 * m + slant * H * K) + 2, int(H * K) + 2), 0)
+    K = SEG_SS
+    t = SEG_THICK * H * K          # segment thickness
+    W = SEG_W * H * K              # digit width (segment centre lines)
+    slant = SEG_SLANT
+    m = t * SEG_MARGIN             # margin round the centre lines
+    gap = SEG_GAP * H * K
+    img = Image.new('L', (int(W + 2 * m + slant * H * K) + SEG_IMG_PAD, int(H * K) + SEG_IMG_PAD), 0)
     d = ImageDraw.Draw(img)
     unit = (H * K - t) / 2         # half the height between the top and bottom centre lines
     def P(x, y):                   # cell coords (x 0..1 across, y 0..2 down) -> px, slanted
@@ -97,15 +114,15 @@ def seg_glyph(c, H):
             d.polygon([a, (a[0] + ux * tip + nx, a[1] + uy * tip + ny), (b[0] - ux * tip + nx, b[1] - uy * tip + ny), b,
                        (b[0] - ux * tip - nx, b[1] - uy * tip - ny), (a[0] + ux * tip - nx, a[1] + uy * tip - ny)], fill=255)
     elif c == ':':
-        img = Image.new('L', (int(t * 2.2), int(H * K) + 2), 0)
+        img = Image.new('L', (int(t * SEG_COLON_W), int(H * K) + SEG_IMG_PAD), 0)
         d = ImageDraw.Draw(img)
-        for yy in (0.32, 0.72):
-            cx, cy = t * 1.1 + slant * H * K * (1 - yy) * 0.5, yy * H * K
+        for yy in SEG_COLON_DOTS:
+            cx, cy = t * SEG_COLON_X + slant * H * K * (1 - yy) * 0.5, yy * H * K
             d.rectangle([cx - t / 2, cy - t / 2, cx + t / 2, cy + t / 2], fill=255)
     elif c == '.':
-        img = Image.new('L', (int(t * 1.6), int(H * K) + 2), 0)
+        img = Image.new('L', (int(t * SEG_DOT_W), int(H * K) + SEG_IMG_PAD), 0)
         d = ImageDraw.Draw(img)
-        d.rectangle([t * 0.3, H * K - t, t * 1.3, H * K], fill=255)
+        d.rectangle([t * SEG_DOT_X0, H * K - t, t * SEG_DOT_X1, H * K], fill=255)
     return img.resize((max(1, img.width // K), max(1, img.height // K)), Image.LANCZOS)
 
 
@@ -113,7 +130,7 @@ def bake_seg(out, name, H, chars):
     """Like bake(), for the seven-segment VFD digits (no font file): every digit the same cell, tabular."""
     height = H + 2 * PAD
     imgs = {c: seg_glyph(c, H) for c in chars if c != ' '}
-    tab = imgs['8'].width + round(0.16 * H)
+    tab = imgs['8'].width + round(SEG_TAB * H)
     cells = []
     for c in chars:
         if c == ' ':
@@ -122,7 +139,7 @@ def bake_seg(out, name, H, chars):
         g = imgs[c]
         img = Image.new('L', (g.width + 2 * PAD, height), 0)
         img.paste(g, (PAD, PAD))
-        adv = tab if c in DIGITS or c == '-' else g.width + round(0.1 * H)
+        adv = tab if c in DIGITS or c == '-' else g.width + round(SEG_ADV * H)
         cells.append((c, img, -PAD, adv))
     x = y = 0
     placed = {}
@@ -170,7 +187,7 @@ def bake(out, name, file, size, chars, stroke=0, weight=None, subs=None):
     for c in chars:
         adv = font.getlength(glyph(c)) + (2 * stroke if c != ' ' else 0)
         if c == ' ':
-            cells.append((c, None, 0, round(adv if adv else size * 0.25)))
+            cells.append((c, None, 0, round(adv if adv else size * SPACE_W)))
             continue
         l, _, r, _ = boxes[c]
         w = r - l + 2 * PAD

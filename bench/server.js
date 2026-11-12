@@ -127,7 +127,8 @@ const shaderBudget = require("../tools/shader_budget"); // what the KOMBI took o
  * @property {string} [type] uniform
  */
 
-const PORT = Number(process.env.BENCH_PORT) || 8078;
+const DEFAULT_PORT = 8078; // the page's port without BENCH_PORT
+const PORT = Number(process.env.BENCH_PORT) || DEFAULT_PORT;
 // BENCH_LAYER_CAP: a lower per-connection cap to try a layout under (cluster-render before 0.4.2 drew 8; photos, Nov 5
 // 2026). 0 = off. Layers past the cap get state 'waiting' and are not drawn. POST /cap sets it live.
 let layerCap = Math.max(0, Number(process.env.BENCH_LAYER_CAP) || 0);
@@ -138,18 +139,20 @@ let layerCap = Math.max(0, Number(process.env.BENCH_LAYER_CAP) || 0);
 // is full". BENCH_PIXEL_MIB overrides the 32 (16 = upstream's; 0 = unlimited).
 const TOTAL_LAYERS = 96,
   LAYERS_PER_CLIENT = 64;
+const MIB = 1024 * 1024;
+const DEFAULT_PIXEL_MIB = 32; // the fork's pixel_mib
+const PIXEL_COPIES = 2; // each image counted twice
 const PIXEL_BYTES =
   (process.env.BENCH_PIXEL_MIB === undefined
-    ? 32
-    : Math.max(0, Number(process.env.BENCH_PIXEL_MIB) || 0)) *
-  1024 *
-  1024;
+    ? DEFAULT_PIXEL_MIB
+    : Math.max(0, Number(process.env.BENCH_PIXEL_MIB) || 0)) * MIB;
 // the service's accounting: an image or asset costs its bytes twice (compositor.cpp: the pixels and a rectangle scratch)
 /** @returns {number} */
 function pixelBytes() {
   let bytes = 0;
   layers.forEach((layer) => {
-    if (layer.image) bytes += layer.iw * layer.ih * (layer.bpp || 4) * 2;
+    if (layer.image)
+      bytes += layer.iw * layer.ih * (layer.bpp || 4) * PIXEL_COPIES;
   });
   return bytes;
 }
@@ -170,7 +173,7 @@ const TOTAL_ASSETS = 32,
  * @param {number} bytes bytes
  * @returns {string}
  */
-const mib = (bytes) => (bytes / 1048576).toFixed(1) + " MiB";
+const mib = (bytes) => (bytes / MIB).toFixed(1) + " MiB";
 const SOCK = path.join(os.tmpdir(), "hud-bench-" + process.pid + ".sock");
 const ROOT = path.join(__dirname, "..");
 const APP_IDS = process.argv.slice(2).length
@@ -204,7 +207,26 @@ const appOf = (id) => apps.find((app) => app.id === id) || null;
 /** @type {Record<string, [number, number]>} target name to [w, h] */
 const TARGETS = { hud: [800, 480], map: [1088, 480], panel: [1920, 720] };
 const CLASSES = ["ambient", "content", "overlay", "alert"];
-const MAX_MSG = 5529664;
+// the wire (PROTOCOL.md; shared/cluster_render_client.js): a 4 byte length, then a type byte and the body
+const LEN_BYTES = 4,
+  HEAD_BYTES = 5;
+const JSON_T = 0x4a, // 'J'
+  FRAME_T = 0x46, // 'F'
+  MESH_T = 0x4d; // 'M'
+const PROTO = 1; // the protocol version the service speaks
+const MAX_IMAGE_W = 1920,
+  MAX_IMAGE_H = 720; // an image layer's largest size, the panel's
+const MSG_SLACK = 64; // room past a whole frame's pixels for its header
+const MAX_MSG = MAX_IMAGE_W * MAX_IMAGE_H * 4 + MSG_SLACK; // 5529664
+const Z_MAX = 1000; // a layer's z runs -Z_MAX..Z_MAX
+const MAX_ASSET_SIDE = 2048;
+const MAX_UNIFORM_NUMBERS = 1024, // a typed (array) uniform
+  MAX_UNTYPED_NUMBERS = 4,
+  MAX_UNIFORMS = 32; // names a layer, u_time among them (Uniforms::kMaxNames)
+// a 'F' message: ref at 0, the rect count at 12, then from 14 a rect each 8 bytes (x, y, w, h as uint16)
+const RECT_COUNT_AT = 12,
+  FRAME_HEAD = 14,
+  RECT_BYTES = 8;
 // The car runs Node 8.16.2, so run the app on that by default when it's in the drive cache.
 const NODE8 = path.join(
   ROOT,
@@ -238,7 +260,8 @@ function appView(app) {
 
 /** @type {Set<http.ServerResponse>} the open event streams */
 const clients = new Set();
-/** @type {PageEvent[]} the last 400 log events, replayed to a new page */
+const LOG_KEEP = 400; // log events replayed to a new page
+/** @type {PageEvent[]} the last LOG_KEEP log events, replayed to a new page */
 const logLines = [];
 /**
  * An event to every page, or only to one.
@@ -260,7 +283,7 @@ function log(level, text) {
     text: new Date().toTimeString().slice(0, 8) + "  " + text,
   };
   logLines.push(entry);
-  if (logLines.length > 400) logLines.shift();
+  if (logLines.length > LOG_KEEP) logLines.shift();
   send(entry);
   (level === "error" ? console.error : console.log)(entry.text);
 }
@@ -355,13 +378,14 @@ function helloMsg() {
 }
 /** @type {NodeJS.Timeout | null} */
 let sceneTimer = null;
-/** Sends the scene to the pages, at most every 16 ms. */
+const SCENE_MS = 16; // the scene goes to the pages at most this often
+/** Sends the scene to the pages, at most every SCENE_MS. */
 function sceneChanged() {
   if (sceneTimer) return;
   sceneTimer = setTimeout(() => {
     sceneTimer = null;
     send({ t: "scene", layers: sceneMeta(), pixels: pixelBytes() });
-  }, 16);
+  }, SCENE_MS);
 }
 /* Pixels never travel on the event stream: a 'px' notice names a rect of an image layer and the page fetches its
  * bytes from GET /px (binary, the layer's current pixels). Base64 on the stream choked the page once the engine
@@ -447,10 +471,10 @@ function pixelRect(query) {
  */
 function writeEv(sock, obj) {
   const body = Buffer.from(JSON.stringify(obj), "utf8");
-  const packet = Buffer.alloc(5 + body.length);
+  const packet = Buffer.alloc(HEAD_BYTES + body.length);
   packet.writeUInt32LE(body.length + 1, 0);
-  packet[4] = 0x4a;
-  body.copy(packet, 5);
+  packet[LEN_BYTES] = JSON_T;
+  body.copy(packet, HEAD_BYTES);
   sock.write(packet);
 }
 
@@ -477,17 +501,17 @@ const renderServer = net.createServer((sock) => {
       ? Buffer.concat([session.buf, chunk])
       : chunk;
     let off = 0;
-    while (session.buf.length - off >= 5) {
+    while (session.buf.length - off >= HEAD_BYTES) {
       const len = session.buf.readUInt32LE(off);
       if (len < 1 || len > MAX_MSG) {
         bad("message length " + len + " out of range, closing");
         sock.destroy();
         return;
       }
-      if (session.buf.length - off < 4 + len) break;
-      const type = session.buf[off + 4];
-      const body = session.buf.slice(off + 5, off + 4 + len);
-      off += 4 + len;
+      if (session.buf.length - off < LEN_BYTES + len) break;
+      const type = session.buf[off + LEN_BYTES];
+      const body = session.buf.slice(off + HEAD_BYTES, off + LEN_BYTES + len);
+      off += LEN_BYTES + len;
       try {
         handle(type, body);
       } catch (err) {
@@ -522,10 +546,10 @@ const renderServer = net.createServer((sock) => {
    * @returns {void}
    */
   function handle(type, body) {
-    if (type === 0x4a) return onJson(body);
+    if (type === JSON_T) return onJson(body);
     if (!session.hello) return bad("binary message before hello");
-    if (type === 0x46) return onFrame(body);
-    if (type === 0x4d)
+    if (type === FRAME_T) return onFrame(body);
+    if (type === MESH_T)
       return bad("mesh geometry received; the bench does not draw meshes");
     bad("unknown message type 0x" + type.toString(16));
   }
@@ -545,8 +569,8 @@ const renderServer = net.createServer((sock) => {
     if (msg.op === "hello") {
       session.hello = true;
       session.app = msg.app || "?";
-      if (msg.proto !== 1)
-        bad("hello proto " + msg.proto + ", service speaks 1");
+      if (msg.proto !== PROTO)
+        bad("hello proto " + msg.proto + ", service speaks " + PROTO);
       log(
         "info",
         "renderer: hello from " + session.app + " (proto " + msg.proto + ")",
@@ -567,8 +591,8 @@ const renderServer = net.createServer((sock) => {
           return refuse("layer", msg.ref, "unknown target " + msg.target);
         if (msg.class && CLASSES.indexOf(msg.class) < 0)
           return refuse("layer", msg.ref, "unknown class " + msg.class);
-        if (msg.z !== undefined && (msg.z < -1000 || msg.z > 1000))
-          return refuse("layer", msg.ref, "z out of -1000..1000");
+        if (msg.z !== undefined && (msg.z < -Z_MAX || msg.z > Z_MAX))
+          return refuse("layer", msg.ref, "z out of -" + Z_MAX + ".." + Z_MAX);
         const [targetW, targetH] = TARGETS[msg.target];
         let mineL = 0;
         layers.forEach((other) => {
@@ -581,7 +605,7 @@ const renderServer = net.createServer((sock) => {
           PIXEL_BYTES &&
           msg.iw > 0 &&
           msg.ih > 0 &&
-          pixelBytes() + msg.iw * msg.ih * 8 > PIXEL_BYTES
+          pixelBytes() + msg.iw * msg.ih * 4 * PIXEL_COPIES > PIXEL_BYTES
         ) {
           return refuse("layer", msg.ref, "the service's pixel memory is full");
         }
@@ -680,7 +704,14 @@ const renderServer = net.createServer((sock) => {
           newLayer.iw = msg.iw;
           newLayer.ih = msg.ih;
           newLayer.bpp = 4;
-          if (!(msg.iw > 0 && msg.ih > 0 && msg.iw <= 1920 && msg.ih <= 720))
+          if (
+            !(
+              msg.iw > 0 &&
+              msg.ih > 0 &&
+              msg.iw <= MAX_IMAGE_W &&
+              msg.ih <= MAX_IMAGE_H
+            )
+          )
             return refuse("layer", msg.ref, "image iw/ih out of range");
           newLayer.image = Buffer.alloc(msg.iw * msg.ih * 4);
         } else if (msg.kind === "effect") {
@@ -733,9 +764,9 @@ const renderServer = net.createServer((sock) => {
         if (!(
           msg.w > 0 &&
           msg.h > 0 &&
-          msg.w <= 2048 &&
-          msg.h <= 2048 &&
-          msg.w * msg.h * bpp + 64 <= 1920 * 720 * 4 + 64
+          msg.w <= MAX_ASSET_SIDE &&
+          msg.h <= MAX_ASSET_SIDE &&
+          msg.w * msg.h * bpp + MSG_SLACK <= MAX_MSG
         ))
           return refuse("asset", msg.ref, "asset size out of range");
         let all = 0,
@@ -748,7 +779,10 @@ const renderServer = net.createServer((sock) => {
         });
         if (all >= TOTAL_ASSETS || mine >= ASSETS_PER_CLIENT)
           return refuse("asset", msg.ref, "too many assets");
-        if (PIXEL_BYTES && pixelBytes() + msg.w * msg.h * bpp * 2 > PIXEL_BYTES)
+        if (
+          PIXEL_BYTES &&
+          pixelBytes() + msg.w * msg.h * bpp * PIXEL_COPIES > PIXEL_BYTES
+        )
           return refuse("asset", msg.ref, "the service's pixel memory is full");
         layers.set(key, {
           key,
@@ -786,7 +820,7 @@ const renderServer = net.createServer((sock) => {
             "x" +
             msg.h +
             " (" +
-            mib(msg.w * msg.h * bpp * 2) +
+            mib(msg.w * msg.h * bpp * PIXEL_COPIES) +
             " of pixel memory)",
         );
         writeEv(sock, { ev: "layer", ref: msg.ref, state: "shown" });
@@ -869,7 +903,10 @@ const renderServer = net.createServer((sock) => {
               msg.ref,
               'unknown uniform type "' + msg.type + '"',
             );
-          if (values.length > 1024 || values.length % WIDTH[msg.type])
+          if (
+            values.length > MAX_UNIFORM_NUMBERS ||
+            values.length % WIDTH[msg.type]
+          )
             return refuse(
               "uniform",
               msg.ref,
@@ -879,9 +916,11 @@ const renderServer = net.createServer((sock) => {
                 values.length +
                 " numbers is not whole " +
                 msg.type +
-                "s (or over 1024)",
+                "s (or over " +
+                MAX_UNIFORM_NUMBERS +
+                ")",
             );
-        } else if (values.length > 4)
+        } else if (values.length > MAX_UNTYPED_NUMBERS)
           return refuse(
             "uniform",
             msg.ref,
@@ -889,17 +928,23 @@ const renderServer = net.createServer((sock) => {
               msg.name +
               ": " +
               values.length +
-              " numbers without a type (max 4)",
+              " numbers without a type (max " +
+              MAX_UNTYPED_NUMBERS +
+              ")",
           );
         // the car's cluster-render keeps at most 32 uniform names a layer (Uniforms::kMaxNames, 0.4.5), u_time among
         // them on a layer with the renderer's clock, and refuses a new one past that (Custom HUD 0.1.9's Miku sent 34
         // and the car refused it, Nov 8 2026; the bench had let it through)
-        const maxU = 32 - (layer.time ? 1 : 0);
+        const maxU = MAX_UNIFORMS - (layer.time ? 1 : 0);
         if (
           !layer.uniforms[msg.name] &&
           Object.keys(layer.uniforms).length >= maxU
         )
-          return refuse("uniform", msg.ref, "at most 32 uniforms a layer");
+          return refuse(
+            "uniform",
+            msg.ref,
+            "at most " + MAX_UNIFORMS + " uniforms a layer",
+          );
         layer.uniforms[msg.name] = { v: values, type: msg.type || null };
         sceneChanged();
         return;
@@ -941,14 +986,14 @@ const renderServer = net.createServer((sock) => {
    * @returns {void}
    */
   function onFrame(body) {
-    if (body.length < 14) return bad("frame message too short");
+    if (body.length < FRAME_HEAD) return bad("frame message too short");
     const ref = body.readUInt32LE(0);
-    const rectCount = body.readUInt16LE(12);
+    const rectCount = body.readUInt16LE(RECT_COUNT_AT);
     const layer = layers.get(conn + ":" + ref);
     if (!layer) return bad("frame for unknown ref " + ref);
     if (layer.kind !== "image" && layer.kind !== "asset")
       return bad("frame for a " + layer.kind + " layer (ref " + ref + ")");
-    const head = 14 + rectCount * 8,
+    const head = FRAME_HEAD + rectCount * RECT_BYTES,
       bpp = layer.bpp || 4;
     const pixels = body.slice(head);
     if (rectCount === 0) {
@@ -967,10 +1012,11 @@ const renderServer = net.createServer((sock) => {
       /** @type {number[][]} [x, y, w, h] */
       const rects = [];
       for (let i = 0; i < rectCount; i++) {
-        const x = body.readUInt16LE(14 + i * 8),
-          y = body.readUInt16LE(16 + i * 8);
-        const w = body.readUInt16LE(18 + i * 8),
-          h = body.readUInt16LE(20 + i * 8);
+        const at = FRAME_HEAD + i * RECT_BYTES;
+        const x = body.readUInt16LE(at),
+          y = body.readUInt16LE(at + 2);
+        const w = body.readUInt16LE(at + 4),
+          h = body.readUInt16LE(at + 6);
         if (x + w > layer.iw || y + h > layer.ih)
           return bad("dirty rect off the image on ref " + ref);
         for (let row = 0; row < h; row++) {
@@ -1190,6 +1236,7 @@ function startApp(app) {
   );
 }
 
+const KILL_AFTER_MS = 1500; // SIGKILL an app that ignored SIGTERM this long
 /**
  * @param {BenchApp} app
  * @param {string} why for the log
@@ -1216,13 +1263,14 @@ function restartApp(app, why) {
       } catch (err) {
         /* gone */
       }
-    }, 1500);
+    }, KILL_AFTER_MS);
   } else startApp(app);
 }
 /** @param {string} why */
 const restartAll = (why) => apps.forEach((app) => restartApp(app, why));
 
 // an app's own folder restarts that app; shared/ and kit/ restart them all
+const RESTART_DEBOUNCE_MS = 300; // a burst of saves restarts once
 /**
  * Restarts targets when a file under dir changes.
  * @param {string} dir
@@ -1236,7 +1284,7 @@ const watchFor = (dir, targets) =>
       clearTimeout(app.restartTimer);
       app.restartTimer = setTimeout(
         () => restartApp(app, path.basename(dir) + "/" + file + " changed"),
-        300,
+        RESTART_DEBOUNCE_MS,
       );
     });
   });
@@ -1247,6 +1295,10 @@ apps.forEach((app) => watchFor(app.dir, [app]));
 
 /* ---------- HTTP ---------- */
 
+const MAX_BODY_CHARS = 1e5; // a POST's JSON body
+const MAX_SHOT_CHARS = 2e7; // a /shot PNG data URL
+const MAX_CLIP_FRAME = 9999,
+  CLIP_FRAME_DIGITS = 4; // a README GIF's frame numbers, 0000.png..9999.png
 /**
  * The request's JSON body; {} when it does not parse.
  * @param {http.IncomingMessage} req
@@ -1257,7 +1309,7 @@ function body(req) {
     let text = "";
     req.on("data", (chunk) => {
       text += chunk;
-      if (text.length > 1e5) req.destroy();
+      if (text.length > MAX_BODY_CHARS) req.destroy();
     });
     req.on("end", () => {
       try {
@@ -1436,7 +1488,7 @@ const web = http.createServer(async (req, res) => {
     let text = "";
     req.on("data", (chunk) => {
       text += chunk;
-      if (text.length > 2e7) req.destroy();
+      if (text.length > MAX_SHOT_CHARS) req.destroy();
     });
     req.on("end", () => {
       try {
@@ -1453,7 +1505,7 @@ const web = http.createServer(async (req, res) => {
         // (tools/clip_gif.sh turns the folder into docs/images/<name>.gif)
         if (reqBody.frame !== undefined) {
           const frame = Number(reqBody.frame);
-          if (!Number.isInteger(frame) || frame < 0 || frame > 9999) {
+          if (!Number.isInteger(frame) || frame < 0 || frame > MAX_CLIP_FRAME) {
             res.writeHead(400);
             return res.end("bad frame");
           }
@@ -1461,7 +1513,10 @@ const web = http.createServer(async (req, res) => {
           if (frame === 0) fs.rmSync(dir, { recursive: true, force: true });
           fs.mkdirSync(dir, { recursive: true });
           fs.writeFileSync(
-            path.join(dir, String(frame).padStart(4, "0") + ".png"),
+            path.join(
+              dir,
+              String(frame).padStart(CLIP_FRAME_DIGITS, "0") + ".png",
+            ),
             Buffer.from(match[1], "base64"),
           );
           res.writeHead(204);

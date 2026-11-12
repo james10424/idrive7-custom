@@ -4,6 +4,8 @@
  */
 const { M_STRIPE } = require("../../hud_themes");
 
+const STRIPE_BANDS = 3; // the tricolour's bands, side by side
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -20,7 +22,9 @@ function paint(hud, state) {
   const widget = state.w,
     buf = Buffer.alloc(widget.w * widget.h * 4, 0);
   for (let px = 0; px < widget.w; px++) {
-    const stripeColor = M_STRIPE[Math.min(2, Math.floor((px * 3) / widget.w))];
+    const stripeColor = M_STRIPE[
+      Math.min(STRIPE_BANDS - 1, Math.floor((px * STRIPE_BANDS) / widget.w))
+    ];
     for (let py = 0; py < widget.h; py++)
       stripeColor.forEach((channel, i) => {
         buf[(py * widget.w + px) * 4 + i] = channel;

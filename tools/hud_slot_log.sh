@@ -13,6 +13,8 @@ set -euo pipefail
 CAR="${1:?usage: $(basename "$0") <car-ssh-host> [out.txt]}"
 OUT="${2:-hud_slot_log_$(date +%Y%m%d_%H%M%S).txt}"
 LOG=/var/opt/cluster-render/log/cluster-render.log
+TS_LEN=19      # a log line's leading timestamp, "YYYY-mm-dd HH:MM:SS"
+BEFORE_ROWS=20 # slot rows kept from before the first event
 
 EVENTS=(
     "Music pop-up: change track or volume from the wheel so the HUD shows the media pop-up"
@@ -44,14 +46,14 @@ ssh "$CAR" "cat $LOG.1 $LOG 2>/dev/null" > "$OUT.raw"
     echo "Slot rows before the first event (the table as it stood):"
     first=""; for s in "${STARTS[@]}"; do [ -n "$s" ] && { first="$s"; break; }; done
     if [ -n "$first" ]; then
-        awk -v t="$first" 'substr($0,1,19) < t' "$OUT.raw" | grep "dcsm: slot" | tail -20
+        awk -v t="$first" -v n="$TS_LEN" 'substr($0,1,n) < t' "$OUT.raw" | grep "dcsm: slot" | tail -"$BEFORE_ROWS"
     fi
     for i in "${!EVENTS[@]}"; do
         echo
         echo "== ${EVENTS[$i]}"
         if [ -z "${STARTS[$i]}" ]; then echo "(skipped)"; continue; fi
         echo "   ${STARTS[$i]} .. ${ENDS[$i]} UTC (car clock)"
-        awk -v a="${STARTS[$i]}" -v b="${ENDS[$i]}" 'substr($0,1,19) >= a && substr($0,1,19) <= b' "$OUT.raw" |
+        awk -v a="${STARTS[$i]}" -v b="${ENDS[$i]}" -v n="$TS_LEN" 'substr($0,1,n) >= a && substr($0,1,n) <= b' "$OUT.raw" |
             grep -E "dcsm: slot|target hud|gives way|pop-up|stock content" || echo "(nothing logged)"
     done
 } > "$OUT"

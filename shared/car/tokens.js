@@ -41,9 +41,24 @@
  *
  * Methods of HudApp (engine/app.js adds them to its prototype).
  */
-const { ROUTE_UNIT } = require("./consts");
+const {
+  DEFAULT_TANK_L,
+  FT_PER_M,
+  L_PER_US_GAL,
+  LBFT_PER_NM,
+  MI_PER_KM,
+  PSI_PER_BAR,
+  ROUTE_UNIT,
+} = require("./consts");
 const { SPEED_SCALE } = require("./scales");
 const { isNum, pad2 } = require("../engine/util");
+
+const ODOMETER_DIGITS = 6; // {{odometer}}
+const RANGE3_MAX = 999; // {{range3}}: up to 3 digits
+const RANGE4_DIGITS = 4; // {{range4}}
+const GAUGE_F_STEP = 10; // {{temp:<deg C>}}: °F labels round to this
+const BOOST_TICK_BAR = 0.5; // {{boostTick:m<k>}}: bar per slot
+const BOOST_TICK_PSI = 5; // {{boostTick:u<k>}}: psi per slot
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** Local time: config.utcOffsetMinutes when set, else the car's time zone once the cluster's clock has been seen, else
@@ -86,7 +101,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       const bar = this._tyre("p", tok.slice(6));
       return isNum(bar)
         ? usUnits
-          ? fix(bar * 14.5038, 0)
+          ? fix(bar * PSI_PER_BAR, 0)
           : fix(bar, 1)
         : "--";
     }
@@ -124,7 +139,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         // 6 digits, km or mi by the units setting
         const km = this._odometer();
         return isNum(km)
-          ? ("000000" + Math.floor(usUnits ? km * 0.621371 : km)).slice(-6)
+          ? (
+              "000000" + Math.floor(usUnits ? km * MI_PER_KM : km)
+            ).slice(-ODOMETER_DIGITS)
           : "------";
       }
       case "range3": {
@@ -132,8 +149,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         return isNum(range)
           ? String(
               Math.min(
-                999,
-                Math.max(0, Math.round(usUnits ? range * 0.621371 : range)),
+                RANGE3_MAX,
+                Math.max(0, Math.round(usUnits ? range * MI_PER_KM : range)),
               ),
             )
           : "---";
@@ -141,7 +158,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "range4": {
         const range = this._raw("range");
         return isNum(range)
-          ? ("0000" + Math.round(usUnits ? range * 0.621371 : range)).slice(-4)
+          ? (
+              "0000" + Math.round(usUnits ? range * MI_PER_KM : range)
+            ).slice(-RANGE4_DIGITS)
           : "----";
       }
       case "u:distUc":
@@ -190,7 +209,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "accGap": {
         const gap = this._acc("gap");
         return isNum(gap)
-          ? String(Math.round(usUnits ? gap * 3.28084 : gap))
+          ? String(Math.round(usUnits ? gap * FT_PER_M : gap))
           : "--";
       }
       case "u:gap":
@@ -198,7 +217,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "accRel": {
         const rel = this._acc("rel");
         return isNum(rel)
-          ? String(Math.round(usUnits ? rel * 0.621371 : rel))
+          ? String(Math.round(usUnits ? rel * MI_PER_KM : rel))
           : "--";
       } // the HUD fonts have no '+'
       case "u:rel":
@@ -211,7 +230,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "speed": {
         const speed = this._raw("speed");
         return isNum(speed)
-          ? String(Math.floor(Math.max(0, usUnits ? speed * 0.621371 : speed)))
+          ? String(Math.floor(Math.max(0, usUnits ? speed * MI_PER_KM : speed)))
           : "--";
       }
       case "u:speed":
@@ -219,7 +238,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "mph": {
         const speed = this._raw("speed");
         return isNum(speed)
-          ? String(Math.floor(Math.max(0, speed) * 0.621371))
+          ? String(Math.floor(Math.max(0, speed) * MI_PER_KM))
           : "--";
       } // mph whatever the units (Grand National), floored as above
       case "oil":
@@ -233,7 +252,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "boost": {
         const boost = this._raw("boost");
         return usUnits
-          ? fix(isNum(boost) ? boost * 14.5038 : boost, 1)
+          ? fix(isNum(boost) ? boost * PSI_PER_BAR : boost, 1)
           : fix(boost, 2);
       }
       case "u:boost":
@@ -244,7 +263,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "fuelFull":
       case "fuelHalf": {
         const tank =
-          (this.config.tankLitres || 65) * (usUnits ? 1 / 3.78541 : 1);
+          (this.config.tankLitres || DEFAULT_TANK_L) *
+          (usUnits ? 1 / L_PER_US_GAL : 1);
         return String(Math.round(tok === "fuelFull" ? tank : tank / 2));
       }
       case "u:fuel":
@@ -256,7 +276,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "range": {
         const range = this._raw("range");
         return fix(
-          isNum(range) ? (usUnits ? range * 0.621371 : range) : range,
+          isNum(range) ? (usUnits ? range * MI_PER_KM : range) : range,
           0,
         );
       }
@@ -271,7 +291,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "torque": {
         const torque = this._raw("torque");
         return fix(
-          isNum(torque) ? (usUnits ? torque * 0.737562 : torque) : torque,
+          isNum(torque) ? (usUnits ? torque * LBFT_PER_NM : torque) : torque,
           0,
         );
       }
@@ -392,7 +412,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           return isNum(celsius)
             ? String(
                 usUnits
-                  ? Math.round(((celsius * 9) / 5 + 32) / 10) * 10
+                  ? Math.round(((celsius * 9) / 5 + 32) / GAUGE_F_STEP) * GAUGE_F_STEP
                   : Math.round(celsius),
               )
             : "--";
@@ -403,8 +423,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           if (slot === "0") return "0";
           if (slot === "end") return usUnits ? "20" : "1.5";
           const k = Number(slot.slice(1));
-          if (slot[0] === "m") return usUnits ? "" : (k * 0.5).toFixed(1);
-          if (slot[0] === "u") return usUnits ? String(k * 5) : "";
+          if (slot[0] === "m") return usUnits ? "" : (k * BOOST_TICK_BAR).toFixed(1);
+          if (slot[0] === "u") return usUnits ? String(k * BOOST_TICK_PSI) : "";
           return "";
         }
         if (tok.indexOf("setup:") === 0) {

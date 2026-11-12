@@ -6,6 +6,9 @@ const { color } = require("../../hud_themes");
 const { isNum, rgba } = require("../../engine/util");
 const BOXES = require("./shader");
 
+const MAX_BOXES = 12; // the shader's box slots (its vec4 arrays are this long)
+const BOX_BORDER_PX = 2; // default frame width
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -41,10 +44,10 @@ module.exports = {
           isNum(box.h) &&
           !(box.toggle && !hud._toggleOn(box.toggle)),
       )
-      .slice(0, 12);
+      .slice(0, MAX_BOXES);
     const rects = [],
       styles = [];
-    for (let i = 0; i < 12; i++) {
+    for (let i = 0; i < MAX_BOXES; i++) {
       const box = list[i];
       rects.push(
         box ? box.x - widget.x : 0,
@@ -54,7 +57,7 @@ module.exports = {
       );
       styles.push(
         box ? box.head || 0 : 0,
-        box ? (box.border === undefined ? 2 : box.border) : 0,
+        box ? (box.border === undefined ? BOX_BORDER_PX : box.border) : 0,
         box ? box.radius || 0 : 0,
         box && box.headColor === "accent" ? 1 : 0,
       );

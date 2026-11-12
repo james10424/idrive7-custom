@@ -3,8 +3,14 @@
  * Lamps: the parking brake / Auto Hold, the indicators, cruise, and the gear row's lit slot.
  * Methods of HudApp (engine/app.js adds them to its prototype).
  */
-const { REGAL_GEARS } = require("./consts");
+const { REGAL_GEARS, STANDSTILL_KMH } = require("./consts");
 const { isNum } = require("../engine/util");
+
+const DEMO_TURN_MS = 6000; // the demo drive's indicator: one phase this long
+const DEMO_TURN_PHASES = 4; // off, left, off, right
+const BLINK_HALF_MS = 400; // a turn lamp's blink: on and off this long each (1.25 Hz)
+const DEMO_CRUISE_MS = 10000; // the demo drive's cruise lamp: one phase this long
+const DEMO_CRUISE_PHASES = 3; // lit in the last
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** The Grand National lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
@@ -31,7 +37,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       this.autoHold === null &&
       data.demo &&
       isNum(data.speed) &&
-      data.speed < 1
+      data.speed < STANDSTILL_KMH
     )
       return data.stage === "P" ? "park" : "hold";
     return null;
@@ -49,9 +55,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     let turn = this.turn;
     if (turn === null && this.car.data().demo)
       turn =
-        Math.floor(now / 6000) % 4 === 1
+        Math.floor(now / DEMO_TURN_MS) % DEMO_TURN_PHASES === 1
           ? "L"
-          : Math.floor(now / 6000) % 4 === 3
+          : Math.floor(now / DEMO_TURN_MS) % DEMO_TURN_PHASES === 3
             ? "R"
             : "";
     return turn === "L" ? -1 : turn === "R" ? 1 : 0;
@@ -68,8 +74,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     // than a few seconds is still on (a 5 s timeout dropped it, and Miku's close-up turned back to straight ahead)
     let turn = this.turn;
     if (turn === null && this.car.data().demo)
-      turn = Math.floor(now / 6000) % 4 === 1 ? "L" : "";
-    return !!turn && turn.indexOf(side) >= 0 && Math.floor(now / 400) % 2 === 0;
+      turn =
+        Math.floor(now / DEMO_TURN_MS) % DEMO_TURN_PHASES === 1 ? "L" : "";
+    return (
+      !!turn &&
+      turn.indexOf(side) >= 0 &&
+      Math.floor(now / BLINK_HALF_MS) % 2 === 0
+    );
   },
 
   /**
@@ -79,7 +90,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _cruiseLit() {
     return (
       this.accOn ||
-      (!!this.car.data().demo && Math.floor(Date.now() / 10000) % 3 === 2)
+      (!!this.car.data().demo &&
+        Math.floor(Date.now() / DEMO_CRUISE_MS) % DEMO_CRUISE_PHASES === 2)
     );
   },
 

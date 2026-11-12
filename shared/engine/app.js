@@ -85,6 +85,7 @@ const {
   LAYER_BUDGET,
   MODE_TEXT,
   PIXEL_BYTES,
+  IMAGE_PX_BYTES,
   SHEET_AREA_FRAC,
   STATUS_ASK_MS,
   TARGET_SIZES,
@@ -93,6 +94,11 @@ const {
 } = require("./consts");
 const { THEMES } = require("../hud_themes");
 const { isNum, mib } = require("./util");
+
+const THEME_CHECK_MS = 60000; // the Auto theme's sunrise / sunset check
+const STATUS_MS = 5000; // the status line's refresh
+const FLASH_RPM = 150; // the shift light blinks from this far under the redline
+const FLASH_HALF_MS = 62.5; // the shift light's blink: on and off this long each (8 Hz)
 
 /** @typedef {import("../cluster_render_client.js").ClusterRender} Client */
 /**
@@ -520,11 +526,11 @@ class HudApp {
           if (this._themeName() !== this.themeName) this._rebuild();
           this._status();
         }),
-      60000,
+      THEME_CHECK_MS,
     );
     this.statusTimer = setInterval(
       () => this._guard("status", () => this._status()),
-      5000,
+      STATUS_MS,
     );
     this._status();
     this._startDme();
@@ -696,14 +702,14 @@ class HudApp {
       if (entry.kind === "sheet") {
         sheets++;
         bytes += entry.w * entry.h * 4;
-        pixelBytes += entry.w * entry.h * 8;
+        pixelBytes += entry.w * entry.h * IMAGE_PX_BYTES;
         this._guard("sheet " + entry.members[0].id, () =>
           this._createSheet(entry),
         );
       } else {
         if (isImage(entry.w.type)) {
           own++;
-          pixelBytes += entry.w.w * entry.w.h * 8;
+          pixelBytes += entry.w.w * entry.w.h * IMAGE_PX_BYTES;
         } else effects++;
         this._guard("widget " + entry.w.id, () => this._create(entry.w, null));
       }
@@ -867,8 +873,8 @@ class HudApp {
     if (!this.client.ready || this._offScreen()) return;
     // shift light: blink the whole bar at 8 Hz once the rpm reaches the redline
     const rpm = this._raw("rpm");
-    const flashing = isNum(rpm) && rpm >= this.setting("redline") - 150;
-    this.flash = flashing ? Math.floor(now / 62.5) % 2 === 0 : false;
+    const flashing = isNum(rpm) && rpm >= this.setting("redline") - FLASH_RPM;
+    this.flash = flashing ? Math.floor(now / FLASH_HALF_MS) % 2 === 0 : false;
     this.widgets.forEach((state) => {
       if (!state.timer)
         this._guard("widget " + state.w.id, () =>

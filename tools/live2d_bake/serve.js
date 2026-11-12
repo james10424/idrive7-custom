@@ -29,14 +29,19 @@ function arg(name, def) {
   const i = process.argv.indexOf("--" + name);
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
 }
+const DEFAULT_PORT = 8095;
+const OUT_PREFIX = "/out/",
+  MODEL_PREFIX = "/model/";
 const model = arg("model"),
   core = arg("core"),
   config = arg("config"),
   out = arg("out"),
-  port = Number(arg("port", 8095));
+  port = Number(arg("port", DEFAULT_PORT));
 if (!model || !core || !out) {
   console.error(
-    "usage: node tools/live2d_bake/serve.js --model <model3.json> --core <live2dcubismcore.min.js> --config <bake.json> --out <folder> [--port 8095]",
+    "usage: node tools/live2d_bake/serve.js --model <model3.json> --core <live2dcubismcore.min.js> --config <bake.json> --out <folder> [--port " +
+      DEFAULT_PORT +
+      "]",
   );
   process.exit(1);
 }
@@ -73,9 +78,9 @@ function send(res, file) {
 http
   .createServer((req, res) => {
     const urlPath = decodeURIComponent(req.url.split("?")[0]);
-    if (req.method === "POST" && urlPath.indexOf("/out/") === 0) {
+    if (req.method === "POST" && urlPath.indexOf(OUT_PREFIX) === 0) {
       // /out/<file> (or /out/inspect/<file>): written under --out, nowhere else
-      const rel = path.normalize(urlPath.slice(5));
+      const rel = path.normalize(urlPath.slice(OUT_PREFIX.length));
       if (
         rel.startsWith("..") ||
         path.isAbsolute(rel) ||
@@ -124,8 +129,8 @@ http
       return config
         ? send(res, path.resolve(config))
         : (res.writeHead(200), res.end("{}"));
-    if (urlPath.indexOf("/model/") === 0) {
-      const rel = path.normalize(urlPath.slice(7));
+    if (urlPath.indexOf(MODEL_PREFIX) === 0) {
+      const rel = path.normalize(urlPath.slice(MODEL_PREFIX.length));
       if (rel.startsWith("..") || path.isAbsolute(rel)) {
         res.writeHead(400);
         res.end("bad path");

@@ -4,6 +4,7 @@
  */
 
 const TEXT_MS = 200; // text re-draws at most 5 times a second (what BMW's own readouts do)
+const MIB_BYTES = 1024 * 1024;
 
 /**
  * A finite number.
@@ -50,7 +51,7 @@ function pad2(num) {
  * @returns {string}
  */
 function mib(bytes) {
-  return (bytes / 1048576).toFixed(1) + " MiB";
+  return (bytes / MIB_BYTES).toFixed(1) + " MiB";
 }
 
 module.exports = { isNum, rgb, rgba, pad2, mib, TEXT_MS };

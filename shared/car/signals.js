@@ -34,6 +34,29 @@ const {
 } = require("./consts");
 const { isNum, pad2 } = require("../engine/util");
 
+const BYTE_NONE = 255; // a byte signal's "none" (fuel, outside temperature, battery condition)
+const RANGE_NONE = 4095; // KombiIF range: none
+const MILEAGE_NONE = 0xffffff; // a 24-bit mileage: none
+const CONS_NONE = 65535; // a consumption raw: none
+const CONS_MAX_DIGITS = 3; // averageConsumption's decimal digits at most
+const TPMS_POLL_MS = 10000; // the tyres are polled this often
+const AMBIENT_SCALE = 0.5,
+  AMBIENT_OFFSET_C = 40; // outside temperature: raw * 0.5 - 40
+const AHEAD_NONE_MIN = 4093; // DataFrontVehicle: 4093..4095 are "no object / not available"
+const AHEAD_ID_NONE_MIN = 253; // DataFrontVehicle object id: 253..255 are "no object"
+const GAP2_NONE_MIN = 253; // GapVehicleDrivingAhead's gap: 253 and up, nothing measured
+const PEDAL_LOG_MS = 200; // pedal readings: logged at most 5 times a second
+const SPORT_PCT_MAX = 150; // the sport display's power / torque %: over this is none
+const STD_BARO_KPA = 101.3; // outside air pressure until the engine unit has given one
+const DME_ECU = 18; // config.dme.ecu when unset: the engine unit's address (0x12)
+const BOOST_ASK_MS = 400; // the engine unit's boost: asked at most this often
+const BARO_ASK_MS = 60000; // the engine unit's outside air pressure: asked at most this often
+const DME_TICK_MS = 100; // the engine unit's question timer
+const FONT_LOAD_MS = 2000; // the car's font: loaded this long after the media signals start
+const TZ_STEP_MIN = 15; // time zones are whole quarter hours
+const TZ_MIN_H = -12,
+  TZ_MAX_H = 14; // the time zones there are, UTC-12..UTC+14
+
 /** @typedef {import("./consts").Signals} Signals */
 
 /**
@@ -193,13 +216,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         statusRangeTankStatus: (msg) => {
           const fuel = msg && msg.fluidLevelFuelTank,
             range = msg && msg.range;
-          this.fuelL = isNum(fuel) && fuel >= 0 && fuel < 255 ? fuel : null;
+          this.fuelL = isNum(fuel) && fuel >= 0 && fuel < BYTE_NONE ? fuel : null;
           this.rangeKm =
-            isNum(range) && range >= 0 && range < 4095 ? range : null;
+            isNum(range) && range >= 0 && range < RANGE_NONE ? range : null;
           // the odometer, whole km (cauliflowermossgrape's Live Data reads it here; MileageSupreme never came)
           const mileage = msg && msg.mileageKilometre;
           const km =
-            isNum(mileage) && mileage > 0 && mileage < 16777215
+            isNum(mileage) && mileage > 0 && mileage < MILEAGE_NONE
               ? mileage
               : null;
           if (km !== this.odoKm) {
@@ -217,10 +240,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             decimals = msg.consumptionCombustionCurrentDigit;
           this.consAvg =
             isNum(scaled) &&
-            scaled < 65535 &&
+            scaled < CONS_NONE &&
             isNum(decimals) &&
             decimals >= 0 &&
-            decimals <= 3
+            decimals <= CONS_MAX_DIGITS
               ? scaled / Math.pow(10, decimals)
               : null;
           this.consUnit = enumNum(msg.combustionUnit, CONS_UNIT);
@@ -235,7 +258,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
               ? bc.resetOption
               : msg.activeResetLogic;
           this.consBc =
-            isNum(bc.consumptionAverage) && bc.consumptionAverage < 65535
+            isNum(bc.consumptionAverage) && bc.consumptionAverage < CONS_NONE
               ? bc.consumptionAverage
               : null;
           if (msg.bcUnits && msg.bcUnits.consumption !== undefined)
@@ -254,7 +277,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       // tyre pressure and temperature per corner, in the car's own display units (_tyreBar / _tyreC).
       // The car never notifies these (BMW's own x_call only ever reads them), so they are polled.
       "de.bmw.infotainment.vehicle.TPMS": {
-        $pollMs: 10000,
+        $pollMs: TPMS_POLL_MS,
         statusTyrePressure: (msg) =>
           TYRE_CORNERS.forEach((k) => {
             this.tyres.p[k] = this._tyreBar(
@@ -302,7 +325,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       "de.bmw.infrastructure.EnvironmentalInformation": {
         ExteriorTemperature: (msg) => {
           const raw = msg && msg.temperatureExterior;
-          this.ambient = isNum(raw) && raw !== 255 ? raw * 0.5 - 40 : null;
+          this.ambient = isNum(raw) && raw !== BYTE_NONE
+              ? raw * AMBIENT_SCALE - AMBIENT_OFFSET_C
+              : null;
         },
       },
       // what BMW's HUD draws for ACC / DCC / STA ("cruise" mode); only HUD apps with makeRoom list it in app.json
@@ -316,9 +341,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           // 4093..4095 are "no object / not available" codes (with no car ahead an X3 sends 4093 in every field and
           // object id 253, Nov 8 2026), as 253..255 are for the object id
           /** @type {(value: *) => ?number} */
-          const num = (value) => (isNum(value) && value < 4093 ? value : null);
+          const num = (value) => (isNum(value) && value < AHEAD_NONE_MIN ? value : null);
           const id = msg.frontVehicleObjectID,
-            none = !isNum(id) || id >= 253;
+            none = !isNum(id) || id >= AHEAD_ID_NONE_MIN;
           this.ahead = {
             gapX: none ? null : num(msg.frontVehicleGapX),
             gapY: none ? null : num(msg.frontVehicleGapY),
@@ -337,9 +362,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
               AHEAD2_MEASURED,
             );
           this.ahead2 = {
-            gap: isNum(gap) && gap < 253 ? gap : null,
+            gap: isNum(gap) && gap < GAP2_NONE_MIN ? gap : null,
             q: msg.qualifierFunctionVehicleDrivingAhead,
-            measured: measurement >= 1 && measurement <= 4,
+            measured:
+              measurement >= AHEAD2_MEASURED.NEUES_ELEMENT__GEMESSEN &&
+              measurement <= AHEAD2_MEASURED.ELEMENT_PRAEDIZIERT,
             at: Date.now(),
           };
           this._gapRate();
@@ -354,7 +381,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             enumNum(
               msg && msg.qualifierActualValueAngleAcceleratorPedal,
               PEDAL_OK,
-            ) === 1;
+            ) ===
+            PEDAL_OK.SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT;
           this.pedal = valid && isNum(raw) ? { raw, at: Date.now() } : null;
           // for working out config.pedal: every change, at most 5 a second, with the pedal message's other values (a
           // slow press on the car showed the bar jumping, Nov 7 2026: wrong field or scaling)
@@ -367,7 +395,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             " (" +
             (msg && msg.qualifierActualValueAngleAcceleratorPedal) +
             ")";
-          if (line !== this.pedalLine && Date.now() - this.pedalLogged > 200) {
+          if (line !== this.pedalLine && Date.now() - this.pedalLogged > PEDAL_LOG_MS) {
             this.pedalLogged = Date.now();
             this.pedalLine = line;
             this.log.info("accelerator pedal raw " + line);
@@ -383,11 +411,15 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             HAND_BRAKE,
           );
           this.parkBrakeCds =
-            contact === 2 ? true : contact === 1 ? false : null;
+            contact === HAND_BRAKE.HANDBREMSE_ANGEZOGEN
+              ? true
+              : contact === HAND_BRAKE.HANDBREMSE_GELOEST
+                ? false
+                : null;
         },
         statusBattery2: (msg) => {
           const condition = msg && msg.conditionBatteryChargingCondition;
-          const raw = isNum(condition) && condition !== 255 ? condition : null;
+          const raw = isNum(condition) && condition !== BYTE_NONE ? condition : null;
           if (raw !== this.battRaw)
             this.log.info("12 V battery charge condition raw " + condition);
           this.battRaw = raw;
@@ -412,13 +444,15 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           const raw = msg && msg.controlIndicateDirection,
             direction = enumNum(raw, INDICATE);
           const turn =
-            direction === 1 || direction === 3
+            direction === INDICATE.TIPP_BLINKEN_LINKS_EIN ||
+            direction === INDICATE.DAUER_BLINKEN_LINKS_EIN
               ? "L"
-              : direction === 2 || direction === 4
+              : direction === INDICATE.TIPP_BLINKEN_RECHTS_EIN ||
+                  direction === INDICATE.DAUER_BLINKEN_RECHTS_EIN
                 ? "R"
-                : direction === 8
+                : direction === INDICATE.BEIDSEITIGES_BLINKEN_EIN
                   ? "LR"
-                  : direction === 0
+                  : direction === INDICATE.BLINKEN_AUS
                     ? ""
                     : null;
           if (turn !== this.turn)
@@ -439,9 +473,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           const raw = msg && msg.statusParkingBrake,
             status = enumNum(raw, PARK_BRAKE);
           const engaged =
-            status === 1 || status === 4
+            status === PARK_BRAKE.PARKBREMSE_MECHANISCH_FESTGESTELLT ||
+            status === PARK_BRAKE.PARKBREMSE_IM_STELLVORGANG_FESTSTELLEN
               ? true
-              : status === 0 || status === 2
+              : status === PARK_BRAKE.PARKBREMSE_MECHANISCH_NICHT_FESTGESTELLT ||
+                  status === PARK_BRAKE.PARKBREMSE_IM_STELLVORGANG_LOESEN
                 ? false
                 : null;
           if (engaged !== this.parkBrake)
@@ -455,11 +491,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           const raw = msg && msg.statusAutoH,
             status = enumNum(raw, AUTO_H);
           const autoHold =
-            status === 2
+            status === AUTO_H.AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG
               ? "hold"
-              : status === 1
+              : status === AUTO_H.AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG_NICHT
                 ? "armed"
-                : status === 0
+                : status === AUTO_H.AUTOH_NICHT_AKTIVIERT
                   ? "off"
                   : null;
           if (autoHold !== this.autoHold)
@@ -474,12 +510,14 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           const parkBrake = enumNum(msg && msg.statusParkingBrake, PARK_BRAKE);
           if (
             this.parkBrake === null &&
-            (parkBrake === 0 ||
-              parkBrake === 1 ||
-              parkBrake === 2 ||
-              parkBrake === 4)
+            (parkBrake === PARK_BRAKE.PARKBREMSE_MECHANISCH_NICHT_FESTGESTELLT ||
+              parkBrake === PARK_BRAKE.PARKBREMSE_MECHANISCH_FESTGESTELLT ||
+              parkBrake === PARK_BRAKE.PARKBREMSE_IM_STELLVORGANG_LOESEN ||
+              parkBrake === PARK_BRAKE.PARKBREMSE_IM_STELLVORGANG_FESTSTELLEN)
           )
-            this.parkBrakeVsm = parkBrake === 1 || parkBrake === 4;
+            this.parkBrakeVsm =
+              parkBrake === PARK_BRAKE.PARKBREMSE_MECHANISCH_FESTGESTELLT ||
+              parkBrake === PARK_BRAKE.PARKBREMSE_IM_STELLVORGANG_FESTSTELLEN;
         },
       },
       // the odometer (the Grand National theme's VFD): MileageSupreme, unit unconfirmed (taken as km; logged raw on change)
@@ -487,7 +525,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         mileageSupreme: (msg) => {
           const mileage = msg && msg.mileageSupreme;
           const km =
-            isNum(mileage) && mileage > 0 && mileage < 0xffffff
+            isNum(mileage) && mileage > 0 && mileage < MILEAGE_NONE
               ? mileage
               : null;
           if (km !== this.mileage)
@@ -507,9 +545,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           const power = msg && msg.displaySportEnginePower,
             torque = msg && msg.displaySportEngineTorque;
           this.sportPower =
-            isNum(power) && power >= 0 && power <= 150 ? power : null;
+            isNum(power) && power >= 0 && power <= SPORT_PCT_MAX ? power : null;
           this.sportTorque =
-            isNum(torque) && torque >= 0 && torque <= 150 ? torque : null;
+            isNum(torque) && torque >= 0 && torque <= SPORT_PCT_MAX ? torque : null;
           this.sportAt = Date.now();
         },
         statusFESVehicleDynamicSwitchHMI: (msg) => {
@@ -604,7 +642,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       return;
     let reader = null,
       busy = false,
-      baro = 101.3,
+      baro = STD_BARO_KPA,
       baroAt = 0,
       boostAskAt = 0;
     try {
@@ -619,7 +657,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             "engine unit link not available: " + ((err && err.message) || err),
           ),
         );
-      reader = new DidReader(link, { ecu: dme.ecu || 18 });
+      reader = new DidReader(link, { ecu: dme.ecu || DME_ECU });
     } catch (err) {
       this.log.info("engine unit boost off: " + ((err && err.message) || err));
       return;
@@ -645,7 +683,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             this.needsBoost &&
             Array.isArray(dme.boost) &&
             now - this.boostFesAt >= FRESH_MS &&
-            now - boostAskAt >= 400;
+            now - boostAskAt >= BOOST_ASK_MS;
           if (!wantPedal && !wantVolt && !wantBoost) return;
           if (this.car.data().demo) return;
           busy = true;
@@ -657,7 +695,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
               if (
                 isNum(pedal) &&
                 Math.round(pedal) !== this.pedalObdLogged &&
-                now - this.pedalLogged > 200
+                now - this.pedalLogged > PEDAL_LOG_MS
               ) {
                 // for config.pedal.obdRange
                 this.pedalObdLogged = Math.round(pedal);
@@ -675,7 +713,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
               return;
             }
             boostAskAt = now;
-            if (now - baroAt > 60000 && Array.isArray(dme.baro)) {
+            if (now - baroAt > BARO_ASK_MS && Array.isArray(dme.baro)) {
               baroAt = now;
               const baroNow = await reader.value("baro", dme.baro);
               if (isNum(baroNow)) baro = baroNow;
@@ -695,7 +733,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
               busy = false;
             });
         }),
-      100,
+      DME_TICK_MS,
     );
   },
 
@@ -783,7 +821,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     // load the font now, not on the first title's paint (the search walks folders once)
     this.fontT = setTimeout(
       () => this._guard("font", () => this._sysFont()),
-      2000,
+      FONT_LOAD_MS,
     );
   },
 
@@ -813,7 +851,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           ? MEDIA_ITEM.ARTIST
           : /ALBUM/.test(name)
             ? MEDIA_ITEM.ALBUM
-            : 0;
+            : MEDIA_ITEM.UNDEFINED;
     };
     /** @type {Array<[string, number]>} [text, MEDIA_ITEM] */
     const lines = [
@@ -927,9 +965,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     const now = new Date();
     let off =
       hour * 60 + minute - (now.getUTCHours() * 60 + now.getUTCMinutes());
-    off = Math.round(off / 15) * 15;
-    while (off < -12 * 60) off += 1440;
-    while (off > 14 * 60) off -= 1440;
+    off = Math.round(off / TZ_STEP_MIN) * TZ_STEP_MIN;
+    while (off < TZ_MIN_H * 60) off += 1440;
+    while (off > TZ_MAX_H * 60) off -= 1440;
     if (off === this.carOffsetMin) return;
     this.carOffsetMin = off;
     this.log.info(

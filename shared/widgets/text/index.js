@@ -6,6 +6,10 @@ const { VERDICT, color } = require("../../hud_themes");
 const textRaster = require("../../hud_text");
 const { isNum, TEXT_MS } = require("../../engine/util");
 
+const NEAR_FADE_STEPS = 8; // "nearFade" repaints a label only when its fade moves an eighth
+const SLIDE_MAX = 150; // "slide" default max (the car-ahead gap, m)
+const SYS_FONT_FRAC = 0.8; // "@sys" default text size, of the box height
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /**
  * A text widget's own fields (see DOCS).
@@ -103,8 +107,8 @@ module.exports = {
       const fade = isNum(pos)
         ? Math.round(
             Math.max(0, 1 - Math.abs(pos - widget.near[1]) / widget.nearFade) *
-              8,
-          ) / 8
+              NEAR_FADE_STEPS,
+          ) / NEAR_FADE_STEPS
         : 0;
       if (fade > 0) {
         const ownColor = color(hud.theme, role),
@@ -139,7 +143,7 @@ module.exports = {
         const low = widget.slide.min || 0,
           progress = Math.min(
             1,
-            Math.max(0, (value - low) / ((widget.slide.max || 150) - low)),
+            Math.max(0, (value - low) / ((widget.slide.max || SLIDE_MAX) - low)),
           );
         const y =
           widget.slide.yBottom -
@@ -162,7 +166,7 @@ module.exports = {
       const mask =
         sysFont && text
           ? sysFont.mask(widget.w, widget.h, text, {
-              size: widget.size || Math.round(widget.h * 0.8),
+              size: widget.size || Math.round(widget.h * SYS_FONT_FRAC),
               align: widget.align,
             })
           : Buffer.alloc(widget.w * widget.h);

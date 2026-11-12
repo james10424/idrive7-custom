@@ -10,6 +10,7 @@
  * (0.1,0.1,0.1), (0.25,0.25,0.25). If the two strips photograph differently, the effect and image
  * paths are not on the same curve (gamma, premultiplied alpha, or a colour-space conversion).
  */
+const SWATCH_STEPS = 11; // default grey steps, 0.0 .. 1.0 in tenths
 /** @type {Array<[number, number, number]>} */
 const TEST_COLOURS = [
   [0.014, 0.027, 0.05],
@@ -63,7 +64,9 @@ function swatchImage(w, h, greySteps) {
         buf[offset + 1] = grey;
         buf[offset + 2] = grey;
       } else {
-        const testColour = TEST_COLOURS[Math.min(Math.floor((x * 4) / w), 3)];
+        const testColour = TEST_COLOURS[
+          Math.min(Math.floor((x * TEST_COLOURS.length) / w), TEST_COLOURS.length - 1)
+        ];
         buf[offset] = Math.round(255 * testColour[0]);
         buf[offset + 1] = Math.round(255 * testColour[1]);
         buf[offset + 2] = Math.round(255 * testColour[2]);
@@ -74,4 +77,4 @@ function swatchImage(w, h, greySteps) {
   return buf;
 }
 
-module.exports = { SWATCH, swatchImage, TEST_COLOURS };
+module.exports = { SWATCH, swatchImage, TEST_COLOURS, SWATCH_STEPS };

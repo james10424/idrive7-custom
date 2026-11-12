@@ -6,6 +6,8 @@ const { color } = require("../../hud_themes");
 const { rgba } = require("../../engine/util");
 const BOX = require("./shader");
 
+const BOX_BORDER_PX = 2; // default frame width
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -40,7 +42,7 @@ module.exports = {
     );
     client.uniform(ref, "u_headH", [widget.head || 0]);
     client.uniform(ref, "u_border", [
-      widget.border === undefined ? 2 : widget.border,
+      widget.border === undefined ? BOX_BORDER_PX : widget.border,
     ]);
     client.uniform(ref, "u_radius", [widget.radius || 0]);
   },

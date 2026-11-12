@@ -5,6 +5,8 @@
 const { color } = require("../../hud_themes");
 const textRaster = require("../../hud_text");
 
+const RPM_PER_LABEL = 1000; // one number per thousand rpm
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -19,7 +21,7 @@ const DOCS = `image layer; the shift bar's rpm numbers (0 .. bar max / 1000), ev
  */
 function paint(hud, state) {
   const widget = state.w,
-    labelCount = hud._barMax(widget) / 1000 + 1,
+    labelCount = hud._barMax(widget) / RPM_PER_LABEL + 1,
     red = hud.setting("redline");
   const mask = Buffer.alloc(widget.w * widget.h, 0),
     hot = Buffer.alloc(widget.w * widget.h, 0);
@@ -34,7 +36,7 @@ function paint(hud, state) {
       font: widget.font,
       x: left,
     });
-    const into = widget.redFrom && i * 1000 >= red ? hot : mask;
+    const into = widget.redFrom && i * RPM_PER_LABEL >= red ? hot : mask;
     for (let k = 0; k < mask.length; k++)
       if (one[k] > into[k]) into[k] = one[k];
   }

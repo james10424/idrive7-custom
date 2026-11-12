@@ -12,10 +12,17 @@ const {
   LDM_COLOR,
   LDM_SYM,
   REL_TAU_MS,
+  STANDSTILL_KMH,
   STA_WHEEL,
   enumNum,
 } = require("./consts");
 const { isNum } = require("../engine/util");
+
+const AHEAD_LOG_MS = 1000; // the car ahead's raw messages: logged at most this often per kind
+const ACC_SET_NONE = 65535; // cruiseCtrlSpeedHUD: no set speed
+const REL_MIN_DT_MS = 200; // the gap's rate: worked out over at least this long
+const KMH_PER_MS = 3.6;
+const CLOSING_KMH = 10; // config.acc.closingKmh when unset
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
@@ -82,7 +89,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.aheadLogAt = this.aheadLogAt || {};
     if (
       line === this.aheadLogged[kind] ||
-      now - (this.aheadLogAt[kind] || 0) < 1000
+      now - (this.aheadLogAt[kind] || 0) < AHEAD_LOG_MS
     )
       return; // each message on its own
     this.aheadLogged[kind] = line;
@@ -90,7 +97,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.log.info(
       "car ahead raw: " +
         line +
-        (isNum(this.accSetRaw) && this.accSetRaw !== 65535
+        (isNum(this.accSetRaw) && this.accSetRaw !== ACC_SET_NONE
           ? ", set speed " + this.accSetRaw
           : "") +
         ", speed " +
@@ -132,7 +139,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       now - ahead2.at < FRESH_MS &&
       ahead2.measured &&
       isNum(ahead2.gap) &&
-      [6, 14, 15].indexOf(enumNum(ahead2.q, AHEAD2_Q)) < 0
+      [
+        AHEAD2_Q.FUNKTION_MELDET_FEHLER,
+        AHEAD2_Q.FUNKTION_NICHT_VERFUEGBAR,
+        AHEAD2_Q.SIGNAL_UNBEFUELLT,
+      ].indexOf(enumNum(ahead2.q, AHEAD2_Q)) < 0
     )
       return this._accScale("gap", ahead2.gap);
     return null;
@@ -155,8 +166,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       return;
     }
     const dt = now - prev.at;
-    if (dt < 200) return;
-    const inst = ((gapM - prev.gapM) / (dt / 1000)) * 3.6;
+    if (dt < REL_MIN_DT_MS) return;
+    const inst = ((gapM - prev.gapM) / (dt / 1000)) * KMH_PER_MS;
     const k = 1 - Math.exp(-dt / REL_TAU_MS);
     this.relFromGap = {
       v: isNum(prev.v) ? prev.v + (inst - prev.v) * k : inst,
@@ -176,7 +187,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (key === "gap") return this._gapM();
     if (key === "rel") {
       const own = this._raw("speed");
-      if (!isNum(own) || own < 1) return null; // standing still: "--" (the gap's rate is only noise then)
+      if (!isNum(own) || own < STANDSTILL_KMH) return null; // standing still: "--" (the gap's rate is only noise then)
       // DataFrontVehicle's speed only once config.acc.rel says how to read it (use: true): following a car slowly on an
       // X3 it read 509, not a relative km/h; until then the gap's rate
       const relCfg = (this.config.acc && this.config.acc.rel) || {};
@@ -199,7 +210,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (key === "set")
       return this.assistActive &&
         isNum(this.accSetRaw) &&
-        this.accSetRaw !== 65535
+        this.accSetRaw !== ACC_SET_NONE
         ? this._accScale("set", this.accSetRaw)
         : null;
     return null;
@@ -214,7 +225,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       lim =
         this.config.acc && isNum(this.config.acc.closingKmh)
           ? this.config.acc.closingKmh
-          : 10;
+          : CLOSING_KMH;
     return isNum(rel) && rel < -lim;
   },
 });

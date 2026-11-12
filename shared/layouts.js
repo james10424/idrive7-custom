@@ -11,6 +11,10 @@ const fs = require("fs");
 const path = require("path");
 const data = require("./hud_data");
 const visible = require("./visible");
+const { TARGET_SIZES, MAX_CONN } = require("./engine/consts");
+
+const SCHEMA_VERSION = 2; // the layout file format this code reads
+const RELOAD_DEBOUNCE_MS = 300; // after the last change in <data>/layouts/: reload once
 
 /**
  * A layout file (hud/layouts/<name>.json or <data>/layouts/<name>.json).
@@ -45,7 +49,7 @@ class Layouts {
    * @param {number[]} [size]
    */
   constructor(dataDir, log, size) {
-    this.size = size || [800, 480];
+    this.size = size || TARGET_SIZES.hud;
     this.dir = path.join(dataDir, "layouts");
     this.log = log;
     /** @type {Array<() => void>} */
@@ -79,7 +83,7 @@ class Layouts {
     this._validate(raw, name);
     // Warn (never refuse) about widgets the driver cannot see: under the hood, under BMW's
     // gear box or belt light on the cluster, outside the windshield window on the HUD.
-    const target = this.size[0] === 1920 ? "panel" : "hud";
+    const target = this.size[0] === TARGET_SIZES.panel[0] ? "panel" : "hud";
     visible
       .check(raw.widgets, target)
       .forEach((warning) => this.log.warn('layout "' + name + '": ' + warning));
@@ -97,8 +101,14 @@ class Layouts {
       throw new Error('layout "' + name + '": ' + why);
     };
     if (!layout || typeof layout !== "object") bad("not an object");
-    if (layout.schemaVersion !== 2)
-      bad("schemaVersion must be 2 (got " + layout.schemaVersion + ")");
+    if (layout.schemaVersion !== SCHEMA_VERSION)
+      bad(
+        "schemaVersion must be " +
+          SCHEMA_VERSION +
+          " (got " +
+          layout.schemaVersion +
+          ")",
+      );
     if (!Array.isArray(layout.widgets)) bad("missing widgets array");
     if (
       layout.modes !== undefined &&
@@ -142,9 +152,14 @@ class Layouts {
         );
       if (
         widget.conn !== undefined &&
-        !(Number.isInteger(widget.conn) && widget.conn >= 0 && widget.conn <= 3)
+        !(Number.isInteger(widget.conn) && widget.conn >= 0 && widget.conn <= MAX_CONN - 1)
       )
-        bad(label + ' "conn" must be 0..3 (the connection to cluster-render)');
+        bad(
+          label +
+            ' "conn" must be 0..' +
+            (MAX_CONN - 1) +
+            " (the connection to cluster-render)",
+        );
       if (
         widget.toggle !== undefined &&
         !/^!?[a-zA-Z0-9_]+(=[a-zA-Z0-9_]+)?$/.test(String(widget.toggle))
@@ -248,7 +263,7 @@ class Layouts {
               this.log.warn("layouts listener: " + err);
             }
           });
-        }, 300);
+        }, RELOAD_DEBOUNCE_MS);
       });
     } catch (err) {
       this.log.warn(

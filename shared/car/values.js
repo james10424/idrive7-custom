@@ -21,14 +21,68 @@ const {
   BRAKE_GMAX,
   BRAKE_TAU_MS,
   CONS_UNIT,
+  DEFAULT_TANK_L,
   FRESH_MS,
+  MI_PER_KM,
   PRESS_TO_BAR,
+  PSI_PER_BAR,
   SETUP,
   SETUP_LEVEL,
   VOLT_MS,
 } = require("./consts");
 const { SPEED_SCALE, scaleFrac } = require("./scales");
 const { isNum } = require("../engine/util");
+const { WARM_OIL } = require("../shift_score");
+
+const FILTER_DT_MAX_MS = 500; // a smoothing filter's step at most (after a pause)
+const RPM_TAU_MS = 120; // the rpm filter
+const RPM_MOVE_MIN = 40; // the rpm readout moves only by this much or more
+const RPM_STEP = 50; // the rpm readout's steps
+const REV_SCALE_STEP_RPM = 1000; // the rev scale's top: the redline rounded up to this
+const RED_MIN_RPM = 500; // the red mark covers at least the scale's last this many rpm
+const ORANGE_RPM = 700; // the orange mark: this many rpm before the red
+const SPEED_STEPS = 8; // label steps on SPEED_SCALE
+const DEFAULT_TORQUE_NM = 500; // config.engine.torqueNm when unset (an M40i)
+const DEFAULT_POWER_KW = 285; // config.engine.powerKw when unset (an M40i)
+const NM_RPM_PER_KW = 9549; // kW = Nm x rpm / 9549
+const PEDAL_OBD_FRESH_MS = 1000; // the OBD pedal reading counts this long
+const DEFAULT_PEDAL_FACTOR = 0.025; // config.pedal.factor when unset
+const DEFAULT_KICKDOWN_PCT = 87; // config.pedal.kickdown when unset
+const BRAKE10_MAX = 10; // brake10's full bar
+const VOLT_STALE_READS = 3; // the 12 V reading is stale after this many VOLT_MS intervals
+const TPMS_PRESS_NONE = 65532; // a TPMS pressure raw at or past this: none
+const TPMS_PRESS_PER_UNIT = 10; // a TPMS pressure raw is 0.1 x the car's unit
+// plausible tyre pressures by unit, when the car's unit is not known
+const TYRE_BAR_MIN = 0.5,
+  TYRE_BAR_MAX = 6;
+const TYRE_PSI_MIN = 7,
+  TYRE_PSI_MAX = 60; // also where kPa starts
+const TYRE_KPA_MAX = 600;
+const TPMS_TEMP_NONE = 65535; // a TPMS temperature raw at or past this: none
+const TPMS_TEMP_OFFSET = 40; // a TPMS temperature raw is the car's degrees + 40
+const ODO_DT_MAX_MS = 1000; // the odometer's step at most (after a pause)
+const ODO_FRAC_MAX = 0.999; // the distance since the car's last km stays under the next km
+const DEFAULT_CONS_FACTOR = 0.1; // config.consumption.factor when unset
+const MPG_US_L100 = 235.215; // mpg (US) = this / l/100km
+const MPG_UK_L100 = 282.481; // mpg (UK) = this / l/100km
+// the demo drive's made-up values
+const DEMO_FUEL_FRAC = 0.62;
+const DEMO_RANGE_KM = 368;
+const DEMO_AMBIENT_C = 24;
+const DEMO_BOOST_BAR = 1.3; // at full throttle
+const DEMO_BOOST_FROM_RPM = 1500,
+  DEMO_BOOST_SPAN_RPM = 2000; // boost builds from 1500 to 3500 rpm
+const DEMO_BRAKE_G = -0.12; // the brake lights come on under this gLong
+const DEMO_BATT_PCT = 82;
+const DEMO_RUNNING_RPM = 400; // over this the engine runs
+const DEMO_VOLT_RUNNING = 14.1,
+  DEMO_VOLT_OFF = 12.6;
+const DEMO_TYRE_BAR_FRONT = 2.3,
+  DEMO_TYRE_BAR_REAR = 2.5;
+const DEMO_TYRE_C_FRONT = 24,
+  DEMO_TYRE_C_REAR = 27;
+const DEMO_ODO_KM = 23817;
+const DEMO_L100 = 9.8;
 
 /** @typedef {import("../engine/app").Widget} Widget */
 /** @typedef {import("./consts").ShiftPoint} ShiftPoint */
@@ -49,7 +103,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _smoothRpm(now) {
     const raw = this.car.data().rpm;
-    const dt = this.lastTickT ? Math.min(500, now - this.lastTickT) : 0;
+    const dt = this.lastTickT ? Math.min(FILTER_DT_MAX_MS, now - this.lastTickT) : 0;
     this.lastTickT = now;
     if (!isNum(raw)) {
       this.rpmF = null;
@@ -57,10 +111,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       return;
     }
     this.rpmF = isNum(this.rpmF)
-      ? this.rpmF + (raw - this.rpmF) * (1 - Math.exp(-dt / 120))
+      ? this.rpmF + (raw - this.rpmF) * (1 - Math.exp(-dt / RPM_TAU_MS))
       : raw;
-    if (!isNum(this.rpmShown) || Math.abs(this.rpmF - this.rpmShown) >= 40)
-      this.rpmShown = Math.max(0, Math.round(this.rpmF / 50) * 50);
+    if (!isNum(this.rpmShown) || Math.abs(this.rpmF - this.rpmShown) >= RPM_MOVE_MIN)
+      this.rpmShown = Math.max(0, Math.round(this.rpmF / RPM_STEP) * RPM_STEP);
   },
 
   /**
@@ -77,13 +131,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       const demo = this.car.data().demo;
       if (name === "fuel")
         return isNum(this.fuelL)
-          ? Math.min(1, this.fuelL / (this.config.tankLitres || 65))
+          ? Math.min(1, this.fuelL / (this.config.tankLitres || DEFAULT_TANK_L))
           : demo
-            ? 0.62
+            ? DEMO_FUEL_FRAC
             : null;
       if (name === "range")
-        return isNum(this.rangeKm) ? this.rangeKm : demo ? 368 : null;
-      return isNum(this.ambient) ? this.ambient : demo ? 24 : null;
+        return isNum(this.rangeKm) ? this.rangeKm : demo ? DEMO_RANGE_KM : null;
+      return isNum(this.ambient) ? this.ambient : demo ? DEMO_AMBIENT_C : null;
     }
     if (name === "torquePct" || name === "powerPct") {
       // the car's own sport display % while it sends one, else from the crank torque and app.json
@@ -96,11 +150,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         data = this.car.data();
       if (!isNum(data.torque)) return null;
       if (name === "torquePct")
-        return (Math.max(0, data.torque) / (engine.torqueNm || 500)) * 100;
+        return (Math.max(0, data.torque) / (engine.torqueNm || DEFAULT_TORQUE_NM)) * 100;
       return isNum(data.rpm)
         ? ((Math.max(0, data.torque) * data.rpm) /
-            9549 /
-            (engine.powerKw || 285)) *
+            NM_RPM_PER_KW /
+            (engine.powerKw || DEFAULT_POWER_KW)) *
             100
         : null;
     }
@@ -130,7 +184,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _barMax(widget) {
     return (
-      Math.ceil(this.setting("redline") / 1000) * 1000 +
+      Math.ceil(this.setting("redline") / REV_SCALE_STEP_RPM) *
+        REV_SCALE_STEP_RPM +
       ((widget && widget.over) || 0)
     );
   },
@@ -144,7 +199,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     const shift = this.score.shiftPoint(data.oil);
     const rpm = isNum(this.rpmF) ? this.rpmF : data.rpm;
     shift.now = isNum(rpm) && rpm >= shift.rpm;
-    shift.oilCold = isNum(data.oil) && data.oil < 80;
+    shift.oilCold = isNum(data.oil) && data.oil < WARM_OIL;
     return shift;
   },
 
@@ -155,8 +210,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {number[]} [red, orange]
    */
   _redMarks(max) {
-    const redFrom = Math.min(this.setting("redline"), max - 500) / max;
-    return [redFrom, redFrom - 700 / max];
+    const redFrom = Math.min(this.setting("redline"), max - RED_MIN_RPM) / max;
+    return [redFrom, redFrom - ORANGE_RPM / max];
   },
 
   /**
@@ -184,9 +239,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     const usUnits = this.setting("units") === "us";
     return (
       scaleFrac(
-        usUnits ? speed * 0.621371 : speed,
+        usUnits ? speed * MI_PER_KM : speed,
         SPEED_SCALE[usUnits ? "us" : "metric"],
-      ) * 8
+      ) * SPEED_STEPS
     );
   },
 
@@ -205,8 +260,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (data.demo && isNum(data.throttle) && isNum(data.rpm))
       return (
         Math.max(0, data.throttle) *
-        1.3 *
-        Math.min(1, Math.max(0, (data.rpm - 1500) / 2000))
+        DEMO_BOOST_BAR *
+        Math.min(
+          1,
+          Math.max(0, (data.rpm - DEMO_BOOST_FROM_RPM) / DEMO_BOOST_SPAN_RPM),
+        )
       );
     return null;
   },
@@ -223,7 +281,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         Array.isArray(pedalCfg.obdRange) && pedalCfg.obdRange.length === 2
           ? pedalCfg.obdRange
           : [0, 100];
-      if (isNum(this.pedalObd) && Date.now() - this.pedalObdAt < 1000)
+      if (isNum(this.pedalObd) && Date.now() - this.pedalObdAt < PEDAL_OBD_FRESH_MS)
         return Math.max(
           0,
           Math.min(
@@ -244,7 +302,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         0,
         Math.min(
           100,
-          this.pedal.raw * (isNum(pedalCfg.factor) ? pedalCfg.factor : 0.025) +
+          this.pedal.raw * (isNum(pedalCfg.factor) ? pedalCfg.factor : DEFAULT_PEDAL_FACTOR) +
             (isNum(pedalCfg.offset) ? pedalCfg.offset : 0),
         ),
       );
@@ -266,10 +324,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (
       pedalCfg.source === "obd" &&
       isNum(this.pedalObd) &&
-      Date.now() - this.pedalObdAt < 1000
+      Date.now() - this.pedalObdAt < PEDAL_OBD_FRESH_MS
     )
       return (
-        this.pedalObd >= (isNum(pedalCfg.kickdown) ? pedalCfg.kickdown : 87)
+        this.pedalObd >= (isNum(pedalCfg.kickdown) ? pedalCfg.kickdown : DEFAULT_KICKDOWN_PCT)
       );
     const data = this.car.data();
     return !!data.demo && isNum(data.throttle) && data.throttle >= 1;
@@ -282,7 +340,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _brake() {
     if (this.brakeOn !== null) return this.brakeOn;
     const data = this.car.data();
-    return !!data.demo && isNum(data.gLong) && data.gLong < -0.12;
+    return !!data.demo && isNum(data.gLong) && data.gLong < DEMO_BRAKE_G;
   },
 
   /** The brake bar 0..10: 0 off; while braking the deceleration on a log scale (BRAKE_G0, BRAKE_GMAX), at least 1; 10
@@ -294,7 +352,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       gLong = this.car.data().gLong;
     const decel = isNum(gLong) ? Math.max(0, -gLong) : null;
     if (isNum(decel)) {
-      const dt = this.decelAt ? Math.min(500, now - this.decelAt) : 0;
+      const dt = this.decelAt ? Math.min(FILTER_DT_MAX_MS, now - this.decelAt) : 0;
       this.decelF = isNum(this.decelF)
         ? this.decelF +
           (decel - this.decelF) * (1 - Math.exp(-dt / BRAKE_TAU_MS))
@@ -302,11 +360,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       this.decelAt = now;
     } else this.decelF = null;
     if (!this._brake()) return 0;
-    if (!isNum(this.decelF)) return 10;
+    if (!isNum(this.decelF)) return BRAKE10_MAX;
     const level =
-      (10 * Math.log(1 + Math.min(this.decelF, BRAKE_GMAX) / BRAKE_G0)) /
+      (BRAKE10_MAX * Math.log(1 + Math.min(this.decelF, BRAKE_GMAX) / BRAKE_G0)) /
       Math.log(1 + BRAKE_GMAX / BRAKE_G0);
-    return Math.max(1, Math.min(10, level));
+    return Math.max(1, Math.min(BRAKE10_MAX, level));
   },
 
   /**
@@ -325,7 +383,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         ),
       );
     }
-    return this.car.data().demo ? 82 : null;
+    return this.car.data().demo ? DEMO_BATT_PCT : null;
   },
 
   /**
@@ -333,10 +391,14 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?number}
    */
   _volt12() {
-    if (isNum(this.volt12) && Date.now() - this.volt12At < VOLT_MS * 3)
+    if (isNum(this.volt12) && Date.now() - this.volt12At < VOLT_MS * VOLT_STALE_READS)
       return this.volt12;
     const data = this.car.data();
-    return data.demo ? (isNum(data.rpm) && data.rpm > 400 ? 14.1 : 12.6) : null;
+    return data.demo
+      ? isNum(data.rpm) && data.rpm > DEMO_RUNNING_RPM
+        ? DEMO_VOLT_RUNNING
+        : DEMO_VOLT_OFF
+      : null;
   },
 
   /** A tyre's pressure ('p', bar) or temperature ('t', C) at corner FL FR RL RR; steady made-up values on the demo drive. */
@@ -346,16 +408,16 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?number}
    */
   _tyreBar(raw) {
-    if (!isNum(raw) || raw < 0 || raw >= 65532) return null;
-    const value = raw / 10,
+    if (!isNum(raw) || raw < 0 || raw >= TPMS_PRESS_NONE) return null;
+    const value = raw / TPMS_PRESS_PER_UNIT,
       k = PRESS_TO_BAR[this.carUnits.press];
     if (k) return value * k;
-    if (value >= 0.5 && value <= 6) return value;
-    if (value >= 7 && value < 60) {
+    if (value >= TYRE_BAR_MIN && value <= TYRE_BAR_MAX) return value;
+    if (value >= TYRE_PSI_MIN && value < TYRE_PSI_MAX) {
       this.carUnits.psiSeen = true;
-      return value / 14.5038;
+      return value / PSI_PER_BAR;
     }
-    if (value >= 60 && value <= 600) return value / 100;
+    if (value >= TYRE_PSI_MAX && value <= TYRE_KPA_MAX) return value / 100;
     return value;
   },
 
@@ -365,8 +427,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {?number}
    */
   _tyreC(raw) {
-    if (!isNum(raw) || raw < 0 || raw >= 65535) return null;
-    const temp = raw - 40,
+    if (!isNum(raw) || raw < 0 || raw >= TPMS_TEMP_NONE) return null;
+    const temp = raw - TPMS_TEMP_OFFSET,
       fahrenheit = this.carUnits.temp
         ? this.carUnits.temp === "F"
         : this.carUnits.psiSeen;
@@ -385,7 +447,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (isNum(value)) return value;
     if (!this.car.data().demo) return null;
     const rear = corner === "RL" || corner === "RR";
-    return kind === "p" ? (rear ? 2.5 : 2.3) : rear ? 27 : 24;
+    return kind === "p"
+      ? rear
+        ? DEMO_TYRE_BAR_REAR
+        : DEMO_TYRE_BAR_FRONT
+      : rear
+        ? DEMO_TYRE_C_REAR
+        : DEMO_TYRE_C_FRONT;
   },
 
   /**
@@ -407,17 +475,19 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    */
   _odometer(now) {
     if (!isNum(now)) now = Date.now();
-    const dt = this.odoAt ? Math.min(1000, Math.max(0, now - this.odoAt)) : 0;
+    const dt = this.odoAt
+      ? Math.min(ODO_DT_MAX_MS, Math.max(0, now - this.odoAt))
+      : 0;
     this.odoAt = now;
     const speed = this._raw("speed");
     if (isNum(speed) && speed > 0) this.odoAcc += (speed * dt) / 3600000;
     // KombiIF's whole km, else MileageSupreme's (no longer asked for: it never came on the car)
     const base = isNum(this.odoKm) ? this.odoKm : this.mileage;
     if (isNum(base)) {
-      this.odoAcc = Math.min(this.odoAcc, 0.999);
+      this.odoAcc = Math.min(this.odoAcc, ODO_FRAC_MAX);
       return base + this.odoAcc;
     }
-    return this.car.data().demo ? 23817 + this.odoAcc : null;
+    return this.car.data().demo ? DEMO_ODO_KM + this.odoAcc : null;
   },
 
   /** Average consumption for the period picked on the center screen, in the car's unit; null before the car sends it.
@@ -431,13 +501,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     else if (isNum(this.consBc)) {
       const consCfg = this.config.consumption || {};
       avg =
-        this.consBc * (isNum(consCfg.factor) ? consCfg.factor : 0.1) +
+        this.consBc * (isNum(consCfg.factor) ? consCfg.factor : DEFAULT_CONS_FACTOR) +
         (isNum(consCfg.offset) ? consCfg.offset : 0);
     } else
       return this.car.data().demo
         ? this.setting("units") === "us"
-          ? 235.215 / 9.8
-          : 9.8
+          ? MPG_US_L100 / DEMO_L100
+          : DEMO_L100
         : null;
     // the car sends it in its own unit: to l/100km, then to the units setting's (mpg US or l/100km)
     const unit =
@@ -447,14 +517,14 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     const l100 = !(avg > 0)
       ? null
       : unit === CONS_UNIT.CONSUMPTION_US
-        ? 235.215 / avg
+        ? MPG_US_L100 / avg
         : unit === CONS_UNIT.CONSUMPTION_UK
-          ? 282.481 / avg
+          ? MPG_UK_L100 / avg
           : unit === CONS_UNIT.CONSUMPTION_KML
             ? 100 / avg
             : avg;
     if (!isNum(l100)) return null;
-    return this.setting("units") === "us" ? 235.215 / l100 : l100;
+    return this.setting("units") === "us" ? MPG_US_L100 / l100 : l100;
   },
 
   /**

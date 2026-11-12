@@ -9,6 +9,8 @@ const { MODE_TEXT } = require("./consts");
 const { THEMES } = require("../hud_themes");
 const { mib } = require("./util");
 
+const STATUS_SOON_MS = 500; // a burst of events waits this long for one status update
+
 /**
  * The status row's state on the app (App, through app_type.d.ts).
  * @typedef {object} StatusState
@@ -36,7 +38,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
     this._statusT = setTimeout(() => {
       this._statusT = null;
       this._guard("status", () => this._status());
-    }, 500);
+    }, STATUS_SOON_MS);
   },
 
   /**

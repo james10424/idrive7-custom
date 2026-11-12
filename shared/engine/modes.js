@@ -8,6 +8,9 @@ const sun = require("../sun");
 const { MODE_KEY } = require("./consts");
 const { isNum } = require("./util");
 
+const HOLE_INSET_PX = 6; // a map hole's default inset ("holeInset")
+const HOLE_RADIUS_PX = 28; // a map hole's default corner radius ("holeRadius")
+
 /** @typedef {import("./app").Widget} Widget */
 
 module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
@@ -137,7 +140,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
         ? widget.hole
         : null;
     if (!hole) return [0, 0, 0, 0];
-    const inset = isNum(widget.holeInset) ? widget.holeInset : 6;
+    const inset = isNum(widget.holeInset) ? widget.holeInset : HOLE_INSET_PX;
     return [
       hole[0] + inset - widget.x,
       hole[1] + inset - widget.y,
@@ -152,6 +155,6 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
    * @returns {number}
    */
   _holeRadius(widget) {
-    return isNum(widget.holeRadius) ? widget.holeRadius : 28;
+    return isNum(widget.holeRadius) ? widget.holeRadius : HOLE_RADIUS_PX;
   },
 });

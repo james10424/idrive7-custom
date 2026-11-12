@@ -5,6 +5,7 @@
 const { color } = require("../../hud_themes");
 const { isNum, rgb } = require("../../engine/util");
 const { scaleFrac, SPEED_SCALE } = require("../../car/scales");
+const { MI_PER_KM } = require("../../car/consts");
 const { packCfg } = require("../../engine/cfg");
 const SDASH = require("./shader");
 
@@ -34,6 +35,22 @@ const CFG = [
   "u_topEnd",
 ];
 const PACKED = packCfg(SDASH, CFG);
+
+const INNER_EXTRA_PX = 18; // default "inner": the inner line sits this much past the band width
+const DEFAULT_RPM_MAX = 8000; // default rpm scale end
+const HOLE_FADE_FEATHER_PX = 30; // "holeFade" default feather
+const HOLE_FADE_DARKNESS = 0.85; // "holeFade" default darkness
+const NEEDLE_STEPS = 500; // the gauges are resent only in steps of 1/500 of their scale
+const OIL_MIN_C = 50; // the oil bar's bottom
+const OIL_MID_C = 110; // its middle: the B58's running temperature
+const OIL_MAX_C = 150; // its top
+/** @type {number[]} */
+const STRIP_MAX = [100, 10]; // "stripMax" default, left and right
+const STRIP_STEPS = 50; // the strip's bars are resent in steps of 1/50
+const GAP_MAX_M = 150; // the car-ahead gauge's default "max"
+const GAP_STEPS = 300; // the car-ahead gauge is resent in steps of 1/300
+const VBAR_STEPS = 100; // the upright boxes are resent in steps of 1/100
+const ROUTE_STEPS = 400; // the route strip is resent in steps of 1/400
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
@@ -65,10 +82,10 @@ module.exports = {
     packer.uniform("u_geo", widget.geo);
     packer.uniform("u_k", widget.k);
     packer.uniform("u_w", [widget.band]);
-    packer.uniform("u_inner", [widget.inner || widget.band + 18]);
+    packer.uniform("u_inner", [widget.inner || widget.band + INNER_EXTRA_PX]);
     packer.uniform("u_scale", widget.scale || [widget.geo[2], widget.geo[0]]);
     packer.uniform("u_ticks", widget.ticks);
-    const [redFrom, orange] = hud._redMarks(widget.rpmMax || 8000);
+    const [redFrom, orange] = hud._redMarks(widget.rpmMax || DEFAULT_RPM_MAX);
     packer.uniform("u_redFrom", [redFrom]);
     packer.uniform("u_orange", [orange]);
     packer.uniform("u_fuelSeg", widget.fuelSeg);
@@ -109,8 +126,8 @@ module.exports = {
         : [0, 0, 0, 0],
     );
     packer.uniform("u_holeFadeK", [
-      holeFade && isNum(holeFade[4]) ? holeFade[4] : 30,
-      holeFade && isNum(holeFade[5]) ? holeFade[5] : 0.85,
+      holeFade && isNum(holeFade[4]) ? holeFade[4] : HOLE_FADE_FEATHER_PX,
+      holeFade && isNum(holeFade[5]) ? holeFade[5] : HOLE_FADE_DARKNESS,
     ]);
     packer.uniform("u_strip", widget.strip);
     const gapRail =
@@ -167,24 +184,24 @@ module.exports = {
       oil = hud._raw("oil");
     /** @type {(value: number) => number} */
     const quantize = (value) =>
-      Math.round(Math.min(1, Math.max(0, value)) * 500) / 500;
+      Math.round(Math.min(1, Math.max(0, value)) * NEEDLE_STEPS) / NEEDLE_STEPS;
     const vals = [
       quantize(
         isNum(speed)
           ? scaleFrac(
-              usUnits ? speed * 0.621371 : speed,
+              usUnits ? speed * MI_PER_KM : speed,
               SPEED_SCALE[usUnits ? "us" : "metric"],
             )
           : 0,
       ),
-      quantize(isNum(rpm) ? rpm / (widget.rpmMax || 8000) : 0),
+      quantize(isNum(rpm) ? rpm / (widget.rpmMax || DEFAULT_RPM_MAX) : 0),
       quantize(isNum(fuel) ? fuel : 0),
       // oil: 50..150 C with 110 (the B58's running temperature) at the bar's middle, each half linear
       quantize(
         isNum(oil)
-          ? oil <= 110
-            ? (0.5 * (oil - 50)) / 60
-            : 0.5 + (0.5 * (oil - 110)) / 40
+          ? oil <= OIL_MID_C
+            ? (0.5 * (oil - OIL_MIN_C)) / (OIL_MID_C - OIL_MIN_C)
+            : 0.5 + (0.5 * (oil - OIL_MID_C)) / (OIL_MAX_C - OIL_MID_C)
           : 0,
       ),
     ];
@@ -192,14 +209,14 @@ module.exports = {
     const stripSignals = Array.isArray(widget.stripSignals)
         ? widget.stripSignals
         : null,
-      stripMax = Array.isArray(widget.stripMax) ? widget.stripMax : [100, 10];
+      stripMax = Array.isArray(widget.stripMax) ? widget.stripMax : STRIP_MAX;
     const strip = stripSignals
       ? [0, 1].map((i) => {
           const value = stripSignals[i] ? hud._raw(stripSignals[i]) : null;
           return isNum(value)
             ? Math.round(
-                Math.min(1, Math.max(0, value / (stripMax[i] || 1))) * 50,
-              ) / 50
+                Math.min(1, Math.max(0, value / (stripMax[i] || 1))) * STRIP_STEPS,
+              ) / STRIP_STEPS
             : 0;
         })
       : null;
@@ -209,8 +226,8 @@ module.exports = {
     const gap = widget.gapGauge ? hud._acc("gap") : null;
     const gapFrac = isNum(gap)
       ? Math.round(
-          Math.min(1, Math.max(0, gap / (widget.gapGauge.max || 150))) * 300,
-        ) / 300
+          Math.min(1, Math.max(0, gap / (widget.gapGauge.max || GAP_MAX_M))) * GAP_STEPS,
+        ) / GAP_STEPS
       : -1;
     const gHot = gapFrac >= 0 && hud._closing();
     // boost and battery boxes: each signal over its "range" [lo, hi], in 100 steps
@@ -225,15 +242,15 @@ module.exports = {
                   Math.min(
                     1,
                     Math.max(0, (value - range[0]) / (range[1] - range[0])),
-                  ) * 100,
-                ) / 100
+                  ) * VBAR_STEPS,
+                ) / VBAR_STEPS
               : -1;
           })
         : null;
     // while guiding, "routeStrip" turns the strip into the route's progress (filled from the right), in 400 steps
     const routeProgress = widget.routeStrip ? hud._routeProgress() : null;
     const route = isNum(routeProgress)
-      ? Math.round(routeProgress * 400) / 400
+      ? Math.round(routeProgress * ROUTE_STEPS) / ROUTE_STEPS
       : -1;
     const key =
       vals.join("|") +

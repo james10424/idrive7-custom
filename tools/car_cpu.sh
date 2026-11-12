@@ -9,12 +9,14 @@
 # Changes nothing.
 set -euo pipefail
 
+DEFAULT_SECS=10   # the window, unless given
 CAR="${1:?usage: $(basename "$0") <car-ssh-host> [seconds]}"
-SECS="${2:-10}"
+SECS="${2:-$DEFAULT_SECS}"
 
 ssh "$CAR" "SECS=$SECS sh -s" <<'EOF'
 OAP=/var/opt/public/oap
-HZ=$(getconf CLK_TCK 2>/dev/null || echo 100)
+DEFAULT_HZ=100   # clock ticks a second when getconf can't say (Linux's usual)
+HZ=$(getconf CLK_TCK 2>/dev/null || echo $DEFAULT_HZ)
 # "pid label" for each process of ours
 find_ours() {
     for app in custom_hud custom_cluster; do

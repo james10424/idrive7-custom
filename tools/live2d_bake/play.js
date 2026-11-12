@@ -46,6 +46,9 @@ const SWITCHES = [
   "UniformMagicEyes",
 ];
 
+const BOX_MARGIN = 0.04; // margin round her idle box, of its height
+const SLIDER_STEPS = 100; // steps across a slider's range
+
 /**
  * Runs page.js's definitions (everything but its closing bake call) as a classic script, so its classes and
  * functions are globals here.
@@ -88,7 +91,7 @@ async function borrowPage() {
     g.setParams(loaded, {});
     loaded.model.update();
     const b = g.bounds(loaded);
-    const pad = (b[3] - b[1]) * 0.04;
+    const pad = (b[3] - b[1]) * BOX_MARGIN;
     const box = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
     const big = /** @type {HTMLCanvasElement} */ (
       document.getElementById("big")
@@ -157,7 +160,7 @@ async function borrowPage() {
       input.min = String(params.minimumValues[i]);
       input.max = String(params.maximumValues[i]);
       input.step = String(
-        (params.maximumValues[i] - params.minimumValues[i]) / 100,
+        (params.maximumValues[i] - params.minimumValues[i]) / SLIDER_STEPS,
       );
       input.value = String(def);
       out.textContent = def.toFixed(2);

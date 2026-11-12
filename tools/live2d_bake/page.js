@@ -115,6 +115,8 @@ const cubismCore = window.Live2DCubismCore;
 
 /* What a config leaves out: Live2D's standard parameter ids (most models use them; a missing one is skipped with a
  * note in the log). tools/live2d_bake/example.json is these written out, to start a config from. */
+const DEFAULT_LEAN_STEPS = 11; // lean angles baked, left to right
+const DEFAULT_LEAN_FACE = 0.6; // the lean from which the braking and happy faces show
 /** @type {Partial<BakeConfig>} */
 const DEFAULTS = {
   frames: {
@@ -124,7 +126,7 @@ const DEFAULTS = {
     talk: { params: { ParamMouthOpenY: 0.5, ParamMouthForm: 1 } },
   },
   lean: {
-    steps: 11,
+    steps: DEFAULT_LEAN_STEPS,
     params: {
       ParamBodyAngleZ: 10,
       ParamAngleZ: 30,
@@ -146,7 +148,7 @@ const DEFAULTS = {
       ParamMouthForm: 1,
       ParamMouthOpenY: 0.7,
     },
-    face: 0.6,
+    face: DEFAULT_LEAN_FACE,
   },
 };
 /**
@@ -166,6 +168,37 @@ const log = (line) => {
   logEl.textContent += "\n" + line;
 };
 const SUPERSAMPLE = 4; // render this many times bigger than the frame, then scale down
+const MIN_OPACITY = 0.001; // a drawable at or under this opacity counts as hidden
+const ATLAS_MAX = 1024; // px a side: the instrument cluster (KOMBI) restarted on a 1024x1128 RGBA asset (Nov 2026)
+const ATLAS_MIN_W = 64; // the atlas width starts here and doubles until everything fits
+const HUD_BYTES_PER_PX = 8; // what an atlas pixel takes of the HUD's pixel memory
+const DEFAULT_PAD = 2; // px of transparent border round each sprite
+const DEFAULT_HEIGHT_PX = 200; // her height on the HUD
+const HEAD_FRAC = 0.15; // the default headY, this far down the figure
+const WAIST_FRAC = 0.4; // the default waist, this far down the figure
+const MARGIN_X_FRAC = 0.025; // the frame's margin either side (for the swaying tails), of the figure's height
+const MARGIN_Y_FRAC = 0.006; // the frame's margin above and below, of the figure's height
+const DEFAULT_PERSPECTIVE = { widen: 0.14, shorten: 0.1 }; // the fb lean's depth
+const LEAN_EPS = 1e-6; // float slack when comparing lean fractions
+const SHOULDER_BAND = 0.06; // an arm's shoulder: its vertices in this top fraction of its height
+const HEAD_BAND = 0.04; // the head band, this fraction of the frame's height either side of headY
+const SOLID_ALPHA = 128; // a pixel over this alpha is solid (the head's top row)
+const HEAD_TOP_MIN = 3; // solid pixels a row needs to be the head's top
+const ALPHA_EMPTY = 2; // a pixel at or under this alpha is transparent (alphaBox)
+const PIXEL_DIFF_MIN = 6; // RGBA difference summed under this: the pixel did not change
+const SHRINK_SLACK = 1.01; // halve while the half is still at least this much over the target
+const DEFAULT_TAILS_ROOT = 0.15; // where the tails hang from, a fraction down their sprite
+const ZOOM_STEPS_MAX = 3; // close-up zoom steps, also the default
+const TURN_STEPS_MAX = 2; // close-up turn steps each way, also the default
+const DEFAULT_SWAY = { ParamAngleZ: 4 }; // the close-up's sway at a full swing
+const DEFAULT_TURN = { ParamAngleX: 30 }; // the close-up's head turn toward the right of the screen
+const TURN_SEARCH_DEG = 8; // bestTurn tries -8 .. 8 deg
+const TURN_SEARCH_STEP = 0.1; // deg
+const INSPECT_H = 1000; // ?inspect: the figure's height in px
+const GRID_PER_UNIT = 10; // ?inspect: grid lines per model unit
+const GRID_STEP = 1 / GRID_PER_UNIT;
+const GRID_LABEL_TOP = 12; // ?inspect: the x labels' baseline
+const PART_THUMB = 128; // ?inspect: each part's own picture, px square
 
 /**
  * @param {string} url
@@ -325,7 +358,7 @@ class Renderer {
     order.forEach((i) => {
       if (
         !cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i]) ||
-        drawables.opacities[i] <= 0.001
+        drawables.opacities[i] <= MIN_OPACITY
       )
         return;
       if (options.only && !options.only(i)) return;
@@ -512,7 +545,7 @@ function bounds(loaded, only) {
   for (let i = 0; i < drawables.count; i++) {
     if (
       !cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i]) ||
-      drawables.opacities[i] <= 0.001 ||
+      drawables.opacities[i] <= MIN_OPACITY ||
       (only && !only(i))
     )
       continue;
@@ -556,7 +589,7 @@ async function inspect(loaded, cfg) {
   ((loaded.cdi && loaded.cdi.Parts) || []).forEach((part) => {
     names[part.Id] = part.Name;
   });
-  const H = 1000,
+  const H = INSPECT_H,
     W = Math.round((H * (box[2] - box[0])) / (box[3] - box[1]));
   const full = renderer.draw(W, H, box);
   const big = document.createElement("canvas");
@@ -570,9 +603,9 @@ async function inspect(loaded, cfg) {
   bigCtx.fillStyle = "#f66";
   bigCtx.font = "11px monospace";
   for (
-    let modelY = Math.ceil(box[1] * 10) / 10;
+    let modelY = Math.ceil(box[1] * GRID_PER_UNIT) / GRID_PER_UNIT;
     modelY <= box[3];
-    modelY += 0.1
+    modelY += GRID_STEP
   ) {
     const y = H - ((modelY - box[1]) / (box[3] - box[1])) * H;
     bigCtx.beginPath();
@@ -582,16 +615,16 @@ async function inspect(loaded, cfg) {
     bigCtx.fillText(modelY.toFixed(1), 2, y - 2);
   }
   for (
-    let modelX = Math.ceil(box[0] * 10) / 10;
+    let modelX = Math.ceil(box[0] * GRID_PER_UNIT) / GRID_PER_UNIT;
     modelX <= box[2];
-    modelX += 0.1
+    modelX += GRID_STEP
   ) {
     const x = ((modelX - box[0]) / (box[2] - box[0])) * W;
     bigCtx.beginPath();
     bigCtx.moveTo(x, 0);
     bigCtx.lineTo(x, H);
     bigCtx.stroke();
-    bigCtx.fillText(modelX.toFixed(1), x + 2, 12);
+    bigCtx.fillText(modelX.toFixed(1), x + 2, GRID_LABEL_TOP);
   }
   view.appendChild(big);
   // every part with drawables of its own, alone
@@ -605,16 +638,16 @@ async function inspect(loaded, cfg) {
       any =
         only(i) &&
         cubismCore.Utils.hasIsVisibleBit(drawables.dynamicFlags[i]) &&
-        drawables.opacities[i] > 0.001;
+        drawables.opacities[i] > MIN_OPACITY;
     if (!any) continue;
     const cell = document.createElement("div");
     cell.className = "cell";
     const canvas = document.createElement("canvas");
-    canvas.width = 128;
-    canvas.height = 128;
+    canvas.width = PART_THUMB;
+    canvas.height = PART_THUMB;
     const img = renderer.draw(
-      128,
-      128,
+      PART_THUMB,
+      PART_THUMB,
       [box[0], box[1], box[0] + (box[3] - box[1]), box[3]],
       { only },
     );
@@ -638,7 +671,7 @@ async function inspect(loaded, cfg) {
  */
 function shrink(src, w, h) {
   let current = src;
-  while (current.width / 2 >= w * 1.01) {
+  while (current.width / 2 >= w * SHRINK_SLACK) {
     const half = document.createElement("canvas");
     half.width = Math.round(current.width / 2);
     half.height = Math.round(current.height / 2);
@@ -670,7 +703,7 @@ function alphaBox(canvas) {
     y1 = -1;
   for (let y = 0; y < canvas.height; y++)
     for (let x = 0; x < canvas.width; x++)
-      if (pixels[(y * canvas.width + x) * 4 + 3] > 2) {
+      if (pixels[(y * canvas.width + x) * 4 + 3] > ALPHA_EMPTY) {
         x0 = Math.min(x0, x);
         x1 = Math.max(x1, x);
         y0 = Math.min(y0, y);
@@ -744,7 +777,7 @@ async function bakeClose(loaded, cfg, at) {
   const close = cfg.close;
   if (!close || !Array.isArray(close.size) || !Array.isArray(close.window))
     return null;
-  const pad = cfg.pad || 2,
+  const pad = cfg.pad || DEFAULT_PAD,
     [frameW, frameH] = close.size,
     aspect = frameW / frameH,
     ppu = at.ppu,
@@ -835,7 +868,10 @@ async function bakeClose(loaded, cfg, at) {
       frameH,
     );
   };
-  const zoomSteps = Math.max(1, Math.min(3, Math.round(close.zoomSteps || 3)));
+  const zoomSteps = Math.max(
+    1,
+    Math.min(ZOOM_STEPS_MAX, Math.round(close.zoomSteps || ZOOM_STEPS_MAX)),
+  );
   /** @type {HTMLCanvasElement[]} */
   const full_ = [];
   /** @type {number[][]} */
@@ -847,9 +883,12 @@ async function bakeClose(loaded, cfg, at) {
   }
   rects.push(inFrame(box1));
   // the close-up's poses: sway (close.sway at -1, 0, 1) and the turn (close.turn at -1 .. 1 in turnSteps each way)
-  const sway = close.sway || { ParamAngleZ: 4 },
-    turn = close.turn || { ParamAngleX: 30 },
-    turnSteps = Math.max(1, Math.min(2, Math.round(close.turnSteps || 2)));
+  const sway = close.sway || DEFAULT_SWAY,
+    turn = close.turn || DEFAULT_TURN,
+    turnSteps = Math.max(
+      1,
+      Math.min(TURN_STEPS_MAX, Math.round(close.turnSteps || TURN_STEPS_MAX)),
+    );
   /**
    * params scaled by k.
    * @param {Params} params
@@ -891,7 +930,7 @@ async function bakeClose(loaded, cfg, at) {
         let diff = 0;
         for (let c = 0; c < 4; c++)
           diff += Math.abs(pixels[k + c] - base[k + c]);
-        if (diff < 6) continue;
+        if (diff < PIXEL_DIFF_MIN) continue;
         const x = (k / 4) % frameW,
           y = (k / 4 - x) / frameW;
         x0 = Math.min(x0, x);
@@ -954,7 +993,11 @@ async function bakeClose(loaded, cfg, at) {
     const tctx = turned.getContext("2d");
     let best = 0,
       bestErr = Infinity;
-    for (let deg = -8; deg <= 8.001; deg += 0.1) {
+    for (
+      let deg = -TURN_SEARCH_DEG;
+      deg <= TURN_SEARCH_DEG + 0.001;
+      deg += TURN_SEARCH_STEP
+    ) {
       tctx.setTransform(1, 0, 0, 1, 0, 0);
       tctx.clearRect(0, 0, frameW, frameH);
       tctx.translate(pivot[0], pivot[1]);
@@ -1003,7 +1046,7 @@ async function bakeClose(loaded, cfg, at) {
       " px",
   );
   // the grid: whole frames first, then the crops
-  const MAX = 1024,
+  const MAX = ATLAS_MAX,
     cell = [frameW + 2 * pad, frameH + 2 * pad],
     cols = Math.floor(MAX / cell[0]),
     wholes = full_.concat(posed.map((frames) => frames[0])),
@@ -1072,7 +1115,7 @@ async function bakeClose(loaded, cfg, at) {
  * @param {BakeConfig} cfg
  */
 async function bake(loaded, cfg) {
-  const pad = cfg.pad || 2;
+  const pad = cfg.pad || DEFAULT_PAD;
   /** @type {DrawablePick} */
   const hidden =
     cfg.hide && cfg.hide.length ? inParts(loaded, cfg.hide) : () => false;
@@ -1098,15 +1141,15 @@ async function bake(loaded, cfg) {
   // so a model in any units bakes without them
   const figH = box[3] - box[1];
   const centreX = (box[0] + box[2]) / 2;
-  const ppu = cfg.pxPerUnit || (cfg.heightPx || 200) / figH;
-  const headY = isFinite(cfg.headY) ? cfg.headY : box[3] - 0.15 * figH;
-  const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - 0.4 * figH;
-  const margin = 0.025 * figH;
+  const ppu = cfg.pxPerUnit || (cfg.heightPx || DEFAULT_HEIGHT_PX) / figH;
+  const headY = isFinite(cfg.headY) ? cfg.headY : box[3] - HEAD_FRAC * figH;
+  const waist = isFinite(cfg.waist) ? cfg.waist : box[3] - WAIST_FRAC * figH;
+  const margin = MARGIN_X_FRAC * figH;
   box = [
     box[0] - margin,
-    box[1] - 0.006 * figH,
+    box[1] - MARGIN_Y_FRAC * figH,
     box[2] + margin,
-    box[3] + 0.006 * figH,
+    box[3] + MARGIN_Y_FRAC * figH,
   ];
   const frameW = Math.ceil((box[2] - box[0]) * ppu),
     frameH = Math.ceil((box[3] - box[1]) * ppu);
@@ -1133,7 +1176,7 @@ async function bake(loaded, cfg) {
   // Baked into the frames, so the HUD's shader does nothing more. persp(a, x, y) moves a frame px point the same way
   const fbLean = cfg.lean && cfg.lean.axis === "fb";
   const perspective = fbLean
-    ? Object.assign({ widen: 0.14, shorten: 0.1 }, cfg.lean.perspective || {})
+    ? Object.assign({}, DEFAULT_PERSPECTIVE, cfg.lean.perspective || {})
     : null;
   const waistPx = toFrame(0, waist)[1],
     cxPx = toFrame(centreX, 0)[0];
@@ -1215,14 +1258,14 @@ async function bake(loaded, cfg) {
     frames[name] = render(body);
   }
   // the lean angles, left to right; the middle one is upright (idle itself, not baked again)
-  const leanSteps = (cfg.lean && cfg.lean.steps) || 11,
+  const leanSteps = (cfg.lean && cfg.lean.steps) || DEFAULT_LEAN_STEPS,
     leanParams = (cfg.lean && cfg.lean.params) || {},
-    faceAt = (cfg.lean && cfg.lean.face) || 0.6;
+    faceAt = (cfg.lean && cfg.lean.face) || DEFAULT_LEAN_FACE;
   /** @type {string[]} */
   const leanNames = [];
   for (let k = 0; k < leanSteps; k++) {
     const lean = -1 + (2 * k) / (leanSteps - 1);
-    if (Math.abs(lean) < 1e-6) {
+    if (Math.abs(lean) < LEAN_EPS) {
       leanNames.push("idle");
       continue;
     }
@@ -1231,9 +1274,9 @@ async function bake(loaded, cfg) {
     Object.keys(leanParams).forEach((id) => {
       poseParams[id] = leanParams[id] * lean;
     });
-    if (lean <= -faceAt + 1e-6)
+    if (lean <= -faceAt + LEAN_EPS)
       Object.assign(poseParams, (cfg.lean && cfg.lean.left) || {});
-    if (lean >= faceAt - 1e-6)
+    if (lean >= faceAt - LEAN_EPS)
       Object.assign(poseParams, (cfg.lean && cfg.lean.right) || {});
     setParams(loaded, Object.assign({}, cfg.params, idle, poseParams));
     loaded.model.update();
@@ -1277,7 +1320,7 @@ async function bake(loaded, cfg) {
       }
     });
     if (!count) return null;
-    const band = top - (top - bot) * 0.06;
+    const band = top - (top - bot) * SHOULDER_BAND;
     let bandSumX = 0,
       bandCount = 0;
     each((positions) => {
@@ -1359,7 +1402,7 @@ async function bake(loaded, cfg) {
             Math.abs(pixels[k + 1] - base[k + 1]) +
             Math.abs(pixels[k + 2] - base[k + 2]) +
             Math.abs(pixels[k + 3] - base[k + 3]) <
-          6
+          PIXEL_DIFF_MIN
         )
           continue;
         const pixel = k / 4,
@@ -1390,8 +1433,7 @@ async function bake(loaded, cfg) {
       );
     }
   }
-  // pack everything into the atlas, at most 1024 px a side: the instrument cluster (KOMBI) restarted on a
-  // 1024x1128 RGBA asset (Nov 2026)
+  // pack everything into the atlas, at most ATLAS_MAX px a side
   /** @type {AtlasItem[]} */
   const items = names.map((name) => ({
     n: name,
@@ -1404,7 +1446,7 @@ async function bake(loaded, cfg) {
     items.push({ n: "arm" + arm.j, cv: arm.cv, bb: arm.bb }),
   );
   // a skyline: tallest first, each where its top lands lowest (then leftmost)
-  const MAX = 1024,
+  const MAX = ATLAS_MAX,
     sky = new Array(MAX).fill(0);
   items
     .slice()
@@ -1429,7 +1471,7 @@ async function bake(loaded, cfg) {
       for (let k = bestX; k < bestX + w; k++) sky[k] = bestY + h;
       item.at = [bestX + pad, bestY + pad];
     });
-  let atlasW = 64;
+  let atlasW = ATLAS_MIN_W;
   while (
     atlasW <
     Math.max.apply(
@@ -1477,8 +1519,8 @@ async function bake(loaded, cfg) {
   // where her head is in each lean frame (the alpha centroid of a band across the head), so the HUD can slide the
   // two nearest lean angles onto each other while it blends them instead of fading one through the other
   const headMid = Math.round(toFrame(0, headY)[1]);
-  const bandY0 = Math.max(0, headMid - Math.round(frameH * 0.04)),
-    bandY1 = Math.min(frameH, headMid + Math.round(frameH * 0.04));
+  const bandY0 = Math.max(0, headMid - Math.round(frameH * HEAD_BAND)),
+    bandY1 = Math.min(frameH, headMid + Math.round(frameH * HEAD_BAND));
   /**
    * The x of her head in a frame: the alpha centroid of the band at headY.
    * @param {HTMLCanvasElement} canvas
@@ -1516,8 +1558,8 @@ async function bake(loaded, cfg) {
     for (let y = 0; y < frameH; y++) {
       let solid = 0;
       for (let x = 0; x < frameW; x++)
-        if (pixels[(y * frameW + x) * 4 + 3] > 128) solid++;
-      if (solid >= 3) return y;
+        if (pixels[(y * frameW + x) * 4 + 3] > SOLID_ALPHA) solid++;
+      if (solid >= HEAD_TOP_MIN) return y;
     }
     return 0;
   };
@@ -1528,7 +1570,7 @@ async function bake(loaded, cfg) {
   if (fbLean) log("head drop per lean angle (px): " + shiftY.join(", "));
   const anchorModel = cfg.anchor || [
       (box[0] + box[2]) / 2,
-      box[1] + 0.006 * figH,
+      box[1] + MARGIN_Y_FRAC * figH,
     ],
     anchorOffset = cfg.anchorPx || [0, 0],
     anchor = toFrame(anchorModel[0], anchorModel[1]);
@@ -1555,7 +1597,7 @@ async function bake(loaded, cfg) {
   if (crop) info.crop = crop;
   if (tailsSprite) {
     const tailsItem = byN.tails,
-      root = cfg.tailsRoot || 0.15;
+      root = cfg.tailsRoot || DEFAULT_TAILS_ROOT;
     info.tails = {
       rect: [
         tailsItem.at[0],
@@ -1649,7 +1691,7 @@ async function bake(loaded, cfg) {
       " (" +
       ((atlasW * atlasH * 4) / 1048576).toFixed(2) +
       " MiB, " +
-      ((atlasW * atlasH * 8) / 1048576).toFixed(2) +
+      ((atlasW * atlasH * HUD_BYTES_PER_PX) / 1048576).toFixed(2) +
       " MiB of the HUD pixel memory), " +
       items.length +
       " sprites",

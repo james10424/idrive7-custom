@@ -6,6 +6,9 @@
 const { GUIDANCE_STATE, enumNum } = require("./consts");
 const { isNum } = require("../engine/util");
 
+const TRAVEL_TIME_NONE = 0xffffffff; // Guidance travelTime: not known
+const ROUTE_LOG_MS = 10000; // route messages: logged at most this often per kind
+
 /** @typedef {import("./consts").Route} Route */
 
 /**
@@ -40,7 +43,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       timeLeft:
         isNum(msg.travelTime) &&
         msg.travelTime >= 0 &&
-        msg.travelTime < 0xffffffff
+        msg.travelTime < TRAVEL_TIME_NONE
           ? msg.travelTime
           : null,
       at: Date.now(),
@@ -84,7 +87,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.routeLogAt = this.routeLogAt || {};
     if (
       line === this.routeLogged[kind] ||
-      now - (this.routeLogAt[kind] || 0) < 10000
+      now - (this.routeLogAt[kind] || 0) < ROUTE_LOG_MS
     )
       return;
     this.routeLogged[kind] = line;

@@ -29,6 +29,8 @@ const READS_CRASH = 38;
 // Tokens: over GOOD (Sport, the biggest that runs) is untested, at CRASH or over (M) is what crashed the display.
 const TOKENS_GOOD = 7835;
 const TOKENS_CRASH = 8724;
+// The command line's shader name column width.
+const NAME_COL = 16;
 
 /**
  * @typedef {object} ShaderCost
@@ -281,7 +283,7 @@ if (require.main === module) {
         : result.level === "warn"
           ? "! "
           : "  ") +
-        name.padEnd(16) +
+        name.padEnd(NAME_COL) +
         result.text +
         (broken ? ", does not compile" : ""),
     );

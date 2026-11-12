@@ -10,6 +10,7 @@ const path = require("path");
  * log(level, text) reports waiting and take-overs. Returns the release function, or null when it gave up. */
 const BUILD_LOCK_WAIT_MS = 120000;
 const BUILD_LOCK_STALE_MS = 300000;
+const BUILD_LOCK_POLL_MS = 200; // the nap between looks at a held lock
 /**
  * @param {string} distDir
  * @param {string} id the app id
@@ -80,7 +81,7 @@ function takeBuildLock(distDir, id, log) {
       log("info", "build " + id + ": another bench is building it, waiting");
       waited = true;
     }
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200); // a blocking 200 ms nap: the build is synchronous anyway
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, BUILD_LOCK_POLL_MS); // a blocking nap: the build is synchronous anyway
   }
 }
 

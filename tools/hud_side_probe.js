@@ -15,9 +15,19 @@ const {
   ClusterRender,
 } = require("/var/opt/cluster-render/current/cluster_render_client.js");
 
-const W = Number(process.env.SIDE_W) || 800,
-  H = Number(process.env.SIDE_H) || 480;
-const secs = Number(process.argv[2]) || 60;
+const DEFAULT_W = 800, // the HUD scene's size, unless SIDE_W / SIDE_H say otherwise
+  DEFAULT_H = 480,
+  DEFAULT_SECS = 60;
+const FRAME = 4, // px: the white frame's width
+  INSET = 8, // px: the corner squares from the edges
+  SQUARE_DIV = 6, // a corner square's side is the shorter side over this
+  BAR_X = 0.2, // the middle bar starts this fraction across
+  BAR_W = 0.6, // and spans this fraction of the width
+  BAR_H = 12; // px
+
+const W = Number(process.env.SIDE_W) || DEFAULT_W,
+  H = Number(process.env.SIDE_H) || DEFAULT_H;
+const secs = Number(process.argv[2]) || DEFAULT_SECS;
 
 /**
  * The test picture, W x H RGBA.
@@ -43,20 +53,20 @@ function picture() {
       }
   };
   const white = [240, 240, 240];
-  fill(0, 0, W, 4, white);
-  fill(0, H - 4, W, 4, white);
-  fill(0, 0, 4, H, white);
-  fill(W - 4, 0, 4, H, white);
-  const size = Math.round(Math.min(W, H) / 6);
-  fill(8, 8, size, size, [255, 40, 40]);
-  fill(W - 8 - size, 8, size, size, [40, 220, 80]);
-  fill(8, H - 8 - size, size, size, [60, 110, 255]);
-  fill(W - 8 - size, H - 8 - size, size, size, [255, 210, 30]);
+  fill(0, 0, W, FRAME, white);
+  fill(0, H - FRAME, W, FRAME, white);
+  fill(0, 0, FRAME, H, white);
+  fill(W - FRAME, 0, FRAME, H, white);
+  const size = Math.round(Math.min(W, H) / SQUARE_DIV);
+  fill(INSET, INSET, size, size, [255, 40, 40]);
+  fill(W - INSET - size, INSET, size, size, [40, 220, 80]);
+  fill(INSET, H - INSET - size, size, size, [60, 110, 255]);
+  fill(W - INSET - size, H - INSET - size, size, size, [255, 210, 30]);
   fill(
-    Math.round(W * 0.2),
-    Math.round(H / 2) - 6,
-    Math.round(W * 0.6),
-    12,
+    Math.round(W * BAR_X),
+    Math.round(H / 2) - BAR_H / 2,
+    Math.round(W * BAR_W),
+    BAR_H,
     white,
   );
   return pixels;

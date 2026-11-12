@@ -6,6 +6,8 @@ const { color } = require("../../hud_themes");
 const { isNum, rgba, TEXT_MS } = require("../../engine/util");
 const ATEXT = require("./shader");
 
+const MAX_CELLS = 32; // the shader's glyph cells (u_text, eight vec4)
+
 /** @typedef {import("../../engine/app").Widget} Widget */
 /**
  * This type's own state on its WidgetState.
@@ -22,7 +24,7 @@ const DOCS = `effect layer (atext/shader.js): text drawn by the GPU from a glyph
  * The glyph codes of a text in an atlas widget's cells, aligned; -1 is an empty cell.
  * @param {WidgetState & AtextState} state
  * @param {unknown} value
- * @returns {number[]} 32 codes
+ * @returns {number[]} MAX_CELLS codes
  */
 function atlasCodes(state, value) {
   const atlas = state.atlas,
@@ -37,7 +39,7 @@ function atlasCodes(state, value) {
         ? Math.floor(pad / 2)
         : 0;
   const codes = [];
-  for (let i = 0; i < 32; i++) {
+  for (let i = 0; i < MAX_CELLS; i++) {
     const j = i - lead;
     const char = j >= 0 && j < text.length ? text[j] : null;
     const k = char === null ? -1 : atlas.chars.indexOf(char);
@@ -75,7 +77,7 @@ module.exports = {
     state.cells = Math.max(
       1,
       Math.min(
-        32,
+        MAX_CELLS,
         isNum(widget.cells)
           ? Math.floor(widget.cells)
           : Math.floor(widget.w / atlas.cellW),

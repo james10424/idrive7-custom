@@ -2,7 +2,7 @@
 /**
  * The "swatchimg" widget: an image layer (pixels).
  */
-const { swatchImage } = require("./calibration");
+const { swatchImage, SWATCH_STEPS } = require("./calibration");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
@@ -21,7 +21,7 @@ module.exports = {
    * @param {WidgetState} state
    */
   create(hud, widget, state) {
-    hud._blit(state, null, swatchImage(widget.w, widget.h, widget.steps || 11));
+    hud._blit(state, null, swatchImage(widget.w, widget.h, widget.steps || SWATCH_STEPS));
   },
   /**
    * @param {HudApp} hud

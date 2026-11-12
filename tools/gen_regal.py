@@ -4,7 +4,7 @@
 Edit the numbers here and run it: python3 tools/gen_regal.py"""
 import json, math, os
 
-W = 1920
+W, H = 1920, 720                   # the cluster's size
 PIVOT = (912, 502)                 # the speed needle's pivot, hidden under the speed window: where the needle lines of two
                                    # photos cross (the museum car's at rest, a replica's at ~38 mph), 0.84 of the number
                                    # row's half width below it, so the needle comes up from the window's bottom edge
@@ -22,14 +22,23 @@ FUEL_LINE = 468                    # where the fuel marks split (a horizontal li
 POD = (300, 292, 112, 146)         # left pod needle pivot, tick radii (right pod mirrored)
 LED = (1104, 466, 312, 22)
 LED2 = (2 * 933 - 1104 - 312, 466, 312, 22)   # the boost bar, the rev bar mirrored about the lower window's middle
+POD_L = (90, 110, 180, 553)       # the left pod's box ('podL'; the right pod mirrored)
+POD_CX = 180                      # the left pod's middle (its x + w / 2): lamps, gear number, clock (right: W - POD_CX)
 POD_WIN_X, POD_WIN_W = 104, 152   # the left pod's inner box ('podWin')
 GEAR_P = POD_WIN_W / 5            # the gear row P R N D S spread around the pod's inner box (justify-around: a fifth each,
 GEAR_X0 = POD_WIN_X + GEAR_P / 2  # each letter in the middle of its fifth), under the gear number
 GEAR_Y = 606
-GEAR_NEEDLE = (GEAR_Y - 12, 110 + 553 - 8, 150)  # the gear needle behind the row: its tip's y pointing straight up (the top of the
+GEAR_TIP_UP = 12                  # the gear needle's tip this far above the row (the letters' top)
+POD_RIM = 8                       # the pod frame's inner rim, this far above the pod's bottom
+GEAR_FAR = 150                    # the gear needle's far pivot, this far below the row
+GEAR_NEEDLE = (GEAR_Y - GEAR_TIP_UP, POD_L[1] + POD_L[3] - POD_RIM, GEAR_FAR)  # the gear needle behind the row: its tip's y pointing straight up (the top of the
                                         # letters; one length, so a little lower toward P and S), its bottom's y (on the pod frame's inner rim), its far pivot
                                         # this far below the row (the letters at about +-22 deg), as the 1950s Buicks' P R N D G
 ODO_Y = 347                     # the rolling odometer under the scale's middle, below MPH, where the gear row was
+LBL_H = 21                      # an r_lbl label's height
+RPM_MAX, LED_N = 7000, 28       # the rev bar's end and its segments
+PSI_PER_BAR, BOOST_MAX_PSI = 14.5038, 20   # the boost bar's US scale ends at 20 psi
+BAT_ICON = (132, 328)           # the battery icon in the left pod (the oil can mirrored)
 
 
 def ray_x(deg, y=None):
@@ -54,8 +63,8 @@ def centred(id, cx, cy, w, h, t, font, color='fg', **kw):
 
 
 wd = [{
-    'id': 'regal', 'type': 'rdash', 'class': 'ambient', 'z': -10, 'x': 0, 'y': 0, 'w': W, 'h': 720,
-    'podL': [90, 110, 180, 553], 'podWin': [104, 124, 152, 336],
+    'id': 'regal', 'type': 'rdash', 'class': 'ambient', 'z': -10, 'x': 0, 'y': 0, 'w': W, 'h': H,
+    'podL': list(POD_L), 'podWin': [POD_WIN_X, 124, POD_WIN_W, 336],
     'ctr': [397, 110, 1072, 429], 'win1': [413, 122, 1040, 270], 'win2': [413, 400, 1040, 128],
     'vfdL': [0, 0, 0, 0], 'vfdR': [0, 0, 0, 0],   # no VFD boxes: the speed sits over the scale, the clock and range in the pods
     'spd': [PIVOT[0], PIVOT[1], NUM_Y, TICK_Y], 'spdVirt': list(VIRT), 'spdMax': SPD_MAX, 'spdMin': SPD_MIN, 'spdMid': SPD_MID, 'spdAmber': SPD_AMBER, 'spdStep': 5, 'spdRest': 12, 'fuelG': list(FUEL), 'podG': list(POD),
@@ -63,22 +72,23 @@ wd = [{
     # coloured zones: the battery red under 11.5 V and over 15.5 V, green 12.5-15 V (running, BMW's smart charging
     # included); the oil blue while cold (under 60 C, as the cold redline), red over 130 C
     'podZones': [{'low': 11.5, 'ok': [12.5, 15], 'high': 15.5}, {'low': 60, 'high': 130}],
-    'fuelLine': FUEL_LINE, 'fuelRowH': 21, 'coldRedline': [4500, 60, 80], 'led': list(LED), 'ledN': 28, 'rpmMax': 7000,
-    'led2': list(LED2), 'led2N': 15, 'led2Signal': 'boost', 'led2Range': [0, 1.5], 'led2RangeUs': [0, round(20 / 14.5038, 4)],
+    'fuelLine': FUEL_LINE, 'fuelRowH': 21, 'coldRedline': [4500, 60, 80], 'led': list(LED), 'ledN': LED_N, 'rpmMax': RPM_MAX,
+    'led2': list(LED2), 'led2N': 15, 'led2Signal': 'boost', 'led2Range': [0, 1.5], 'led2RangeUs': [0, round(BOOST_MAX_PSI / PSI_PER_BAR, 4)],
     'gearRow': [GEAR_X0, GEAR_P, GEAR_Y],
     'gearNeedle': [POD_WIN_X + POD_WIN_W / 2, GEAR_Y + GEAR_NEEDLE[2], GEAR_NEEDLE[0], GEAR_NEEDLE[1]],
-    'lampB': [120, 478, 120, 36], 'arrow': [0, 0, 0], 'batIcon': [132, 328],   # arrow size 0: no turn arrows
+    'lampB': [120, 478, 120, 36], 'arrow': [0, 0, 0], 'batIcon': list(BAT_ICON),   # arrow size 0: no turn arrows
 }]
 
 # speed numbers (mph) on their marks: 5, 15 ... 85, the 55 in amber; no km/h row (as the Turbo 3.8's)
 for mph in range(5, SPD_MAX + 1, 10):
     wd.append(centred('mph%d' % mph, ray_x(mph_deg(mph), NUM_Y), NUM_Y, 44, 39, str(mph), 'r_num', 'amber' if mph == SPD_AMBER else 'fg'))
-wd.append(centred('mph_unit', PIVOT[0], 318, 46, 21, 'MPH', 'r_lbl'))
+wd.append(centred('mph_unit', PIVOT[0], 318, 46, LBL_H, 'MPH', 'r_lbl'))
 
 # the speed in the units setting's unit, big in the VFD orange over the scale's middle, its unit beside; the
 # needle's tip stops at y 212, under it
+SPD_UNIT_DX = 66                   # the speed's unit starts this far right of the digits' middle
 wd.append(centred('spd_val', PIVOT[0], 174, 124, 48, '{{speed}}', 'r_seg', 'vfd'))       # the digits centred on the panel
-wd.append(text('spd_unit', PIVOT[0] + 66, 176, 62, 21, '{{u:speed}}', 'r_lbl', 'vfd', 'left'))
+wd.append(text('spd_unit', PIVOT[0] + SPD_UNIT_DX, 176, 62, LBL_H, '{{u:speed}}', 'r_lbl', 'vfd', 'left'))
 # the gear row in the left pod under the gear number: P R N D S in see-through white, the red needle behind it (the
 # shader's) pointing at the selected one (M at S, the stick on the side) and showing through the letter
 for i, g in enumerate('PRNDS'):
@@ -87,71 +97,90 @@ for i, g in enumerate('PRNDS'):
 # beside), white digits (r_gl) in the units setting's unit, spread along the speed window (justify-around: each at a
 # quarter of its width from its end); the speed needle (its own layer, regal_needle below) sweeps over them
 WIN1 = (413, 1040)                       # the speed window's x and width (wd[0]['win1'], before the shifts)
-ODO_W, ODO_H = 6 * 20 + 2, 30
-RNG_W, RNG_UW = 3 * 20 + 2, 30           # the range drums and their unit
+DRUM_W, DRUM_PAD = 20, 2                # a drum's width; the frame, a px each side
+ODO_DRUMS, RNG_DRUMS = 6, 3
+ODO_W, ODO_H = ODO_DRUMS * DRUM_W + DRUM_PAD, 30
+RNG_W, RNG_UW = RNG_DRUMS * DRUM_W + DRUM_PAD, 30   # the range drums and their unit
+RNG_UNIT_GAP = 6                         # between the range drums and their unit
 odo_cx, rng_cx = WIN1[0] + WIN1[1] / 4, WIN1[0] + 3 * WIN1[1] / 4
 wd.append({'id': 'odo', 'type': 'odo', 'class': 'content', 'z': 2, 'x': round(odo_cx - ODO_W / 2), 'y': ODO_Y - ODO_H // 2,
-           'w': ODO_W, 'h': ODO_H, 'drums': 6, 'font': 'r_gl', 'color': 'fg', 'gap': 2, 'frame': 1})
-rng_x = round(rng_cx - (RNG_W + 6 + RNG_UW) / 2)  # the drums and the unit centred together
+           'w': ODO_W, 'h': ODO_H, 'drums': ODO_DRUMS, 'font': 'r_gl', 'color': 'fg', 'gap': 2, 'frame': 1})
+rng_x = round(rng_cx - (RNG_W + RNG_UNIT_GAP + RNG_UW) / 2)  # the drums and the unit centred together
 wd.append({'id': 'range_drums', 'type': 'odo', 'source': 'range', 'class': 'content', 'z': 2, 'x': rng_x,
-           'y': ODO_Y - ODO_H // 2, 'w': RNG_W, 'h': ODO_H, 'drums': 3, 'font': 'r_gl', 'color': 'fg', 'gap': 2,
+           'y': ODO_Y - ODO_H // 2, 'w': RNG_W, 'h': ODO_H, 'drums': RNG_DRUMS, 'font': 'r_gl', 'color': 'fg', 'gap': 2,
            'frame': 1})
-wd.append(text('range_unit', rng_x + RNG_W + 6, ODO_Y - 10, RNG_UW, 21, '{{u:distUc}}', 'r_lbl', 'fg', 'left'))
+wd.append(text('range_unit', rng_x + RNG_W + RNG_UNIT_GAP, ODO_Y - LBL_H // 2, RNG_UW, LBL_H, '{{u:distUc}}', 'r_lbl', 'fg', 'left'))
 
 # lower window: fuel and the LED revs. The fuel gauge as the Grand National's: UNLEADED FUEL ONLY over it, E, the pump and
 # F standing on the line its marks split at, where the end and middle marks' upper parts would be, PREMIUM FUEL under it
 GAP = 4                                           # half the marks' gap at the line (the shader's)
+EF_H, EF_INK_UP = 23, 2                           # r_ef's cell height; its ink this far above the cell's bottom
 for lbl, side in (('E', -1), ('F', 1)):
     x = FUEL[0] + side * FUEL[2]                  # where that end mark crosses the line
     # r_ef: 21 px letters, their ink 2 px above the cell's bottom: the ink's bottom on the marks' cut edge
-    wd.append(centred('fuel_' + lbl, x, FUEL_LINE - GAP + 2 - 11.5, 16, 23, lbl, 'r_ef'))
+    wd.append(centred('fuel_' + lbl, x, FUEL_LINE - GAP + EF_INK_UP - EF_H / 2, 16, EF_H, lbl, 'r_ef'))
 # the pump as tall as the letters: its ink is 72% of the box from 22% down (icons.js), so 21 px of ink is a 29 px box,
 # its bottom (94% down) on the marks' cut edge with the letters'
 ICON_H = 29
-wd.append({'id': 'fuel_icon', 'type': 'icon', 'icon': 'fuel', 'z': 5, 'x': round(FUEL[0] - ICON_H * 26 / 30 / 2),
-           'y': round(FUEL_LINE - GAP - 0.94 * ICON_H), 'w': round(ICON_H * 26 / 30), 'h': ICON_H, 'color': 'fg'})
+ICON_AW, ICON_AH = 26, 30                         # the pump icon's aspect, w : h
+ICON_INK_BOTTOM = 0.94                            # the icon's ink bottom, as a fraction of its box down
+wd.append({'id': 'fuel_icon', 'type': 'icon', 'icon': 'fuel', 'z': 5, 'x': round(FUEL[0] - ICON_H * ICON_AW / ICON_AH / 2),
+           'y': round(FUEL_LINE - GAP - ICON_INK_BOTTOM * ICON_H), 'w': round(ICON_H * ICON_AW / ICON_AH), 'h': ICON_H, 'color': 'fg'})
 wd.append(centred('fuel_top', FUEL[0], 414, 200, 17, 'UNLEADED FUEL ONLY', 'r_tiny'))
 wd.append(centred('fuel_bottom', FUEL[0], 516, 130, 17, 'PREMIUM FUEL', 'r_tiny'))
+LED_LABEL_Y, LED_TICK_Y = 418, 446               # the bars' titles and their scale numbers
+LBL_CHAR_W = 12                                   # an r_lbl character's width
 # left of the bar's middle: clear of the red mark, which starts as low as 4500 rpm (64% along) on a cold engine
-wd.append(centred('rpm_label', LED[0] + LED[2] * 0.4, 418, 104, 21, 'RPM X 100', 'r_lbl'))
-wd.append(centred('boost_label', LED2[0] + LED2[2] / 2, 418, 200, 21, 'TURBO BOOST - {{u:boost}}', 'r_lbl'))
+RPM_LABEL_F = 0.4
+wd.append(centred('rpm_label', LED[0] + LED[2] * RPM_LABEL_F, LED_LABEL_Y, 104, LBL_H, 'RPM X 100', 'r_lbl'))
+wd.append(centred('boost_label', LED2[0] + LED2[2] / 2, LED_LABEL_Y, 200, LBL_H, 'TURBO BOOST - {{u:boost}}', 'r_lbl'))
 # its scale: 0 .. 1.5 bar in thirds, or with US units 0 .. 20 psi in quarters (the Grand National's 0 5 10 15); the ends are
-# shared, the slots between belong to one unit and are empty in the other
+# shared, the slots between belong to one unit and are empty in the other; the end numbers BOOST_END_IN px inside
+BOOST_END_IN = 8
 for tok, f, w in (('0', 0, 12), ('m1', 1 / 3, 30), ('m2', 2 / 3, 28), ('u1', 1 / 4, 12), ('u2', 2 / 4, 24),
                   ('u3', 3 / 4, 24), ('end', 1, 30)):
-    wd.append(centred('boost_' + tok, LED2[0] + LED2[2] * f + (8 if f == 0 else -8 if f == 1 else 0), 446, w, 21,
+    wd.append(centred('boost_' + tok, LED2[0] + LED2[2] * f + (BOOST_END_IN if f == 0 else -BOOST_END_IN if f == 1 else 0),
+                      LED_TICK_Y, w, LBL_H,
                       '{{boostTick:%s}}' % tok, 'r_lbl'))
-for k in range(0, 8):   # 0 .. 70, each over its orange segment (every fourth of 28)
+RPM_K = RPM_MAX // 1000
+for k in range(0, RPM_K + 1):   # 0 .. 70, each over its orange segment (every fourth of 28), half a segment in
     t = str(k * 10)
-    wd.append(centred('rpm%d' % k, LED[0] + LED[2] * k / 7 + LED[2] / 56, 446, 12 * len(t), 21, t, 'r_lbl'))
+    wd.append(centred('rpm%d' % k, LED[0] + LED[2] * k / RPM_K + LED[2] / (2 * LED_N), LED_TICK_Y, LBL_CHAR_W * len(t),
+                      LBL_H, t, 'r_lbl'))
 
 # the pods' scales: battery (V) left, oil temperature right; labels at the ends and the middle of 5 marks over +-50 deg
+POD_SWEEP = 100                  # deg, the pod scale's whole sweep
+POD_LABEL_R = 168                # the labels' radius from the pod's needle pivot
+GL_CHAR_W = 16                   # an r_gl character's width
 def pod_label(side, f, t, w):
-    a = math.radians((f - 0.5) * 100)
-    x = POD[0] - 168 * math.cos(a)
-    y = POD[1] - 168 * math.sin(a)
+    a = math.radians((f - 0.5) * POD_SWEEP)
+    x = POD[0] - POD_LABEL_R * math.cos(a)
+    y = POD[1] - POD_LABEL_R * math.sin(a)
     if side == 'R':
         x = W - x
     return centred('pod%s%d' % (side, int(f * 2)), x, y, w, 28, t, 'r_gl')
 for f, t in ((1, '16'), (0.5, '12'), (0, '8')):
-    wd.append(pod_label('L', f, t, 16 * len(t)))
+    wd.append(pod_label('L', f, t, GL_CHAR_W * len(t)))
 for f, c in ((1, 150), (0.5, 110), (0, 50)):     # oil: 110 C (the B58's running temperature) in the middle
     wd.append(pod_label('R', f, '{{temp:%d}}' % c, 48))
-wd.append({'id': 'oilcan', 'type': 'icon', 'icon': 'oilcan', 'z': 5, 'x': W - 132 - 20, 'y': 314, 'w': 40, 'h': 26, 'color': 'fg'})
+OILCAN_W = 40
+wd.append({'id': 'oilcan', 'type': 'icon', 'icon': 'oilcan', 'z': 5, 'x': W - BAT_ICON[0] - OILCAN_W // 2, 'y': 314,
+           'w': OILCAN_W, 'h': 26, 'color': 'fg'})
 
 # lamps: their text shows only while lit
-wd.append(centred('lamp_brake', 180, 496, 112, 17, '{{lampBrake}}', 'r_tiny', 'lampText'))
+wd.append(centred('lamp_brake', POD_CX, 496, 112, 17, '{{lampBrake}}', 'r_tiny', 'lampText'))
 # the gear number where the left turn signal was (the range is on the drum row): GEAR over it in VFD digits, while driving
-wd.append(centred('pod_glabel', 180, 530, 80, 17, 'GEAR', 'r_tiny', 'vfd'))
-wd.append(centred('pod_gear', 180, 563, 40, 36, '{{gearInD}}', 'r_seg_m', 'vfd'))
+wd.append(centred('pod_glabel', POD_CX, 530, 80, 17, 'GEAR', 'r_tiny', 'vfd'))
+wd.append(centred('pod_gear', POD_CX, 563, 40, 36, '{{gearInD}}', 'r_seg_m', 'vfd'))
 # under the right turn lamp, in the VFD's seven segments: the outside temperature
-wd.append(centred('pod_tlabel', W - 180, 600, 80, 17, 'OUTSIDE', 'r_tiny', 'vfd'))
-# centred under OUTSIDE for two digits (38 px) + 3 px + the unit (21 px)
-wd.append(text('pod_temp', W - 180 + 7 - 62, 612, 62, 25, '{{ambientN}}', 'r_seg_s', 'vfd', 'right'))
-wd.append(text('pod_tunit', W - 180 + 10, 618, 34, 21, '{{u:temp}}', 'r_lbl', 'vfd', 'left'))
+wd.append(centred('pod_tlabel', W - POD_CX, 600, 80, 17, 'OUTSIDE', 'r_tiny', 'vfd'))
+# centred under OUTSIDE for two digits (38 px) + 3 px + the unit (21 px): the digits end TEMP_R right of the middle
+TEMP_R, TEMP_GAP, TEMP_W = 7, 3, 62
+wd.append(text('pod_temp', W - POD_CX + TEMP_R - TEMP_W, 612, TEMP_W, 25, '{{ambientN}}', 'r_seg_s', 'vfd', 'right'))
+wd.append(text('pod_tunit', W - POD_CX + TEMP_R + TEMP_GAP, 618, 34, LBL_H, '{{u:temp}}', 'r_lbl', 'vfd', 'left'))
 # the clock where the right turn signal was, level with the range
-wd.append(centred('pod_clock', W - 180, 563, 132, 36, '{{time}}', 'r_seg_m', 'vfd'))
-wd.append(centred('lamp_cruise', W - 180, 496, 112, 17, '{{lampCruise}}', 'r_tiny', 'lampTextG'))
+wd.append(centred('pod_clock', W - POD_CX, 563, 132, 36, '{{time}}', 'r_seg_m', 'vfd'))
+wd.append(centred('lamp_cruise', W - POD_CX, 496, 112, 17, '{{lampCruise}}', 'r_tiny', 'lampTextG'))
 
 # the dash sits DY px lower than drawn above: the pods' outer top corners clear the hood (x 90 / 1830 hidden above
 # y ~150) and the centre panel's top lines up with the pods', clear of the dash camera (x ~760..1200, down to y ~132;
