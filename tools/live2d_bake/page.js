@@ -12,6 +12,8 @@
  *               angles from a full lean left (the car braking) to a full lean right (pulling away); each angle's params
  *               are "params" times -1 .. 1. From "face" on, the left ones add "left" (the braking face) and the right
  *               ones "right" (the happy face). Neighbouring angles are close enough to blend without a double image.
+ *               "poses" instead of "params": each angle's own params, left to right without the upright middle
+ *               (steps - 1 of them), for a lean that isn't the same both ways, such as one posed from a VTube Studio clip.
  *               axis "fb" bakes the forward/back lean instead (a bake of its own, for the HUD's "Miku lean" setting,
  *               deployed with --miku-fb): "params" then tip her back, away from you, at a full lean right (pulling
  *               away, pressed into the seat) and toward you at a full lean left (braking), e.g. ParamBodyAngleY and
@@ -27,7 +29,9 @@
  *               close-up, its width from "size". On the way in the camera zooms evenly from the window to the
  *               close-up while "expressions" and "params" blend from the model's defaults to fully on, baked at
  *               "zoomSteps" points between. Zoomed in she sways ("sway" times -1 and 1) and turns her head toward the
- *               indicator ("turn": her looking toward the right of the screen, times -1 .. 1 over "turnSteps" each way), every pose with its eyes open, half shut
+ *               indicator ("turn": her looking toward the right of the screen, times -1 .. 1 over "turnSteps" each way;
+ *               or "turnPoses": each step's own params, in the order -turnSteps .. -1, 1 .. turnSteps, for a turn that
+ *               isn't the same both ways, such as one posed from a VTube Studio clip), every pose with its eyes open, half shut
  *               and shut (frames.half, frames.shut). "pivot" (model units) is what the sway turns about, which the
  *               HUD uses to line the baked steps up while it blends them
  *   tails       ["part id", ...]: drawn in their own sprite (swung by the HUD), hidden in the body frames
@@ -57,11 +61,11 @@ const cubismCore = window.Live2DCubismCore;
  * @typedef {object} BakeConfig
  * @property {Params} [params]
  * @property {Record<string, FrameConfig>} frames
- * @property {{ steps?: number, params?: Params, left?: Params, right?: Params, face?: number, axis?: string,
+ * @property {{ steps?: number, params?: Params, poses?: Params[], left?: Params, right?: Params, face?: number, axis?: string,
  *   perspective?: { widen?: number, shorten?: number } }} lean
  * @property {{ size?: number[], window?: number[], centre: number[], height: number, pivot: number[],
  *   expressions?: string[], params?: Params, zoomSteps?: number, sway?: Params, turn?: Params,
- *   turnSteps?: number }} [close]
+ *   turnSteps?: number, turnPoses?: Params[] }} [close]
  * @property {string[]} [tails]
  * @property {number} [tailsRoot]
  * @property {[number, number]} [anchor]
@@ -899,8 +903,13 @@ async function bakeClose(loaded, cfg, at) {
     Object.fromEntries(Object.keys(params).map((id) => [id, params[id] * k]));
   /** @type {Params[]} */
   const poses = [times(sway, -1), {}, times(sway, 1)];
+  if (close.turnPoses && close.turnPoses.length !== 2 * turnSteps)
+    throw new Error("close.turnPoses: " + close.turnPoses.length + " poses, turnSteps " + turnSteps + " needs " + 2 * turnSteps);
   for (let k = -turnSteps; k <= turnSteps; k++)
-    if (k) poses.push(times(turn, k / turnSteps));
+    if (k)
+      poses.push(
+        close.turnPoses ? close.turnPoses[k < 0 ? k + turnSteps : k + turnSteps - 1] : times(turn, k / turnSteps),
+      );
   /** @type {HTMLCanvasElement[][]} */
   const posed = poses.map((pose) => {
     const base = Object.assign(toggles(1), pose);
@@ -1261,6 +1270,19 @@ async function bake(loaded, cfg) {
   const leanSteps = (cfg.lean && cfg.lean.steps) || DEFAULT_LEAN_STEPS,
     leanParams = (cfg.lean && cfg.lean.params) || {},
     faceAt = (cfg.lean && cfg.lean.face) || DEFAULT_LEAN_FACE;
+  const leanPoses = cfg.lean && cfg.lean.poses;
+  if (leanPoses && leanPoses.length !== leanSteps - 1)
+    throw new Error("lean.poses: " + leanPoses.length + " poses, " + leanSteps + " steps need " + (leanSteps - 1));
+  /**
+   * Angle k's lean params: its own pose, or "params" times its lean.
+   * @param {number} k
+   * @param {number} lean
+   * @returns {Params}
+   */
+  const leanPose = (k, lean) =>
+    leanPoses
+      ? Object.assign({}, leanPoses[k < (leanSteps - 1) / 2 ? k : k - 1])
+      : Object.fromEntries(Object.keys(leanParams).map((id) => [id, leanParams[id] * lean]));
   /** @type {string[]} */
   const leanNames = [];
   for (let k = 0; k < leanSteps; k++) {
@@ -1269,11 +1291,7 @@ async function bake(loaded, cfg) {
       leanNames.push("idle");
       continue;
     }
-    /** @type {Params} */
-    const poseParams = {};
-    Object.keys(leanParams).forEach((id) => {
-      poseParams[id] = leanParams[id] * lean;
-    });
+    const poseParams = leanPose(k, lean);
     if (lean <= -faceAt + LEAN_EPS)
       Object.assign(poseParams, (cfg.lean && cfg.lean.left) || {});
     if (lean >= faceAt - LEAN_EPS)
@@ -1345,11 +1363,7 @@ async function bake(loaded, cfg) {
       [leanSteps - 1, "right"],
     ].forEach(([k, side]) => {
       const lean = -1 + (2 * k) / (leanSteps - 1),
-        /** @type {Params} */
-        poseParams = {};
-      Object.keys(leanParams).forEach((id) => {
-        poseParams[id] = leanParams[id] * lean;
-      });
+        poseParams = leanPose(k, lean);
       setParams(loaded, Object.assign({}, cfg.params, idle, poseParams));
       loaded.model.update();
       armsIn.forEach((inArm, j) => {
