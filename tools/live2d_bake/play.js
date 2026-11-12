@@ -4,8 +4,7 @@
  * sliders for the face and body parameters the HUD's bake poses. For choosing which expressions to bake; it writes
  * nothing.
  *
- * It borrows page.js's loader and renderer: page.js is fetched and run without its last statement (the bake itself),
- * so the two never drift apart.
+ * It borrows page.js's loader and renderer (borrow.js), so the two never drift apart.
  */
 
 /** The face and body parameters the bake poses (tools/live2d_bake/example.json), and the breath. */
@@ -48,25 +47,6 @@ const SWITCHES = [
 
 const BOX_MARGIN = 0.04; // margin round her idle box, of its height
 const SLIDER_STEPS = 100; // steps across a slider's range
-
-/**
- * Runs page.js's definitions (everything but its closing bake call) as a classic script, so its classes and
- * functions are globals here.
- * @returns {Promise<void>}
- */
-async function borrowPage() {
-  const src = await (await fetch("/page.js")).text();
-  const end = src.lastIndexOf("\n(async () => {");
-  if (end < 0) throw new Error("page.js: its closing bake call not found");
-  await new Promise((resolve) => {
-    const script = document.createElement("script");
-    script.textContent = src.slice(0, end) + "\nwindow.__pageReady = true;";
-    document.body.appendChild(script);
-    resolve(undefined);
-  });
-  if (!(/** @type {*} */ (window).__pageReady))
-    throw new Error("page.js did not run");
-}
 
 (async () => {
   const logLine = (/** @type {string} */ text) => {

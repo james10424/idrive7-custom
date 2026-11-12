@@ -38,7 +38,9 @@ node tools/live2d_bake/vts_record.js --out <folder>/wave.json
 
 It asks for VTube Studio's address (Enter for this computer, or another computer's IP), connects to its API (in VTube Studio's settings, turn on Start API; port 8001), and the first time asks for access: click Allow in VTube Studio's popup. Then it records, about 30 times a second (`--fps`), until you press Enter, and writes the clip: the parameters' ranges, their names, and one row of values per frame with its time. Ctrl+C quits without saving. Node 22 or newer.
 
-Keep the clips next to your model, not in this repo. VTube Studio's physics (hair, ribbons) is in the recorded values too, so a bake from a clip should apply the face and body parameters and let the model's own physics do the rest.
+Keep the clips next to your model, not in this repo.
+
+To watch a clip on the model, open `http://localhost:8095/replay` (or start the server with `--home replay`) and drop the clip on her, or pick it on the right. Play, pause, scrub, step frame by frame (Space and the arrow keys), slow it down, loop it. The recorded values include VTube Studio's physics (hair, ribbons). The bake has none of its own (the HUD's shader swings the twin tails), so the page has a switch to show the clip with or without it: off keeps only what you acted, face and body, with the physics outputs (from the model's `.physics3.json`) at their defaults.
 
 ## Deploy to the car
 

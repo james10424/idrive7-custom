@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Miku replay</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #111; color: #ddd; font: 13px -apple-system, Helvetica, sans-serif; }
+  #log { white-space: pre-wrap; font: 12px ui-monospace, Menlo, monospace; color: #9c9; max-height: 3.6em; overflow: auto; }
+  #view { display: none; }
+  body { height: 100vh; box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; }
+  .wrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 20px; }
+  .stage { min-height: 0; position: relative; }
+  .stage canvas { display: block; width: 100%; height: calc(100vh - 70px); object-fit: contain; object-position: center top; }
+  .stage.drop::after { content: "drop the clip"; position: absolute; inset: 0; display: grid; place-items: center; border: 2px dashed #9c9; border-radius: 6px; color: #9c9; font-size: 18px; background: rgba(0, 0, 0, .5); }
+  .panel { min-width: 0; overflow-y: auto; padding-right: 8px; }
+  h2 { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 6px; }
+  button { background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+  button:disabled { opacity: .4; cursor: default; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+  input[type=range] { width: 100%; }
+  .time { font: 12px ui-monospace, Menlo, monospace; color: #9c9; }
+  .note { color: #888; font-size: 12px; line-height: 1.4; }
+  label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .live { font: 11px ui-monospace, Menlo, monospace; color: #aaa; white-space: pre; }
+</style>
+</head>
+<body>
+<div id="log">loading…</div>
+<div id="view"></div>
+<div class="wrap">
+  <div class="stage" id="stage">
+    <canvas id="big" width="900" height="1600"></canvas>
+  </div>
+  <div class="panel">
+    <h2>Clip</h2>
+    <div class="row"><input type="file" id="file" accept=".json,application/json"></div>
+    <p class="note">A clip from vts_record.js. Drop it on the model or pick it here.</p>
+    <div id="info" class="note"></div>
+    <h2>Play</h2>
+    <div class="row">
+      <button id="play" disabled>Play</button>
+      <select id="speed"><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select>
+      <label><input type="checkbox" id="loop" checked> loop</label>
+      <span class="time" id="time">0.00 / 0.00 s</span>
+    </div>
+    <div class="row"><input type="range" id="seek" min="0" max="1000" value="0" disabled></div>
+    <div class="row"><button id="prev" disabled>&lt; frame</button><button id="next" disabled>frame &gt;</button></div>
+    <h2>Physics</h2>
+    <label><input type="checkbox" id="phys" checked> VTube Studio's physics (hair, ribbons)</label>
+    <p class="note">The bake has no physics: it poses the model by its parameters and the HUD's shader swings the twin tails. Off: only what you acted (face, body), as recorded; the physics outputs stay at their defaults.</p>
+    <h2>Now</h2>
+    <div class="live" id="live"></div>
+  </div>
+</div>
+<script src="/core.js"></script>
+<script src="/borrow.js"></script>
+<script src="/replay.js"></script>
+</body>
+</html>

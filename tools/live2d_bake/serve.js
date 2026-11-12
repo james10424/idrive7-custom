@@ -11,8 +11,9 @@
  * atlas.rgba and preview.png. Push them with scripts/deploy.sh <car> --miku <out>.
  * http://localhost:8095/?inspect shows the model with its parts, parameters and drawables, to write the config;
  * http://localhost:8095/play is a playground: toggle the model's expressions and move its face and body parameters.
- * --home play serves the playground at / as well (for a launcher that opens only the root); the bake page is then at
- * /bake (always there too).
+ * http://localhost:8095/replay plays a clip recorded from VTube Studio (vts_record.js) on the model.
+ * --home play (or replay) serves that page at / as well (for a launcher that opens only the root); the bake page is
+ * then at /bake (always there too).
  *
  * Nothing of the model ever goes in this repo: keep the config and the output next to the model.
  * The config's fields are described in page.js (CONFIG).
@@ -49,6 +50,8 @@ if (!model || !core || !out) {
   process.exit(1);
 }
 const modelDir = path.dirname(path.resolve(model));
+/** @type {Record<string, string>} --home: the page served at / */
+const PAGES = { bake: "page.html", play: "play.html", replay: "replay.html" };
 /** @type {Record<string, string>} extension to Content-Type */
 const TYPES = {
   ".html": "text/html",
@@ -108,13 +111,21 @@ http
       return;
     }
     if (urlPath === "/")
-      return send(res, path.join(__dirname, home === "play" ? "play.html" : "page.html"));
+      return send(res, path.join(__dirname, PAGES[home] || "page.html"));
     if (urlPath === "/bake") return send(res, path.join(__dirname, "page.html"));
     // the toggles playground: play.html, and the model's expressions (its .exp3.json files) for it to list
     if (urlPath === "/play")
       return send(res, path.join(__dirname, "play.html"));
     if (urlPath === "/play.js")
       return send(res, path.join(__dirname, "play.js"));
+    // the replay page: a recorded clip played on the model
+    if (urlPath === "/replay")
+      return send(res, path.join(__dirname, "replay.html"));
+    if (urlPath === "/replay.js")
+      return send(res, path.join(__dirname, "replay.js"));
+    // page.js's loader and renderer, for the playground and the replay page
+    if (urlPath === "/borrow.js")
+      return send(res, path.join(__dirname, "borrow.js"));
     if (urlPath === "/expressions.json") {
       const names = fs
         .readdirSync(modelDir)
@@ -148,9 +159,9 @@ http
   })
   .listen(port, "127.0.0.1", () =>
     console.log(
-      (home === "play" ? "playground: http://localhost:" + port + "/   (bake page: /bake)" : "bake page: http://localhost:" + port + "/") +
+      (home !== "bake" ? home + " page: http://localhost:" + port + "/   (bake page: /bake)" : "bake page: http://localhost:" + port + "/") +
         "   (inspect: http://localhost:" +
         port +
-        "/bake?inspect, playground: /play)",
+        "/bake?inspect, playground: /play, replay: /replay)",
     ),
   );
