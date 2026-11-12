@@ -23,7 +23,7 @@ Turns a Live2D model you own into the frames Custom HUD's **Miku** layout draws 
    ```
 
 3. Open `http://localhost:8095/?inspect` to see the model with a grid in model units, and every part on its own with its id. Use it to fill in the config.
-4. Open `http://localhost:8095/` to bake. It writes `atlas.json`, `atlas.rgba` (what the car loads) and `preview.png` to the folder.
+4. Open `http://localhost:8095/` to bake. It writes `atlas.json`, `atlas.rgba` and `preview.png` to the folder, and the server then compresses the atlases to ETC2: `atlas.etc2` (with `atlas.json`, what the car loads; about 20 s more for both atlases).
 5. Copy them to the car: see [Deploy to the car](#deploy-to-the-car).
 
 `http://localhost:8095/play` is a playground: a checkbox per expression and a slider per face and body parameter, to try them before writing the config. With `--home play` the server opens on it (its root is the playground, the bake page moves to `/bake`), for a launcher that only opens a server's root.
@@ -50,11 +50,11 @@ Custom HUD reads the frames from one fixed folder, `miku/`, inside its own data 
 
 ```
 <Custom HUD's app folder>/data/miku/atlas.json
-<Custom HUD's app folder>/data/miku/atlas.rgba
-<Custom HUD's app folder>/data/miku/close.rgba
+<Custom HUD's app folder>/data/miku/atlas.etc2
+<Custom HUD's app folder>/data/miku/close.etc2
 ```
 
-The files must be there, under exactly those names, straight from the same bake (`atlas.rgba` and `close.rgba` must be exactly width x height x 4 bytes, as `atlas.json` says). `close.rgba` is the close-up's own atlas; a bake without `close` has none, and she just stands. `preview.png` and `close.png` are only for you and is not needed on the car. The app folder is `/var/opt/public/oap/oap_<id>/` on the car (OAP picks the id at install), so its data folder is `/var/opt/public/oap/oap_<id>/data/`.
+The files must be there, under exactly those names, straight from the same bake (`atlas.etc2` and `close.etc2` must be exactly the ETC2 size of the width x height `atlas.json` says: a byte a pixel). They are ETC2 RGBA, which the cluster's GPU draws compressed, so they take a quarter of the pixel memory RGBA would; that needs cluster-render 0.5.5 or later on the car. `close.etc2` is the close-up's own atlas; a bake without `close` has none, and she just stands. `preview.png`, `close.png` and the `.rgba` files are only for you and are not needed on the car. The app folder is `/var/opt/public/oap/oap_<id>/` on the car (OAP picks the id at install), so its data folder is `/var/opt/public/oap/oap_<id>/data/`.
 
 ### What you need
 
@@ -69,11 +69,11 @@ The files must be there, under exactly those names, straight from the same bake 
    ./scripts/deploy.sh root@<car> --miku <folder>
    ```
 
-   `<folder>` is the bake's `--out` folder, the one with `atlas.json` and `atlas.rgba` in it. The script checks both files are there and the JSON is valid, finds Custom HUD's folder on the car (it looks for the `package.json` that names `custom_hud`), creates `data/miku/`, copies the files in (`close.rgba` too when `atlas.json` has a close-up) and gives them to the app's own user.
+   `<folder>` is the bake's `--out` folder, the one with `atlas.json` and `atlas.etc2` in it. The script checks both files are there and the JSON is valid, finds Custom HUD's folder on the car (it looks for the `package.json` that names `custom_hud`), creates `data/miku/`, copies the files in (`close.etc2` too when `atlas.json` has a close-up; an older bake's `.rgba` files on the car are removed) and gives them to the app's own user.
 
 2. Make the app load them. It reads the frames only when it builds the layout, and does not watch the folder, so on the center screen open **Custom HUD**, pick another layout, then **Miku** again (or restart the app).
 
-3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "2 layers" and about "12.0 MiB" of pixels (it depends on the bake). The app's log has lines like `miku frames: 14 of 144x278, tails, 1024x567 RGBA asset, 4.4 MiB of pixel memory` and `miku close-up: 3 zoom steps, 7 poses of 249x278, 1024x970 RGBA asset, 7.6 MiB of pixel memory`.
+3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "2 layers" and about "3.0 MiB" of pixels (it depends on the bake). The app's log has lines like `miku frames: 14 of 144x278, tails, 1024x564 ETC2 asset and its 1024x3 tables, 1.1 MiB of pixel memory` and `miku close-up: 3 zoom steps, 7 poses of 249x278, 1024x972 ETC2 asset, 1.9 MiB of pixel memory`.
 
 ### By hand
 
@@ -90,7 +90,7 @@ ssh root@<car> 'mkdir -p /var/opt/public/oap/oap_<id>/data/miku'
 ```
 
 ```bash
-scp <folder>/atlas.json <folder>/atlas.rgba root@<car>:/var/opt/public/oap/oap_<id>/data/miku/
+scp <folder>/atlas.json <folder>/atlas.etc2 <folder>/close.etc2 root@<car>:/var/opt/public/oap/oap_<id>/data/miku/
 ```
 
 ```bash
@@ -119,12 +119,13 @@ The status row says why, after "Miku:":
 
 | Status row | Meaning |
 | --- | --- |
-| `no baked frames in .../data/miku` | The folder or `atlas.rgba` is missing: deploy again. |
+| `no baked frames in .../data/miku` | The folder or `atlas.etc2` is missing: deploy again. "in ETC2 (an older bake" means only an older bake's `atlas.rgba` is there: bake again with the current tools/live2d_bake and deploy. |
+| `refused asset ...: ... format ... (ETC2 needs cluster-render 0.5.5 or later)` | The car's cluster-render is older than 0.5.5 and can't take the ETC2 atlases: update it from the Store. |
 | `atlas.json: ...` or `Unexpected ...` | The JSON is not from this bake tool, or was cut short: deploy again. |
-| `atlas.rgba is N bytes, ... needs M` | The two files don't belong together (one from an older bake): deploy both again. |
+| `atlas.etc2 is N bytes, ... ETC2 needs M` | The two files don't belong together (one from an older bake): deploy both again. |
 | `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it (a precaution, see [What the cluster can take](#what-the-cluster-can-take)). |
 | `atlas asset refused` | cluster-render had no room: another app is using most of its pixel memory. |
-| `refused asset ... the service's pixel memory is full` (log), she never zooms in | The close-up (7.6 MiB) didn't fit next to the other apps' images. Upstream cluster-render has 16 MiB for every app together, Grand National on the cluster uses 7.5; our fork's `pixel_mib` (32) makes room. Without it she just stands. |
+| `refused asset ... the service's pixel memory is full` (log), she never zooms in | The close-up (1.9 MiB) didn't fit next to the other apps' images. Upstream cluster-render has 16 MiB for every app together, Grand National on the cluster uses 7.5; our fork's `pixel_mib` (32) makes room. Without it she just stands. |
 
 Nothing shows during route guidance either: that's on purpose, BMW's turn map uses her corner.
 
@@ -136,15 +137,15 @@ Not yet checked on a car: the app folder path (from the Store's docs) and SSH as
 
 ## What it makes
 
-Two images, at most 1024 px a side.
+Two images, at most 1024 px a side, each written as `.rgba` (for you) and `.etc2` (for the car).
 
-`atlas.rgba`: her upright with eyes open, half shut and shut and with a smile, the same standing pose at 11 lean angles from a full lean left (braking face) to a full lean right (happy face), the twin tails on their own, and (with `arms` in the config) each arm on its own, which the HUD swings up from the shoulder to point toward the indicator. The angles are close enough that the HUD blends between neighbours without a double image. The face frames differ from upright only around her head, so each keeps just that crop; the HUD draws the upright frame round it.
+`atlas.etc2`: her upright with eyes open, half shut and shut and with a smile, the same standing pose at 11 lean angles from a full lean left (braking face) to a full lean right (happy face), the twin tails on their own, and (with `arms` in the config) each arm on its own, which the HUD swings up from the shoulder to point toward the indicator. The angles are close enough that the HUD blends between neighbours without a double image. The face frames differ from upright only around her head, so each keeps just that crop; the HUD draws the upright frame round it.
 
-`close.rgba` (with `close`): the close-up, every frame drawn at the size it shows on the HUD (249x278), so nothing is scaled up. Three zoom steps on the way in (the camera a quarter, half and three quarters of the way from the window to her head and chest, the expressions as far on), then the close-up itself swaying left, upright and right (`sway`), and turning her head left and right at half and full (`turn`), each pose with its eyes half shut and shut as crops round her eyes. The bake measures how far the sway turns her head about `pivot` and how far each turn moves it, so the HUD can line neighbouring poses up while it blends them.
+`close.etc2` (with `close`): the close-up, every frame drawn at the size it shows on the HUD (249x278), so nothing is scaled up. Three zoom steps on the way in (the camera a quarter, half and three quarters of the way from the window to her head and chest, the expressions as far on), then the close-up itself swaying left, upright and right (`sway`), and turning her head left and right at half and full (`turn`), each pose with its eyes half shut and shut as crops round her eyes. The bake measures how far the sway turns her head about `pivot` and how far each turn moves it, so the HUD can line neighbouring poses up while it blends them.
 
 The model itself is never changed.
 
-With RetrynowMiku the atlases are 1024x564 and 1024x970 (4.4 and 7.6 MiB of pixel memory). On the car the GPU animates these: blinks, breathing, the lean as on a bus, the tails following her head and streaming out with speed, and the close-up when the car stops.
+With RetrynowMiku the atlases are 1024x564 and 1024x972 (1.1 MiB with the standing shader's small RGBA table asset, and 1.9 MiB of pixel memory, compressed; 4.4 and 7.6 as RGBA). Heights are rounded up to whole 4x4 ETC2 blocks. On the car the GPU animates these: blinks, breathing, the lean as on a bus, the tails following her head and streaming out with speed, and the close-up when the car stops.
 
 ## What the cluster can take
 

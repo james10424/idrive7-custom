@@ -5,7 +5,8 @@
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
 #   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
 #
-# --miku copies the folder's atlas.json and atlas.rgba (and close.rgba, the close-up, when the bake made one; from tools/live2d_bake) to the app's data folder,
+# --miku copies the folder's atlas.json and atlas.etc2 (and close.etc2, the close-up, when the bake made one; ETC2 from
+# tools/live2d_bake, which needs cluster-render 0.5.5 or later on the car) to the app's data folder,
 # <app>/data/miku/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
 # next time it builds the layout (switch to another layout and back, or restart the app).
 #
@@ -41,13 +42,13 @@ if [ "${1:-}" = "--miku" ]; then
     MIKU_DIR="${1#--}"
     [ $# -eq 2 ] && [ -d "$2" ] || { echo "Usage: $(basename "$0") <car-ssh-host> $1 <bake output folder>" >&2; exit 1; }
     MIKU_SRC="$2"; shift 2
-    [ -f "$MIKU_SRC/atlas.json" ] && [ -f "$MIKU_SRC/atlas.rgba" ] || { echo "No atlas.json and atlas.rgba in $MIKU_SRC" >&2; exit 1; }
+    [ -f "$MIKU_SRC/atlas.json" ] && [ -f "$MIKU_SRC/atlas.etc2" ] || { echo "No atlas.json and atlas.etc2 in $MIKU_SRC (bake again with the current tools/live2d_bake)" >&2; exit 1; }
     python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$MIKU_SRC/atlas.json" || { echo "Not valid JSON: $MIKU_SRC/atlas.json" >&2; exit 1; }
     # the close-up she zooms into when the car stops: its own atlas, when the bake made one
-    MIKU_FILES=("$MIKU_SRC/atlas.json" "$MIKU_SRC/atlas.rgba")
+    MIKU_FILES=("$MIKU_SRC/atlas.json" "$MIKU_SRC/atlas.etc2")
     if python3 -c 'import json,sys; sys.exit(0 if "close" in json.load(open(sys.argv[1])) else 1)' "$MIKU_SRC/atlas.json"; then
-        [ -f "$MIKU_SRC/close.rgba" ] || { echo "atlas.json has a close-up but $MIKU_SRC/close.rgba is missing" >&2; exit 1; }
-        MIKU_FILES+=("$MIKU_SRC/close.rgba")
+        [ -f "$MIKU_SRC/close.etc2" ] || { echo "atlas.json has a close-up but $MIKU_SRC/close.etc2 is missing" >&2; exit 1; }
+        MIKU_FILES+=("$MIKU_SRC/close.etc2")
     fi
 fi
 LAYOUT_DIR="$(dirname "$SCRIPT_DIR")/apps/${APP_ID}/hud/layouts"
@@ -69,7 +70,8 @@ echo "App folder on the car: ${APP_DIR}"
 if [ -n "$MIKU_SRC" ]; then
     OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
     ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/${MIKU_DIR}'"
-    ssh "$CAR_HOST" "rm -f '${APP_DIR}/data/${MIKU_DIR}/close.rgba'"
+    # the RGBA files of older bakes (the app reads only the ETC2 ones now) and any old close-up
+    ssh "$CAR_HOST" "rm -f '${APP_DIR}/data/${MIKU_DIR}/atlas.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.etc2'"
     scp "${MIKU_FILES[@]}" "${CAR_HOST}:${APP_DIR}/data/${MIKU_DIR}/"
     ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/${MIKU_DIR}'"
     echo "Pushed the Miku frames to ${APP_DIR}/data/${MIKU_DIR}. Switch to another layout and back (or restart the app) to load them."

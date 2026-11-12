@@ -1,5 +1,5 @@
 // Miku's close-up (GLSL ES 1.00): what she zooms into when the car stops, from its own baked atlas (u_atlas, straight
-// alpha; tools/live2d_bake's bakeClose, close.rgba). Every frame is the layer's size, laid out on a grid (u_grid,
+// alpha, ETC2; tools/live2d_bake's bakeClose, close.etc2). Every frame is the layer's size, laid out on a grid (u_grid,
 // u_cropGrid), so nothing reads a table: first the zoom steps (the camera part of the way in, the expressions part of
 // the way on), then the close-up's poses (sway left, middle, sway right, then the turn from the left to the right
 // without the middle), then each pose's eyes half shut and shut, cropped to one rect (u_crop).

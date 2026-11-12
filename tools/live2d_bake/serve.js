@@ -15,10 +15,14 @@
  * --home play (or replay) serves that page at / as well (for a launcher that opens only the root); the bake page is
  * then at /bake (always there too).
  *
+ * After the page writes atlas.json, the atlases (atlas.rgba, close.rgba) are compressed to ETC2 (atlas.etc2,
+ * close.etc2, tools/etc2.js), which is what Custom HUD uploads: a quarter of the pixel memory.
+ *
  * Nothing of the model ever goes in this repo: keep the config and the output next to the model.
  * The config's fields are described in page.js (CONFIG).
  */
 const http = require("http");
+const etc2 = require("../etc2");
 const fs = require("fs");
 const path = require("path");
 
@@ -81,6 +85,26 @@ function send(res, file) {
   });
 }
 
+/**
+ * atlas.rgba and close.rgba (when the bake has a close-up) to atlas.etc2 and close.etc2, sized as atlas.json says.
+ * @param {string} dir
+ */
+function compressAtlases(dir) {
+  const info = JSON.parse(fs.readFileSync(path.join(dir, "atlas.json"), "utf8"));
+  /** @type {Array<[string, number[]]>} */
+  const atlases = [["atlas", info.atlas]];
+  if (info.close && fs.existsSync(path.join(dir, "close.rgba"))) atlases.push(["close", info.close.atlas]);
+  atlases.forEach(([name, size]) => {
+    const start = Date.now();
+    const out = etc2.encode(fs.readFileSync(path.join(dir, name + ".rgba")), size[0], size[1]);
+    fs.writeFileSync(path.join(dir, name + ".etc2"), out);
+    console.log(
+      "wrote " + path.join(dir, name + ".etc2") + " (" + out.length + " bytes, ETC2 " + size[0] + "x" + size[1] +
+        ", " + ((Date.now() - start) / 1000).toFixed(1) + " s)",
+    );
+  });
+}
+
 http
   .createServer((req, res) => {
     const urlPath = decodeURIComponent(req.url.split("?")[0]);
@@ -106,6 +130,17 @@ http
         console.log(
           "wrote " + dest + " (" + Buffer.concat(chunks).length + " bytes)",
         );
+        // the page writes atlas.json last of the atlases: compress them both to ETC2 before answering, so the page's
+        // "done" means the .etc2 files are there too
+        if (rel === "atlas.json") {
+          try {
+            compressAtlases(path.dirname(dest));
+          } catch (err) {
+            console.error("etc2: " + (err instanceof Error ? err.message : err));
+            res.writeHead(500);
+            return res.end("etc2: " + (err instanceof Error ? err.message : err));
+          }
+        }
         res.end("ok");
       });
       return;

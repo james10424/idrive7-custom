@@ -40,6 +40,7 @@ const { takeBuildLock, BUILD_LOCK_WAIT_MS } = require("./build_lock");
 // one source of truth, shared with the app's layout check. The page gets it in the 'hello' event.
 const visible = require("../shared/visible");
 const shaderBudget = require("../tools/shader_budget"); // what the KOMBI took on the car (texture reads, size)
+const etc2 = require("../tools/etc2"); // etc2rgba assets, decoded for the page
 
 /** @typedef {import("./run-app").ToApp} ToApp */
 /** @typedef {import("./run-app").FromApp} FromApp */
@@ -69,7 +70,9 @@ const shaderBudget = require("../tools/shader_budget"); // what the KOMBI took o
  * @property {number} [ih]
  * @property {number} [bpp] bytes a pixel: 4, or 1 for an r8 asset
  * @property {Buffer} [image] image or asset pixels
- * @property {string} [format] asset only: "r8" or "rgba8"
+ * @property {string} [format] asset only: "r8", "rgba8" or "etc2rgba"
+ * @property {number} [memBpp] bytes a pixel in the service's pixel memory, when not bpp (etc2rgba: 1; its image here is
+ *   the decoded RGBA, for the page)
  * @property {string} [fs] effect only: the fragment shader
  * @property {boolean} [time] effect only: the renderer's clock in u_time
  * @property {Record<string, string>} [binds] effect only: sampler name to asset key
@@ -152,7 +155,7 @@ function pixelBytes() {
   let bytes = 0;
   layers.forEach((layer) => {
     if (layer.image)
-      bytes += layer.iw * layer.ih * (layer.bpp || 4) * PIXEL_COPIES;
+      bytes += layer.iw * layer.ih * (layer.memBpp || layer.bpp || 4) * PIXEL_COPIES;
   });
   return bytes;
 }
@@ -754,19 +757,25 @@ const renderServer = net.createServer((sock) => {
       }
       case "asset": {
         // PROTOCOL.md "asset": an R8 or RGBA8 texture, not drawn, not a layer; effect layers sample it through "bind".
+        // Also etc2rgba (cluster-render 0.5.5): ETC2 RGBA, 4x4 blocks of 16 bytes, sent whole; kept here decoded
+        // (tools/etc2.js) so the page draws it as the car does.
         // The service's limits: 32 assets, 16 per client, 1..2048 a side, within one frame message; pixel memory twice its bytes.
         if (!TARGETS[msg.target])
           return refuse("asset", msg.ref, "unknown target " + msg.target);
         const format = msg.format || "rgba8",
-          bpp = format === "r8" ? 1 : format === "rgba8" ? 4 : 0;
+          etc2Asset = format === "etc2rgba",
+          bpp = format === "r8" ? 1 : format === "rgba8" || etc2Asset ? 4 : 0,
+          memBpp = etc2Asset ? 1 : bpp;
         if (!bpp)
           return refuse("asset", msg.ref, "unknown asset format " + format);
+        if (etc2Asset && (msg.w % etc2.BLOCK || msg.h % etc2.BLOCK))
+          return refuse("asset", msg.ref, "etc2rgba: w and h must be multiples of 4");
         if (!(
           msg.w > 0 &&
           msg.h > 0 &&
           msg.w <= MAX_ASSET_SIDE &&
           msg.h <= MAX_ASSET_SIDE &&
-          msg.w * msg.h * bpp + MSG_SLACK <= MAX_MSG
+          msg.w * msg.h * memBpp + MSG_SLACK <= MAX_MSG
         ))
           return refuse("asset", msg.ref, "asset size out of range");
         let all = 0,
@@ -781,7 +790,7 @@ const renderServer = net.createServer((sock) => {
           return refuse("asset", msg.ref, "too many assets");
         if (
           PIXEL_BYTES &&
-          pixelBytes() + msg.w * msg.h * bpp * PIXEL_COPIES > PIXEL_BYTES
+          pixelBytes() + msg.w * msg.h * memBpp * PIXEL_COPIES > PIXEL_BYTES
         )
           return refuse("asset", msg.ref, "the service's pixel memory is full");
         layers.set(key, {
@@ -793,6 +802,7 @@ const renderServer = net.createServer((sock) => {
           target: msg.target,
           format,
           bpp,
+          memBpp,
           class: "-",
           z: 0,
           x: 0,
@@ -820,7 +830,7 @@ const renderServer = net.createServer((sock) => {
             "x" +
             msg.h +
             " (" +
-            mib(msg.w * msg.h * bpp * PIXEL_COPIES) +
+            mib(msg.w * msg.h * memBpp * PIXEL_COPIES) +
             " of pixel memory)",
         );
         writeEv(sock, { ev: "layer", ref: msg.ref, state: "shown" });
@@ -996,7 +1006,15 @@ const renderServer = net.createServer((sock) => {
     const head = FRAME_HEAD + rectCount * RECT_BYTES,
       bpp = layer.bpp || 4;
     const pixels = body.slice(head);
-    if (rectCount === 0) {
+    if (layer.format === "etc2rgba") {
+      if (rectCount) return bad("etc2rgba asset ref " + ref + ": whole only, no rects");
+      if (pixels.length !== etc2.etc2Bytes(layer.iw, layer.ih))
+        return bad(
+          "etc2rgba ref " + ref + " is " + pixels.length + " bytes, " + layer.iw + "x" + layer.ih + " needs " +
+            etc2.etc2Bytes(layer.iw, layer.ih),
+        );
+      etc2.decode(pixels, layer.iw, layer.ih).copy(layer.image);
+    } else if (rectCount === 0) {
       if (pixels.length !== layer.image.length)
         return bad(
           "whole frame for ref " +

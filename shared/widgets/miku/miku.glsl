@@ -1,5 +1,5 @@
-// The Miku layout's character (GLSL ES 1.00), from frames baked offline (tools/live2d_bake) into one RGBA atlas
-// asset (u_atlas, straight alpha, u_atlasSize px). She stands, as on a bus: the bake posed her at u_counts.x lean angles
+// The Miku layout's character (GLSL ES 1.00), from frames baked offline (tools/live2d_bake) into one ETC2 RGBA atlas
+// asset (u_atlas, straight alpha, u_atlasSize px; its tables in an RGBA8 one, u_table). She stands, as on a bus: the bake posed her at u_counts.x lean angles
 // (11) with the model's own body and head rotation, from a full lean left with the braking face to a full lean right
 // with the happy face (a forward/back bake: toward you braking, back pulling away), close enough together
 // that the shader can blend the two nearest to u_drive.x without a double image (-1 hard braking .. +1 pulling away
@@ -26,6 +26,7 @@ uniform vec2 u_size;
 uniform float u_time;
 uniform vec4 u_drive;
 uniform sampler2D u_atlas;
+uniform sampler2D u_table;   // the per-frame tables (mikuData in sprite.js): exact values, so RGBA8 beside the ETC2 art
 uniform vec2 u_atlasSize;   // the atlas and its table rows under it (px)
 uniform vec2 u_frame;       // frame w, h
 uniform vec2 u_origin;      // the frame's top-left in layer px
@@ -42,7 +43,7 @@ uniform vec4 u_spr[6];   // cluster-render takes at most 32 uniform names a laye
 #define u_tails u_spr[2]   // atlas rect of the tails sprite (w = 0: none)
 #define u_tailsAt u_spr[3]   // its top-left in frame px, root y in the sprite, length px
 #define u_crop u_spr[4]   // the face frames are crops of this rect (frame px; w = 0: whole frames)
-#define u_counts u_spr[5]   // lean frames (odd, up to 15), 0, 0, and the y of the table rows in the atlas
+#define u_counts u_spr[5]   // lean frames (odd, up to 15), 0, 0, and the table asset's height (px; its width is the atlas's)
 uniform vec4 u_arm[8];   // cluster-render takes at most 32 uniform names a layer, u_time among them: these fixed values go up as one array
 #define u_arm0 u_arm[0]   // atlas rect of an arm sprite (w = 0: none)
 #define u_arm0At u_arm[1]   // its top-left and its shoulder (the pivot), frame px, at rest
@@ -85,11 +86,11 @@ vec4 arm(vec4 r, vec4 at, vec4 offL, vec4 offR, float side, float l, float raise
     return tap(r, at.zw + rot(p - sh, -phi) - at.xy);
 }
 
-// table entry i (mikuData in sprite.js): a 3x3 px block in the rows under the art, read at its middle, two values of
+// table entry i (mikuData in sprite.js): a 3x3 px block of the table asset (u_table), read at its middle, two values of
 // 12 bits ((v + 1024) * 2: R and B's high nibble, G and B's low nibble), -1024 .. 1023.5 px
 vec2 dat(float i) {
     float per = floor(u_atlasSize.x / 3.0), row = floor(i / per), col = i - row * per;
-    vec3 t = floor(texture2D(u_atlas, vec2(col * 3.0 + 1.5, u_counts.w + row * 3.0 + 1.5) / u_atlasSize).rgb * 255.0 + 0.5);
+    vec3 t = floor(texture2D(u_table, vec2(col * 3.0 + 1.5, row * 3.0 + 1.5) / vec2(u_atlasSize.x, u_counts.w)).rgb * 255.0 + 0.5);
     float lo = floor(t.b / 16.0);
     return vec2(t.r * 16.0 + lo, t.g * 16.0 + (t.b - lo * 16.0)) * 0.5 - 1024.0;
 }

@@ -68,7 +68,7 @@ The Miku layout draws a Live2D model you own. Nothing of it ships with the app: 
    node tools/live2d_bake/serve.js --model <model>.model3.json --core <sdk>/Core/live2dcubismcore.min.js --config <bake>.json --out <folder>
    ```
 
-   Open `http://localhost:8095/?inspect` to see every part with its id (to fill in the config), then `http://localhost:8095/` to bake. It writes `atlas.json`, `atlas.rgba` and, with `close` in the config, `close.rgba` (what the car loads) and `preview.png` (for you) to `<folder>`. The bake refuses an atlas over 1024 px a side.
+   Open `http://localhost:8095/?inspect` to see every part with its id (to fill in the config), then `http://localhost:8095/` to bake. It writes `atlas.json`, `atlas.etc2` and, with `close` in the config, `close.etc2` (ETC2, what the car loads; cluster-render 0.5.5 or later), the same as `.rgba`, and `preview.png` (for you) to `<folder>`. The bake refuses an atlas over 1024 px a side.
 4. **Copy to the car** (Custom HUD installed, SSH as root):
 
    ```bash

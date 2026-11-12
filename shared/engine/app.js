@@ -485,7 +485,9 @@ class HudApp {
           ": " +
           reason,
       );
-      if (!this.refused) this.refused = (widgetId || operation) + ": " + reason; // the first one, until the next rebuild
+      // an asset format this cluster-render doesn't know: Miku's ETC2 atlases (etc2rgba) need 0.5.5 or later
+      const hint = operation === "asset" && /format/i.test(reason) ? " (ETC2 needs cluster-render 0.5.5 or later)" : "";
+      if (!this.refused) this.refused = (widgetId || operation) + ": " + reason + hint; // the first one, until the next rebuild
       // the widget knows it can't draw (Miku doesn't zoom into a close-up that isn't there); a refused asset leaves
       // the cache, so the next rebuild asks again
       const state = widgetId ? this.widgets.get(widgetId) : null;

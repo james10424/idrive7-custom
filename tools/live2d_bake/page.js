@@ -174,7 +174,10 @@ const log = (line) => {
 const SUPERSAMPLE = 4; // render this many times bigger than the frame, then scale down
 const MIN_OPACITY = 0.001; // a drawable at or under this opacity counts as hidden
 const ATLAS_MAX = 1024; // px a side: the instrument cluster (KOMBI) restarted on a 1024x1128 RGBA asset (Nov 2026)
-const ATLAS_MIN_W = 64; // the atlas width starts here and doubles until everything fits
+const ATLAS_MIN_W = 64;
+const ETC2_BLOCK = 4; // serve.js compresses the atlases to ETC2 (tools/etc2.js), whose blocks are 4x4: heights round up
+/** @param {number} px @returns {number} px rounded up to whole ETC2 blocks */
+const ceilBlock = (px) => Math.ceil(px / ETC2_BLOCK) * ETC2_BLOCK; // the atlas width starts here and doubles until everything fits
 const HUD_BYTES_PER_PX = 8; // what an atlas pixel takes of the HUD's pixel memory
 const DEFAULT_PAD = 2; // px of transparent border round each sprite
 const DEFAULT_HEIGHT_PX = 200; // her height on the HUD
@@ -1065,7 +1068,7 @@ async function bakeClose(loaded, cfg, at) {
     crops = [];
   posed.forEach((frames) => crops.push(frames[1], frames[2]));
   const cropY = rows * cell[1],
-    atlasH = cropY + Math.ceil(crops.length / cropCols) * cropCell[1];
+    atlasH = ceilBlock(cropY + Math.ceil(crops.length / cropCols) * cropCell[1]);
   if (atlasH > MAX)
     throw new Error(
       "the close-up atlas would be " +
@@ -1494,9 +1497,11 @@ async function bake(loaded, cfg) {
     )
   )
     atlasW *= 2;
-  const atlasH = Math.max.apply(
-    null,
-    items.map((item) => item.at[1] + item.bb[3] + pad),
+  const atlasH = ceilBlock(
+    Math.max.apply(
+      null,
+      items.map((item) => item.at[1] + item.bb[3] + pad),
+    ),
   );
   if (atlasW > MAX || atlasH > MAX)
     throw new Error(

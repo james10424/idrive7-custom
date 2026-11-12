@@ -31,7 +31,7 @@ const DOCS = `effect layer; the Miku layout's character, from frames baked offli
 app's data folder (miku/, see sprite.js); animated by the renderer's clock (time: true), so only small uniforms go up
 when the smoothed g, the speed or the zoom moves a step. Two widgets of this type, the same rect, in this order: the
 first draws her standing and runs her; "part": "close" draws the close-up she zooms into when the car has stood still
-for 1 s (out again past 10 km/h), from the bake's close.rgba (none baked: she just stands). "feet" [x, y] target px
+for 1 s (out again past 10 km/h), from the bake's close.etc2 (none baked: she just stands). "feet" [x, y] target px
 where the bake's "anchor" (between her feet) goes ([480, 377]). Nothing is drawn without frames (the status row says
 so)`;
 
@@ -210,6 +210,7 @@ module.exports = {
     const rect = (part) =>
       part && Array.isArray(part.rect) ? part.rect : [0, 0, 0, 0];
     client.bind(ref, "u_atlas", atlas.ref);
+    if (atlas.tableRef) client.bind(ref, "u_table", atlas.tableRef);
     client.uniform(ref, "u_size", [widget.w, widget.h]);
     client.uniform(ref, "u_atlasSize", atlas.size);
     client.uniform(ref, "u_frame", info.frame);

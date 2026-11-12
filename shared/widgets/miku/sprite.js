@@ -1,7 +1,8 @@
 "use strict";
 /**
- * The Miku character's baked frames (tools/live2d_bake), loaded from the app's data folder and uploaded as one RGBA
- * asset with the shader's tables in pixel rows under the art.
+ * The Miku character's baked frames (tools/live2d_bake), loaded from the app's data folder and uploaded as ETC2 RGBA
+ * assets (cluster-render's etc2rgba, 0.5.5 on: a quarter of RGBA8's pixel memory), the standing shader's tables in a
+ * small RGBA8 asset beside its atlas.
  */
 const fs = require("fs");
 const path = require("path");
@@ -14,7 +15,23 @@ const TABLE_ENTRIES = 16; // entries in each of the two tables (lean frames, hea
 const BLOCK_PX = 3; // each entry is a 3x3 px block
 const CODE_OFFSET_PX = 1024; // a table value's code is (v + this) * 2, so -1024 .. 1023.5 px fit
 const CODE_MAX = 4095; // the code's 12 bits
-const PIXEL_MEM_BYTES = 8; // pixel memory counted per asset px (as the engine counts it)
+const PIXEL_MEM_BYTES = 8; // pixel memory counted per RGBA8 asset px (as the engine counts it: 4 bytes, twice)
+const ETC2_MEM_BYTES = 2; // and per ETC2 asset px (1 byte, twice)
+const ETC2_BLOCK_PX = 4,
+  ETC2_BLOCK_BYTES = 16;
+/** Bytes of a w x h ETC2 RGBA image. @param {number} w @param {number} h */
+const etc2Bytes = (w, h) => (w / ETC2_BLOCK_PX) * (h / ETC2_BLOCK_PX) * ETC2_BLOCK_BYTES;
+/**
+ * Why a w x h ETC2 atlas file of n bytes is bad, or "".
+ * @param {string} name @param {number} n @param {number} w @param {number} h
+ * @returns {string}
+ */
+function etc2Problem(name, n, w, h) {
+  if (w % ETC2_BLOCK_PX || h % ETC2_BLOCK_PX)
+    return name + " is " + w + "x" + h + ", not whole 4x4 blocks: bake again with the current tools/live2d_bake";
+  if (n !== etc2Bytes(w, h)) return name + " is " + n + " bytes, " + w + "x" + h + " ETC2 needs " + etc2Bytes(w, h);
+  return "";
+}
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -38,12 +55,12 @@ const PIXEL_MEM_BYTES = 8; // pixel memory counted per asset px (as the engine c
  * @property {boolean} [breathe]
  * @property {string} [leanAxis] "fb" for a forward/back bake
  * @property {string} [pose]
- * @property {MikuClose} [close] the close-up's atlas, close.rgba
+ * @property {MikuClose} [close] the close-up's atlas, close.etc2
  */
 /**
  * The close-up in atlas.json (tools/live2d_bake bakeClose).
  * @typedef {object} MikuClose
- * @property {number[]} atlas [w, h] of close.rgba
+ * @property {number[]} atlas [w, h] of close.etc2
  * @property {number[]} frame [w, h]
  * @property {number} zoomSteps
  * @property {number} turnSteps
@@ -56,14 +73,15 @@ const PIXEL_MEM_BYTES = 8; // pixel memory counted per asset px (as the engine c
  * @property {number[]} turnShift
  */
 /**
- * The Miku frames as an RGBA asset on a connection (_sprite).
+ * The Miku frames as an ETC2 asset on a connection (_sprite).
  * @typedef {object} SpriteAtlas
  * @property {number} ref
+ * @property {number} [tableRef] the standing atlas's tables (RGBA8; u_table)
  * @property {Client} c
  * @property {number} ci
  * @property {MikuInfo} info
  * @property {number[]} size [w, h] with the table rows
- * @property {number} dataY where the table rows start
+ * @property {number} dataY the standing atlas: its table asset's height (px)
  * @property {MikuCounts} counts
  * @property {number} bytes pixel memory
  */
@@ -123,10 +141,11 @@ function mikuData(info, atlasWidth) {
 
 /**
  * The Miku layout's baked frames: <data>/miku/atlas.json and
- * atlas.rgba (straight-alpha RGBA, atlas[0] x atlas[1] px), made by tools/live2d_bake and pushed by
- * scripts/deploy.sh --miku. They are not in the app: the character's art stays with its owner. Uploaded once as an
- * RGBA asset per connection and kept in hud.atlases (so the pixel memory counts it); new files (a later bake)
- * drop the old asset. Null, with hud.problem set, when the files are missing or bad.
+ * atlas.etc2 (ETC2 RGBA of the straight-alpha art, atlas[0] x atlas[1] px), made by tools/live2d_bake and pushed by
+ * scripts/deploy.sh --miku. They are not in the app: the character's art stays with its owner. Uploaded once per
+ * connection as an etc2rgba asset, with the per-frame tables (exact values, which ETC2 would blur) in a small RGBA8
+ * asset of their own, and kept in hud.atlases (so the pixel memory counts them); new files (a later bake) drop the
+ * old assets. Null, with hud.problem set, when the files are missing or bad.
  * @param {import("../../engine/app").App} hud
  * @param {Widget} widget
  * @param {number} connIndex connection index
@@ -139,7 +158,7 @@ function sprite(hud, widget, connIndex) {
     dir = path.join(hud.ctx.dataDir || ".", sub);
   let stat;
   try {
-    stat = fs.statSync(path.join(dir, "atlas.rgba"));
+    stat = fs.statSync(path.join(dir, "atlas.etc2"));
   } catch (err) {
     stat = null;
   }
@@ -152,6 +171,7 @@ function sprite(hud, widget, connIndex) {
   hud.atlases.forEach((atlas, k) => {
     if (k.indexOf(pre) === 0) {
       atlas.c.drop(atlas.ref);
+      if (atlas.tableRef) atlas.c.drop(atlas.tableRef);
       hud.atlases.delete(k);
     }
   });
@@ -160,7 +180,10 @@ function sprite(hud, widget, connIndex) {
       throw new Error(
         "no baked frames in " +
           dir +
-          " (tools/live2d_bake, then scripts/deploy.sh --" +
+          (fs.existsSync(path.join(dir, "atlas.rgba"))
+            ? " in ETC2 (an older bake: bake again with the current tools/live2d_bake"
+            : " (tools/live2d_bake") +
+          ", then scripts/deploy.sh --" +
           sub +
           ")",
       );
@@ -170,7 +193,8 @@ function sprite(hud, widget, connIndex) {
     const [atlasWidth, atlasHeight] = info.atlas || [];
     if (!(atlasWidth > 0 && atlasHeight > 0))
       throw new Error('atlas.json: bad "atlas" size');
-    // the instrument cluster (KOMBI) restarted on a 1024x1128 RGBA asset (Nov 2026): nothing over 1024 a side
+    // the instrument cluster (KOMBI) restarted with a 1024x1128 RGBA asset (Nov 2026; the shader was later found to
+    // be the cause, but 2048 is untested): nothing over 1024 a side
     if (atlasWidth > MAX_SIDE_PX || atlasHeight > MAX_SIDE_PX)
       throw new Error(
         "atlas " +
@@ -188,62 +212,50 @@ function sprite(hud, widget, connIndex) {
       !Array.isArray(info.anchor)
     )
       throw new Error('atlas.json: needs "frame", "anchor" and frames.idle');
-    const art = fs.readFileSync(path.join(dir, "atlas.rgba"));
-    if (art.length !== atlasWidth * atlasHeight * 4)
-      throw new Error(
-        "atlas.rgba is " +
-          art.length +
-          " bytes, " +
-          atlasWidth +
-          "x" +
-          atlasHeight +
-          " RGBA needs " +
-          atlasWidth * atlasHeight * 4,
-      );
-    // the per-frame tables go in a few rows under the art, which the shader reads (mikuData), not in uniforms
+    const art = fs.readFileSync(path.join(dir, "atlas.etc2"));
+    const bad = etc2Problem("atlas.etc2", art.length, atlasWidth, atlasHeight);
+    if (bad) throw new Error(bad);
     if (info.pose)
       throw new Error(
         "atlas.json is a " +
           info.pose +
           " bake (no layout draws one now): bake the standing one",
       );
-    const data = mikuData(info, atlasWidth),
-      height = atlasHeight + data.rows;
-    if (height > MAX_SIDE_PX)
-      throw new Error(
-        "atlas " +
-          atlasWidth +
-          "x" +
-          atlasHeight +
-          " leaves no room under " +
-          MAX_SIDE_PX +
-          " px for its " +
-          data.rows +
-          " rows of tables; bake again with the current tools/live2d_bake",
-      );
-    const pixels = Buffer.concat([art, data.px]);
+    // the per-frame tables, which the shader reads (mikuData), in an RGBA8 asset of their own as wide as the atlas
+    const data = mikuData(info, atlasWidth);
     const client = hud._clientAt(connIndex);
     const ref = client.asset({
       target: hud.target,
-      format: "rgba8",
+      format: "etc2rgba",
       w: atlasWidth,
-      h: height,
+      h: atlasHeight,
       sampling: "bilinear",
     });
     if (!ref)
-      throw new Error(
-        "atlas asset refused (" + atlasWidth + "x" + height + ")",
-      );
-    client.pixels(ref, null, pixels);
+      throw new Error("atlas asset refused (" + atlasWidth + "x" + atlasHeight + " ETC2)");
+    const tableRef = client.asset({
+      target: hud.target,
+      format: "rgba8",
+      w: atlasWidth,
+      h: data.rows,
+      sampling: "nearest",
+    });
+    if (!tableRef) {
+      client.drop(ref);
+      throw new Error("table asset refused (" + atlasWidth + "x" + data.rows + ")");
+    }
+    client.pixels(ref, null, art);
+    client.pixels(tableRef, null, data.px);
     const atlas = {
       ref,
+      tableRef,
       c: client,
       ci: connIndex,
       info,
-      size: [atlasWidth, height],
-      dataY: atlasHeight,
+      size: [atlasWidth, atlasHeight],
+      dataY: data.rows,
       counts: data.counts,
-      bytes: atlasWidth * height * PIXEL_MEM_BYTES,
+      bytes: atlasWidth * atlasHeight * ETC2_MEM_BYTES + atlasWidth * data.rows * PIXEL_MEM_BYTES,
     };
     hud.atlases.set(key, atlas);
     hud.log.info(
@@ -255,8 +267,12 @@ function sprite(hud, widget, connIndex) {
         (info.tails ? "tails, " : "") +
         atlasWidth +
         "x" +
-        height +
-        " RGBA asset, " +
+        atlasHeight +
+        " ETC2 asset and its " +
+        atlasWidth +
+        "x" +
+        data.rows +
+        " tables, " +
         mib(atlas.bytes) +
         " of pixel memory",
     );
@@ -269,11 +285,11 @@ function sprite(hud, widget, connIndex) {
 }
 
 /**
- * The close-up's atlas (<data>/miku/close.rgba, tools/live2d_bake's bakeClose, described by atlas.json's "close"),
- * uploaded once per connection as an RGBA asset of its own and kept in hud.atlases like the standing one. Null when
- * the bake has no close-up or close.rgba is missing or bad: the reason is logged and she just stands, no zoom.
+ * The close-up's atlas (<data>/miku/close.etc2, ETC2 RGBA, tools/live2d_bake's bakeClose, described by atlas.json's
+ * "close"), uploaded once per connection as an etc2rgba asset of its own and kept in hud.atlases like the standing one. Null when
+ * the bake has no close-up or close.etc2 is missing or bad: the reason is logged and she just stands, no zoom.
  * @param {HudApp} hud
- * @param {SpriteAtlas} standing the standing atlas (sprite()), whose atlas.json says what close.rgba holds
+ * @param {SpriteAtlas} standing the standing atlas (sprite()), whose atlas.json says what close.etc2 holds
  * @param {number} connIndex connection index
  * @returns {?SpriteAtlas}
  */
@@ -281,7 +297,7 @@ function closeSprite(hud, standing, connIndex) {
   const close = standing.info.close;
   if (!close) return null;
   const dir = path.join(hud.ctx.dataDir || ".", "miku"),
-    file = path.join(dir, "close.rgba");
+    file = path.join(dir, "close.etc2");
   let stat;
   try {
     stat = fs.statSync(file);
@@ -303,21 +319,12 @@ function closeSprite(hud, standing, connIndex) {
     if (!(w > 0 && h > 0) || w > MAX_SIDE_PX || h > MAX_SIDE_PX)
       throw new Error("bad close.atlas size " + w + "x" + h);
     const pixels = fs.readFileSync(file);
-    if (pixels.length !== w * h * 4)
-      throw new Error(
-        "close.rgba is " +
-          pixels.length +
-          " bytes, " +
-          w +
-          "x" +
-          h +
-          " RGBA needs " +
-          w * h * 4,
-      );
+    const bad = etc2Problem("close.etc2", pixels.length, w, h);
+    if (bad) throw new Error(bad);
     const client = hud._clientAt(connIndex);
     const ref = client.asset({
       target: hud.target,
-      format: "rgba8",
+      format: "etc2rgba",
       w,
       h,
       sampling: "bilinear",
@@ -332,7 +339,7 @@ function closeSprite(hud, standing, connIndex) {
       size: [w, h],
       dataY: h,
       counts: standing.counts,
-      bytes: w * h * PIXEL_MEM_BYTES,
+      bytes: w * h * ETC2_MEM_BYTES,
     };
     hud.atlases.set(key, atlas);
     hud.log.info(
@@ -346,7 +353,7 @@ function closeSprite(hud, standing, connIndex) {
         w +
         "x" +
         h +
-        " RGBA asset, " +
+        " ETC2 asset, " +
         mib(atlas.bytes) +
         " of pixel memory",
     );
