@@ -84,7 +84,7 @@ const ask = (question) => new Promise((resolve) => rl.question(question, resolve
 function connect(url) {
   if (typeof WebSocket !== "function") throw new Error("this Node has no WebSocket: use Node 22 or newer");
   const ws = new WebSocket(url);
-  /** @type {Map<string, { resolve: (msg: *) => void, reject: (err: Error) => void, timer: NodeJS.Timeout }>} */
+  /** @type {Map<string, { type: string, resolve: (msg: *) => void, reject: (err: Error) => void, timer: NodeJS.Timeout }>} */
   const waiting = new Map();
   let next = 0;
   ws.addEventListener("message", (event) => {
@@ -102,11 +102,14 @@ function connect(url) {
       entry.reject(new Error("VTube Studio: " + (msg.data && msg.data.message) + " (error " + (msg.data && msg.data.errorID) + ")"));
     else entry.resolve(msg.data || {});
   });
-  ws.addEventListener("close", () => {
-    waiting.forEach((entry) => {
+  ws.addEventListener("close", (event) => {
+    // the close code and VTube Studio's reason, if it gave one (1000 normal, 1006 dropped without a close frame)
+    const why = "VTube Studio closed the connection (code " + event.code + (event.reason ? ": " + event.reason : "") + ")";
+    waiting.forEach((entry, requestID) => {
       clearTimeout(entry.timer);
-      entry.reject(new Error("VTube Studio closed the connection"));
+      entry.reject(new Error(why + " while waiting for " + entry.type + " " + requestID));
     });
+    if (!waiting.size) console.error("\n" + why);
     waiting.clear();
   });
   return {
@@ -134,7 +137,7 @@ function connect(url) {
           waiting.delete(requestID);
           reject(new Error("VTube Studio didn't answer " + type));
         }, ms || ANSWER_MS);
-        waiting.set(requestID, { resolve, reject, timer });
+        waiting.set(requestID, { type, resolve, reject, timer });
         ws.send(JSON.stringify({ apiName: "VTubeStudioPublicAPI", apiVersion: "1.0", requestID, messageType: type, data: data || {} }));
       }),
   };
