@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 12 2026
+
+- **Bench: less GPU.** The page drew both screens 30 times a second and ran every effect shader each time. Now a screen is drawn only when something on it changed (its layers, their pixels, BMW's stand-ins), an effect's shader runs only when its uniforms, assets or size change (or every frame on the renderer's clock, as Miku), and its picture is kept until then. One WebGL canvas serves every effect without being resized each time, and each program's uniforms are looked up once. In demo the browser's GPU process went from about 64% to 28% of a core; a still car in manual mode draws only the HUD.
+
 ## Nov 11 2026
 
 - **Custom Cluster 0.1.54: Grand National's P R N D S has a needle,** as the 1950s Buicks' selector: see-through white letters (S added; M points at S) and a red needle behind them on the ray from a far pivot below, instead of the red box. Pointing straight up (N) it reaches the letters' top, one length on the others, and shows through the letter it points at. On a change it eases to the new letter, 300 ms a letter (P to D passes N, as BMW's selector reports), and with no gear it stays where it was. Its uniforms are sent only while it moves.

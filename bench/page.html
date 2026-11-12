@@ -92,7 +92,7 @@
       <label class="chk"><input type="checkbox" id="road"> <span id="backdropName">backdrop</span></label>
       <label class="chk" title="BMW's own HUD content, drawn over our layers as the car does: its speed and speed-limit sign bottom-left (x 150..355, y 314..378, measured Nov 5 2026). The limit is a stand-in: the bench has no speed-limit signal."><input type="checkbox" id="bmwhud" checked> BMW's HUD</label>
       <label class="chk" title="What the driver sees: the hood hides the top corners of the cluster, the dash camera hides its top middle, and BMW draws its gear box and belt light over us; on the HUD only a window is visible through the windshield. Measured from car photos, Nov 5 2026 (shared/visible.js)."><input type="checkbox" id="carview" checked> car view</label>
-      <label class="chk" title="Draw the displays (at most 30 times a second, as cluster-render). Off: the picture holds still and the page uses next to no CPU; the apps, the renderer and the layers table keep running."><input type="checkbox" id="redraw" checked> redraw</label>
+      <label class="chk" title="Draw the displays (at most 30 times a second, as cluster-render; a screen only when something on it changed, an effect only when its inputs did). Off: the picture holds still and the page uses next to no CPU; the apps, the renderer and the layers table keep running."><input type="checkbox" id="redraw" checked> redraw</label>
       <span id="fps"></span>
     </div>
     <div id="views"><canvas id="hud" class="view" width="800" height="480"></canvas></div>
@@ -154,7 +154,10 @@
   const logEl = document.getElementById('log');
   let scene = [];
   const images = new Map();     // key -> canvas holding the layer's pixels
-  let dirty = true;
+  // The screens to draw again: a target ('panel', 'hud'), or '*' for every one. A screen whose layers, backdrop and
+  // stand-ins are as they were isn't drawn again, and an effect whose inputs are as they were isn't run again.
+  const dirtyViews = new Set(['*']);
+  const markDirty = (target) => { dirtyViews.add(target || '*'); };
 
   /* ---------- WebGL for effect layers: the app's real fragment shader ---------- */
   const glCanvas = document.createElement('canvas');
@@ -201,45 +204,64 @@
     if (uniformNotes.has(k)) return;
     uniformNotes.add(k); addLog({ level: 'warn', text: 'bench: layer ' + layer.ref + ' uniform ' + name + ': ' + why });
   }
+  // A program's uniforms as WebGL reports them, looked up once: [{ info, location, base }]
+  function uniformsOf(compiled) {
+    if (compiled.uniforms) return compiled.uniforms;
+    const prog = compiled.prog, list = [], count = gl.getProgramParameter(prog, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < count; i++) {
+      const info = gl.getActiveUniform(prog, i);
+      // An array uniform is reported as "name[0]" with size > 1; the client sets it by its base name
+      // (PROTOCOL.md "Uniforms": one 'uniform' message of type x size numbers). Either spelling is accepted.
+      const base = info.name.replace(/\[0\]$/, '');
+      list.push({ info, base, location: gl.getUniformLocation(prog, info.name) || gl.getUniformLocation(prog, base) });
+    }
+    return (compiled.uniforms = list);
+  }
+  // layer key -> { canvas, fs, sig }: an effect's last picture and the inputs it was drawn from. The shader runs again
+  // only when they change (its uniforms, bound assets, size or source, or u_time on a layer on the renderer's clock).
+  const effectOut = new Map();
   function drawEffect(layer, t) {
     const compiled = compile(layer.fs);
     if (compiled.err) {
       if (!shaderErrors.has(layer.key)) { shaderErrors.add(layer.key); addLog({ level: 'error', text: 'bench: layer ' + layer.ref + ' ' + compiled.err }); }
       return null;
     }
-    glCanvas.width = Math.max(1, layer.w); glCanvas.height = Math.max(1, layer.h);
-    gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+    const w = Math.max(1, layer.w), h = Math.max(1, layer.h);
+    const binds = layer.binds ? Object.keys(layer.binds).map((name) => { const image = images.get(layer.binds[name]); return name + ':' + layer.binds[name] + ':' + (image ? image.stamp || 0 : '-'); }) : [];
+    const sig = JSON.stringify([w, h, layer.uniforms, binds, layer.time ? t : 0]);
+    let out = effectOut.get(layer.key);
+    if (out && out.fs === layer.fs && out.sig === sig) return out.canvas;
+    if (!out) { out = { canvas: document.createElement('canvas') }; effectOut.set(layer.key, out); }
+    out.fs = layer.fs; out.sig = sig;
+    // one WebGL canvas for every effect, grown to the biggest and never shrunk (a resize reallocates it);
+    // each effect draws in its bottom-left w x h, which is canvas rows height - h .. height
+    if (glCanvas.width < w) glCanvas.width = w;
+    if (glCanvas.height < h) glCanvas.height = h;
+    gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(compiled.prog);
-    const loc = gl.getAttribLocation(compiled.prog, 'a_pos');
+    if (compiled.aPos === undefined) compiled.aPos = gl.getAttribLocation(compiled.prog, 'a_pos');
     gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-    const uniformCount = gl.getProgramParameter(compiled.prog, gl.ACTIVE_UNIFORMS);
+    gl.enableVertexAttribArray(compiled.aPos); gl.vertexAttribPointer(compiled.aPos, 2, gl.FLOAT, false, 0, 0);
     let unit = 0;
-    for (let i = 0; i < uniformCount; i++) {
-      const info = gl.getActiveUniform(compiled.prog, i);
+    uniformsOf(compiled).forEach(({ info, base, location }) => {
       if (info.type === gl.SAMPLER_2D) {
         // a sampler reads the asset bound to it (the 'bind' op); its pixels came as an image, R in .r
         const key = layer.binds && layer.binds[info.name], image = key && images.get(key);
-        const location = gl.getUniformLocation(compiled.prog, info.name);
-        if (!image || !location) { if (!image) noteUniform(layer, info.name, 'no asset bound'); continue; }
+        if (!image || !location) { if (!image) noteUniform(layer, info.name, 'no asset bound'); return; }
         gl.activeTexture(gl.TEXTURE0 + unit);
         gl.bindTexture(gl.TEXTURE_2D, textureOf(key, image));
         gl.uniform1i(location, unit++);
-        continue;
+        return;
       }
-      // An array uniform is reported as "name[0]" with size > 1; the client sets it by its base name
-      // (PROTOCOL.md "Uniforms": one 'uniform' message of type x size numbers). Either spelling is accepted.
-      const base = info.name.replace(/\[0\]$/, '');
-      const location = gl.getUniformLocation(compiled.prog, info.name) || gl.getUniformLocation(compiled.prog, base);
-      let entry = layer.uniforms[base] || layer.uniforms[info.name];
+      const entry = layer.uniforms[base] || layer.uniforms[info.name];
       let value = entry ? entry.v : null;
       if (info.name === 'u_time' && layer.time) value = [t / 1000];
-      if (!value || !location) continue;
+      if (!value || !location) return;
       const width = { [gl.FLOAT]: 1, [gl.FLOAT_VEC2]: 2, [gl.FLOAT_VEC3]: 3, [gl.FLOAT_VEC4]: 4, [gl.FLOAT_MAT4]: 16 }[info.type];
-      if (!width) continue;
+      if (!width) return;
       const count = Math.min(info.size, Math.floor(value.length / width));   // whole elements only, up to the shader's array size
-      if (count < 1) { noteUniform(layer, info.name, value.length + ' numbers do not fill one element of width ' + width); continue; }
+      if (count < 1) { noteUniform(layer, info.name, value.length + ' numbers do not fill one element of width ' + width); return; }
       if (entry && entry.v.length > width * info.size) noteUniform(layer, info.name, entry.v.length + ' numbers sent, shader holds ' + info.size + ' x ' + width + '; extra ignored');
       const vals = new Float32Array(value.slice(0, count * width));
       if (info.type === gl.FLOAT) gl.uniform1fv(location, vals);
@@ -247,10 +269,30 @@
       else if (info.type === gl.FLOAT_VEC3) gl.uniform3fv(location, vals);
       else if (info.type === gl.FLOAT_VEC4) gl.uniform4fv(location, vals);
       else if (info.type === gl.FLOAT_MAT4) gl.uniformMatrix4fv(location, false, vals);
-    }
+    });
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    return glCanvas;
+    // kept as the layer's own picture, drawn on its screen until its inputs change
+    if (out.canvas.width !== w || out.canvas.height !== h) { out.canvas.width = w; out.canvas.height = h; }
+    const outCtx = out.canvas.getContext('2d');
+    outCtx.clearRect(0, 0, w, h);
+    outCtx.drawImage(glCanvas, 0, glCanvas.height - h, w, h, 0, 0, w, h);
+    return out.canvas;
   }
+
+  // The targets whose drawn layers changed between two scenes (a layer added, gone, or any field the screen shows)
+  const DRAWN_FIELDS = ['kind', 'target', 'class', 'z', 'x', 'y', 'w', 'h', 'visible', 'opacity', 'exclusive', 'iw', 'ih', 'time', 'uniforms', 'binds', 'state'];
+  function sceneChanges(before, after) {
+    const old = new Map(before.map((layer) => [layer.key, layer])), targets = new Set();
+    const same = (a, b) => a.fs === b.fs && DRAWN_FIELDS.every((k) => JSON.stringify(a[k]) === JSON.stringify(b[k]));
+    after.forEach((layer) => {
+      const prev = old.get(layer.key);
+      old.delete(layer.key);
+      if (!prev || !same(prev, layer)) { targets.add(layer.target); if (prev) targets.add(prev.target); }
+    });
+    old.forEach((layer) => { targets.add(layer.target); effectOut.delete(layer.key); });
+    return targets;
+  }
+  const targetOf = (app) => { const pane = views.find((p) => p.app === app); return pane ? pane.target : undefined; };
 
   /* ---------- compositing ---------- */
   // view: the target the app draws on (its app.json config.target), from the server's hello
@@ -435,7 +477,7 @@
     const scr = document.getElementById('screens');
     scr.innerHTML = list.map((app) => '<div class="appblock" data-app="' + app.id + '">' + (list.length > 1 ? '<h3>' + app.id + '</h3>' : '') +
       '<div class="status">status: waiting for the app</div><div class="settings"></div></div>').join('');
-    dirty = true;
+    markDirty();
   }
   const appBlock = (id) => document.querySelector('#screens .appblock[data-app="' + id + '"]') || document.querySelector('#screens .appblock');
   function drawRoad() {
@@ -490,7 +532,7 @@
   const stockPhotos = {};
   ['stock-map', 'stock-sport', 'stock-nav', 'stock-acc'].forEach((name) => {
     const img = new Image();
-    img.onload = () => { stockPhotos[name] = img; dirty = true; };
+    img.onload = () => { stockPhotos[name] = img; markDirty(); };
     img.src = '/backdrop/' + name + '.jpg';
   });
   function drawStockCluster() {
@@ -548,12 +590,14 @@
   // at most 30 redraws a second, as cluster-render's tick (cluster-render.conf fps = 30); a faster screen skips frames
   const FRAME_MS = 1000 / 30;
   function frame(t) {
-    const animated = scene.some((layer) => layer.kind === 'effect' && layer.time);
     const redraw = document.getElementById('redraw').checked;
-    if (redraw && (dirty || animated) && t - lastDraw >= FRAME_MS - 2) {
+    // the screens marked dirty, and every frame a screen with an effect on the renderer's clock (u_time)
+    const due = redraw && t - lastDraw >= FRAME_MS - 2 ? views.filter((pane) => dirtyViews.has('*') || dirtyViews.has(pane.target) ||
+      scene.some((layer) => layer.target === pane.target && layer.kind === 'effect' && layer.time && layer.visible)) : [];
+    if (due.length) {
       lastDraw = t;
-      dirty = false;
-      views.forEach((pane) => {
+      dirtyViews.clear();
+      due.forEach((pane) => {
       canvas = pane.canvas; ctx = pane.ctx; view = pane.target; VW = pane.VW; VH = pane.VH;
       lastValues = valuesByApp[pane.app] || {}; units = unitsByApp[pane.app] || units;
       ctx.clearRect(0, 0, VW, VH);
@@ -587,7 +631,7 @@
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  ['outlines', 'road', 'carview', 'bmwhud', 'redraw'].forEach((id) => document.getElementById(id).addEventListener('change', () => { dirty = true; }));
+  ['outlines', 'road', 'carview', 'bmwhud', 'redraw'].forEach((id) => document.getElementById(id).addEventListener('change', () => markDirty()));
   const capEl = document.getElementById('cap');
   capEl.addEventListener('change', () => fetch('/cap', { method: 'POST', body: JSON.stringify({ cap: Number(capEl.value) || 0 }) }));
 
@@ -649,7 +693,7 @@
       let buf = '';
       for (;;) {
         const { value, done } = await reader.read();
-        dbgReads++; dbgBuf = buf.length; dirty = true;
+        dbgReads++; dbgBuf = buf.length;
         if (done) break;
         buf += dec.decode(value, { stream: true });
         let i;
@@ -658,12 +702,12 @@
           msg.split('\n').forEach((line) => { if (line.indexOf(SSE_PREFIX) === 0) onData(line.slice(SSE_PREFIX.length)); });
         }
       }
-    } catch (err) { addLog({ level: 'error', text: 'bench page: event stream: ' + (err && err.message || err) }); dbgErr = String(err && err.message || err); dirty = true; }
+    } catch (err) { addLog({ level: 'error', text: 'bench page: event stream: ' + (err && err.message || err) }); dbgErr = String(err && err.message || err); markDirty(); }
     setConn('bench server gone', 'bad');
   })();
   let dbgN = 0, dbgLast = '', dbgReads = 0, dbgBuf = 0, dbgErr = '', dbgPx = 0, pixelCap = DEFAULT_PIXEL_MIB * MIB;
   function onMessage(msg) {
-    dbgN++; dbgLast = msg.t + ':' + (msg.key || '') + ':' + (msg.w === undefined ? 'whole' : 'rect'); dirty = true;
+    dbgN++; dbgLast = msg.t + ':' + (msg.key || '') + ':' + (msg.w === undefined ? 'whole' : 'rect');
     if (msg.t === 'log') addLog(msg);
     else if (msg.t === 'hello') {
       geo = msg.geometry || geo;
@@ -673,12 +717,14 @@
       setViews(msg.apps || [{ id: msg.app, view: msg.view || 'hud' }], msg.targets); document.getElementById('title').textContent = 'Bench: ' + msg.app;
     }
     else if (msg.t === 'scene') {
+      const before = scene;
       scene = msg.layers;
+      sceneChanges(before, scene).forEach(markDirty);
       if (msg.pixels !== undefined) document.getElementById('pixels').textContent = 'pixels: ' + (msg.pixels / MIB).toFixed(1) + ' of ' + (pixelCap ? (pixelCap / MIB).toFixed(0) + ' MiB' : 'unlimited');
       const keys = new Set(scene.map((layer) => layer.key));
       Array.from(images.keys()).forEach((k) => { if (!keys.has(k)) images.delete(k); });
       renderShaderPill();
-      renderLayerTable(); dirty = true;
+      renderLayerTable();
     } else if (msg.t === 'px') {
       // a rect of an image layer changed (the whole image, or a packed sheet's text update): fetch its bytes
       let image = images.get(msg.key);
@@ -690,16 +736,16 @@
           if (!buf || images.get(msg.key) !== image) return;
           image.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), msg.w, msg.h), msg.x, msg.y);
           image.stamp = (image.stamp || 0) + 1;
-          dbgPx++; dirty = true;
+          dbgPx++; const owner = scene.find((layer) => layer.key === msg.key); markDirty(owner && owner.target);
         }).catch(() => {});
     } else if (msg.t === 'nav' || msg.t === 'assist') {
-      bmwState[msg.t] = msg.value; dirty = true;
+      bmwState[msg.t] = msg.value; markDirty();
       document.querySelectorAll('#' + msg.t + ' button').forEach((button) => button.classList.toggle('on', button.dataset.v === (msg.value === null ? '' : msg.value)));
     } else if (msg.t === 'car') {
       carSw = msg.values || {};
       document.querySelectorAll('#carsw .seg').forEach((group) => group.querySelectorAll('button').forEach((button) => button.classList.toggle('on', button.dataset.v === (carSw[group.dataset.k] || ''))));
     } else if (msg.t === 'settings') {
-      if (msg.values && msg.values.units) { unitsByApp[msg.app] = msg.values.units; dirty = true; }
+      if (msg.values && msg.values.units) { unitsByApp[msg.app] = msg.values.units; markDirty(targetOf(msg.app)); }
       renderSettings(msg);
     } else if (msg.t === 'status') {
       const block = appBlock(msg.app);
@@ -710,8 +756,10 @@
       stateEl.textContent = ids.length > 1 ? ids.map((k) => k.replace(/^custom_/, '') + ': ' + appStates[k]).join(', ') : 'app: ' + msg.state;
       stateEl.className = 'pill ' + (allRunning ? 'ok' : 'bad');
     } else if (msg.t === 'values') {
+      // BMW's speed (HUD) and gear (cluster) stand-ins follow each app's values: its screen is drawn again when they change
+      const old = valuesByApp[msg.app] || {};
+      if (old.speed !== msg.values.speed || old.gear !== msg.values.gear) markDirty(targetOf(msg.app));
       valuesByApp[msg.app] = msg.values;
-      dirty = true;   // BMW's speed (HUD) and gear (cluster) stand-ins follow each app's values
       if (msg.app && primaryApp && msg.app !== primaryApp) return;   // the sliders follow the first app
       lastValues = msg.values;
       if (msg.mode !== mode) setMode(msg.mode, true);
