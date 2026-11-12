@@ -757,7 +757,7 @@ const renderServer = net.createServer((sock) => {
       }
       case "asset": {
         // PROTOCOL.md "asset": an R8 or RGBA8 texture, not drawn, not a layer; effect layers sample it through "bind".
-        // Also etc2rgba (cluster-render 0.5.5): ETC2 RGBA, 4x4 blocks of 16 bytes, sent whole; kept here decoded
+        // Also etc2rgba (cluster-render 0.5.9): ETC2 RGBA, 4x4 blocks of 16 bytes, sent whole; kept here decoded
         // (tools/etc2.js) so the page draws it as the car does.
         // The service's limits: 32 assets, 16 per client, 1..2048 a side, within one frame message; pixel memory twice its bytes.
         if (!TARGETS[msg.target])

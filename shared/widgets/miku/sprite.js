@@ -1,7 +1,7 @@
 "use strict";
 /**
  * The Miku character's baked frames (tools/live2d_bake), loaded from the app's data folder and uploaded as ETC2 RGBA
- * assets (cluster-render's etc2rgba, 0.5.5 on: a quarter of RGBA8's pixel memory), the standing shader's tables in a
+ * assets (cluster-render's etc2rgba, 0.5.9 on: a quarter of RGBA8's pixel memory), the standing shader's tables in a
  * small RGBA8 asset beside its atlas.
  */
 const fs = require("fs");

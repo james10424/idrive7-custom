@@ -362,7 +362,7 @@ class ClusterRender extends EventEmitter {
             if (!(o.w > 0 && o.h > 0 && o.w <= 2048 && o.h <= 2048 && o.w * o.h * l.bpp <= 1920 * 720 * 4)) return 0;
             l.iw = o.w;
             l.ih = o.h;
-            // (idrive7-custom change, from cluster-render's etc2rgba format, 0.5.5: ETC2 RGBA, 16 bytes a 4x4 block,
+            // (idrive7-custom change, from cluster-render's etc2rgba format, 0.5.9: ETC2 RGBA, 16 bytes a 4x4 block,
             // sent whole)
             if (o.format === 'etc2rgba') {
                 if (o.w % 4 || o.h % 4) return 0;
@@ -387,7 +387,7 @@ class ClusterRender extends EventEmitter {
     image(opts) { return this._add('image', opts); }
     effect(opts) { return this._add('effect', opts); }
     mesh(opts) { return this._add('mesh', opts); }
-    /* opts: target, format ('rgba8', 'r8'; 'etc2rgba' from cluster-render 0.5.5, w and h multiples of 4, sent
+    /* opts: target, format ('rgba8', 'r8'; 'etc2rgba' from cluster-render 0.5.9, w and h multiples of 4, sent
      * whole: an idrive7-custom change), w, h (up to 2048), sampling
      * ('nearest', 'bilinear'), wrap ('clamp', 'repeat'). */
     asset(opts) { return this._add('asset', opts); }

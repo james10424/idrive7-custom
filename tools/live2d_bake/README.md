@@ -54,7 +54,7 @@ Custom HUD reads the frames from one fixed folder, `miku/`, inside its own data 
 <Custom HUD's app folder>/data/miku/close.etc2
 ```
 
-The files must be there, under exactly those names, straight from the same bake (`atlas.etc2` and `close.etc2` must be exactly the ETC2 size of the width x height `atlas.json` says: a byte a pixel). They are ETC2 RGBA, which the cluster's GPU draws compressed, so they take a quarter of the pixel memory RGBA would; that needs cluster-render 0.5.5 or later on the car. `close.etc2` is the close-up's own atlas; a bake without `close` has none, and she just stands. `preview.png`, `close.png` and the `.rgba` files are only for you and are not needed on the car. The app folder is `/var/opt/public/oap/oap_<id>/` on the car (OAP picks the id at install), so its data folder is `/var/opt/public/oap/oap_<id>/data/`.
+The files must be there, under exactly those names, straight from the same bake (`atlas.etc2` and `close.etc2` must be exactly the ETC2 size of the width x height `atlas.json` says: a byte a pixel). They are ETC2 RGBA, which the cluster's GPU draws compressed, so they take a quarter of the pixel memory RGBA would; that needs cluster-render 0.5.9 or later on the car. `close.etc2` is the close-up's own atlas; a bake without `close` has none, and she just stands. `preview.png`, `close.png` and the `.rgba` files are only for you and are not needed on the car. The app folder is `/var/opt/public/oap/oap_<id>/` on the car (OAP picks the id at install), so its data folder is `/var/opt/public/oap/oap_<id>/data/`.
 
 ### What you need
 
@@ -120,7 +120,7 @@ The status row says why, after "Miku:":
 | Status row | Meaning |
 | --- | --- |
 | `no baked frames in .../data/miku` | The folder or `atlas.etc2` is missing: deploy again. "in ETC2 (an older bake" means only an older bake's `atlas.rgba` is there: bake again with the current tools/live2d_bake and deploy. |
-| `refused asset ...: ... format ... (ETC2 needs cluster-render 0.5.5 or later)` | The car's cluster-render is older than 0.5.5 and can't take the ETC2 atlases: update it from the Store. |
+| `refused asset ...: ... format ... (ETC2 needs cluster-render 0.5.9 or later)` | The car's cluster-render is older than 0.5.9 and can't take the ETC2 atlases: update it from the Store. |
 | `atlas.json: ...` or `Unexpected ...` | The JSON is not from this bake tool, or was cut short: deploy again. |
 | `atlas.etc2 is N bytes, ... ETC2 needs M` | The two files don't belong together (one from an older bake): deploy both again. |
 | `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it (a precaution, see [What the cluster can take](#what-the-cluster-can-take)). |

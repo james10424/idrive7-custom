@@ -6,7 +6,7 @@
 #   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
 #
 # --miku copies the folder's atlas.json and atlas.etc2 (and close.etc2, the close-up, when the bake made one; ETC2 from
-# tools/live2d_bake, which needs cluster-render 0.5.5 or later on the car) to the app's data folder,
+# tools/live2d_bake, which needs cluster-render 0.5.9 or later on the car) to the app's data folder,
 # <app>/data/miku/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
 # next time it builds the layout (switch to another layout and back, or restart the app).
 #

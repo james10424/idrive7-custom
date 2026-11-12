@@ -47,7 +47,7 @@ export interface LayerOpts {
 /** An asset (a texture a layer samples). */
 export interface AssetOpts {
   target: "panel" | "hud" | string;
-  /** etc2rgba: ETC2 RGBA, w and h multiples of 4, (w/4)*(h/4)*16 bytes sent whole (cluster-render 0.5.5) */
+  /** etc2rgba: ETC2 RGBA, w and h multiples of 4, (w/4)*(h/4)*16 bytes sent whole (cluster-render 0.5.9) */
   format: "rgba8" | "r8" | "etc2rgba";
   /** up to 2048 */
   w: number;
