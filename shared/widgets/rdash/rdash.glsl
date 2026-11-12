@@ -1,4 +1,4 @@
-// The Regal theme in one cluster-render "effect" layer (GLSL ES 1.00), after a 1987 Buick Regal's digital-and-needle
+// The Grand National theme in one cluster-render "effect" layer (GLSL ES 1.00), after a 1987 Buick Grand National's digital-and-needle
 // dash: chrome-framed pods left and right (a needle gauge each, pivoting from the pod's inner edge, and lamps under it),
 // a centre panel holding a swinging speed needle over a straight row of numbers (the pivot hidden below), two orange
 // VFD windows, a fuel needle and an LED rev bar. v_uv (0,0) is the top-left. All the numbers are text widgets over it.
@@ -44,7 +44,7 @@ const vec3 TICK = vec3(0.95, 0.95, 0.95);
 const vec3 AMBER = vec3(1.0, 0.63, 0.16);
 const vec3 NEEDLE = vec3(1.0, 0.8, 0.78);
 const vec3 LED_Y = vec3(1.0, 0.86, 0.16);
-// the rev bar as the Turbo Regal's: green, every fourth (each 1000 rpm) orange, the redline mark red
+// the rev bar as the Grand National's: green, every fourth (each 1000 rpm) orange, the redline mark red
 const vec3 LED_G = vec3(0.62, 0.86, 0.16);
 const vec3 LED_O = vec3(1.0, 0.42, 0.08);
 const vec3 LED_GOFF = vec3(0.07, 0.11, 0.02);
@@ -199,7 +199,7 @@ void main() {
         // the speed needle is its own layer over the text (NEEDLE_LAYER below), so it sweeps over the PRND row
     }
 
-    // fuel, as the Turbo Regal's: 5 marks on rays from a pivot just under PREMIUM FUEL, crossing a horizontal line
+    // fuel, as the Grand National's: 5 marks on rays from a pivot just under PREMIUM FUEL, crossing a horizontal line
     // (u_fuelV.y) evenly spaced out to +-u_fuelG.z, each cut by two bands along it: under the line every mark's lower part
     // (u_fuelG.w tall), over it a row as tall as E, the pump and F (u_fuelV.z), where only the two marks between show (E,
     // the pump and F, text and icon widgets, stand in the others' place). Its needle is on the needle layer
@@ -210,7 +210,7 @@ void main() {
         float above = cov(p.y - ly + 4.0) * cov(ly - 4.0 - u_fuelV.z - p.y);
         for (int i = 0; i < 5; i++) {
             float a = atan((float(i) / 2.0 - 1.0) * u_fuelG.z, depth);
-            // the two marks between (no E, pump or F over them) thinner, as the Turbo Regal's
+            // the two marks between (no E, pump or F over them) thinner, as the Grand National's
             bool between = i == 1 || i == 3;
             float part = between ? max(below, above) : below;
             c = mix(c, TICK, mark(p, fp, a, 0.0, depth + 80.0, between ? 1.8 : 3.0) * part);

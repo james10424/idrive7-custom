@@ -72,7 +72,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.brakeOn = null; // the brake lights (true / false), null until the car says
     /** @type {?string} */
     this.turn = null; // the indicators: 'L', 'R', 'LR' (hazards) or '' (body.Light StatusFunctionsIndicators)
-    this.accOn = false; // BMW's HUD has the ACC car or distance bars up (the Regal CRUISE lamp)
+    this.accOn = false; // BMW's HUD has the ACC car or distance bars up (the Grand National CRUISE lamp)
     /** @type {?number} */
     this.mileage = null; // the odometer as sent (MileageSupreme, taken as km)
     /** @type {?boolean} */
@@ -354,7 +354,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
                 ? false
                 : null;
         },
-        // the indicators (the Regal theme's turn lamps): controlIndicateDirection 1 / 3 left, 2 / 4 right, 8 hazards
+        // the indicators (the Grand National theme's turn lamps): controlIndicateDirection 1 / 3 left, 2 / 4 right, 8 hazards
         StatusFunctionsIndicators: (msg) => {
           const raw = msg && msg.controlIndicateDirection,
             direction = enumNum(raw, INDICATE);
@@ -380,7 +380,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           this.turnAt = Date.now();
         },
       },
-      // the parking brake (the Regal theme's left lamp): statusParkingBrake 1 / 4 = set or setting, 0 / 2 = released
+      // the parking brake (the Grand National theme's left lamp): statusParkingBrake 1 / 4 = set or setting, 0 / 2 = released
       "de.bmw.infotainment.vehicle.Vehicle2": {
         statusStandstillFunctions: (msg) => {
           const raw = msg && msg.statusParkingBrake,
@@ -429,7 +429,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             this.parkBrakeVsm = parkBrake === 1 || parkBrake === 4;
         },
       },
-      // the odometer (the Regal theme's VFD): MileageSupreme, unit unconfirmed (taken as km; logged raw on change)
+      // the odometer (the Grand National theme's VFD): MileageSupreme, unit unconfirmed (taken as km; logged raw on change)
       "de.bmw.infrastructure.MileageSupreme": {
         mileageSupreme: (msg) => {
           const mileage = msg && msg.mileageSupreme;

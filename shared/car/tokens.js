@@ -6,7 +6,7 @@
  * {{gear}} (P / R / N, D3 / S3 / M3 by the shifter programme, or just 3 when the selector position is unknown), {{gearnum}} (3, or P / R / N)
  * {{spd:<i>}} (speed scale label i of SPEED_SCALE: 0..200 mph, 0..320 km/h) {{range}} {{u:distLc}} (mi, km) {{ambient}} (outside, signed: +75) {{u:speedLc}} (mph, km/h) {{ampmLc}} (am, pm) {{torque}} {{u:torque}} (lb-ft, Nm) {{torquePct}} {{powerPct}} (% of config.engine's peak) {{boostHi}} {{boostMid}}
  * (gauge labels for 1.4 / 0.7 bar in the display unit) {{stage}} (P R N, D / S / M by the shifter programme) {{gearInD}} (gear number while in D, else -) {{mode}} (COMFORT, SPORT, SPORT PLUS, SPORT INDIVIDUAL, ECO PRO, ...)
- * {{temp:<deg C>}} (that temperature in the display unit, °F rounded to 10, for gauge labels) {{boostTick:0|m1|m2|u1|u2|u3|end}} (Regal's boost scale labels: 0 .. 1.5 bar in thirds, or 0 .. 20 psi in quarters; the other unit's slots empty) {{setup:engine|chassis|steering|gearbox}} (what that part is set to in the drive mode now)
+ * {{temp:<deg C>}} (that temperature in the display unit, °F rounded to 10, for gauge labels) {{boostTick:0|m1|m2|u1|u2|u3|end}} (Grand National's boost scale labels: 0 .. 1.5 bar in thirds, or 0 .. 20 psi in quarters; the other unit's slots empty) {{setup:engine|chassis|steering|gearbox}} (what that part is set to in the drive mode now)
  * {{consumption}} {{u:cons}}: average consumption for the period picked on the center screen, in the units setting's unit (mpg or
  * l/100km, converted from the car's own; ResetLogic averageConsumption, scale / 10^digit, else bcDataAll's raw * config.consumption.factor 0.1).
  * {{fuelFull}} {{fuelHalf}} (the tank's full and half marks, config.tankLitres, in L or US gal) {{u:fuel}} (L / gal)
@@ -16,7 +16,7 @@
  * this one, once a second, 253 with nothing measured; DataFrontVehicle frontVehicleGapX when the car sends that), {{accRel}}
  * its speed against ours in km/h / mph ({{u:rel}}, minus = closing; "--" while we stand still): DataFrontVehicle frontVehicleSpeedX when sent,
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
- * Regal: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{range3}} (up to 999, no leading zeros), {{u:distUc}} (MI, KM), {{u:consUc}} (L/100KM, MPG), {{ambientN}} (outside, no + sign),
+ * Grand National: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{range3}} (up to 999, no leading zeros), {{u:distUc}} (MI, KM), {{u:consUc}} (L/100KM, MPG), {{ambientN}} (outside, no + sign),
  * {{lampBrake}} (PARK BRAKE / AUTO HOLD) {{lampTurnL}} {{lampTurnR}} {{lampCruise}} (the lamp's text while lit, else empty; config.lamps).
  * The route while guiding (Guidance finalDestinationInfo / travelledDistance, apps with "navLayout"; "--" else): {{navLeft}} the
  * distance left as BMW formats it, {{u:navLeft}} its unit (km, mi, m, ft), {{navTime}} the time left h:mm.
@@ -105,7 +105,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       }
       case "musicTitle":
         return this.musicTitle || "";
-      // the Regal theme's lamps: their text while lit, else nothing
+      // the Grand National theme's lamps: their text while lit, else nothing
       case "lampBrake": {
         const lamp = this._brakeLamp();
         return lamp === "park"
@@ -137,7 +137,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
               ),
             )
           : "---";
-      } // up to 3 digits, no leading zeros, 999 past it (Regal's pod)
+      } // up to 3 digits, no leading zeros, 999 past it (Grand National's pod)
       case "range4": {
         const range = this._raw("range");
         return isNum(range)
@@ -221,7 +221,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         return isNum(speed)
           ? String(Math.floor(Math.max(0, speed) * 0.621371))
           : "--";
-      } // mph whatever the units (Regal), floored as above
+      } // mph whatever the units (Grand National), floored as above
       case "oil":
       case "coolant": {
         const temp = this._raw(tok);
@@ -334,7 +334,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           : data.stage || "-";
       }
       case "gearInD": {
-        // the gear number while driving, else a dash (Regal's GEAR readout)
+        // the gear number while driving, else a dash (Grand National's GEAR readout)
         const data = this.car.data();
         return (data.stage === "D" || (!data.stage && isNum(data.gear))) &&
           isNum(data.gear) &&
@@ -398,7 +398,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             : "--";
         } // gauge labels: °F to the 10
         if (tok.indexOf("boostTick:") === 0) {
-          // Regal's boost scale: 0 .. 1.5 bar in thirds, or 0 .. 20 psi in quarters; a slot of the other unit is empty
+          // Grand National's boost scale: 0 .. 1.5 bar in thirds, or 0 .. 20 psi in quarters; a slot of the other unit is empty
           const slot = tok.slice(10);
           if (slot === "0") return "0";
           if (slot === "end") return usUnits ? "20" : "1.5";

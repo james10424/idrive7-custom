@@ -48,7 +48,7 @@ CLUSTER_FONTS = [
     ('s_val', 'Michroma-Regular.ttf', 26, DIGITS + ':+-.', 1),
     ('s_unit', 'Barlow-Medium.ttf', 24, LOWER + UPPER + DIGITS + '°/-. '),
     ('s_gl', 'Michroma-Regular.ttf', 21, DIGITS + '/', 1),
-    # Regal (1987 Buick Regal dash): tall condensed white numbers, small print, and the orange VFD's seven segments
+    # Grand National (1987 Buick Grand National dash): tall condensed white numbers, small print, and the orange VFD's seven segments
     ('r_num', 'BarlowCondensed-SemiBold.ttf', 50, DIGITS),
     ('r_gl', 'BarlowCondensed-SemiBold.ttf', 34, DIGITS + 'EF'),
     ('r_ef', 'BarlowCondensed-SemiBold.ttf', 27, 'EF'),   # the fuel gauge's E and F, 80% of r_gl

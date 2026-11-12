@@ -7,9 +7,9 @@ const { REGAL_GEARS } = require("./consts");
 const { isNum } = require("../engine/util");
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
-  /** The Regal lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
+  /** The Grand National lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
    *  that side (hazards: both); the demo drive blinks left now and then. Cruise: BMW's ACC car or bars up. */
-  /** The Regal left lamp: 'park' (the parking brake set: red PARK BRAKE), 'hold' (Auto Hold holding the car: green AUTO
+  /** The Grand National left lamp: 'park' (the parking brake set: red PARK BRAKE), 'hold' (Auto Hold holding the car: green AUTO
    *  HOLD) or null. The demo drive: parked in P, holding at a standstill otherwise.
    * @returns {?string}
    */
@@ -58,7 +58,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
-   * A Regal turn lamp lit now (blinking at 1.25 Hz).
+   * A Grand National turn lamp lit now (blinking at 1.25 Hz).
    * @param {string} side 'L' or 'R'
    * @returns {boolean}
    */
@@ -73,7 +73,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
-   * The Regal CRUISE lamp lit: BMW's ACC car or bars up.
+   * The Grand National CRUISE lamp lit: BMW's ACC car or bars up.
    * @returns {boolean}
    */
   _cruiseLit() {
@@ -84,7 +84,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
-   * The Regal gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D, S and M 3), -1 for none.
+   * The Grand National gear row's lit slot (REGAL_GEARS: P 0, R 1, N 2, D, S and M 3), -1 for none.
    * @returns {number}
    */
   _regalGear() {

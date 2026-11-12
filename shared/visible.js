@@ -35,7 +35,7 @@ const HOOD = [
   [1900, 196],
   [1920, 240],
 ];
-/** The dash camera hangs in front of the panel's top middle, from the top down to y ~132 (car photo of the Regal
+/** The dash camera hangs in front of the panel's top middle, from the top down to y ~132 (car photo of the Grand National
  *  theme, Nov 8 2026): [x0, y0, x1, y1]. */
 /** @type {[number, number, number, number]} */
 const CAMERA = [760, 0, 1200, 135];

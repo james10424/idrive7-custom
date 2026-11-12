@@ -137,10 +137,10 @@ const THEMES = {
     sgreen: [47, 210, 122, 255],
     syellow: [255, 194, 26, 255],
   },
-  // Regal (layout regal.json, after a 1987 Buick Regal's dash): white numbers, the orange VFD, green lamps. Extra roles:
+  // Grand National (layout regal.json, after a 1987 Buick Grand National's dash): white numbers, the orange VFD, green lamps. Extra roles:
   // vfd (the VFD's orange), kmh (the km/h row), lampText (on the lit BRAKE lamp), green (turn and cruise lamps).
   regal: {
-    name: "Regal",
+    name: "Grand National",
     fg: [240, 240, 240, 255],
     dim: [170, 172, 178, 255],
     track: [80, 80, 84, 255],

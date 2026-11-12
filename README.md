@@ -4,9 +4,9 @@
 
 ## Custom Cluster
 
-Redraws the whole instrument cluster as a 1987 Buick Regal dash, and switches to a Sport view round BMW's map while route guidance is on. [Read more](apps/custom_cluster/README.md)
+Redraws the whole instrument cluster as a 1987 Buick Grand National dash, and switches to a Sport view round BMW's map while route guidance is on. [Read more](apps/custom_cluster/README.md)
 
-<p align="center"><img src="docs/images/cluster-regal.gif" width="900" alt="Regal theme"><br><sub>Regal: the speed over the 55, the voltmeter and oil temperature pods with the range and clock, the rolling odometer under the 55 and P R N D in the left pod</sub></p>
+<p align="center"><img src="docs/images/cluster-regal.gif" width="900" alt="Grand National theme"><br><sub>Grand National: the speed over the 55, the voltmeter and oil temperature pods with the range and clock, the rolling odometer under the 55 and P R N D in the left pod</sub></p>
 
 <p align="center"><img src="docs/images/cluster-sport.gif" width="900" alt="Sport theme while navigating"><br><sub>Sport while navigating: BMW's map shows in the middle (black here), the route's progress along the bottom</sub></p>
 

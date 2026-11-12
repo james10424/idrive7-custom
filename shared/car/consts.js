@@ -156,7 +156,7 @@ const ROUTE_UNIT = {
   4: "mi",
   6: "yd",
 };
-// the Regal theme's gear row: P R N D, a gap, the gear number; the lit box for each selector state (S lights D, M the number)
+// the Grand National theme's gear row: P R N D, a gap, the gear number; the lit box for each selector state (S lights D, M the number)
 // the parking brake and Auto Hold (Vehicle2 statusStandstillFunctions, VehicleStabilizationManagement StandStillFunction, CDS
 // statusHandBrake; someip-interfaces.json)
 const PARK_BRAKE = {

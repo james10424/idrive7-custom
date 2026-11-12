@@ -108,7 +108,7 @@ The status row says why, after "Miku:":
 | `atlas.rgba is N bytes, ... needs M` | The two files don't belong together (one from an older bake): deploy both again. |
 | `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it (a precaution, see [What the cluster can take](#what-the-cluster-can-take)). |
 | `atlas asset refused` | cluster-render had no room: another app is using most of its pixel memory. |
-| `refused asset ... the service's pixel memory is full` (log), she never zooms in | The close-up (7.6 MiB) didn't fit next to the other apps' images. Upstream cluster-render has 16 MiB for every app together, Regal on the cluster uses 7.5; our fork's `pixel_mib` (32) makes room. Without it she just stands. |
+| `refused asset ... the service's pixel memory is full` (log), she never zooms in | The close-up (7.6 MiB) didn't fit next to the other apps' images. Upstream cluster-render has 16 MiB for every app together, Grand National on the cluster uses 7.5; our fork's `pixel_mib` (32) makes room. Without it she just stands. |
 
 Nothing shows during route guidance either: that's on purpose, BMW's turn map uses her corner.
 

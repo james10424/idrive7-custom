@@ -6,7 +6,7 @@ const { isNum } = require("../../engine/util");
 const { packCfg } = require("../../engine/cfg");
 const RDASH = require("./shader");
 
-const REGAL_NEEDLE_TAU_MS = 170; // Regal's fuel and pod needles ease toward a reading: settled in about 0.5 s
+const REGAL_NEEDLE_TAU_MS = 170; // Grand National's fuel and pod needles ease toward a reading: settled in about 0.5 s
 const REGAL_SPEED_TAU_MS = 50; // its speed needle: about 0.15 s, so it keeps up with the digits
 // the set-once uniforms packed into u_cfg (engine/cfg.js), in slot order
 const CFG = [
@@ -64,7 +64,7 @@ const NEEDLE = packCfg(
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
-const DOCS = `effect layer; the whole Regal theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMin" (0, the mph at the scale's start), "spdMid" (55, the middle; halfway between spdMin and spdMax makes the scale linear), "spdStep" (5, between marks; the first mark), "spdAmber" (55, the amber mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" [pivot x, y, the end marks' crossing of fuelLine (+-x), the lower band's height], "podG" [pivot x, y, tick r0, r1], "fuelLine" (y: where the fuel marks split, E, the pump and F sitting on it) and "fuelRowH" (the row above it: E, the pump, F and the marks' upper parts this tall, 21), "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "podZones" [{ low?, ok?: [lo, hi], high? }] x 2 (bands on the scale's outer edge, as deep as its short marks: up to low red on the left pod and blue on the right, ok green, from high red), "led" with "ledN" and "rpmMax" (green segments, every fourth orange; a red mark above from the Redline setting to the end, from "coldRedline" [rpm, cold C, warm C] while the oil is cold, gliding to the setting as it warms), "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]), or "led2RangeUs" with US units, in "led2N" (15) segments), "gearBox" + "gearPitch" (the lit box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "arrow" [x, y, size], "batIcon" [x, y]`;
+const DOCS = `effect layer; the whole Grand National theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMin" (0, the mph at the scale's start), "spdMid" (55, the middle; halfway between spdMin and spdMax makes the scale linear), "spdStep" (5, between marks; the first mark), "spdAmber" (55, the amber mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" [pivot x, y, the end marks' crossing of fuelLine (+-x), the lower band's height], "podG" [pivot x, y, tick r0, r1], "fuelLine" (y: where the fuel marks split, E, the pump and F sitting on it) and "fuelRowH" (the row above it: E, the pump, F and the marks' upper parts this tall, 21), "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "podZones" [{ low?, ok?: [lo, hi], high? }] x 2 (bands on the scale's outer edge, as deep as its short marks: up to low red on the left pod and blue on the right, ok green, from high red), "led" with "ledN" and "rpmMax" (green segments, every fourth orange; a red mark above from the Redline setting to the end, from "coldRedline" [rpm, cold C, warm C] while the oil is cold, gliding to the setting as it warms), "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]), or "led2RangeUs" with US units, in "led2N" (15) segments), "gearBox" + "gearPitch" (the lit box in the gear row P R N D _ n: D in D and S, the number in M), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "arrow" [x, y, size], "batIcon" [x, y]`;
 
 module.exports = {
   type: "rdash",
@@ -222,7 +222,7 @@ module.exports = {
     const redAt = Math.min(1, Math.max(0, redRpm / max));
     // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
     const led2N = widget.led2N || 15,
-      // "led2RangeUs": the range with US units (Regal's 0 .. 20 psi, in bar)
+      // "led2RangeUs": the range with US units (Grand National's 0 .. 20 psi, in bar)
       led2Range = (hud.setting("units") === "us" && widget.led2RangeUs) ||
         widget.led2Range || [0, 1.5],
       boost = hud._raw(widget.led2Signal || "boost");

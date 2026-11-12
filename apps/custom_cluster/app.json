@@ -1,8 +1,8 @@
 {
   "id": "custom_cluster",
   "title": "Custom Cluster",
-  "description": "Redraws the instrument cluster: a 1987 Regal dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.52",
+  "description": "Redraws the instrument cluster: a 1987 Grand National dash, or a Sport view round BMW's map while navigating",
+  "version": "0.1.53",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -96,11 +96,11 @@
     },
     "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
       "functionalLibraryData": "rs",
-      "_optional": "the Regal theme's CRUISE lamp"
+      "_optional": "the Grand National theme's CRUISE lamp"
     },
     "de.bmw.chassis.VehicleStabilizationManagement": {
       "StandStillFunction": "s",
-      "_optional": "Auto Hold for the Regal theme's left lamp"
+      "_optional": "Auto Hold for the Grand National theme's left lamp"
     }
   },
   "screens": [
@@ -136,7 +136,7 @@
         ],
         [
           "regal",
-          "Regal (1987)"
+          "Grand National (1987)"
         ],
         [
           "sport",
@@ -160,7 +160,7 @@
         ],
         [
           "regal",
-          "Regal (1987)"
+          "Grand National (1987)"
         ],
         [
           "off",
@@ -242,7 +242,7 @@
       "lon": -80.8431
     },
     "utcOffsetMinutes": null,
-    "_comment": "target panel: the whole 1920x720 instrument cluster, drawn over BMW's gauges. socketPath: cluster-render's documented default. location and utcOffsetMinutes: as in Custom HUD (the clock box). tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a 2020 G20 M340i holds 59 L / 15.6 gal). engine: the peak crank torque (Nm) and power (kW) the {{torquePct}} and {{powerPct}} tokens count from (an M40i: 500 Nm, 285 kW / 382 hp). lamps: the Regal theme's lamps (the brake lights, BMW's ACC display).",
+    "_comment": "target panel: the whole 1920x720 instrument cluster, drawn over BMW's gauges. socketPath: cluster-render's documented default. location and utcOffsetMinutes: as in Custom HUD (the clock box). tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a 2020 G20 M340i holds 59 L / 15.6 gal). engine: the peak crank torque (Nm) and power (kW) the {{torquePct}} and {{powerPct}} tokens count from (an M40i: 500 Nm, 285 kW / 382 hp). lamps: the Grand National theme's lamps (the brake lights, BMW's ACC display).",
     "dme": {
       "comment": "Boost from the engine unit (DME, ecu 18) over read-only UDS 0x22, only while the sport display sends no boost and a boost readout is shown. Absolute kPa, the outside air pressure (baro) is subtracted. Candidates tried in order, the first plausible one wins. From cauliflowermossgrape's car_vitals (MIT).",
       "ecu": 18,
@@ -408,7 +408,7 @@
       "m": "regal"
     },
     "fixedSettings": {
-      "_comment": "Settings no longer offered (0.1.48): the values the engine reads for them. Regal's red mark over the rev scale starts at the Redline setting.",
+      "_comment": "Settings no longer offered (0.1.48): the values the engine reads for them. Grand National's red mark over the rev scale starts at the Redline setting.",
       "mapWindow": false,
       "shiftBefore": 0,
       "coldGuard": false,

@@ -1,6 +1,6 @@
 # Custom Cluster
 
-Redraws the whole instrument cluster: a 1987 Buick Regal dash, switching to a Sport view round BMW's map while you navigate. Open **Custom Cluster** from the apps menu on the center screen to change it.
+Redraws the whole instrument cluster: a 1987 Buick Grand National dash, switching to a Sport view round BMW's map while you navigate. Open **Custom Cluster** from the apps menu on the center screen to change it.
 
 ## Themes
 
@@ -16,16 +16,16 @@ The look of BMW's newer Live Cockpit Sport view.
 
 <p align="center"><img src="../../docs/images/cluster-sport.gif" width="900" alt="Sport theme while navigating"><br><sub>While navigating: BMW's map shows in the middle (black here)</sub></p>
 
-### Regal (1987)
+### Grand National (1987)
 
-The look of a 1987 Buick Regal's dash: chrome frames, white numbers, pink needles and an orange VFD.
+The look of a 1987 Buick Grand National's dash: chrome frames, white numbers, pink needles and an orange VFD.
 
-<p align="center"><img src="../../docs/images/cluster-regal.gif" width="900" alt="Regal theme"></p>
+<p align="center"><img src="../../docs/images/cluster-regal.gif" width="900" alt="Grand National theme"></p>
 
 - **Left pod:** a 12 V voltmeter (8 to 16 V), with the parking brake lamp (red PARK BRAKE, or green AUTO HOLD while Auto Hold holds the car), the range (in orange VFD digits), and under it P R N D with the gear number, the lit one boxed.
 - **Right pod:** oil temperature (50 / 110 / 150 °C), with the CRUISE lamp (lit green while ACC is on), the clock and the outside temperature under it.
 - **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. Over the 55, the speed in big orange VFD digits (mph or km/h by the units setting); under it, a rolling odometer: six drums of white digits that turn as a real one's do (miles or km by the units setting; the last drum turns with the distance driven), and the needle sweeps over it. No turn signals: BMW's own indicator sound stays.
-- **Middle, bottom:** the fuel gauge in the middle as the Turbo Regal's (UNLEADED FUEL ONLY over it, PREMIUM FUEL under it, E, the pump and F standing on the line its marks split at), a yellow LED boost bar (0 to 1.5 bar) on its left, and on its right an LED rev bar from 0 to 7000 rpm, green with each 1000's segment orange, under a red mark from your redline to the end.
+- **Middle, bottom:** the fuel gauge in the middle as the Grand National's (UNLEADED FUEL ONLY over it, PREMIUM FUEL under it, E, the pump and F standing on the line its marks split at), a yellow LED boost bar (0 to 1.5 bar) on its left, and on its right an LED rev bar from 0 to 7000 rpm, green with each 1000's segment orange, under a red mark from your redline to the end.
 - **Bottom:** BMW's belt light and gear letter. There is no map window.
 
 More themes are on the way.
@@ -38,11 +38,11 @@ More themes are on the way.
 
 ## Settings
 
-- **Theme:** Regal or Sport (or Off).
-- **While navigating:** Sport with the map, Regal, Off, or no change.
+- **Theme:** Grand National or Sport (or Off).
+- **While navigating:** Sport with the map, Grand National, Off, or no change.
 - **Units:** mph, °F, psi or km/h, °C, bar.
 - **Clock:** 12-hour or 24-hour.
-- **Redline:** where Regal's rev LEDs turn yellow, and where the red marks start on Sport's rev scale (they always cover at least the last 500 rpm, and the yellow marks sit in the 700 rpm before them).
+- **Redline:** where Grand National's rev LEDs turn yellow, and where the red marks start on Sport's rev scale (they always cover at least the last 500 rpm, and the yellow marks sit in the 700 rpm before them).
 - **Demo data:** fake driving data for trying it out parked.
 - **Calibration grid:** a theme that draws lines every 50 px with labels, for checking on a photo where things land on the real screen. It also carries a few test marks used to measure cluster-render's limits on the car.
 
@@ -56,7 +56,7 @@ More themes are on the way.
 
 Tested on a 2020 M340i. cluster-render draws up to 64 layers per connection (since 0.4.2), and every theme uses far fewer. Still to be checked:
 
-- whether Sport and Regal draw complete (if not, the first row of the app's page says how many parts are drawn and why the rest are not);
+- whether Sport and Grand National draw complete (if not, the first row of the app's page says how many parts are drawn and why the rest are not);
 - whether BMW's warning lights still show over the dash (start the car with a seat belt off and look);
 - the switch to Sport when route guidance starts, and the map window's position;
 - how the colours and edges look on the real screen.
