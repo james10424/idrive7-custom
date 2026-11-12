@@ -4,9 +4,10 @@
  * Records a Live2D model's parameters from VTube Studio (motion capture through its face tracking), to bake into
  * animation frames.
  *
- *   node tools/live2d_bake/vts_record.js [--out clip.json] [--fps 30] [--host 192.168.1.20[:8001]]
+ *   node tools/live2d_bake/vts_record.js [192.168.1.20[:8001]] [--out clip.json] [--fps 30]
  *
- * It asks for VTube Studio's address (Enter: this computer), connects to its plugin API (VTube Studio: Settings, "Start
+ * VTube Studio's address is the first argument (an IP or a name, :port if not 8001); without it, it asks (Enter: this
+ * computer). It connects to its plugin API (VTube Studio: Settings, "Start
  * API", port 8001 by default; from another computer, that machine's IP), and the first time asks VTube Studio for a
  * token: click Allow in its popup. The token is kept in ~/.config/idrive7-custom/vts-token for next time. Then it
  * records the loaded model's parameters, polled --fps times a second (the API has no parameter-change event), until
@@ -47,6 +48,19 @@ const PROGRESS_MS = 1000; // the recording line updates this often
 function arg(name, def) {
   const i = process.argv.indexOf("--" + name);
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : def;
+}
+
+/**
+ * The first command-line argument that isn't a --flag or a flag's value: VTube Studio's address.
+ * @returns {string | undefined}
+ */
+function positional() {
+  const args = process.argv.slice(2);
+  for (let i = 0; i < args.length; i++) {
+    if (args[i].startsWith("--")) i++;
+    else return args[i];
+  }
+  return undefined;
 }
 
 const fps = Math.min(MAX_FPS, Math.max(1, Number(arg("fps", String(DEFAULT_FPS))) || DEFAULT_FPS));
@@ -152,7 +166,7 @@ async function authenticate(api) {
 }
 
 async function main() {
-  let host = arg("host") || (await ask("VTube Studio's address (Enter: this computer): ")).trim() || "127.0.0.1";
+  let host = positional() || arg("host") || (await ask("VTube Studio's address (Enter: this computer): ")).trim() || "127.0.0.1";
   if (!/:\d+$/.test(host)) host += ":" + DEFAULT_PORT;
   const api = connect("ws://" + host);
   await api.open();
