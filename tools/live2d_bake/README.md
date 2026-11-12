@@ -28,6 +28,18 @@ Turns a Live2D model you own into the frames Custom HUD's **Miku** layout draws 
 
 `http://localhost:8095/play` is a playground: a checkbox per expression and a slider per face and body parameter, to try them before writing the config. With `--home play` the server opens on it (its root is the playground, the bake page moves to `/bake`), for a launcher that only opens a server's root.
 
+## Record motion from VTube Studio
+
+To bake animation from your own face tracking, record the model's parameters from VTube Studio while you act it out:
+
+```bash
+node tools/live2d_bake/vts_record.js --out <folder>/wave.json
+```
+
+It asks for VTube Studio's address (Enter for this computer, or another computer's IP), connects to its API (in VTube Studio's settings, turn on Start API; port 8001), and the first time asks for access: click Allow in VTube Studio's popup. Then it records, about 30 times a second (`--fps`), until you press Enter, and writes the clip: the parameters' ranges, their names, and one row of values per frame with its time. Ctrl+C quits without saving. Node 22 or newer.
+
+Keep the clips next to your model, not in this repo. VTube Studio's physics (hair, ribbons) is in the recorded values too, so a bake from a clip should apply the face and body parameters and let the model's own physics do the rest.
+
 ## Deploy to the car
 
 ### Where the HUD looks
