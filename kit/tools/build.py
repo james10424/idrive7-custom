@@ -449,7 +449,7 @@ def build(app_id, language='en'):
             if '/' in d or d in ('', '.', '..') or not os.path.isdir(sp):
                 raise SystemExit('%s: app.json "shared" lists %r, which is not a folder of shared/' % (app_id, f))
             shutil.copytree(sp, os.path.join(src, 'javascript', d),
-                            ignore=shutil.ignore_patterns('.*', '__pycache__'))
+                            ignore=shutil.ignore_patterns('.*', '__pycache__', '*.d.ts'))  # .d.ts: editor types only
             continue
         sp = os.path.join(ROOT, 'shared', f)
         if not f.endswith('.js') or os.path.basename(f) != f or not os.path.isfile(sp):

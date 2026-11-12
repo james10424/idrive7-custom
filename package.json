@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "description": "Editor types only: nothing here ships. The apps run on the car's Node 8, so Node's types are 8.10.",
+  "devDependencies": {
+    "@types/node": "8.10.66"
+  }
+}

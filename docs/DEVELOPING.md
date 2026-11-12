@@ -23,6 +23,8 @@ mgu-repo.json     tells the Store how to build the apps
 
 `python3 kit/tools/build.py <id>` builds one app into `dist/`. It needs an `oap-sdk/` folder. On the car the Store makes the real one from a BMW app. On the Mac the bench writes a stub, which is gitignored and must never ship.
 
+**Editor types:** run `npm install` once for Node's types (`@types/node` 8.10, the car's Node). The JSDoc types come from `jsconfig.json`; `App` (HudApp with the engine and car files' methods) is an interface in `shared/engine/app_type.d.ts`, since as a typedef it referenced itself and became `any`. The build leaves `.d.ts` files out.
+
 ## Test on the Mac
 
 ```sh

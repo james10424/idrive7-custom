@@ -242,8 +242,9 @@ const { isNum, mib } = require("./util");
  */
 /**
  * HudApp with the methods the engine and car files add to its prototype (mixin, at the end of this file): what
- * widget modules get as their app, and `this` inside those files.
- * @typedef {HudApp & typeof import("./plan") & typeof import("./status") & typeof import("./modes") & typeof import("./assets") & typeof import("../car/signals") & typeof import("../car/route") & typeof import("../car/assist") & typeof import("../car/values") & typeof import("../car/lamps") & typeof import("../car/tokens")} App
+ * widget modules get as their app, and `this` inside those files. Declared in app_type.d.ts (an interface: as a
+ * typedef here it referenced itself, and TypeScript made it any).
+ * @typedef {import("./app_type").App} App
  */
 /** @typedef {{ c: Client, ci: number, ref: number, key: string }} LayerRef */
 /** @typedef {{ state: string, reason?: string }} LayerState */

@@ -5,6 +5,6 @@
     "lib": ["ES2020", "DOM"],
     "checkJs": false
   },
-  "include": ["shared/**/*.js", "bench/**/*.js", "tools/**/*.js", "apps/*/*.js", "kit/**/*.js"],
+  "include": ["shared/**/*.js", "shared/**/*.d.ts", "bench/**/*.js", "tools/**/*.js", "apps/*/*.js", "kit/**/*.js"],
   "exclude": ["node_modules", "dist", "oap-sdk", ".claude"]
 }
