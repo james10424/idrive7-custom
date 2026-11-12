@@ -13,7 +13,8 @@
   .wrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 360px); gap: 20px; }
   .stage { min-height: 0; position: relative; }
   .stage canvas { display: block; width: 100%; height: calc(100vh - 70px); object-fit: contain; object-position: center top; }
-  .stage.drop::after { content: "drop the clip"; position: absolute; inset: 0; display: grid; place-items: center; border: 2px dashed #9c9; border-radius: 6px; color: #9c9; font-size: 18px; background: rgba(0, 0, 0, .5); }
+  /* while a file is dragged over the window */
+  body.drop::after { content: "drop the clip to play it"; position: fixed; inset: 8px; display: grid; place-items: center; border: 2px dashed #9c9; border-radius: 8px; color: #9c9; font-size: 20px; background: rgba(0, 0, 0, .6); pointer-events: none; z-index: 10; }
   .panel { min-width: 0; overflow-y: auto; padding-right: 8px; }
   h2 { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 6px; }
   button { background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
@@ -36,7 +37,7 @@
   <div class="panel">
     <h2>Clip</h2>
     <div class="row"><input type="file" id="file" accept=".json,application/json"></div>
-    <p class="note">A clip from vts_record.js. Drop it on the model or pick it here.</p>
+    <p class="note">A clip from vts_record.js. Drop it anywhere on the page or pick it here.</p>
     <div id="info" class="note"></div>
     <h2>Play</h2>
     <div class="row">

@@ -164,15 +164,28 @@
         const input = /** @type {HTMLInputElement} */ (event.target);
         if (input.files && input.files[0]) readFile(input.files[0]);
       });
-      const stage = $("stage");
-      stage.addEventListener("dragover", (event) => {
+      // the whole window takes a dropped clip (dropped anywhere else, the browser would open the file instead)
+      let dragDepth = 0;
+      const showDrop = (/** @type {boolean} */ on) => document.body.classList.toggle("drop", on);
+      document.addEventListener("dragenter", (event) => {
         event.preventDefault();
-        stage.classList.add("drop");
+        dragDepth++;
+        showDrop(true);
       });
-      stage.addEventListener("dragleave", () => stage.classList.remove("drop"));
-      stage.addEventListener("drop", (event) => {
+      document.addEventListener("dragover", (event) => {
         event.preventDefault();
-        stage.classList.remove("drop");
+        if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+      });
+      document.addEventListener("dragleave", () => {
+        if (--dragDepth <= 0) {
+          dragDepth = 0;
+          showDrop(false);
+        }
+      });
+      document.addEventListener("drop", (event) => {
+        event.preventDefault();
+        dragDepth = 0;
+        showDrop(false);
         const file = event.dataTransfer && event.dataTransfer.files[0];
         if (file) readFile(file);
       });
@@ -206,7 +219,7 @@
       });
 
       draw();
-      logLine("open a clip (vts_record.js): drop it on the model or pick it on the right. Space: play, arrows: frames");
+      logLine("open a clip (vts_record.js): drop it anywhere on the page or pick it on the right. Space: play, arrows: frames");
     } catch (err) {
       logLine("ERROR: " + ((err && /** @type {*} */ (err).stack) || err));
     }

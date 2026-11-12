@@ -40,7 +40,7 @@ The first argument is VTube Studio's address: the IP of the computer it runs on 
 
 Keep the clips next to your model, not in this repo.
 
-To watch a clip on the model, open `http://localhost:8095/replay` (or start the server with `--home replay`) and drop the clip on her, or pick it on the right. Play, pause, scrub, step frame by frame (Space and the arrow keys), slow it down, loop it. The recorded values include VTube Studio's physics (hair, ribbons). The bake has none of its own (the HUD's shader swings the twin tails), so the page has a switch to show the clip with or without it: off keeps only what you acted, face and body, with the physics outputs (from the model's `.physics3.json`) at their defaults.
+To watch a clip on the model, open `http://localhost:8095/replay` (or start the server with `--home replay`) and drop the clip anywhere on the page, or pick it on the right. Play, pause, scrub, step frame by frame (Space and the arrow keys), slow it down, loop it. The recorded values include VTube Studio's physics (hair, ribbons). The bake has none of its own (the HUD's shader swings the twin tails), so the page has a switch to show the clip with or without it: off keeps only what you acted, face and body, with the physics outputs (from the model's `.physics3.json`) at their defaults.
 
 ## Deploy to the car
 
