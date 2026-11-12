@@ -430,9 +430,20 @@ setInterval(() => {
     temperatureEngineDrive: raw("temp", num("coolant", 90)),
     temperatureEngineOilDrive: raw("temp", num("oil", 100)),
   });
+  // the selector switch: P / R / N as the car sends them (no gear; R's own), D / S / M in the gear slider's gear (at
+  // least 1); unset, the gear slider alone (in gear: D, else P)
+  const sel = carSw.selector,
+    parked = sel === "P" || sel === "R" || sel === "N",
+    driveGear = sel ? Math.max(1, gear) : gear;
   stub.feed("de.bmw.infrastructure.VehicleInformation", "statusGearboxDrive", {
-    statusActualGearDrive: gear > 0 ? "G" + gear : "N_OR_P",
-    statusActualStageDrive: gear > 0 ? "D" : "P",
+    statusActualGearDrive: parked
+      ? sel === "R"
+        ? "R"
+        : "N_OR_P"
+      : driveGear > 0
+        ? "G" + driveGear
+        : "N_OR_P",
+    statusActualStageDrive: parked ? sel : driveGear > 0 ? "D" : "P",
   });
   stub.feed(
     "de.bmw.infotainment.drivingexcitement.FES",
@@ -454,16 +465,21 @@ setInterval(() => {
     "ExteriorTemperature",
     { temperatureExterior: Math.round((num("ambient", 22) + 40) / 0.5) },
   );
-  // the car's display units (bar, C), so the tyre values below read as 0.1 bar and C + 40; the shifter programme from `program` (S / M)
+  // the car's display units (bar, C), so the tyre values below read as 0.1 bar and C + 40; the shifter programme: S / M
+  // from the selector switch, else D
   stub.feed(
     "de.bmw.infotainment.vehicle.Vehicle",
     "statusNewCurrentUnitsStatusExt",
     { unitOfMeasurementAirPressure: 1, unitOfMeasurementTemperature: 1 },
   );
-  if (!carSw.program)
-    stub.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
-      displayProgramGearbox: "D_PROGRAMM",
-    });
+  stub.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
+    displayProgramGearbox:
+      sel === "S"
+        ? "S_MINUS_PROGRAMM"
+        : sel === "M"
+          ? "M_MINUS_PROGRAMM"
+          : "D_PROGRAMM",
+  });
   // tyres (TPMS, the fields the car answers a read with): pressure in 0.1 bar, temperature raw - 40 C; the rear pair a notch higher
   const pressure = Math.round(num("tyreP", 2.3) * 10),
     temperature = Math.round(num("tyreT", 24) + 40);
@@ -547,15 +563,6 @@ const CAR_SW = {
         }[value],
       },
     ),
-  program: (value) =>
-    stub.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
-      displayProgramGearbox:
-        value === "S"
-          ? "S_MINUS_PROGRAMM"
-          : value === "M"
-            ? "M_MINUS_PROGRAMM"
-            : "D_PROGRAMM",
-    }),
 };
 // sent when a switch changes (and once when the app starts), as the car's subscriptions report changes, not on a
 // timer: a timer here hid an app that forgot a signal held longer than a few seconds

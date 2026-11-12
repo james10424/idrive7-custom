@@ -719,7 +719,7 @@
     ['brakeLights', 'Brake lights: body.Light LampExterior (Sport brake bar)', [['', 'Brake lights not sent'], ['on', 'BRAKING'], ['off', 'OFF']]],
     ['parkBrake', 'Parking brake: Vehicle2 statusStandstillFunctions (Grand National PARK BRAKE lamp)', [['', 'Parking brake not sent'], ['set', 'SET'], ['released', 'RELEASED']]],
     ['autoHold', 'Auto Hold: VehicleStabilizationManagement StandStillFunction (Grand National AUTO HOLD lamp)', [['', 'Auto Hold not sent'], ['off', 'OFF'], ['armed', 'ON'], ['hold', 'HOLDING']]],
-    ['program', 'Shifter programme: MDrive dataDisplayGearbox (D / S / M next to the gear)', [['', 'Programme not sent'], ['D', 'D'], ['S', 'S'], ['M', 'M']]],
+    ['selector', 'Selector: P R N (VehicleInformation statusGearboxDrive, manual drive only: the demo drive is always in gear), or D / S / M (the gear slider\'s gear, at least 1; MDrive dataDisplayGearbox for S and M, in demo too)', [['', 'Selector from the gear'], ['P', 'P'], ['R', 'R'], ['N', 'N'], ['D', 'D'], ['S', 'S'], ['M', 'M']]],
   ];
   const csw = document.getElementById('carsw');
   CAR_SW.forEach(([k, title, opts]) => {
