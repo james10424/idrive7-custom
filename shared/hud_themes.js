@@ -138,7 +138,7 @@ const THEMES = {
     syellow: [255, 194, 26, 255],
   },
   // Grand National (layout regal.json, after a 1987 Buick Grand National's dash): white numbers, the orange VFD, green lamps. Extra roles:
-  // vfd (the VFD's orange), kmh (the km/h row), lampText (on the lit BRAKE lamp), green (turn and cruise lamps).
+  // vfd (the VFD's orange), kmh (the km/h row), lampText (on the lit BRAKE lamp), green (turn and cruise lamps), gearText (the P R N D S row, see-through).
   regal: {
     name: "Grand National",
     fg: [240, 240, 240, 255],
@@ -167,6 +167,7 @@ const THEMES = {
     lampTextG: [225, 255, 230, 255],
     green: [60, 235, 100, 255],
     amber: [255, 160, 40, 255],
+    gearText: [240, 240, 240, 165], // P R N D S: white, see-through so the red needle under them shows
   },
 };
 // every theme: the shift-point red, used by "hot" (the gear and SHIFT at the shift point, the rev bar past it)

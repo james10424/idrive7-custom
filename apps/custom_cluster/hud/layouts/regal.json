@@ -153,7 +153,7 @@
       "gearNeedle": [
         180.0,
         801,
-        666,
+        639,
         692
       ],
       "lampB": [
@@ -338,7 +338,7 @@
       "h": 24,
       "text": "P",
       "font": "r_vfd",
-      "color": "fg",
+      "color": "gearText",
       "align": "center"
     },
     {
@@ -351,7 +351,7 @@
       "h": 24,
       "text": "R",
       "font": "r_vfd",
-      "color": "fg",
+      "color": "gearText",
       "align": "center"
     },
     {
@@ -364,7 +364,7 @@
       "h": 24,
       "text": "N",
       "font": "r_vfd",
-      "color": "fg",
+      "color": "gearText",
       "align": "center"
     },
     {
@@ -377,7 +377,7 @@
       "h": 24,
       "text": "D",
       "font": "r_vfd",
-      "color": "fg",
+      "color": "gearText",
       "align": "center"
     },
     {
@@ -390,7 +390,7 @@
       "h": 24,
       "text": "S",
       "font": "r_vfd",
-      "color": "fg",
+      "color": "gearText",
       "align": "center"
     },
     {
@@ -1063,7 +1063,7 @@
       "gearNeedle": [
         180.0,
         801,
-        666,
+        639,
         692
       ],
       "lampB": [

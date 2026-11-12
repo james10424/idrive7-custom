@@ -4,7 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 11 2026
 
-- **Custom Cluster 0.1.54: Grand National's P R N D S has a needle,** as the 1950s Buicks' selector: white letters (S added; M points at S), a red needle under them on the ray from a far pivot below, instead of the red box. On a change it eases to the new letter, 300 ms a letter (P to D passes N, as BMW's selector reports), and with no gear it stays where it was. Its uniforms are sent only while it moves.
+- **Custom Cluster 0.1.54: Grand National's P R N D S has a needle,** as the 1950s Buicks' selector: see-through white letters (S added; M points at S) and a red needle behind them on the ray from a far pivot below, instead of the red box. Pointing straight up (N) it reaches the letters' top, one length on the others, and shows through the letter it points at. On a change it eases to the new letter, 300 ms a letter (P to D passes N, as BMW's selector reports), and with no gear it stays where it was. Its uniforms are sent only while it moves.
 
 - **Custom Cluster 0.1.53: Regal is now Grand National,** in the Theme and While navigating menus as Grand National (1987) and in the READMEs. A saved Regal choice carries over.
 

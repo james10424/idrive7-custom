@@ -26,8 +26,9 @@ POD_WIN_X, POD_WIN_W = 104, 152   # the left pod's inner box ('podWin')
 GEAR_P = POD_WIN_W / 5            # the gear row P R N D S spread around the pod's inner box (justify-around: a fifth each,
 GEAR_X0 = POD_WIN_X + GEAR_P / 2  # each letter in the middle of its fifth), under the gear number
 GEAR_Y = 606
-GEAR_NEEDLE = (GEAR_Y + 15, 647, 150)   # the gear needle under the row: its tip's y, its bottom's y, its far pivot this far
-                                        # below the row (the letters at about +-22 deg), as the 1950s Buicks' P R N D G
+GEAR_NEEDLE = (GEAR_Y - 12, 647, 150)  # the gear needle behind the row: its tip's y pointing straight up (the top of the
+                                        # letters; one length, so a little lower toward P and S), its bottom's y, its far pivot
+                                        # this far below the row (the letters at about +-22 deg), as the 1950s Buicks' P R N D G
 ODO_Y = 347                     # the rolling odometer under the scale's middle, below MPH, where the gear row was
 
 
@@ -78,10 +79,10 @@ wd.append(centred('mph_unit', PIVOT[0], 318, 46, 21, 'MPH', 'r_lbl'))
 # needle's tip stops at y 212, under it
 wd.append(centred('spd_val', PIVOT[0], 174, 124, 48, '{{speed}}', 'r_seg', 'vfd'))       # the digits centred on the panel
 wd.append(text('spd_unit', PIVOT[0] + 66, 176, 62, 21, '{{u:speed}}', 'r_lbl', 'vfd', 'left'))
-# the gear row in the left pod under the gear number: P R N D S in white, a red needle under it (the shader's) pointing
-# at the selected one (M at S, the stick on the side)
+# the gear row in the left pod under the gear number: P R N D S in see-through white, the red needle behind it (the
+# shader's) pointing at the selected one (M at S, the stick on the side) and showing through the letter
 for i, g in enumerate('PRNDS'):
-    wd.append(centred('gear_' + g, GEAR_X0 + GEAR_P * i, GEAR_Y, 20, 24, g, 'r_vfd'))
+    wd.append(centred('gear_' + g, GEAR_X0 + GEAR_P * i, GEAR_Y, 20, 24, g, 'r_vfd', 'gearText'))
 # the drum row below MPH, as the Grand National's two counters: the rolling odometer (six drums) and the range (three, its unit
 # beside), white digits (r_gl) in the units setting's unit, spread along the speed window (justify-around: each at a
 # quarter of its width from its end); the speed needle (its own layer, regal_needle below) sweeps over them

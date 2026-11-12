@@ -254,12 +254,12 @@ void main() {
         c = mix(c, mix(LED_YOFF, LED_Y, clamp(u_led2V.y * n - i, 0.0, 1.0)), cov(d));
     }
 
-    // the gear needle, red, under the P R N D S row (the text is over this layer): on the ray from a far pivot below the
-    // row to the point it points at, from the pod's bottom up to just under the letters, tapering
+    // the gear needle, red, behind the P R N D S row (the see-through letters are over this layer): on the ray from a far
+    // pivot below the row to the point it points at, from the pod's bottom up to one length (the letters' top straight up)
     if (p.y > u_gearN.z - 3.0 && p.y < u_gearN.w + 3.0) {
         vec2 gd = normalize(u_gearV), gq = p - u_gearN.xy;
         float gal = dot(gq, gd), gpe = abs(dot(gq, vec2(-gd.y, gd.x)));
-        float gr0 = (u_gearN.w - u_gearN.y) / gd.y, gr1 = (u_gearN.z - u_gearN.y) / gd.y;
+        float gr0 = (u_gearN.w - u_gearN.y) / gd.y, gr1 = u_gearN.y - u_gearN.z;
         float ghw = mix(2.4, 1.3, clamp((gal - gr0) / (gr1 - gr0), 0.0, 1.0));
         c = mix(c, mix(GEAR_RED, GEAR_RED * 0.7, smoothstep(0.0, ghw, gpe)), cov(max(gpe - ghw, max(gr0 - gal, gal - gr1))));
     }
