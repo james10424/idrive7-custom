@@ -41,15 +41,14 @@ To try a build on the car before releasing it, install it the way the Store does
    scp root@<car>:/var/opt/public/oap/oap_12204/source/javascript/app.js ~/oap-donor/javascript/
    ```
 
-2. **Build** with it. The bench's `oap-sdk/` is a stub that must never ship, so swap it out and back:
+2. **Build** with it (`oap-sdk/` is gitignored; the extract replaces the bench's stub there):
 
    ```bash
-   rm -rf oap-sdk && node kit/tools/extract_sdk.js ~/oap-donor/javascript/app.js oap-sdk
+   node kit/tools/extract_sdk.js ~/oap-donor/javascript/app.js oap-sdk
    python3 kit/tools/build.py custom_hud
-   rm -rf oap-sdk
    ```
 
-   This writes `dist/custom_hud@<version>.tgz` (`custom_cluster` the same way). The bench writes its stub again the next time it runs.
+   This writes `dist/custom_hud@<version>.tgz` (`custom_cluster` the same way).
 
 3. **Install** it, as the renderer test was:
 
