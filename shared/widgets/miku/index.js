@@ -24,6 +24,7 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {number} [clockAt] when the close-up's u_clock last went up (ms)
  * @property {boolean} [blanked] (the close-up layer) told to draw nothing after a refusal
  * @property {boolean} [only] (the standing layer) her bake is close-up only: it runs her and draws nothing
+ * @property {number} [shownAt] (the standing layer, close-up only) when the close-up layer was last shown (ms; 0: not shown)
  * @property {number} [leanSent] (the standing layer, close-up only) the close-up layer's u_lean, last sent
  * @property {number} [leanSteps] (the standing layer, close-up only) the bake's lean steps each way
  * @property {number} [leanStep] (the standing layer, close-up only) the lean step she's going to, -leanSteps .. leanSteps
@@ -65,13 +66,14 @@ const MIKU_MAX_DT_MS = 500; // a longer gap between updates eases as if it were 
 const MIKU_LEAN_G = 0.4; // this longitudinal g is a full lean
 const MIKU_POINT_STEP_S = 0.01; // the arm's spring is stepped at most this long at a time
 const MIKU_SPEED_KMH = 130; // her speed's full scale
-const IDLE_SHIFT_SLOTS = 24; // the idle loop's head shifts sent (u_ish[6], 4 a vec4)
+const IDLE_SHIFT_SLOTS = 40; // the idle loop's head shifts sent (u_ish[10], 4 a vec4): its frames at most (page.js IDLE_FRAMES_MAX)
 const TURN_SHIFT_SLOTS = 36; // the close-up's turn head shifts sent (u_tsh[9], 4 a vec4)
 const MIKU_STEPS = 500; // the lean, speed, zoom and turn are sent in steps of 1/500
 const MIKU_LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
 const MIKU_LEAN_STEP_TAU_MS = 120; // close-up only: she eases to the lean's step this quickly
 const MIKU_LEAN_SNAP = 0.002; // and is there within this of it
 const MIKU_LEAN_HYST = 0.75; // close-up only: the lean's step changes this far (in steps) past it, not halfway
+const MIKU_SETTLE_MS = 3000; // close-up only: her idle loop waits this long after her layer is (back) on the HUD
 const MIKU_CLOCK_LOOP_MS = 4000; // the close-up's u_clock runs 0 .. 4 s, then starts again
 
 /**
@@ -543,7 +545,14 @@ module.exports = {
       if (only && state.idlePeriod) {
         const turned = Math.abs(state.point || 0),
           firstStep = 1 / Math.max(1, state.turnSteps || 1);
-        if (state.zoomT === 1 && state.zoom < 1) state.idleMs = 0;
+        // and upright and still for MIKU_SETTLE_MS once her layer is shown (first, or back after giving way): her
+        // textures' upload is paid off then (cluster-render paces what goes to the KOMBI and holds the HUD's frames
+        // meanwhile, so the loop jerked along for a few seconds)
+        const layer = hud.layerStates.get(close.ci + ":" + close.ref);
+        if (!layer || layer.state !== "shown") state.shownAt = 0;
+        else if (!state.shownAt) state.shownAt = now;
+        if (!state.shownAt || now - state.shownAt < MIKU_SETTLE_MS) state.idleMs = 0;
+        else if (state.zoomT === 1 && state.zoom < 1) state.idleMs = 0;
         else if (turned > firstStep) state.idleMs = 0;
         else if (turned <= MIKU_TURN_BACK) state.idleMs = (state.idleMs || 0) + (now - (state.idleAt || now));
         state.idleAt = now;

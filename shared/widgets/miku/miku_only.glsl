@@ -26,7 +26,7 @@ uniform vec4 u_tsh[9];   // the turn frames' head shifts (px), left to right, th
 uniform sampler2D u_idle; // the stopped idle loop's own atlas (a close.idle bake), laid out as u_atlas
 uniform vec2 u_idleSize;
 uniform vec4 u_ic[4];    // its grid, crop grid, eyes' rect (as u_cl[4 .. 6]); frames, period (s) (0 frames: no loop)
-uniform vec4 u_ish[6];   // its frames' head shifts (px), four a vec4
+uniform vec4 u_ish[10];  // its frames' head shifts (px), four a vec4: up to 40 frames
 uniform vec4 u_cl[10];   // the bake's fixed values, as one array (cluster-render's 32 uniform names a layer)
 #define u_grid u_cl[4]   // frame cell w, h, columns, pad
 #define u_cropGrid u_cl[5]   // crop cell w, h, columns, y of the first row
@@ -84,10 +84,11 @@ vec4 idleFrame(float n, vec2 q, float eh) {
     }
     return c;
 }
+#define IDLE_BLEND 0.35
 float idleShift(float i) {
     float q = floor(i / 4.0 + 0.01), r = i - q * 4.0;
     vec4 v = vec4(0.0);
-    for (int k = 0; k < 6; k++) if (abs(float(k) - q) < 0.5) v = u_ish[k];
+    for (int k = 0; k < 10; k++) if (abs(float(k) - q) < 0.5) v = u_ish[k];
     return r < 0.5 ? v.x : r < 1.5 ? v.y : r < 2.5 ? v.z : v.w;
 }
 // her stopped idle now (the clock's place in the loop), its two nearest frames slid so the heads meet; without a loop
@@ -95,7 +96,10 @@ float idleShift(float i) {
 vec4 idleNow(vec2 q, float eh, float wy) {
     float n = u_ic[3].x;
     if (n < 0.5) return frameAt(u_frames.z + 1.0, 1.0, q, eh);
-    float k = mod(u_idleT, u_ic[3].y) / u_ic[3].y * n, i0 = min(floor(k), n - 1.0), f = k - i0;
+    float k = mod(u_idleT, u_ic[3].y) / u_ic[3].y * n, i0 = min(floor(k), n - 1.0);
+    // each frame holds, then crossfades into the next over the last IDLE_BLEND of its time: a full crossfade showed
+    // two poses at once for most of a frame (her hair and shoulders blurred while she bobbed)
+    float f = smoothstep(1.0 - IDLE_BLEND, 1.0, k - i0);
     float i1 = i0 + 1.0 > n - 0.5 ? 0.0 : i0 + 1.0;
     float h0 = idleShift(i0), h1 = idleShift(i1), hc = mix(h0, h1, f);
     vec4 c = idleFrame(i0, q + vec2((h0 - hc) * wy, 0.0), eh);
