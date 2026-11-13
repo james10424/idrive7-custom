@@ -202,6 +202,7 @@ const DEFAULT_TAILS_ROOT = 0.15; // where the tails hang from, a fraction down t
 const ZOOM_STEPS_MAX = 3; // close-up zoom steps, also the default
 const TURN_STEPS_DEFAULT = 2; // close-up turn steps each way by default
 const IDLE_FRAME_S = 0.25; // close.idle without a "period": this long a frame
+const LEAN_SHIFT_SLOTS = 44; // the turn's and the lean's head shifts together at most (miku_only.glsl u_tsh[11])
 const IDLE_FRAMES_MAX = 40; // close.idle.poses at most: the head shifts the app sends (miku_only.glsl u_ish[10])
 const IN_STEPS_DEFAULT = 6; // close.only: frames between no expressions and all (Yandere's hands rising)
 const TURN_STEPS_MAX = 17; // and at most: what a 2048x2048 close-up atlas holds with 3 zoom steps and 3 sway poses
@@ -1092,15 +1093,22 @@ async function bakeClose(loaded, cfg, at) {
       " px",
   );
   // the grid: whole frames first, then the crops
+  // close.only with a lean: the lean's frames (the driving set, poses.length ..) go in an atlas of their own
+  // (lean.rgba), laid out as the close-up's, so the close-up atlas keeps its room for the turn
+  const leanPosed = lean ? posed.slice(poses.length) : [],
+    closePosed = lean ? posed.slice(0, poses.length) : posed;
+  if (lean && turnShift.length > LEAN_SHIFT_SLOTS)
+    throw new Error("the turn and the lean have " + turnShift.length + " steps together, over " + LEAN_SHIFT_SLOTS +
+      ": fewer close.turnSteps or close.lean.poses");
   const MAX = only || turnSteps > TURN_STEPS_DEFAULT ? CLOSE_ATLAS_MAX : ATLAS_MAX,
     cell = [frameW + 2 * pad, frameH + 2 * pad],
     cols = Math.floor(MAX / cell[0]),
-    wholes = full_.concat(posed.map((frames) => frames[0])),
+    wholes = full_.concat(closePosed.map((frames) => frames[0])),
     rows = Math.ceil(wholes.length / cols),
     cropCell = [crop[2] + 2 * pad, crop[3] + 2 * pad],
     cropCols = Math.floor(MAX / cropCell[0]),
     crops = [];
-  posed.forEach((frames) => crops.push(frames[1], frames[2]));
+  closePosed.forEach((frames) => crops.push(frames[1], frames[2]));
   const cropY = rows * cell[1],
     atlasH = ceilBlock(cropY + Math.ceil(crops.length / cropCols) * cropCell[1]);
   if (atlasH > MAX)
@@ -1135,6 +1143,30 @@ async function bakeClose(loaded, cfg, at) {
       crop[3],
     ),
   );
+  // the lean's own atlas: its frames left to right (a full lean left .. upright .. a full lean right), then each
+  // frame's half shut and shut eyes, on the close-up's grid
+  /** @type {?{ canvas: HTMLCanvasElement, info: object }} */
+  let leanOut = null;
+  if (leanPosed.length) {
+    const lrows = Math.ceil(leanPosed.length / cols),
+      lcropY = lrows * cell[1],
+      leanH = ceilBlock(lcropY + Math.ceil((2 * leanPosed.length) / cropCols) * cropCell[1]);
+    if (leanH > MAX) throw new Error("the lean atlas would be " + leanH + " px high, over " + MAX + ": fewer close.lean.poses");
+    const leanAtlas = document.createElement("canvas");
+    leanAtlas.width = MAX;
+    leanAtlas.height = leanH;
+    const lctx = leanAtlas.getContext("2d");
+    leanPosed.forEach((frames, n) => {
+      lctx.drawImage(frames[0], (n % cols) * cell[0] + pad, Math.floor(n / cols) * cell[1] + pad);
+      [frames[1], frames[2]].forEach((canvas, e) => {
+        const m = 2 * n + e;
+        lctx.drawImage(canvas, crop[0], crop[1], crop[2], crop[3],
+          (m % cropCols) * cropCell[0] + pad, lcropY + Math.floor(m / cropCols) * cropCell[1] + pad, crop[2], crop[3]);
+      });
+    });
+    leanOut = { canvas: leanAtlas, info: { atlas: [MAX, leanH], cropY: lcropY } };
+    log("lean: " + leanPosed.length + " frames in their own atlas, " + MAX + "x" + leanH);
+  }
   // close.only's idle (close.idle: { period: s, poses: [params, ...] }): her stopped loop, a frame each, in an atlas
   // of its own (idle.rgba) laid out as the close-up's: whole frames, then each frame's half shut and shut eyes
   /** @type {?{ canvas: HTMLCanvasElement, info: object }} */
@@ -1222,6 +1254,7 @@ async function bakeClose(loaded, cfg, at) {
   }
   return {
     idle: idleOut,
+    lean: leanOut,
     canvas: atlas,
     info: {
       atlas: [MAX, atlasH],
@@ -1229,7 +1262,8 @@ async function bakeClose(loaded, cfg, at) {
       zoomSteps,
       turnSteps,
       // close.only: no standing figure or zoom; zoomSteps are then the expressions' in-steps, and leanSteps each way of
-      // the driving set follow the turn (poses 3 + 2 * turnSteps ..), upright in their middle
+      // the driving set are in their own atlas (close.leanAtlas, lean.rgba), upright in their middle; their head
+      // shifts follow the turn's in turnShift
       only,
       leanSteps,
       // grid: cell w, h, columns, pad; cropGrid: cell w, h, columns, y of the first row
@@ -1802,6 +1836,14 @@ async function bake(loaded, cfg) {
   if (closeUp) {
     info.close = closeUp.info;
     // close.only's idle loop: its own atlas, idle.rgba (serve.js compresses it to idle.etc2)
+    // and its lean: lean.rgba (serve.js compresses it to lean.etc2)
+    if (closeUp.lean) {
+      info.close.leanAtlas = closeUp.lean.info;
+      const leanRgba = closeUp.lean.canvas
+        .getContext("2d")
+        .getImageData(0, 0, closeUp.lean.canvas.width, closeUp.lean.canvas.height).data;
+      await fetch("/out/lean.rgba", { method: "POST", body: new Blob([leanRgba]) });
+    }
     if (closeUp.idle) {
       info.close.idle = closeUp.idle.info;
       const idleRgba = closeUp.idle.canvas

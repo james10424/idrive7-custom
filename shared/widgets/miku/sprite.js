@@ -73,7 +73,12 @@ function etc2Problem(name, n, w, h) {
  * @property {Array<number[]>} rects each zoom step's camera and the close-up's, standing frame px
  * @property {number[]} pivot
  * @property {number[]} swayAngle
- * @property {number[]} turnShift
+ * @property {number[]} turnShift the turn's head shifts, then (close.only) the lean's
+ * @property {boolean} [only] close.only: no standing figure or zoom
+ * @property {number} [leanSteps] close.only: the lean's steps each way
+ * @property {{ atlas: number[], cropY: number }} [leanAtlas] close.only: the lean's own atlas (lean.etc2), on the
+ *   close-up's grid with its crops from cropY
+ * @property {*} [idle] close.only: the idle loop's atlas (idle.etc2)
  */
 /**
  * The Miku frames as an ETC2 asset on a connection (_sprite).
@@ -82,6 +87,8 @@ function etc2Problem(name, n, w, h) {
  * @property {number} [tableRef] the standing atlas's tables (RGBA8; u_table)
  * @property {number} [idleRef] the close-up's idle loop (a close.idle bake; u_idle)
  * @property {number[]} [idleSize] its [w, h]
+ * @property {number} [leanRef] the close-up's lean (a close.only bake's driving set, lean.etc2; u_leanAtlas)
+ * @property {number[]} [leanSize] its [w, h]
  * @property {Client} c
  * @property {number} ci
  * @property {MikuInfo} info
@@ -325,6 +332,7 @@ function closeSprite(hud, standing, connIndex) {
     if (k.indexOf(pre) === 0) {
       atlas.c.drop(atlas.ref);
       if (atlas.idleRef) atlas.c.drop(atlas.idleRef);
+      if (atlas.leanRef) atlas.c.drop(atlas.leanRef);
       hud.atlases.delete(k);
     }
   });
@@ -355,6 +363,37 @@ function closeSprite(hud, standing, connIndex) {
       counts: standing.counts,
       bytes: w * h * ETC2_MEM_BYTES,
     };
+    // a close.only bake with a lean: the driving set's own atlas, lean.etc2 (u_leanAtlas); without it she can't drive
+    const leanAtlas = close.leanAtlas;
+    if (leanAtlas) {
+      const lw = (leanAtlas.atlas || [])[0],
+        lh = (leanAtlas.atlas || [])[1];
+      let leanBytes = null;
+      try {
+        leanBytes = fs.readFileSync(path.join(dir, "lean.etc2"));
+      } catch (err) {
+        /* named below */
+      }
+      const badLean = !leanBytes
+        ? "no lean.etc2 (deploy the bake again)"
+        : !(lw > 0 && lh > 0) || lw > CLOSE_MAX_SIDE_PX || lh > CLOSE_MAX_SIDE_PX
+          ? "bad close.leanAtlas size " + lw + "x" + lh
+          : etc2Problem("lean.etc2", leanBytes.length, lw, lh);
+      if (badLean) {
+        client.drop(ref);
+        throw new Error(badLean);
+      }
+      const leanRef = client.asset({ target: hud.target, format: "etc2rgba", w: lw, h: lh, sampling: "bilinear" });
+      if (!leanRef) {
+        client.drop(ref);
+        throw new Error("lean asset refused (" + lw + "x" + lh + ")");
+      }
+      client.pixels(leanRef, null, /** @type {Buffer} */ (leanBytes));
+      atlas.leanRef = leanRef;
+      atlas.leanSize = [lw, lh];
+      atlas.bytes += lw * lh * ETC2_MEM_BYTES;
+      hud.log.info("miku lean: " + (2 * close.leanSteps + 1) + " frames, " + lw + "x" + lh + " ETC2 asset");
+    }
     // a close.idle bake: the stopped idle loop's own atlas, idle.etc2, a second asset (u_idle)
     const idle = close.idle;
     if (idle) {

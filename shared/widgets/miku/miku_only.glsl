@@ -2,8 +2,9 @@
 // her head and chest all the time, one layer the close-up's size, its atlas (u_atlas, straight alpha, ETC2) laid out
 // on a grid (u_grid, u_cropGrid): first the in-steps (the expressions coming on: Yandere's hands rising to her
 // cheeks, Blush), then the poses, each with its eyes half shut and shut cropped to one rect (u_crop): sway left,
-// upright and sway right with the expressions on, the turn from the left to the right (u_frames.w each way), then the
-// driving set without them, the lean from a full lean left to right (u_drv.x each way, upright in its middle).
+// upright and sway right with the expressions on, and the turn from the left to the right (u_frames.w each way). The
+// driving set without them, the lean from a full lean left to right (u_drv.x each way, upright in its middle), is in
+// an atlas of its own on the same grid (u_leanAtlas, its crops from u_lc.z), so the close-up's keeps room for the turn.
 // u_zoom = (expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there): the app brings the expressions
 // on over about 0.8 s when the car has stood still for 1 s or an indicator is on, and off again as she drives on.
 // At 0 she leans with the car (u_lean -1 braking .. 1 pulling away) and blinks; in between the in-steps play; at 1 she
@@ -21,12 +22,14 @@ uniform sampler2D u_atlas;
 uniform vec2 u_atlasSize;
 uniform vec4 u_zoom;     // expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there (0: draw nothing)
 uniform float u_lean;    // -1 .. 1, driving
-uniform vec4 u_tsh[9];   // the turn frames' head shifts (px), left to right, then the lean frames', four a vec4
+uniform vec4 u_tsh[11];   // the turn frames' head shifts (px), left to right, then the lean frames', four a vec4
 
 uniform sampler2D u_idle; // the stopped idle loop's own atlas (a close.idle bake), laid out as u_atlas
 uniform vec2 u_idleSize;
 uniform vec4 u_ic[4];    // its grid, crop grid, eyes' rect (as u_cl[4 .. 6]); frames, period (s) (0 frames: no loop)
 uniform vec4 u_ish[10];  // its frames' head shifts (px), four a vec4: up to 40 frames
+uniform sampler2D u_leanAtlas; // the lean's own atlas (the driving set), on the close-up's grid
+uniform vec4 u_lc;       // its w, h, the y of its crops' first row
 uniform vec4 u_cl[10];   // the bake's fixed values, as one array (cluster-render's 32 uniform names a layer)
 #define u_grid u_cl[4]   // frame cell w, h, columns, pad
 #define u_cropGrid u_cl[5]   // crop cell w, h, columns, y of the first row
@@ -60,6 +63,26 @@ vec4 frameAt(float n, float m, vec2 q, float eh) {
         e = clamp(e, vec2(0.5), u_crop.zw - 0.5);
         c = mix(c, tap(cropAt(2.0 * m), u_crop.zw, e), min(1.0, eh * 2.0));              // half shut
         c = mix(c, tap(cropAt(2.0 * m + 1.0), u_crop.zw, e), max(0.0, eh * 2.0 - 1.0));   // shut
+    }
+    return c;
+}
+// the lean's frame m (0 a full lean left .. 2 * steps a full lean right) at frame px q, its eyes eh
+vec4 ltap(vec2 at, vec2 size, vec2 p) {
+    if (p.x < 0.0 || p.y < 0.0 || p.x > size.x || p.y > size.y) return vec4(0.0);
+    vec4 t = texture2D(u_leanAtlas, (at + p) / u_lc.xy);
+    return vec4(t.rgb * t.a, t.a);
+}
+vec2 leanCropAt(float m) {
+    float row = floor((m + 0.5) / u_cropGrid.z);
+    return vec2(m - row * u_cropGrid.z, row) * u_cropGrid.xy + vec2(0.0, u_lc.z) + u_grid.w;
+}
+vec4 leanFrame(float m, vec2 q, float eh) {
+    vec4 c = ltap(slot(m), u_frames.xy, q);
+    vec2 e = q - u_crop.xy;
+    if (eh > 0.001 && e.x >= 0.0 && e.y >= 0.0 && e.x <= u_crop.z && e.y <= u_crop.w) {
+        e = clamp(e, vec2(0.5), u_crop.zw - 0.5);
+        c = mix(c, ltap(leanCropAt(2.0 * m), u_crop.zw, e), min(1.0, eh * 2.0));              // half shut
+        c = mix(c, ltap(leanCropAt(2.0 * m + 1.0), u_crop.zw, e), max(0.0, eh * 2.0 - 1.0));   // shut
     }
     return c;
 }
@@ -110,7 +133,7 @@ float shiftAt(float i) {
     float q = floor(i / 4.0 + 0.01), r = i - q * 4.0;
     // GLSL ES 1.00 indexes a fragment shader's uniform array only by a constant or a loop's index
     vec4 v = vec4(0.0);
-    for (int k = 0; k < 9; k++) if (abs(float(k) - q) < 0.5) v = u_tsh[k];
+    for (int k = 0; k < 11; k++) if (abs(float(k) - q) < 0.5) v = u_tsh[k];
     return r < 0.5 ? v.x : r < 1.5 ? v.y : r < 2.5 ? v.z : v.w;
 }
 // the turn's chain position j (0 .. 2 * steps; the middle is the sway): its pose and head shift
@@ -118,8 +141,7 @@ float turnPose(float j) { return j < u_frames.w ? 3.0 + j : 2.0 + j; }
 float turnShift(float j) {
     return abs(j - u_frames.w) < 0.5 ? 0.0 : shiftAt(j < u_frames.w ? j : j - 1.0);
 }
-// the lean's chain position m (0 .. 2 * steps, upright in the middle): its pose and head shift
-float leanPose(float m) { return 3.0 + 2.0 * u_frames.w + m; }
+// the lean's chain position m (0 .. 2 * steps, upright in the middle): its head shift (its frame is leanFrame(m))
 float leanShift(float m) { return shiftAt(2.0 * u_frames.w + m); }
 
 void main() {
@@ -133,7 +155,7 @@ void main() {
     // every case blends two endpoints: pose p0 at q0 and p1 at q1 by f, or her idle now in place of either (idle0,
     // idle1); a pose is whole frame steps + p with crop pair p, the in-steps whole frames 0 .. steps - 1 (pose -1 - n)
     float steps = u_frames.z, p0 = 0.0, p1 = 0.0, f = 0.0, e = eh;
-    bool idle0 = false, idle1 = false;
+    bool idle0 = false, idle1 = false, lean0 = false, lean1 = false;
     vec2 q0 = q, q1 = q;
     if (y < 0.001) {
         // driving: the lean's two nearest frames, slid so the heads meet
@@ -141,15 +163,18 @@ void main() {
         float m0 = min(floor(k), 2.0 * n - 1.0);
         f = k - m0;
         float h0 = leanShift(m0), h1 = leanShift(m0 + 1.0), hc = mix(h0, h1, f);
-        p0 = leanPose(m0);
-        p1 = leanPose(m0 + 1.0);
+        lean0 = true;
+        lean1 = true;
+        p0 = m0;
+        p1 = m0 + 1.0;
         q0 = q + vec2((h0 - hc) * wy, 0.0);
         q1 = q + vec2((h1 - hc) * wy, 0.0);
     } else if (y < 0.999) {
         // the expressions coming on or going off: driving upright, the in-steps, her idle; no blink meanwhile
         float k = y * (steps + 1.0), i0 = min(floor(k), steps);
         f = k - i0;
-        p0 = i0 < 0.5 ? leanPose(u_drv.x) : -i0;
+        lean0 = i0 < 0.5;   // driving upright: the lean's middle frame
+        p0 = lean0 ? u_drv.x : -i0;
         idle1 = i0 + 1.0 > steps + 0.5;
         p1 = -(i0 + 1.0);
         e = 0.0;
@@ -172,10 +197,13 @@ void main() {
     }
     vec4 ic = vec4(0.0);
     if (idle0 || (idle1 && f > 0.001)) ic = idleNow(q, e, wy);
-    // pose p >= 0: whole frame steps + p with its eyes; p < 0: in-step -p, whole frame -p - 1, no crops
-    vec4 c = idle0 ? ic : frameAt(p0 < -0.5 ? -p0 - 1.0 : steps + p0, p0 < -0.5 ? -1.0 : p0, q0, e);
+    // a lean endpoint: the lean's frame p; else pose p >= 0: whole frame steps + p with its eyes; p < 0: in-step -p,
+    // whole frame -p - 1, no crops
+    vec4 c = idle0 ? ic : lean0 ? leanFrame(p0, q0, e)
+                                : frameAt(p0 < -0.5 ? -p0 - 1.0 : steps + p0, p0 < -0.5 ? -1.0 : p0, q0, e);
     if (f > 0.001)
-        c = mix(c, idle1 ? ic : frameAt(p1 < -0.5 ? -p1 - 1.0 : steps + p1, p1 < -0.5 ? -1.0 : p1, q1, e), f);
+        c = mix(c, idle1 ? ic : lean1 ? leanFrame(p1, q1, e)
+                                      : frameAt(p1 < -0.5 ? -p1 - 1.0 : steps + p1, p1 < -0.5 ? -1.0 : p1, q1, e), f);
     vec3 rgb = c.rgb / max(c.a, 0.0001);
     gl_FragColor = vec4(rgb * u_zoom.z, c.a);
 }

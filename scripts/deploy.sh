@@ -5,7 +5,8 @@
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
 #   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
 #
-# --miku copies the folder's atlas.json and atlas.etc2 (and close.etc2, the close-up, when the bake made one; ETC2 from
+# --miku copies the folder's atlas.json and atlas.etc2 (and close.etc2, the close-up, when the bake made one, with a
+# close-up-only bake's idle.etc2 and lean.etc2; ETC2 from
 # tools/live2d_bake, which needs cluster-render 0.5.9 or later on the car) to the app's data folder,
 # <app>/data/miku/. They stay out of this repo: the character's art belongs to its owner. The app picks them up the
 # next time it builds the layout (switch to another layout and back, or restart the app).
@@ -54,6 +55,11 @@ if [ "${1:-}" = "--miku" ]; then
             [ -f "$MIKU_SRC/idle.etc2" ] || { echo "atlas.json has an idle loop but $MIKU_SRC/idle.etc2 is missing" >&2; exit 1; }
             MIKU_FILES+=("$MIKU_SRC/idle.etc2")
         fi
+        # and its lean: its own atlas
+        if python3 -c 'import json,sys; sys.exit(0 if "leanAtlas" in json.load(open(sys.argv[1])).get("close", {}) else 1)' "$MIKU_SRC/atlas.json"; then
+            [ -f "$MIKU_SRC/lean.etc2" ] || { echo "atlas.json has a lean atlas but $MIKU_SRC/lean.etc2 is missing" >&2; exit 1; }
+            MIKU_FILES+=("$MIKU_SRC/lean.etc2")
+        fi
     fi
 fi
 LAYOUT_DIR="$(dirname "$SCRIPT_DIR")/apps/${APP_ID}/hud/layouts"
@@ -76,7 +82,7 @@ if [ -n "$MIKU_SRC" ]; then
     OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
     ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/${MIKU_DIR}'"
     # the RGBA files of older bakes (the app reads only the ETC2 ones now) and any old close-up
-    ssh "$CAR_HOST" "rm -f '${APP_DIR}/data/${MIKU_DIR}/atlas.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.etc2' '${APP_DIR}/data/${MIKU_DIR}/idle.etc2'"
+    ssh "$CAR_HOST" "rm -f '${APP_DIR}/data/${MIKU_DIR}/atlas.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.etc2' '${APP_DIR}/data/${MIKU_DIR}/idle.etc2' '${APP_DIR}/data/${MIKU_DIR}/lean.etc2'"
     scp "${MIKU_FILES[@]}" "${CAR_HOST}:${APP_DIR}/data/${MIKU_DIR}/"
     ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/${MIKU_DIR}'"
     echo "Pushed the Miku frames to ${APP_DIR}/data/${MIKU_DIR}. Switch to another layout and back (or restart the app) to load them."
