@@ -46,6 +46,7 @@ const SWITCHES = [
 ];
 
 const BOX_MARGIN = 0.04; // margin round her idle box, of its height
+const SWITCH_NAMES_SHOWN = 2; // a switch's label names this many of the expressions that turn it on, then "+N"
 const SLIDER_STEPS = 100; // steps across a slider's range
 
 (async () => {
@@ -128,8 +129,31 @@ const SLIDER_STEPS = 100; // steps across a slider's range
     );
     /** @type {{ input: HTMLInputElement, out: HTMLOutputElement, def: number }[]} */
     const inputs = [];
-    /** @type {(id: string, into: HTMLElement) => void} */
-    const addSlider = (id, into) => {
+    // which expressions turn each switch on (the model's .exp3.json files, a value over half): its label names them,
+    // e.g. "Pose1 (Yandere)"
+    /** @type {Record<string, string[]>} */
+    const turnsOn = {};
+    await Promise.all(
+      names.map(async (file) => {
+        try {
+          const exp = await (await fetch("/model/" + encodeURI(file))).json();
+          (exp.Parameters || []).forEach((/** @type {{ Id: string, Value: number }} */ p) => {
+            if (p.Value > 0.5) (turnsOn[p.Id] = turnsOn[p.Id] || []).push(label(file));
+          });
+        } catch (err) {
+          /* an expression that doesn't load just isn't named */
+        }
+      }),
+    );
+    /** @type {(id: string) => string} */
+    const switchLabel = (id) => {
+      const by = (turnsOn[id] || []).sort();
+      if (!by.length) return id;
+      const shown = by.slice(0, SWITCH_NAMES_SHOWN).join(", ");
+      return id + " (" + shown + (by.length > SWITCH_NAMES_SHOWN ? " +" + (by.length - SWITCH_NAMES_SHOWN) : "") + ")";
+    };
+    /** @type {(id: string, into: HTMLElement, named?: boolean) => void} */
+    const addSlider = (id, into, named) => {
       const i = params.ids.indexOf(id);
       if (i < 0) return;
       const row = document.createElement("label"),
@@ -151,7 +175,8 @@ const SLIDER_STEPS = 100; // steps across a slider's range
         values[id] = Math.round(v * 100) / 100;
         draw();
       });
-      row.appendChild(document.createTextNode(id.replace(/^Param/, "")));
+      row.appendChild(document.createTextNode(named ? switchLabel(id) : id.replace(/^Param/, "")));
+      if (named && turnsOn[id]) row.title = "turned on by " + turnsOn[id].join(", ");
       row.appendChild(input);
       row.appendChild(out);
       into.appendChild(row);
@@ -161,7 +186,7 @@ const SLIDER_STEPS = 100; // steps across a slider's range
     const switches = /** @type {HTMLElement} */ (
       document.getElementById("switches")
     );
-    SWITCHES.forEach((id) => addSlider(id, switches));
+    SWITCHES.forEach((id) => addSlider(id, switches, true));
     const clearExpressions = () => {
       on.clear();
       toggles

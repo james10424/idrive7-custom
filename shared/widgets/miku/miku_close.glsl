@@ -31,7 +31,8 @@ uniform vec4 u_cl[10];   // the bake's fixed values, as one array (cluster-rende
 #define u_cropGrid u_cl[5]   // crop cell w, h, columns, y of the first row
 #define u_crop u_cl[6]   // the eyes' rect in a frame, px
 #define u_pose u_cl[7]   // the sway's pivot x, y (frame px), its turn at the left and right sway (rad, clockwise)
-#define u_shift u_cl[8]   // the turn frames' head shifts (px), left to right
+                         // u_cl[8]: unused (the first four turn shifts, as up to Custom HUD 0.1.29)
+uniform vec4 u_tsh[9];   // the turn frames' head shifts (px), left to right, four a vec4: up to 18 steps each way
 #define u_frames u_cl[9]   // frame w, h, zoom steps, turn steps each way
 
 vec4 tap(vec2 at, vec2 size, vec2 p) {
@@ -69,8 +70,11 @@ vec4 pose(float p, vec2 q, float eh) {
 // the turn's chain position j (0 .. 2 * steps; the middle is the sway): its pose and head shift
 float turnPose(float j) { return j < u_frames.w ? 3.0 + j : 2.0 + j; }
 float turnShift(float j) {
-    float i = j < u_frames.w ? j : j - 1.0;
-    float s = i < 0.5 ? u_shift.x : i < 1.5 ? u_shift.y : i < 2.5 ? u_shift.z : u_shift.w;
+    float i = j < u_frames.w ? j : j - 1.0, q = floor(i / 4.0 + 0.01), r = i - q * 4.0;
+    // GLSL ES 1.00 indexes a fragment shader's uniform array only by a constant or a loop's index
+    vec4 v = vec4(0.0);
+    for (int k = 0; k < 9; k++) if (abs(float(k) - q) < 0.5) v = u_tsh[k];
+    float s = r < 0.5 ? v.x : r < 1.5 ? v.y : r < 2.5 ? v.z : v.w;
     return abs(j - u_frames.w) < 0.5 ? 0.0 : s;
 }
 

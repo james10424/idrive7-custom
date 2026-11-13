@@ -9,6 +9,9 @@ const path = require("path");
 const { isNum, mib } = require("../../engine/util");
 
 const MAX_SIDE_PX = 1024; // the KOMBI restarted on a 1024x1128 asset: nothing over this a side
+// the close-up's atlas: 2048x2048 ETC2 draws on the HUD and the cluster, seven at once (car tests, Nov 13 2026; the
+// 1024x1128 restart was the shader's reads, not the atlas), so it may be 2048 a side (more turn frames)
+const CLOSE_MAX_SIDE_PX = 2048;
 const MIN_LEAN_FRAMES = 3; // fewer lean frames than this: only the idle frame
 const MAX_LEAN_FRAMES = 15; // lean frames read from a bake, at most
 const TABLE_ENTRIES = 16; // entries in each of the two tables (lean frames, head shifts)
@@ -316,7 +319,7 @@ function closeSprite(hud, standing, connIndex) {
   });
   try {
     const [w, h] = close.atlas || [];
-    if (!(w > 0 && h > 0) || w > MAX_SIDE_PX || h > MAX_SIDE_PX)
+    if (!(w > 0 && h > 0) || w > CLOSE_MAX_SIDE_PX || h > CLOSE_MAX_SIDE_PX)
       throw new Error("bad close.atlas size " + w + "x" + h);
     const pixels = fs.readFileSync(file);
     const bad = etc2Problem("close.etc2", pixels.length, w, h);

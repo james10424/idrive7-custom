@@ -21,7 +21,7 @@
   h2 { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 6px; }
   .toggles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
   .toggles label { display: flex; gap: 6px; align-items: center; cursor: pointer; padding: 2px 0; }
-  .sliders label { display: grid; grid-template-columns: 150px 1fr 48px; gap: 8px; align-items: center; padding: 2px 0; }
+  .sliders label { display: grid; grid-template-columns: minmax(150px, max-content) 1fr 48px; gap: 8px; align-items: center; padding: 2px 0; }
   .sliders output { color: #9c9; font: 12px ui-monospace, Menlo, monospace; text-align: right; }
   button { background: #333; color: #ddd; border: 1px solid #555; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
   .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }

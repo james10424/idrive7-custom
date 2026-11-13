@@ -174,6 +174,10 @@ const log = (line) => {
 const SUPERSAMPLE = 4; // render this many times bigger than the frame, then scale down
 const MIN_OPACITY = 0.001; // a drawable at or under this opacity counts as hidden
 const ATLAS_MAX = 1024; // px a side: the instrument cluster (KOMBI) restarted on a 1024x1128 RGBA asset (Nov 2026)
+// the close-up's atlas, ETC2 on the car: 2048x2048 draws, on the HUD and the cluster, seven at once (car tests, Nov 13
+// 2026); the 1024x1128 restart above was the shader's reads, not the atlas. Used for close.turnSteps over 2 (more turn
+// frames); with 2 or fewer the close-up stays 1024 wide, as the HUD up to 0.1.29 reads it
+const CLOSE_ATLAS_MAX = 2048;
 const ATLAS_MIN_W = 64;
 const ETC2_BLOCK = 4; // serve.js compresses the atlases to ETC2 (tools/etc2.js), whose blocks are 4x4: heights round up
 /** @param {number} px @returns {number} px rounded up to whole ETC2 blocks */
@@ -196,7 +200,8 @@ const PIXEL_DIFF_MIN = 6; // RGBA difference summed under this: the pixel did no
 const SHRINK_SLACK = 1.01; // halve while the half is still at least this much over the target
 const DEFAULT_TAILS_ROOT = 0.15; // where the tails hang from, a fraction down their sprite
 const ZOOM_STEPS_MAX = 3; // close-up zoom steps, also the default
-const TURN_STEPS_MAX = 2; // close-up turn steps each way, also the default
+const TURN_STEPS_DEFAULT = 2; // close-up turn steps each way by default
+const TURN_STEPS_MAX = 17; // and at most: what a 2048x2048 close-up atlas holds with 3 zoom steps and 3 sway poses
 const DEFAULT_SWAY = { ParamAngleZ: 4 }; // the close-up's sway at a full swing
 const DEFAULT_TURN = { ParamAngleX: 30 }; // the close-up's head turn toward the right of the screen
 const TURN_SEARCH_DEG = 8; // bestTurn tries -8 .. 8 deg
@@ -894,7 +899,7 @@ async function bakeClose(loaded, cfg, at) {
     turn = close.turn || DEFAULT_TURN,
     turnSteps = Math.max(
       1,
-      Math.min(TURN_STEPS_MAX, Math.round(close.turnSteps || TURN_STEPS_MAX)),
+      Math.min(TURN_STEPS_MAX, Math.round(close.turnSteps || TURN_STEPS_DEFAULT)),
     );
   /**
    * params scaled by k.
@@ -1058,7 +1063,7 @@ async function bakeClose(loaded, cfg, at) {
       " px",
   );
   // the grid: whole frames first, then the crops
-  const MAX = ATLAS_MAX,
+  const MAX = turnSteps > TURN_STEPS_DEFAULT ? CLOSE_ATLAS_MAX : ATLAS_MAX,
     cell = [frameW + 2 * pad, frameH + 2 * pad],
     cols = Math.floor(MAX / cell[0]),
     wholes = full_.concat(posed.map((frames) => frames[0])),

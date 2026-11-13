@@ -1010,6 +1010,8 @@ const renderServer = net.createServer((sock) => {
     layers.forEach((other) => {
       if (other.conn !== conn || !other.binds) return;
       if (!Object.keys(other.binds).some((sampler) => other.binds[sampler] === asset.key)) return;
+      // already held for another of its assets: this one's timer releases it too (whichever is up last)
+      if (other.state === "waiting" && other.reason === NOT_WRITTEN) return void held.push(other);
       if (other.state !== "shown") return; // waiting for something else (the layer cap): left as it is
       other.state = "waiting";
       other.reason = NOT_WRITTEN;

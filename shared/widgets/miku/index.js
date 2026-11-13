@@ -54,6 +54,7 @@ const MIKU_MAX_DT_MS = 500; // a longer gap between updates eases as if it were 
 const MIKU_LEAN_G = 0.4; // this longitudinal g is a full lean
 const MIKU_POINT_STEP_S = 0.01; // the arm's spring is stepped at most this long at a time
 const MIKU_SPEED_KMH = 130; // her speed's full scale
+const TURN_SHIFT_SLOTS = 36; // the close-up's turn head shifts sent (u_tsh[9], 4 a vec4)
 const MIKU_STEPS = 500; // the lean, speed, zoom and turn are sent in steps of 1/500
 const MIKU_LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
 const MIKU_CLOCK_LOOP_MS = 4000; // the close-up's u_clock runs 0 .. 4 s, then starts again
@@ -200,6 +201,10 @@ module.exports = {
         ),
         { type: "vec4" },
       );
+      // the turn frames' head shifts, left to right, four a vec4 (miku_close.glsl u_tsh): up to 18 steps each way
+      const tsh = [];
+      for (let i = 0; i < TURN_SHIFT_SLOTS; i++) tsh.push(close.turnShift[i] || 0);
+      client.uniform(ref, "u_tsh", tsh, { type: "vec4" });
       client.uniform(ref, "u_zoom", zoomNow(hud));
       return;
     }

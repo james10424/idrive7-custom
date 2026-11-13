@@ -358,7 +358,9 @@ class ClusterRender extends EventEmitter {
             l.ih = o.ih;
             l.bpp = 4;
         } else if (kind === 'asset') {
-            l.bpp = o.format === 'r8' ? 1 : 4;
+            // (idrive7-custom change, as cluster-render 0.5.9's client: an etc2rgba asset is a byte a pixel, so up to
+            // 2048x2048 fits one frame message)
+            l.bpp = o.format === 'r8' || o.format === 'etc2rgba' ? 1 : 4;
             if (!(o.w > 0 && o.h > 0 && o.w <= 2048 && o.h <= 2048 && o.w * o.h * l.bpp <= 1920 * 720 * 4)) return 0;
             l.iw = o.w;
             l.ih = o.h;
