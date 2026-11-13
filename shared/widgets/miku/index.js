@@ -48,6 +48,7 @@ const MIKU_POINT_C = 16.7; // critically damped: it rises and settles without bo
 const MIKU_STILL_MS = 1000; // stood still (speed 0) this long: she zooms into her close-up
 const MIKU_CLOCK_MS = 33; // the close-up's own clock (u_clock) goes up this often while she is zoomed in
 const MIKU_ZOOM_MS = 1000; // the zoom, in or out
+const MIKU_TURN_BACK = 0.01; // close-up only: her head this near straight counts as back from a turn
 const MIKU_IN_MS = 800; // close-up only: the expressions coming on (Yandere's hands rising, Blush), or going off
 const MIKU_ZOOM_OUT_KMH = 10; // past this she zooms back out to standing
 const MIKU_STILL_KMH = 0.5; // below this she counts as stood still
@@ -436,7 +437,8 @@ module.exports = {
       still = isNum(speed) && speed < MIKU_STILL_KMH;
     state.stillMs = still ? (state.stillMs || 0) + dt : 0;
     // close-up only: an indicator brings the expressions on too (she turns toward it with them), at any speed
-    if (close && only && hud._turnSide()) state.zoomT = 1;
+    // and they stay on until her head is back from a turn (the in-steps are upright: going off still turned jumped)
+    if (close && only && (hud._turnSide() || Math.abs(state.point || 0) > MIKU_TURN_BACK)) state.zoomT = 1;
     else if (!close || !isNum(speed) || speed > MIKU_ZOOM_OUT_KMH) state.zoomT = 0;
     else if (state.stillMs >= MIKU_STILL_MS) state.zoomT = 1;
     const zoomT = state.zoomT || 0,
