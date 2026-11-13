@@ -479,11 +479,12 @@ module.exports = {
         ? Math.min(zoomT, zoom + move)
         : Math.max(zoomT, zoom - move);
     const brightness = hud.themeName === "night" ? MIKU_NIGHT_BRIGHTNESS : 1;
-    // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
+    // a soft curve: the lean eases in toward a full one, divided by its value there so MIKU_LEAN_G is the full lean
+    // (without it the curve stopped at tanh(1.15) = 82%: the last two of 10 baked steps each way never showed)
     // close-up only: the smoothed lean picks a baked step, with hysteresis (it moves on only MIKU_LEAN_HYST of a step
     // past one, so a g jittering round a step's edge, where the faces start (eyes open, then shut), doesn't flick
     // between the two), and she eases to that step: a steady pull rests on one frame, not a half-and-half blend of two
-    let leanShown = Math.tanh(state.lean * MIKU_LEAN_SOFT);
+    let leanShown = Math.tanh(state.lean * MIKU_LEAN_SOFT) / Math.tanh(MIKU_LEAN_SOFT);
     if (only && state.leanSteps) {
       const n = state.leanSteps,
         at = leanShown * n,
