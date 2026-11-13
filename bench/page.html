@@ -643,6 +643,8 @@
     boxes.forEach((box) => { box.checked = false; });
     markDirty();
     await new Promise((resolve) => setTimeout(resolve, 300));   // a few frames: drawn without them
+    // and two more frames for sure (a hidden or background page draws a frame or two a second)
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     const px = pane.ctx.getImageData(0, 0, pane.VW, pane.VH).data;
     boxes.forEach((box, i) => { box.checked = was[i]; });
     markDirty();

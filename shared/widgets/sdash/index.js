@@ -35,6 +35,13 @@ const CFG = [
   "u_topEnd",
 ];
 const PACKED = packCfg(SDASH, CFG);
+/** @type {(define: string) => string} the shader with one pass's #define, packed */
+const variant = (define) =>
+  packCfg(SDASH.replace("#endif\nvarying", "#endif\n#define " + define + "\nvarying"), CFG);
+// with a backdrop (a layout's "backdrop": true): the bench's bake draws only what never changes (SDASH_BAKE); the car
+// draws the baked backdrop and only what moves over it (SDASH_LIVE)
+const BAKE = variant("SDASH_BAKE");
+const LIVE = variant("SDASH_LIVE");
 
 const INNER_EXTRA_PX = 18; // default "inner": the inner line sits this much past the band width
 const DEFAULT_RPM_MAX = 8000; // default rpm scale end
@@ -63,11 +70,16 @@ module.exports = {
   fields: ["geo", "k", "band", "ticks", "fuelSeg", "oilSeg", "strip", "topEnd"],
   docs: DOCS,
   cfg: CFG,
-  /** @returns {string} */
-  shader() {
-    return PACKED;
+  /**
+   * @param {HudApp} hud
+   * @returns {string}
+   */
+  shader(hud) {
+    const backdrop = hud.backdrop;
+    return backdrop ? (backdrop.bake ? BAKE : LIVE) : PACKED;
   },
-  shaders: { sdash: PACKED },
+  shaders: { sdash: PACKED, sdashBake: BAKE, sdashLive: LIVE },
+  BAKE,
   /**
    * @param {HudApp} hud
    * @param {Widget} widget
@@ -78,6 +90,9 @@ module.exports = {
       ref = state.ref,
       theme = hud.theme;
     const packer = hud._cfgPacker(client, ref, "sdash");
+    // the baked backdrop under the live parts (engine/backdrop.js)
+    const backdrop = hud.backdrop;
+    if (backdrop && !backdrop.bake && backdrop.ref) client.bind(ref, "u_back", backdrop.ref);
     packer.uniform("u_size", [widget.w, widget.h]);
     packer.uniform("u_geo", widget.geo);
     packer.uniform("u_k", widget.k);

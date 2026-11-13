@@ -5,6 +5,12 @@
 // and the bottom strip draw over it). Two-tone fuel and oil bars inside the brackets, a blue / red strip at the bottom
 // (optionally two bars from its middle out: the throttle left, the brake right). v_uv (0,0) is
 // the top-left. The backdrop is pure black: the car brightens dark tints (seen Nov 5 2026), so no dark panels.
+// Three passes from this one file: with SDASH_BAKE only what never changes while driving (the black with the map window
+// cut in its alpha, the brackets' lines and label marks, the bars' rails, the bottom line), which the bench bakes with
+// the static labels into the backdrop (hud/backdrops/<layout>-<units>[-map].etc2, engine/backdrop.js); with SDASH_LIVE
+// that backdrop (u_back) and only what moves: the brackets' bands (filled, the band past the value, the marker) under
+// its marks and lines, the redline over them, the bars' bodies, the upright boxes and the bottom strip; with neither,
+// everything.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -45,6 +51,9 @@ uniform vec4 u_vbar1;
 uniform vec2 u_vbarV;     // their fills 0..1 (< 0: no value)
 uniform vec3 u_vbarC0;    // their fill colours
 uniform vec3 u_vbarC1;
+#ifdef SDASH_LIVE
+uniform sampler2D u_back; // the baked backdrop (ETC2, the layer's size; see-through in the map window when it is open)
+#endif
 
 // speed, after iDrive 8 (photo, Nov 8 2026): a cyan line, a medium blue band, filled pale aqua deepening to cyan
 const vec3 BLUE_LINE = vec3(0.24, 0.72, 1.0);
@@ -152,8 +161,12 @@ vec4 bar(vec2 p, vec4 s, float val, float zones, float rail, vec4 c) {
     if (abs(side) > 22.0) return c;
     float ends = cov(yt - p.y) * cov(p.y - yb);                          // flat ends
     float h = (b.y - p.y) / (b.y - a.y);                                 // 0 empty .. 1 full, along y
+#ifndef SDASH_BAKE
     float seg = fract(h * 4.0);
     float div = cov(min(seg, 1.0 - seg) * (yb - yt) / 4.0 - 1.1);        // dark lines between the four segments
+#endif
+#ifndef SDASH_BAKE
+    // the body (live), beside the rail: they never overlap, so either can be drawn first
     float body = cov(abs(side) - 10.0) * ends;
     vec3 off = vec3(0.30, 0.32, 0.37), edge = vec3(0.47, 0.49, 0.55);
     vec3 lit = mix(vec3(0.78, 0.8, 0.84), vec3(0.97, 0.98, 1.0), clamp(h / max(val, 0.05), 0.0, 1.0));
@@ -161,15 +174,81 @@ vec4 bar(vec2 p, vec4 s, float val, float zones, float rail, vec4 c) {
     vec3 col = on ? lit : mix(off, edge, 1.0 - cov(abs(side) - 8.5));
     c = over(vec4(col, (on ? 1.0 : 0.92) * body), c);
     c = over(vec4(0.0, 0.0, 0.0, 0.85 * body * div * step(0.02, h) * step(h, 0.98)), c);
-    // the rail
+#endif
+#ifndef SDASH_LIVE
+    // the rail (baked)
     float rs = side - rail * 15.0;
     float r = cov(abs(rs) - 1.3) * ends;
     vec3 rc = vec3(0.9, 0.92, 0.96);
     if (zones > 0.5 && h < 0.12) rc = vec3(0.25, 0.5, 1.0);
     if (zones > 0.5 && h > 0.9) rc = vec3(1.0, 0.2, 0.22);
     c = over(vec4(rc, 0.95 * r), c);
+#endif
     return c;
 }
+
+
+// With a backdrop, a bracket in two parts. Its band zone (between the outer line's inside and the inner line, where the
+// fill, the band past the value and the marker draw) is live, opaque over black; the backdrop holds the rest, and in
+// the zone only the marks and lines drawn over the band (see-through round them), so the backdrop over the zone is
+// bracket() without its redline, which the live pass draws last (over the marks, as bracket() does).
+bool inZone(vec2 q, float d) { return q.y > u_geo.x + 5.0 && q.y < u_geo.z - 4.0 && d > 2.5 && d < u_inner - 0.5; }
+#ifdef SDASH_LIVE
+// the zone's live part over black, as bracket() draws it (inside the zone inY holds)
+vec4 bracketFill(vec2 q, float d, float val, vec3 band, vec3 lit, vec3 lit2) {
+    vec4 c = vec4(0.0, 0.0, 0.0, 1.0);
+    float t = (u_scale.x - q.y) / (u_scale.x - u_scale.y);
+    float b1 = u_inner - 1.5, b0 = b1 - u_w, f0 = 3.8;
+    bool on = t <= val && val > 0.002;
+    float inB = cov(-(d - (on ? f0 : b0))) * cov(d - b1);
+    if (inB > 0.0) {
+        vec3 col = band;
+        float a = 0.95;
+        if (on) {
+            a = 0.96;
+            col = mix(lit, lit2, clamp(t / max(val, 0.01), 0.0, 1.0));
+            col = mix(col, vec3(1.0), 0.08 * (1.0 - clamp((d - f0) / (b1 - f0), 0.0, 1.0)));
+        }
+        c = over(vec4(col, a * inB), c);
+    }
+    float yv = u_scale.x - val * (u_scale.x - u_scale.y);
+    if (val > 0.002 && d > f0 && d < b1) c = over(vec4(1.0, 1.0, 1.0, cov(abs(q.y - yv) - 2.0)), c);
+    return c;
+}
+// the rpm bracket's redline in the gap by the outer line: yellow dashes, then a solid red line
+vec4 redline(vec2 q, float d, vec4 c) {
+    float t = (u_scale.x - q.y) / (u_scale.x - u_scale.y);
+    if (u_redFrom < 1.5 && d > 6.0 && d < 11.0 && d < u_inner - 1.5 - u_w) {
+        if (t >= u_redFrom && t <= 1.02) c = over(vec4(1.0, 0.2, 0.2, 1.0), c);
+        else if (t >= u_orange && t < u_redFrom && mod(q.y, 16.0) < 7.0) c = over(vec4(1.0, 0.85, 0.1, 1.0), c);
+    }
+    return c;
+}
+#endif
+#ifdef SDASH_BAKE
+// what bracket() draws over the band: the label marks, the glow, the outer line with its runs and the inner line
+vec4 bracketMarks(vec2 q, float d, float ticks, vec3 line, vec3 inner, vec4 c) {
+    float t = (u_scale.x - q.y) / (u_scale.x - u_scale.y);
+    bool inY = q.y > u_geo.x + 5.0 && q.y < u_geo.z - 4.0;
+    float b1 = u_inner - 1.5, b0 = b1 - u_w, f0 = 3.8;
+    if (inY) {
+        float kk = floor(t * ticks + 0.5);
+        float yk = u_scale.x - kk / ticks * (u_scale.x - u_scale.y);
+        float gm = 0.5 * (f0 + 3.0 + b0), gh = max(0.5, 0.5 * (b0 - f0 - 3.0) - 3.5);
+        float td = length(vec2(max(abs(d - gm) - gh, 0.0), q.y - yk)) - 2.2;
+        if (kk >= 0.0 && kk <= ticks) c = over(vec4(line, 0.95 * cov(td)), c);
+    }
+    float o = q.y > u_geo.x - 1.0 && q.y < u_geo.z + 1.0 ? cov(abs(d - 0.5) - 3.0) : 0.0;
+    vec2 tl = vec2(outerX(u_geo.x), u_geo.x), bl = vec2(outerX(u_geo.z), u_geo.z);
+    o = max(o, cov(segD(q, tl, vec2(u_topEnd, u_geo.x)) - 3.0));
+    o = max(o, cov(segD(q, bl, bl + vec2(u_inner + 40.0, 0.0)) - 3.0));
+    c = over(vec4(line, 0.35 * exp(-abs(d) / 5.0) * (inY ? 1.0 : 0.0) * step(d, 0.0)), c);
+    c = over(vec4(line, o), c);
+    float il = (q.y > u_geo.x && q.y < u_geo.z - 6.0) ? cov(abs(d - u_inner) - 1.6) : 0.0;
+    c = over(vec4(inner, 0.95 * il), c);
+    return c;
+}
+#endif
 
 // an upright box filled from the bottom up to f (0..1; < 0 none) in fc over a grey track, a lighter outline on the track
 vec4 vbox(vec2 p, vec4 r, float f, vec3 fc, vec4 c) {
@@ -187,12 +266,25 @@ vec4 vbox(vec2 p, vec4 r, float f, vec3 fc, vec4 c) {
 void main() {
     vec2 p = v_uv * u_size;
     vec2 pm = vec2(u_size.x - p.x, p.y);
+#ifndef SDASH_BAKE
+#ifndef SDASH_LIVE
     vec4 c = vec4(0.0, 0.0, 0.0, 1.0);
-
     c = bracket(p, u_speed, 2.0, 2.0, u_ticks.x, BLUE_LINE, BLUE_BAND, 0.95, BLUE_LIT, BLUE_LIT2, BLUE_IN, c);
     c = bracket(pm, u_rpm, u_redFrom, u_orange, u_ticks.y, RED_LINE, RED_BAND, 0.95, RED_LIT * 0.85, RED_LIT, RED_IN, c);
-    // the map window: a rounded hole cut out of the backdrop and brackets, so BMW's map shows clean; the fuel and
-    // oil bars and the bottom strip draw over it, as BMW's own Sport view lays them beside the map
+#endif
+#endif
+#ifdef SDASH_BAKE
+    // with a backdrop, one bracket a pixel (nothing of either crosses the middle)
+    bool right = p.x > u_size.x * 0.5;
+    vec2 q = right ? pm : p;
+    // the black, see-through in the brackets' band zones (drawn live) and the map window
+    float d = dIn(q);
+    vec4 c = vec4(0.0, 0.0, 0.0, inZone(q, d) ? 0.0 : 1.0);
+    c = bracketMarks(q, d, right ? u_ticks.y : u_ticks.x, right ? RED_LINE : BLUE_LINE, right ? RED_IN : BLUE_IN, c);
+#endif
+#ifndef SDASH_LIVE
+    // the map window: a rounded hole cut out of the backdrop and brackets (c's alpha), so BMW's map shows clean; the
+    // fuel and oil bars and the bottom strip draw over it, as BMW's own Sport view lays them beside the map
     if (u_hole.z > 0.0) {
         vec2 hs = u_hole.zw * 0.5;
         vec2 q = abs(p - (u_hole.xy + hs)) - (hs - vec2(u_holeR));
@@ -224,12 +316,26 @@ void main() {
             c.a = max(c.a, u_holeFadeK.y * (1.0 - smoothstep(0.0, u_holeFadeK.x, fd)));
         }
     }
+#endif
+#ifdef SDASH_LIVE
+    bool right = p.x > u_size.x * 0.5;
+    vec2 q = right ? pm : p;
+    vec4 c = texture2D(u_back, v_uv);
+    float d = dIn(q);
+    if (inZone(q, d)) {
+        c = over(c, bracketFill(q, d, right ? u_rpm : u_speed, right ? RED_BAND : BLUE_BAND,
+            right ? RED_LIT * 0.85 : BLUE_LIT, right ? RED_LIT : BLUE_LIT2));
+        if (right) c = redline(q, d, c);
+    }
+#endif
     c = bar(p, u_fuelSeg, u_fuel, 0.0, -1.0, c);
     c = bar(p, u_oilSeg, u_oil, 1.0, 1.0, c);
+#ifndef SDASH_LIVE
     // the bottom line between the brackets
     if (abs(p.y - u_geo.z) < 3.0 && abs(p.x - u_size.x * 0.5) < u_size.x * 0.5 - outerX(u_geo.z))
         c = over(vec4(mix(BLUE_LINE, RED_LINE, step(u_size.x * 0.5, p.x)) * 0.8, cov(abs(p.y - u_geo.z) - 1.2)), c);
-
+#endif
+#ifndef SDASH_BAKE
     // the car-ahead gauge: an upright box filled up to the gap, white (red while closing fast); boost and battery boxes
     c = vbox(p, u_gapRail, u_gapG.x, u_gapG.y > 0.5 ? vec3(1.0, 0.2, 0.22) : vec3(0.96, 0.97, 1.0), c);
     c = vbox(p, u_vbar0, u_vbarV.x, u_vbarC0, c);
@@ -262,5 +368,6 @@ void main() {
         c = over(vec4(0.02, 0.03, 0.08, 0.5 * inside * div), c);
         c = over(vec4(1.0, 1.0, 1.0, 0.25 * inside * cov(abs(sy) - 1.0)), c);
     }
+#endif
     gl_FragColor = c;
 }
