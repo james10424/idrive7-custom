@@ -28,6 +28,8 @@ The look of a 1987 Buick Grand National's dash: chrome frames, white numbers, pi
 - **Middle, bottom:** the fuel gauge in the middle as the Grand National's (UNLEADED FUEL ONLY over it, PREMIUM FUEL under it, E, the pump and F standing on the line its marks split at), a yellow LED boost bar (0 to 1.5 bar) on its left, and on its right an LED rev bar from 0 to 7000 rpm, green with each 1000's segment orange, under a red mark from your redline to the end.
 - **Bottom:** BMW's belt light and gear letter. There is no map window.
 
+What never changes while driving (the chrome frames, the marks, the coloured zones and the labels) is drawn once, as one compressed image for each Units setting, and only what moves is drawn live over it: 2.9 MiB of cluster-render's pixel memory instead of 7.4, and a much smaller shader. It needs cluster-render 0.5.9 or later, as Custom HUD does.
+
 More themes are on the way.
 
 ## Navigation and Off

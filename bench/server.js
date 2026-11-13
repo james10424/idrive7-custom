@@ -1315,6 +1315,7 @@ apps.forEach((app) => watchFor(app.dir, [app]));
 
 const MAX_BODY_CHARS = 1e5; // a POST's JSON body
 const MAX_SHOT_CHARS = 2e7; // a /shot PNG data URL
+const MAX_BACKDROP_BYTES = 2048 * 1024 * 4; // a /backdrop capture, raw RGBA
 const MAX_CLIP_FRAME = 9999,
   CLIP_FRAME_DIGITS = 4; // a README GIF's frame numbers, 0000.png..9999.png
 /**
@@ -1499,6 +1500,50 @@ const web = http.createServer(async (req, res) => {
     else restartAll("restart button");
     res.writeHead(204);
     return res.end();
+  }
+  if (req.method === "POST" && url === "/backdrop") {
+    // bake mode (CLUSTER_BACKDROP_BAKE=1, launch config "bench-backdrop"): the page posts the cluster's display as raw
+    // RGBA; the app's <data>/backdrop-bake.json names it and gives its key; written as ETC2 to
+    // apps/<app>/hud/backdrops/<layout>-<units>.etc2 with its .json (engine/backdrop.js)
+    /** @type {Buffer[]} */
+    const chunks = [];
+    let size = 0;
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BACKDROP_BYTES) req.destroy();
+      else chunks.push(chunk);
+    });
+    req.on("end", () => {
+      try {
+        const app = apps.filter((a) => fs.existsSync(path.join(a.data, "backdrop-bake.json")))[0];
+        if (!app) throw new Error("no app in backdrop bake mode (start the bench with CLUSTER_BACKDROP_BAKE=1)");
+        const bake = JSON.parse(fs.readFileSync(path.join(app.data, "backdrop-bake.json"), "utf8"));
+        const rgba = Buffer.concat(chunks);
+        if (rgba.length !== bake.w * bake.h * 4)
+          throw new Error(rgba.length + " bytes is not " + bake.w + "x" + bake.h + " RGBA");
+        const dir = path.join(app.dir, "hud", "backdrops"),
+          base = path.join(dir, bake.layout + "-" + bake.units);
+        fs.mkdirSync(dir, { recursive: true });
+        const start = Date.now();
+        const out = etc2.encode(rgba, bake.w, bake.h);
+        fs.writeFileSync(base + ".etc2", out);
+        fs.writeFileSync(
+          base + ".json",
+          JSON.stringify({ w: bake.w, h: bake.h, units: bake.units, key: bake.key }, null, 2) + "\n",
+        );
+        log(
+          "info",
+          "backdrop written: " + path.relative(ROOT, base) + ".etc2 (" + bake.w + "x" + bake.h + ", " + out.length +
+            " bytes, key " + bake.key + ", " + ((Date.now() - start) / 1000).toFixed(1) + " s)",
+        );
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ file: path.relative(ROOT, base) + ".etc2", key: bake.key, bytes: out.length }));
+      } catch (err) {
+        res.writeHead(400);
+        res.end(String(err instanceof Error ? err.message : err));
+      }
+    });
+    return;
   }
   if (req.method === "POST" && url === "/shot") {
     // a README screenshot: the page posts a canvas as a PNG data URL; written to docs/images/<name>.png (name: letters,

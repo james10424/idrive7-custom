@@ -106,11 +106,15 @@ function gearNeedleX(widget, state, slot, now) {
   return Math.round((row[0] + row[1] * gn.pos) * GEAR_X_STEPS_PER_PX) / GEAR_X_STEPS_PER_PX;
 }
 
+/** @type {(define: string) => string} the shader with one pass's #define, packed */
+const variant = (define) =>
+  packCfg(RDASH.replace("#endif\nvarying", "#endif\n#define " + define + "\nvarying"), CFG);
 // "needleOnly": the speed and fuel needles on their own layer, over the text
-const NEEDLE = packCfg(
-  RDASH.replace("#endif\nvarying", "#endif\n#define NEEDLE_LAYER\nvarying"),
-  CFG,
-);
+const NEEDLE = variant("NEEDLE_LAYER");
+// with a backdrop (a layout's "backdrop": true): the bench's bake draws only what never changes (RDASH_BAKE); the car
+// draws the baked backdrop and only what moves over it (RDASH_LIVE)
+const BAKE = variant("RDASH_BAKE");
+const LIVE = variant("RDASH_LIVE");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /**
@@ -136,9 +140,12 @@ module.exports = {
    * @returns {string}
    */
   shader(hud, widget) {
-    return widget.needleOnly ? NEEDLE : PACKED;
+    if (widget.needleOnly) return NEEDLE;
+    const backdrop = hud.backdrop;
+    return backdrop ? (backdrop.bake ? BAKE : LIVE) : PACKED;
   },
-  shaders: { rdash: PACKED, rdashNeedle: NEEDLE },
+  shaders: { rdash: PACKED, rdashNeedle: NEEDLE, rdashBake: BAKE, rdashLive: LIVE },
+  BAKE,
   /**
    * @param {HudApp} hud
    * @param {Widget} widget
@@ -148,6 +155,9 @@ module.exports = {
     const client = state.c,
       ref = state.ref;
     const packer = hud._cfgPacker(client, ref, "rdash");
+    // the baked backdrop under the live parts (engine/backdrop.js)
+    const backdrop = hud.backdrop;
+    if (!widget.needleOnly && backdrop && !backdrop.bake && backdrop.ref) client.bind(ref, "u_back", backdrop.ref);
     /** @type {(rect: *) => number[]} */
     const rel = (rect) =>
       Array.isArray(rect) && rect.length === 4

@@ -78,6 +78,7 @@
  * app exit, and on the car a second unexpected exit uninstalls the app.
  */
 const Layouts = require("../layouts");
+const { useBackdrop, noBackdrop } = require("./backdrop");
 const widgetTypes = require("../widgets");
 const { ClusterRender, DEFAULT_PATH } = require("../cluster_render_client.js");
 const {
@@ -322,6 +323,8 @@ class HudApp {
     this.flash = false;
     /** @type {?string} */
     this.problem = null; // why nothing shows (a bad layout), for the status line
+    /** @type {?import("./backdrop").Backdrop} a layout's baked backdrop (engine/backdrop.js), null without one */
+    this.backdrop = null;
     /** @type {Array<(text: string, detail: string) => void>} */
     this.statusListeners = [];
     /** @type {?string} */
@@ -671,7 +674,7 @@ class HudApp {
         (this.layoutTheme ? "" : " (" + this.setting("hudTheme") + ")") +
         (mode !== "normal" ? ", " + mode + " mode" : ""),
     );
-    const shown = layout.widgets
+    let shown = layout.widgets
       .map((widget) => this._inMode(widget, mode))
       .filter(
         (widget) =>
@@ -679,6 +682,18 @@ class HudApp {
           !(widget.toggle && !this._toggleOn(widget.toggle)) &&
           !(widget.themes && widget.themes.indexOf(this.themeName) < 0),
       );
+    // a baked backdrop under the live parts (engine/backdrop.js); missing or out of date, nothing is drawn and the
+    // status row says why
+    if (layout.backdrop) {
+      try {
+        shown = useBackdrop(this, name, shown, require("../widgets/rdash").BAKE);
+      } catch (err) {
+        noBackdrop(this);
+        this.problem = layout.name + ": " + (err instanceof Error ? err.message : err);
+        this.log.warn('layout "' + name + '": ' + this.problem);
+        return;
+      }
+    } else noBackdrop(this);
     this.needsBoost = /boost/.test(JSON.stringify(shown));
     this.needsVolt = /volt12/.test(JSON.stringify(shown));
     this.needsPedal = /throttle/.test(JSON.stringify(shown));

@@ -3,6 +3,10 @@
 // a centre panel holding a swinging speed needle over a straight row of numbers (the pivot hidden below), two orange
 // VFD windows, a fuel needle and an LED rev bar. v_uv (0,0) is the top-left. All the numbers are text widgets over it.
 // Big areas stay pure black (the car brightens dark tints); only the frames are grey.
+// Three passes from this one file: with RDASH_BAKE only what never changes while driving (frames, marks, the pods'
+// zones and ticks, the battery glyph), which the bench bakes with the static labels into the backdrop
+// (hud/backdrops/<layout>-<units>.etc2); with RDASH_LIVE that backdrop (u_back) and only what moves over it (the LED
+// bars, the redline, the pods' and the gear needles, the lamps, the turn arrows); with neither, everything.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -37,6 +41,9 @@ uniform vec4 u_lampB;     // the parking brake / Auto Hold lamp box (left pod; i
 uniform vec3 u_arrow;     // the left turn arrow: centre x, y, size (right: mirrored)
 uniform vec4 u_lamps;     // left lamp (0 off, 1 red: parking brake, 2 green: Auto Hold), left turn, right turn, cruise on (1) / off (0)
 uniform vec2 u_batIcon;   // the battery glyph's centre
+#ifdef RDASH_LIVE
+uniform sampler2D u_back; // the baked backdrop (ETC2, the layer's size)
+#endif
 
 const vec3 CHROME = vec3(0.62, 0.64, 0.68);
 const vec3 CHROME2 = vec3(0.32, 0.33, 0.36);
@@ -90,9 +97,9 @@ float mark(vec2 p, vec2 pv, float a, float r0, float r1, float hw) {
     float al = dot(q, dir), pe = abs(dot(q, vec2(-dir.y, dir.x)));
     return cov(max(pe - hw, max(r0 - al, al - r1)));
 }
-// a side pod's gauge (sgn -1: the left pod, pointing left; +1 the right): 5 marks over +-50 deg, the long ones at the ends
-// and the middle, and its needle
-vec3 podGauge(vec2 p, vec2 pv, float r0, float r1, float sgn, float v, vec4 z, vec3 c) {
+// a side pod's dial (sgn -1: the left pod, pointing left; +1 the right): 5 marks over +-50 deg, the long ones at the ends
+// and the middle (its needle: podNeedle)
+vec3 podDial(vec2 p, vec2 pv, float r0, float r1, float sgn, vec4 z, vec3 c) {
     // the zones: bands on the scale's outer edge as deep as the short marks, under them; low red on the left pod
     // (the battery) and blue on the right (oil), ok green, high red
     vec2 q = p - pv;
@@ -111,9 +118,12 @@ vec3 podGauge(vec2 p, vec2 pv, float r0, float r1, float sgn, float v, vec4 z, v
         float lg = mod(float(i), 2.0) < 0.5 ? 1.0 : 0.0;
         c = mix(c, TICK, mark(p, pv, a, r0 + (1.0 - lg) * (r1 - r0) * 0.35, r1, 3.2));
     }
-    float a = sgn * (1.5708 - (clamp(v, -0.03, 1.03) - 0.5) * 1.745);
-    c = needle(p, pv, a, r0 * 0.25, r1 + 14.0, 4.5, 2.5, c);
     return c;
+}
+// its needle at v (0..1, bottom to top)
+vec3 podNeedle(vec2 p, vec2 pv, float r0, float r1, float sgn, float v, vec3 c) {
+    float a = sgn * (1.5708 - (clamp(v, -0.03, 1.03) - 0.5) * 1.745);
+    return needle(p, pv, a, r0 * 0.25, r1 + 14.0, 4.5, 2.5, c);
 }
 
 void main() {
@@ -156,10 +166,14 @@ void main() {
         return;
     }
 #endif
-    vec3 c = vec3(0.0);
     float W = u_size.x;
-    vec4 podR = vec4(W - u_podL.x - u_podL.z, u_podL.y, u_podL.z, u_podL.w);
     vec4 winR = vec4(W - u_podWin.x - u_podWin.z, u_podWin.y, u_podWin.z, u_podWin.w);
+    vec2 pvL = u_podG.xy, pvR = vec2(W - u_podG.x, u_podG.y);
+#ifdef RDASH_LIVE
+    vec3 c = texture2D(u_back, v_uv).rgb;
+#else
+    vec3 c = vec3(0.0);
+    vec4 podR = vec4(W - u_podL.x - u_podL.z, u_podL.y, u_podL.z, u_podL.w);
 
     // frames
     c = frame(rbox(p, u_podL, 14.0), c);
@@ -217,10 +231,9 @@ void main() {
         }
     }
 
-    // the side pods' gauges (the pivots sit behind each pod's inner edge)
-    vec2 pvL = u_podG.xy, pvR = vec2(W - u_podG.x, u_podG.y);
-    if (rbox(p, u_podWin, 8.0) < 0.0) c = podGauge(p, pvL, u_podG.z, u_podG.w, -1.0, u_podV.x, u_podZL, c);
-    if (rbox(p, winR, 8.0) < 0.0) c = podGauge(p, pvR, u_podG.z, u_podG.w, 1.0, u_podV.y, u_podZR, c);
+    // the side pods' dials (the pivots sit behind each pod's inner edge)
+    if (rbox(p, u_podWin, 8.0) < 0.0) c = podDial(p, pvL, u_podG.z, u_podG.w, -1.0, u_podZL, c);
+    if (rbox(p, winR, 8.0) < 0.0) c = podDial(p, pvR, u_podG.z, u_podG.w, 1.0, u_podZR, c);
 
     // battery glyph: a box with two terminals
     vec2 bq = p - u_batIcon;
@@ -228,6 +241,13 @@ void main() {
     bat = min(bat, rbox(bq, vec4(-10.0, -12.0, 5.0, 4.0), 0.5));
     bat = min(bat, rbox(bq, vec4(5.0, -12.0, 5.0, 4.0), 0.5));
     c = mix(c, TICK, cov(bat));
+#endif
+#ifdef RDASH_BAKE
+    gl_FragColor = vec4(c, 1.0);
+#else
+    // what moves: the pods' needles
+    if (rbox(p, u_podWin, 8.0) < 0.0) c = podNeedle(p, pvL, u_podG.z, u_podG.w, -1.0, u_podV.x, c);
+    if (rbox(p, winR, 8.0) < 0.0) c = podNeedle(p, pvR, u_podG.z, u_podG.w, 1.0, u_podV.y, c);
 
     // LED rev bar: segments with a gap, lit up to the revs, green with every fourth orange
     if (p.x >= u_led.x && p.x < u_led.x + u_led.z && p.y >= u_led.y && p.y < u_led.y + u_led.w) {
@@ -281,4 +301,5 @@ void main() {
         c = mix(c, mix(vec3(0.03, 0.09, 0.04), GREEN, on), cov(d));
     }
     gl_FragColor = vec4(c, 1.0);
+#endif
 }

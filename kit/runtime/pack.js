@@ -64,6 +64,14 @@ function openPack(file) {
             const k = String(key);
             return (index.split[rel] ? part(rel + '#' + k.slice(0, 2).toUpperCase()) : part(rel))[k];
         },
+        /* A file's bytes (any file, not parsed), null when missing; not cached. */
+        buffer(rel) {
+            const e = index.files[rel];
+            if (!e) return null;
+            const b = Buffer.alloc(e[1]);
+            fs.readSync(fd, b, 0, e[1], base + e[0]);
+            return zlib.inflateRawSync(b);
+        },
     };
 }
 
@@ -81,6 +89,9 @@ function openFolder(dir) {
         has: (rel) => fs.existsSync(path.join(dir, rel)),
         json,
         get: (rel, key) => json(rel)[String(key)],
+        buffer(rel) {
+            try { return fs.readFileSync(path.join(dir, rel)); } catch (e) { return null; }
+        },
     };
 }
 

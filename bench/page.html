@@ -93,6 +93,7 @@
       <label class="chk" title="BMW's own HUD content, drawn over our layers as the car does: its speed and speed-limit sign bottom-left (x 150..355, y 314..378, measured Nov 5 2026). The limit is a stand-in: the bench has no speed-limit signal."><input type="checkbox" id="bmwhud" checked> BMW's HUD</label>
       <label class="chk" title="What the driver sees: the hood hides the top corners of the cluster, the dash camera hides its top middle, and BMW draws its gear box and belt light over us; on the HUD only a window is visible through the windshield. Measured from car photos, Nov 5 2026 (shared/visible.js)."><input type="checkbox" id="carview" checked> car view</label>
       <label class="chk" title="Draw the displays (at most 30 times a second, as cluster-render; a screen only when something on it changed, an effect only when its inputs did). Off: the picture holds still and the page uses next to no CPU; the apps, the renderer and the layers table keep running."><input type="checkbox" id="redraw" checked> redraw</label>
+      <button id="bakeBackdrop" title="Backdrop bake mode only (the bench started with CLUSTER_BACKDROP_BAKE=1, launch config bench-backdrop): captures the cluster's display (outlines, backdrop and car view off) and writes it as the layout's ETC2 backdrop for the current Units setting, apps/&lt;app&gt;/hud/backdrops/ (engine/backdrop.js). Bake once per Units setting.">bake backdrop</button>
       <span id="fps"></span>
     </div>
     <div id="views"><canvas id="hud" class="view" width="800" height="480"></canvas></div>
@@ -632,6 +633,21 @@
   }
   requestAnimationFrame(frame);
   ['outlines', 'road', 'carview', 'bmwhud', 'redraw'].forEach((id) => document.getElementById(id).addEventListener('change', () => markDirty()));
+  // bake mode: the cluster's display as drawn, nothing of the bench's own over it, posted raw to /backdrop
+  document.getElementById('bakeBackdrop').addEventListener('click', async () => {
+    const pane = views.find((v) => v.target === 'panel');
+    if (!pane) return addLog({ level: 'error', text: 'bench page: no cluster display to bake' });
+    const boxes = ['outlines', 'road', 'carview'].map((id) => document.getElementById(id)),
+      was = boxes.map((box) => box.checked);
+    boxes.forEach((box) => { box.checked = false; });
+    markDirty();
+    await new Promise((resolve) => setTimeout(resolve, 300));   // a few frames: drawn without them
+    const px = pane.ctx.getImageData(0, 0, pane.VW, pane.VH).data;
+    boxes.forEach((box, i) => { box.checked = was[i]; });
+    markDirty();
+    const res = await fetch('/backdrop', { method: 'POST', body: px });
+    addLog({ level: res.ok ? 'info' : 'error', text: 'bench page: backdrop bake: ' + (await res.text()) });
+  });
   const capEl = document.getElementById('cap');
   capEl.addEventListener('change', () => fetch('/cap', { method: 'POST', body: JSON.stringify({ cap: Number(capEl.value) || 0 }) }));
 
