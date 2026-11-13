@@ -29,7 +29,9 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {number} [leanStep] (the standing layer, close-up only) the lean step she's going to, -leanSteps .. leanSteps
  * @property {number} [leanEased] (the standing layer, close-up only) the lean shown, easing to leanStep's
  * @property {number} [idlePeriod] (the standing layer, close-up only) the idle loop's length, s (0: none)
- * @property {number} [idleT0] (the standing layer, close-up only) when the idle loop last started (ms)
+ * @property {number} [idleMs] (the standing layer, close-up only) how far into the idle loop she is (ms)
+ * @property {number} [idleAt] (the standing layer, close-up only) when idleMs last went on (ms)
+ * @property {number} [turnSteps] (the standing layer, close-up only) the bake's turn steps each way
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -204,6 +206,7 @@ module.exports = {
       state.only = true; // close-up only: the standing layer runs her (update) and draws nothing
       state.leanSteps = atlas.info.close.leanSteps || 0;
       state.idlePeriod = atlas.info.close.idle ? atlas.info.close.idle.period : 0;
+      state.turnSteps = atlas.info.close.turnSteps || 0;
       return;
     }
     if (!isClose(widget)) state.only = false;
@@ -530,12 +533,23 @@ module.exports = {
       (force || now - (state.clockAt || 0) >= MIKU_CLOCK_MS)
     ) {
       state.clockAt = now;
-      // close-up only with an idle loop: the clock runs over the loop's length, from 0 as the expressions finish
-      // coming on (so the loop starts at its first frame, upright, where the in-steps end)
-      const loopMs = only && state.idlePeriod ? state.idlePeriod * 1000 : MIKU_CLOCK_LOOP_MS;
-      if (only && state.idlePeriod && state.zoomT === 1 && state.zoom < 1) state.idleT0 = now;
-      const since = now - (only && state.idlePeriod ? state.idleT0 || 0 : 0);
-      close.c.uniform(close.ref, "u_clock", [(((since % loopMs) + loopMs) % loopMs) / 1000]);
+      close.c.uniform(close.ref, "u_clock", [
+        (((now % MIKU_CLOCK_LOOP_MS) + MIKU_CLOCK_LOOP_MS) % MIKU_CLOCK_LOOP_MS) / 1000,
+      ]);
+      // close-up only with an idle loop: where she is in it. From its first frame (upright, where the in-steps end) as
+      // the expressions finish coming on; held while her head turns away (the turn blends from that frame), and back
+      // to its first frame once she's past the turn's first step (no longer seen), so turning back lands on upright,
+      // as the turn's first step is (it jumped to wherever the loop had run on to)
+      if (only && state.idlePeriod) {
+        const turned = Math.abs(state.point || 0),
+          firstStep = 1 / Math.max(1, state.turnSteps || 1);
+        if (state.zoomT === 1 && state.zoom < 1) state.idleMs = 0;
+        else if (turned > firstStep) state.idleMs = 0;
+        else if (turned <= MIKU_TURN_BACK) state.idleMs = (state.idleMs || 0) + (now - (state.idleAt || now));
+        state.idleAt = now;
+        const loopMs = state.idlePeriod * 1000;
+        close.c.uniform(close.ref, "u_idleT", [((state.idleMs || 0) % loopMs) / 1000]);
+      }
     }
     // close-up only: the lean goes to the close-up layer (it draws the driving set)
     if (only && close && (force || drive[0] !== state.leanSent)) {

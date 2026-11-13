@@ -15,7 +15,8 @@ precision highp float;
 precision mediump float;
 #endif
 varying vec2 v_uv;
-uniform float u_clock;   // seconds 0 .. 4, from the app (blink 2 s, sway 4 s)
+uniform float u_clock;   // seconds, from the app: the blink, every 2 s
+uniform float u_idleT;   // seconds into the idle loop, from the app (it holds and restarts it round a turn)
 uniform sampler2D u_atlas;
 uniform vec2 u_atlasSize;
 uniform vec4 u_zoom;     // expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there (0: draw nothing)
@@ -94,7 +95,7 @@ float idleShift(float i) {
 vec4 idleNow(vec2 q, float eh, float wy) {
     float n = u_ic[3].x;
     if (n < 0.5) return frameAt(u_frames.z + 1.0, 1.0, q, eh);
-    float k = mod(u_clock, u_ic[3].y) / u_ic[3].y * n, i0 = min(floor(k), n - 1.0), f = k - i0;
+    float k = mod(u_idleT, u_ic[3].y) / u_ic[3].y * n, i0 = min(floor(k), n - 1.0), f = k - i0;
     float i1 = i0 + 1.0 > n - 0.5 ? 0.0 : i0 + 1.0;
     float h0 = idleShift(i0), h1 = idleShift(i1), hc = mix(h0, h1, f);
     vec4 c = idleFrame(i0, q + vec2((h0 - hc) * wy, 0.0), eh);
