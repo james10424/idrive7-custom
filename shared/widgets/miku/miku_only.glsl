@@ -7,7 +7,7 @@
 // u_zoom = (expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there): the app brings the expressions
 // on over about 0.8 s when the car has stood still for 1 s or an indicator is on, and off again as she drives on.
 // At 0 she leans with the car (u_lean -1 braking .. 1 pulling away) and blinks; in between the in-steps play; at 1 she
-// blinks, sways (none while she turns) and turns her head toward the indicator. Two nearest baked frames are blended
+// plays her idle loop (a close.idle bake, its own atlas u_idle; else upright) and turns her head toward the indicator. Two nearest baked frames are blended
 // everywhere, each slid so the heads meet (u_tsh: each turn and lean frame's head shift, px).
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
@@ -22,6 +22,10 @@ uniform vec4 u_zoom;     // expressions 0 .. 1, turn -1 .. 1, brightness, 1 once
 uniform float u_lean;    // -1 .. 1, driving
 uniform vec4 u_tsh[9];   // the turn frames' head shifts (px), left to right, then the lean frames', four a vec4
 
+uniform sampler2D u_idle; // the stopped idle loop's own atlas (a close.idle bake), laid out as u_atlas
+uniform vec2 u_idleSize;
+uniform vec4 u_ic[4];    // its grid, crop grid, eyes' rect (as u_cl[4 .. 6]); frames, period (s) (0 frames: no loop)
+uniform vec4 u_ish[6];   // its frames' head shifts (px), four a vec4
 uniform vec4 u_cl[10];   // the bake's fixed values, as one array (cluster-render's 32 uniform names a layer)
 #define u_grid u_cl[4]   // frame cell w, h, columns, pad
 #define u_cropGrid u_cl[5]   // crop cell w, h, columns, y of the first row
@@ -58,6 +62,44 @@ vec4 frameAt(float n, float m, vec2 q, float eh) {
     }
     return c;
 }
+// the idle loop's frame n at frame px q, its eyes eh
+vec4 itap(vec2 at, vec2 size, vec2 p) {
+    if (p.x < 0.0 || p.y < 0.0 || p.x > size.x || p.y > size.y) return vec4(0.0);
+    vec4 t = texture2D(u_idle, (at + p) / u_idleSize);
+    return vec4(t.rgb * t.a, t.a);
+}
+vec4 idleFrame(float n, vec2 q, float eh) {
+    float row = floor((n + 0.5) / u_ic[0].z);
+    vec4 c = itap(vec2(n - row * u_ic[0].z, row) * u_ic[0].xy + u_ic[0].w, u_frames.xy, q);
+    vec2 e = q - u_ic[2].xy;
+    if (eh > 0.001 && e.x >= 0.0 && e.y >= 0.0 && e.x <= u_ic[2].z && e.y <= u_ic[2].w) {
+        e = clamp(e, vec2(0.5), u_ic[2].zw - 0.5);
+        float m = 2.0 * n, mr = floor((m + 0.5) / u_ic[1].z);
+        vec2 a0 = vec2(m - mr * u_ic[1].z, mr) * u_ic[1].xy + vec2(0.0, u_ic[1].w) + u_ic[0].w;
+        float m1 = m + 1.0, mr1 = floor((m1 + 0.5) / u_ic[1].z);
+        vec2 a1 = vec2(m1 - mr1 * u_ic[1].z, mr1) * u_ic[1].xy + vec2(0.0, u_ic[1].w) + u_ic[0].w;
+        c = mix(c, itap(a0, u_ic[2].zw, e), min(1.0, eh * 2.0));              // half shut
+        c = mix(c, itap(a1, u_ic[2].zw, e), max(0.0, eh * 2.0 - 1.0));        // shut
+    }
+    return c;
+}
+float idleShift(float i) {
+    float q = floor(i / 4.0 + 0.01), r = i - q * 4.0;
+    vec4 v = vec4(0.0);
+    for (int k = 0; k < 6; k++) if (abs(float(k) - q) < 0.5) v = u_ish[k];
+    return r < 0.5 ? v.x : r < 1.5 ? v.y : r < 2.5 ? v.z : v.w;
+}
+// her stopped idle now (the clock's place in the loop), its two nearest frames slid so the heads meet; without a loop
+// in the bake, the upright pose
+vec4 idleNow(vec2 q, float eh, float wy) {
+    float n = u_ic[3].x;
+    if (n < 0.5) return frameAt(u_frames.z + 1.0, 1.0, q, eh);
+    float k = mod(u_clock, u_ic[3].y) / u_ic[3].y * n, i0 = min(floor(k), n - 1.0), f = k - i0;
+    float i1 = i0 + 1.0 > n - 0.5 ? 0.0 : i0 + 1.0;
+    float h0 = idleShift(i0), h1 = idleShift(i1), hc = mix(h0, h1, f);
+    vec4 c = idleFrame(i0, q + vec2((h0 - hc) * wy, 0.0), eh);
+    return mix(c, idleFrame(i1, q + vec2((h1 - hc) * wy, 0.0), eh), f);
+}
 // head shift i (0 the first turn frame; the lean frames after the turn's), px
 float shiftAt(float i) {
     float q = floor(i / 4.0 + 0.01), r = i - q * 4.0;
@@ -83,9 +125,10 @@ void main() {
     float eh = smoothstep(0.0, 0.06, bt) * (1.0 - smoothstep(0.1, 0.22, bt));
     // the heads meet above the shoulders: the slide fades out below the sway's pivot
     float wy = 1.0 - smoothstep(u_pose.y - 20.0, u_pose.y + 30.0, q.y);
-    // every case blends two frames (so two frames' reads in all): pose p0 at q0 and p1 at q1 by f; a pose is whole
-    // frame steps + p with crop pair p; the in-steps are whole frames 0 .. steps - 1 without crops (pose -1 - n)
-    float steps = u_frames.z, p0, p1, f = 0.0, e = eh;
+    // every case blends two endpoints: pose p0 at q0 and p1 at q1 by f, or her idle now in place of either (idle0,
+    // idle1); a pose is whole frame steps + p with crop pair p, the in-steps whole frames 0 .. steps - 1 (pose -1 - n)
+    float steps = u_frames.z, p0 = 0.0, p1 = 0.0, f = 0.0, e = eh;
+    bool idle0 = false, idle1 = false;
     vec2 q0 = q, q1 = q;
     if (y < 0.001) {
         // driving: the lean's two nearest frames, slid so the heads meet
@@ -98,42 +141,36 @@ void main() {
         q0 = q + vec2((h0 - hc) * wy, 0.0);
         q1 = q + vec2((h1 - hc) * wy, 0.0);
     } else if (y < 0.999) {
-        // the expressions coming on: driving upright, the in-steps, the stopped upright; no blink meanwhile
+        // the expressions coming on or going off: driving upright, the in-steps, her idle; no blink meanwhile
         float k = y * (steps + 1.0), i0 = min(floor(k), steps);
         f = k - i0;
         p0 = i0 < 0.5 ? leanPose(u_drv.x) : -i0;
-        p1 = i0 + 1.0 > steps + 0.5 ? 1.0 : -(i0 + 1.0);
+        idle1 = i0 + 1.0 > steps + 0.5;
+        p1 = -(i0 + 1.0);
         e = 0.0;
     } else {
-        // stopped (or an indicator on): the sway, -1 .. 1 over 4 s, none while she turns, and the turn
+        // stopped (or an indicator on): her idle, and toward the indicator the turn, from wherever the idle has her
         float turn = clamp(u_zoom.y, -1.0, 1.0);
-        float s = sin(t * 1.5708) * (1.0 - smoothstep(0.0, 0.4, abs(turn)));
-        if (abs(turn) < 0.001) {
-            // the two nearest baked sways, each turned onto the sway between (as the bake measured their turn)
-            float i0 = min(floor(s + 1.0), 1.0);
-            f = s + 1.0 - i0;
-            float a0 = i0 < 0.5 ? u_pose.z : 0.0, a1 = i0 > 0.5 ? u_pose.w : 0.0, a = mix(a0, a1, f);
-            p0 = i0;
-            p1 = i0 + 1.0;
-            q0 = rot(q - u_pose.xy, a0 - a) + u_pose.xy;
-            q1 = rot(q - u_pose.xy, a1 - a) + u_pose.xy;
-        } else {
-            // the turn's two nearest along the chain (the middle is upright, turned by what's left of the sway)
+        if (abs(turn) < 0.001) idle0 = true;
+        else {
             float n = 2.0 * u_frames.w, kt = (turn + 1.0) * u_frames.w;
             float t0 = min(floor(kt), n - 1.0), t1 = t0 + 1.0;
             f = kt - t0;
             float h0 = turnShift(t0), h1 = turnShift(t1), hc = mix(h0, h1, f);
-            float sa = s > 0.0 ? s * u_pose.w : -s * u_pose.z;   // the sway's turn there
-            bool mid0 = abs(t0 - u_frames.w) < 0.5, mid1 = abs(t1 - u_frames.w) < 0.5;
-            p0 = mid0 ? 1.0 : turnPose(t0);
-            p1 = mid1 ? 1.0 : turnPose(t1);
-            q0 = mid0 ? rot(q - u_pose.xy, -sa) + u_pose.xy : q + vec2((h0 - hc) * wy, 0.0);
-            q1 = mid1 ? rot(q - u_pose.xy, -sa) + u_pose.xy : q + vec2((h1 - hc) * wy, 0.0);
+            idle0 = abs(t0 - u_frames.w) < 0.5;
+            idle1 = abs(t1 - u_frames.w) < 0.5;
+            p0 = turnPose(t0);
+            p1 = turnPose(t1);
+            q0 = q + vec2((h0 - hc) * wy, 0.0);
+            q1 = q + vec2((h1 - hc) * wy, 0.0);
         }
     }
+    vec4 ic = vec4(0.0);
+    if (idle0 || (idle1 && f > 0.001)) ic = idleNow(q, e, wy);
     // pose p >= 0: whole frame steps + p with its eyes; p < 0: in-step -p, whole frame -p - 1, no crops
-    vec4 c = frameAt(p0 < -0.5 ? -p0 - 1.0 : steps + p0, p0 < -0.5 ? -1.0 : p0, q0, e);
-    if (f > 0.001) c = mix(c, frameAt(p1 < -0.5 ? -p1 - 1.0 : steps + p1, p1 < -0.5 ? -1.0 : p1, q1, e), f);
+    vec4 c = idle0 ? ic : frameAt(p0 < -0.5 ? -p0 - 1.0 : steps + p0, p0 < -0.5 ? -1.0 : p0, q0, e);
+    if (f > 0.001)
+        c = mix(c, idle1 ? ic : frameAt(p1 < -0.5 ? -p1 - 1.0 : steps + p1, p1 < -0.5 ? -1.0 : p1, q1, e), f);
     vec3 rgb = c.rgb / max(c.a, 0.0001);
     gl_FragColor = vec4(rgb * u_zoom.z, c.a);
 }

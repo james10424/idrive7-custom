@@ -15,8 +15,8 @@
  * --home play (or replay) serves that page at / as well (for a launcher that opens only the root); the bake page is
  * then at /bake (always there too).
  *
- * After the page writes atlas.json, the atlases (atlas.rgba, close.rgba) are compressed to ETC2 (atlas.etc2,
- * close.etc2, tools/etc2.js), which is what Custom HUD uploads: a quarter of the pixel memory.
+ * After the page writes atlas.json, the atlases (atlas.rgba, close.rgba, idle.rgba) are compressed to ETC2 (atlas.etc2,
+ * close.etc2, idle.etc2, tools/etc2.js), which is what Custom HUD uploads: a quarter of the pixel memory.
  *
  * Nothing of the model ever goes in this repo: keep the config and the output next to the model.
  * The config's fields are described in page.js (CONFIG).
@@ -94,6 +94,8 @@ function compressAtlases(dir) {
   /** @type {Array<[string, number[]]>} */
   const atlases = [["atlas", info.atlas]];
   if (info.close && fs.existsSync(path.join(dir, "close.rgba"))) atlases.push(["close", info.close.atlas]);
+  if (info.close && info.close.idle && fs.existsSync(path.join(dir, "idle.rgba")))
+    atlases.push(["idle", info.close.idle.atlas]);
   atlases.forEach(([name, size]) => {
     const start = Date.now();
     const out = etc2.encode(fs.readFileSync(path.join(dir, name + ".rgba")), size[0], size[1]);

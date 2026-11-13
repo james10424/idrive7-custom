@@ -28,6 +28,8 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {number} [leanSteps] (the standing layer, close-up only) the bake's lean steps each way
  * @property {number} [leanStep] (the standing layer, close-up only) the lean step she's going to, -leanSteps .. leanSteps
  * @property {number} [leanEased] (the standing layer, close-up only) the lean shown, easing to leanStep's
+ * @property {number} [idlePeriod] (the standing layer, close-up only) the idle loop's length, s (0: none)
+ * @property {number} [idleT0] (the standing layer, close-up only) when the idle loop last started (ms)
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -61,6 +63,7 @@ const MIKU_MAX_DT_MS = 500; // a longer gap between updates eases as if it were 
 const MIKU_LEAN_G = 0.4; // this longitudinal g is a full lean
 const MIKU_POINT_STEP_S = 0.01; // the arm's spring is stepped at most this long at a time
 const MIKU_SPEED_KMH = 130; // her speed's full scale
+const IDLE_SHIFT_SLOTS = 24; // the idle loop's head shifts sent (u_ish[6], 4 a vec4)
 const TURN_SHIFT_SLOTS = 36; // the close-up's turn head shifts sent (u_tsh[9], 4 a vec4)
 const MIKU_STEPS = 500; // the lean, speed, zoom and turn are sent in steps of 1/500
 const MIKU_LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
@@ -200,6 +203,7 @@ module.exports = {
     if (only && !isClose(widget)) {
       state.only = true; // close-up only: the standing layer runs her (update) and draws nothing
       state.leanSteps = atlas.info.close.leanSteps || 0;
+      state.idlePeriod = atlas.info.close.idle ? atlas.info.close.idle.period : 0;
       return;
     }
     if (!isClose(widget)) state.only = false;
@@ -246,7 +250,21 @@ module.exports = {
       for (let i = 0; i < TURN_SHIFT_SLOTS; i++) tsh.push(close.turnShift[i] || 0);
       client.uniform(ref, "u_tsh", tsh, { type: "vec4" });
       client.uniform(ref, "u_zoom", zoomNow(hud));
-      if (only) client.uniform(ref, "u_lean", [leanNow(hud)]);
+      if (only) {
+        client.uniform(ref, "u_lean", [leanNow(hud)]);
+        // the stopped idle loop's own atlas (miku_only.glsl u_idle), when the bake has one
+        const idle = close.idle;
+        if (idle && closeAtlas.idleRef) {
+          client.bind(ref, "u_idle", closeAtlas.idleRef);
+          client.uniform(ref, "u_idleSize", closeAtlas.idleSize || [1, 1]);
+          client.uniform(ref, "u_ic", [].concat(idle.grid, idle.cropGrid, idle.crop, [idle.count, idle.period, 0, 0]), {
+            type: "vec4",
+          });
+          const ish = [];
+          for (let i = 0; i < IDLE_SHIFT_SLOTS; i++) ish.push(idle.shift[i] || 0);
+          client.uniform(ref, "u_ish", ish, { type: "vec4" });
+        } else client.uniform(ref, "u_ic", [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0], { type: "vec4" });
+      }
       return;
     }
     /** @type {(k: string) => number[]} */
@@ -512,9 +530,12 @@ module.exports = {
       (force || now - (state.clockAt || 0) >= MIKU_CLOCK_MS)
     ) {
       state.clockAt = now;
-      close.c.uniform(close.ref, "u_clock", [
-        (((now % MIKU_CLOCK_LOOP_MS) + MIKU_CLOCK_LOOP_MS) % MIKU_CLOCK_LOOP_MS) / 1000,
-      ]);
+      // close-up only with an idle loop: the clock runs over the loop's length, from 0 as the expressions finish
+      // coming on (so the loop starts at its first frame, upright, where the in-steps end)
+      const loopMs = only && state.idlePeriod ? state.idlePeriod * 1000 : MIKU_CLOCK_LOOP_MS;
+      if (only && state.idlePeriod && state.zoomT === 1 && state.zoom < 1) state.idleT0 = now;
+      const since = now - (only && state.idlePeriod ? state.idleT0 || 0 : 0);
+      close.c.uniform(close.ref, "u_clock", [(((since % loopMs) + loopMs) % loopMs) / 1000]);
     }
     // close-up only: the lean goes to the close-up layer (it draws the driving set)
     if (only && close && (force || drive[0] !== state.leanSent)) {

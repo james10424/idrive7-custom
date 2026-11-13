@@ -49,6 +49,11 @@ if [ "${1:-}" = "--miku" ]; then
     if python3 -c 'import json,sys; sys.exit(0 if "close" in json.load(open(sys.argv[1])) else 1)' "$MIKU_SRC/atlas.json"; then
         [ -f "$MIKU_SRC/close.etc2" ] || { echo "atlas.json has a close-up but $MIKU_SRC/close.etc2 is missing" >&2; exit 1; }
         MIKU_FILES+=("$MIKU_SRC/close.etc2")
+        # a close-up-only bake's idle loop: its own atlas
+        if python3 -c 'import json,sys; sys.exit(0 if "idle" in json.load(open(sys.argv[1])).get("close", {}) else 1)' "$MIKU_SRC/atlas.json"; then
+            [ -f "$MIKU_SRC/idle.etc2" ] || { echo "atlas.json has an idle loop but $MIKU_SRC/idle.etc2 is missing" >&2; exit 1; }
+            MIKU_FILES+=("$MIKU_SRC/idle.etc2")
+        fi
     fi
 fi
 LAYOUT_DIR="$(dirname "$SCRIPT_DIR")/apps/${APP_ID}/hud/layouts"
@@ -71,7 +76,7 @@ if [ -n "$MIKU_SRC" ]; then
     OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
     ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/${MIKU_DIR}'"
     # the RGBA files of older bakes (the app reads only the ETC2 ones now) and any old close-up
-    ssh "$CAR_HOST" "rm -f '${APP_DIR}/data/${MIKU_DIR}/atlas.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.etc2'"
+    ssh "$CAR_HOST" "rm -f '${APP_DIR}/data/${MIKU_DIR}/atlas.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.rgba' '${APP_DIR}/data/${MIKU_DIR}/close.etc2' '${APP_DIR}/data/${MIKU_DIR}/idle.etc2'"
     scp "${MIKU_FILES[@]}" "${CAR_HOST}:${APP_DIR}/data/${MIKU_DIR}/"
     ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/${MIKU_DIR}'"
     echo "Pushed the Miku frames to ${APP_DIR}/data/${MIKU_DIR}. Switch to another layout and back (or restart the app) to load them."

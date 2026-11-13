@@ -201,6 +201,7 @@ const SHRINK_SLACK = 1.01; // halve while the half is still at least this much o
 const DEFAULT_TAILS_ROOT = 0.15; // where the tails hang from, a fraction down their sprite
 const ZOOM_STEPS_MAX = 3; // close-up zoom steps, also the default
 const TURN_STEPS_DEFAULT = 2; // close-up turn steps each way by default
+const IDLE_FRAME_S = 0.25; // close.idle without a "period": this long a frame
 const IN_STEPS_DEFAULT = 6; // close.only: frames between no expressions and all (Yandere's hands rising)
 const TURN_STEPS_MAX = 17; // and at most: what a 2048x2048 close-up atlas holds with 3 zoom steps and 3 sway poses
 const DEFAULT_SWAY = { ParamAngleZ: 4 }; // the close-up's sway at a full swing
@@ -1133,7 +1134,91 @@ async function bakeClose(loaded, cfg, at) {
       crop[3],
     ),
   );
+  // close.only's idle (close.idle: { period: s, poses: [params, ...] }): her stopped loop, a frame each, in an atlas
+  // of its own (idle.rgba) laid out as the close-up's: whole frames, then each frame's half shut and shut eyes
+  /** @type {?{ canvas: HTMLCanvasElement, info: object }} */
+  let idleOut = null;
+  if (only && close.idle && Array.isArray(close.idle.poses) && close.idle.poses.length) {
+    const idlePosed = close.idle.poses.map((pose) => {
+      const base = Object.assign(toggles(1), pose);
+      return [
+        shot(base, box1),
+        shot(Object.assign({}, base, half, keepOwn(base, half)), box1),
+        shot(Object.assign({}, base, shut, keepOwn(base, shut)), box1),
+      ];
+    });
+    // its eyes' rect: round every pixel an idle frame's blink changes (her head moves, so its own)
+    let ix0 = frameW,
+      iy0 = frameH,
+      ix1 = -1,
+      iy1 = -1;
+    idlePosed.forEach(([open, ...eyes]) => {
+      const base = px(open);
+      eyes.forEach((canvas) => {
+        const pixels = px(canvas);
+        for (let k = 0; k < pixels.length; k += 4) {
+          let diff = 0;
+          for (let c = 0; c < 4; c++) diff += Math.abs(pixels[k + c] - base[k + c]);
+          if (diff < PIXEL_DIFF_MIN) continue;
+          const x = (k / 4) % frameW,
+            y = (k / 4 - x) / frameW;
+          ix0 = Math.min(ix0, x);
+          ix1 = Math.max(ix1, x);
+          iy0 = Math.min(iy0, y);
+          iy1 = Math.max(iy1, y);
+        }
+      });
+    });
+    if (ix1 < 0) throw new Error("close.idle: the eyes don't change with frames.half or frames.shut");
+    const icrop = [
+      Math.max(0, ix0 - 1),
+      Math.max(0, iy0 - 1),
+      Math.min(frameW - 1, ix1 + 1) - Math.max(0, ix0 - 1) + 1,
+      Math.min(frameH - 1, iy1 + 1) - Math.max(0, iy0 - 1) + 1,
+    ];
+    // each frame's head shift (px, as the turn's), so the HUD lines neighbouring frames up while it blends them
+    const idleShift = idlePosed.map(
+      (frames) => Math.round((midX(frames[0], y0, y1 + 1) - eyeMid) * 10) / 10,
+    );
+    const IMAX = CLOSE_ATLAS_MAX,
+      icols = Math.floor(IMAX / cell[0]),
+      irows = Math.ceil(idlePosed.length / icols),
+      icropCell = [icrop[2] + 2 * pad, icrop[3] + 2 * pad],
+      icropCols = Math.floor(IMAX / icropCell[0]),
+      icropY = irows * cell[1],
+      idleH = ceilBlock(icropY + Math.ceil((2 * idlePosed.length) / icropCols) * icropCell[1]);
+    if (idleH > IMAX)
+      throw new Error("the idle atlas would be " + idleH + " px high, over " + IMAX + ": fewer close.idle.poses");
+    const idleAtlas = document.createElement("canvas");
+    idleAtlas.width = IMAX;
+    idleAtlas.height = idleH;
+    const ictx = idleAtlas.getContext("2d");
+    idlePosed.forEach((frames, n) => {
+      ictx.drawImage(frames[0], (n % icols) * cell[0] + pad, Math.floor(n / icols) * cell[1] + pad);
+      [frames[1], frames[2]].forEach((canvas, e) => {
+        const m = 2 * n + e;
+        ictx.drawImage(canvas, icrop[0], icrop[1], icrop[2], icrop[3],
+          (m % icropCols) * icropCell[0] + pad, icropY + Math.floor(m / icropCols) * icropCell[1] + pad,
+          icrop[2], icrop[3]);
+      });
+    });
+    idleOut = {
+      canvas: idleAtlas,
+      info: {
+        atlas: [IMAX, idleH],
+        count: idlePosed.length,
+        period: close.idle.period || idlePosed.length * IDLE_FRAME_S,
+        grid: [cell[0], cell[1], icols, pad],
+        cropGrid: [icropCell[0], icropCell[1], icropCols, icropY],
+        crop: icrop,
+        shift: idleShift,
+      },
+    };
+    log("idle: " + idlePosed.length + " frames over " + idleOut.info.period + " s, " + IMAX + "x" + idleH +
+      ", eyes cropped to " + icrop[2] + "x" + icrop[3] + "; head shifts " + idleShift.join(", ") + " px");
+  }
   return {
+    idle: idleOut,
     canvas: atlas,
     info: {
       atlas: [MAX, atlasH],
@@ -1713,6 +1798,14 @@ async function bake(loaded, cfg) {
   });
   if (closeUp) {
     info.close = closeUp.info;
+    // close.only's idle loop: its own atlas, idle.rgba (serve.js compresses it to idle.etc2)
+    if (closeUp.idle) {
+      info.close.idle = closeUp.idle.info;
+      const idleRgba = closeUp.idle.canvas
+        .getContext("2d")
+        .getImageData(0, 0, closeUp.idle.canvas.width, closeUp.idle.canvas.height).data;
+      await fetch("/out/idle.rgba", { method: "POST", body: new Blob([idleRgba]) });
+    }
     const closeRgba = closeUp.canvas
       .getContext("2d")
       .getImageData(0, 0, closeUp.canvas.width, closeUp.canvas.height).data;

@@ -80,6 +80,8 @@ function etc2Problem(name, n, w, h) {
  * @typedef {object} SpriteAtlas
  * @property {number} ref
  * @property {number} [tableRef] the standing atlas's tables (RGBA8; u_table)
+ * @property {number} [idleRef] the close-up's idle loop (a close.idle bake; u_idle)
+ * @property {number[]} [idleSize] its [w, h]
  * @property {Client} c
  * @property {number} ci
  * @property {MikuInfo} info
@@ -322,6 +324,7 @@ function closeSprite(hud, standing, connIndex) {
   hud.atlases.forEach((atlas, k) => {
     if (k.indexOf(pre) === 0) {
       atlas.c.drop(atlas.ref);
+      if (atlas.idleRef) atlas.c.drop(atlas.idleRef);
       hud.atlases.delete(k);
     }
   });
@@ -352,6 +355,34 @@ function closeSprite(hud, standing, connIndex) {
       counts: standing.counts,
       bytes: w * h * ETC2_MEM_BYTES,
     };
+    // a close.idle bake: the stopped idle loop's own atlas, idle.etc2, a second asset (u_idle)
+    const idle = close.idle;
+    if (idle) {
+      const iw = (idle.atlas || [])[0],
+        ih = (idle.atlas || [])[1];
+      let idleBytes = null;
+      try {
+        idleBytes = fs.readFileSync(path.join(dir, "idle.etc2"));
+      } catch (err) {
+        /* named below */
+      }
+      const badIdle = !idleBytes
+        ? "no idle.etc2 (deploy the bake again)"
+        : !(iw > 0 && ih > 0) || iw > CLOSE_MAX_SIDE_PX || ih > CLOSE_MAX_SIDE_PX
+          ? "bad close.idle.atlas size " + iw + "x" + ih
+          : etc2Problem("idle.etc2", idleBytes.length, iw, ih);
+      if (badIdle) hud.log.warn("miku idle: " + badIdle + "; she stands upright when stopped");
+      else {
+        const idleRef = client.asset({ target: hud.target, format: "etc2rgba", w: iw, h: ih, sampling: "bilinear" });
+        if (idleRef) {
+          client.pixels(idleRef, null, /** @type {Buffer} */ (idleBytes));
+          atlas.idleRef = idleRef;
+          atlas.idleSize = [iw, ih];
+          atlas.bytes += iw * ih * ETC2_MEM_BYTES;
+          hud.log.info("miku idle: " + idle.count + " frames over " + idle.period + " s, " + iw + "x" + ih + " ETC2 asset");
+        } else hud.log.warn("miku idle: asset refused (" + iw + "x" + ih + ")");
+      }
+    }
     hud.atlases.set(key, atlas);
     hud.log.info(
       "miku close-up: " +
