@@ -25,7 +25,11 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {boolean} [blanked] (the close-up layer) told to draw nothing after a refusal
  * @property {boolean} [only] (the standing layer) her bake is close-up only: it runs her and draws nothing
  * @property {number} [shownAt] (the standing layer, close-up only) when the close-up layer was last shown (ms; 0: not shown)
- * @property {number} [leanSent] (the standing layer, close-up only) the close-up layer's u_lean, last sent
+ * @property {number[]} [pkSent] (the standing layer, close-up only) the close-up layer's u_pk, last sent
+ * @property {number} [idleT] (the standing layer, close-up only) seconds into the idle loop, last worked out
+ * @property {number[]} [turnShift] (the standing layer, close-up only) the bake's turn, then lean, head shifts (px)
+ * @property {number[]} [idleShift] (the standing layer, close-up only) the idle loop's head shifts (px)
+ * @property {number} [idleCount] (the standing layer, close-up only) the idle loop's frames (0: none)
  * @property {number} [leanSteps] (the standing layer, close-up only) the bake's lean steps each way
  * @property {number} [leanStep] (the standing layer, close-up only) the lean step she's going to, -leanSteps .. leanSteps
  * @property {number} [leanEased] (the standing layer, close-up only) the lean shown, easing to leanStep's
@@ -66,9 +70,8 @@ const MIKU_MAX_DT_MS = 500; // a longer gap between updates eases as if it were 
 const MIKU_LEAN_G = 0.4; // this longitudinal g is a full lean
 const MIKU_POINT_STEP_S = 0.01; // the arm's spring is stepped at most this long at a time
 const MIKU_SPEED_KMH = 130; // her speed's full scale
-const IDLE_SHIFT_SLOTS = 40; // the idle loop's head shifts sent (u_ish[10], 4 a vec4): its frames at most (page.js IDLE_FRAMES_MAX)
+const IDLE_BLEND = 0.35; // close-up only: each idle frame holds, then crossfades into the next over this much of its time
 const CLOSE_TURN_SHIFT_SLOTS = 36; // the zooming close-up's turn head shifts sent (miku_close.glsl u_tsh[9])
-const TURN_SHIFT_SLOTS = 44; // the close-up's turn head shifts sent, then (close-up only) the lean's (u_tsh[11], 4 a vec4)
 const MIKU_STEPS = 500; // the lean, speed, zoom and turn are sent in steps of 1/500
 const MIKU_LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
 const MIKU_LEAN_STEP_TAU_MS = 120; // close-up only: she eases to the lean's step this quickly
@@ -131,13 +134,77 @@ function zoomNow(hud) {
 }
 
 /**
- * The lean the standing layer last sent (close-up only: the close-up layer's u_lean).
+ * The pick the standing layer last sent (close-up only: the close-up layer's u_pk).
  * @param {HudApp} hud
- * @returns {number}
+ * @returns {number[]}
  */
-function leanNow(hud) {
+function pickNow(hud) {
   const standing = layerState(hud, false);
-  return standing && isNum(standing.leanSent) ? standing.leanSent : 0;
+  return (standing && standing.pkSent) || [0, 0, 0, 0, 0, 0, 0, 0];
+}
+
+/**
+ * Close-up only: the two frames miku_only.glsl blends and how far, and their head slides, as u_pk[2]: [the lean's or
+ * the turn's chain position of the first frame, the blend to the next, the idle loop's frame, the blend to its next;
+ * the slides (px) of those four frames, each frame's head shift less the blended one, so the heads meet]. The branch
+ * follows the shader's: driving (no expressions) the lean, all expressions on and turned the turn. Worked out here,
+ * not in the shader: its lookups over the shift tables restarted the KOMBI.
+ * @param {MikuState} state the standing layer's
+ * @param {number} zoom the close-up's u_zoom.x as sent
+ * @param {number} turn its u_zoom.y as sent
+ * @param {number} lean -1 .. 1
+ * @returns {number[]}
+ */
+function pickOf(state, zoom, turn, lean) {
+  const T = state.turnSteps || 0,
+    L = state.leanSteps || 0,
+    ts = state.turnShift || [],
+    /** @type {(i: number) => number} */
+    sh = (i) => ts[i] || 0,
+    /** @type {(v: number) => number} */
+    clamp1 = (v) => Math.max(-1, Math.min(1, v));
+  let p = 0,
+    f = 0,
+    h0 = 0,
+    h1 = 0;
+  if (zoom < 0.001 && L) {
+    const k = (clamp1(lean) + 1) * L;
+    p = Math.min(Math.floor(k), 2 * L - 1);
+    f = k - p;
+    h0 = sh(2 * T + p);
+    h1 = sh(2 * T + p + 1);
+  } else if (zoom >= 0.999 && Math.abs(turn) >= 0.001 && T) {
+    const k = (clamp1(turn) + 1) * T;
+    /** @type {(j: number) => number} */
+    const hs = (j) => (j === T ? 0 : sh(j < T ? j : j - 1));
+    p = Math.min(Math.floor(k), 2 * T - 1);
+    f = k - p;
+    h0 = hs(p);
+    h1 = hs(p + 1);
+  }
+  const hc = h0 + (h1 - h0) * f;
+  let i0 = 0,
+    fi = 0,
+    g0 = 0,
+    g1 = 0;
+  const n = state.idleCount || 0,
+    period = state.idlePeriod || 0;
+  if (n && period) {
+    const k = ((((state.idleT || 0) % period) + period) % period) / period * n,
+      ish = state.idleShift || [];
+    i0 = Math.min(Math.floor(k), n - 1);
+    const x = Math.max(0, Math.min(1, (k - i0 - (1 - IDLE_BLEND)) / IDLE_BLEND));
+    fi = x * x * (3 - 2 * x); // smoothstep
+    const i1 = i0 + 1 > n - 0.5 ? 0 : i0 + 1,
+      a = ish[i0] || 0,
+      b = ish[i1] || 0,
+      c = a + (b - a) * fi;
+    g0 = a - c;
+    g1 = b - c;
+  }
+  /** @type {(v: number) => number} */
+  const r = (v) => Math.round(v * 1000) / 1000;
+  return [p, r(f), i0, r(fi), r(h0 - hc), r(h1 - hc), r(g0), r(g1)];
 }
 /**
  * Where the standing frame's top-left sits in a widget's layer (px): the bake's "anchor" (between her feet) on the
@@ -210,6 +277,9 @@ module.exports = {
       state.leanSteps = atlas.info.close.leanSteps || 0;
       state.idlePeriod = atlas.info.close.idle ? atlas.info.close.idle.period : 0;
       state.turnSteps = atlas.info.close.turnSteps || 0;
+      state.turnShift = atlas.info.close.turnShift || [];
+      state.idleShift = atlas.info.close.idle ? atlas.info.close.idle.shift || [] : [];
+      state.idleCount = atlas.info.close.idle ? atlas.info.close.idle.count || 0 : 0;
       return;
     }
     if (!isClose(widget)) state.only = false;
@@ -251,14 +321,16 @@ module.exports = {
         ),
         { type: "vec4" },
       );
-      // the turn frames' head shifts, left to right, four a vec4 (miku_close.glsl u_tsh[9]: up to 18 steps each way;
-      // close-up only, miku_only.glsl u_tsh[11]: the lean's after the turn's)
-      const tsh = [];
-      for (let i = 0; i < (only ? TURN_SHIFT_SLOTS : CLOSE_TURN_SHIFT_SLOTS); i++) tsh.push(close.turnShift[i] || 0);
-      client.uniform(ref, "u_tsh", tsh, { type: "vec4" });
+      // the turn frames' head shifts, left to right, four a vec4 (miku_close.glsl u_tsh[9]: up to 18 steps each way);
+      // close-up only, the app picks the frames and their slides (u_pk)
+      if (!only) {
+        const tsh = [];
+        for (let i = 0; i < CLOSE_TURN_SHIFT_SLOTS; i++) tsh.push(close.turnShift[i] || 0);
+        client.uniform(ref, "u_tsh", tsh, { type: "vec4" });
+      }
       client.uniform(ref, "u_zoom", zoomNow(hud));
       if (only) {
-        client.uniform(ref, "u_lean", [leanNow(hud)]);
+        client.uniform(ref, "u_pk", pickNow(hud), { type: "vec4" });
         // the lean's own atlas (miku_only.glsl u_leanAtlas): its size and where its crops start
         if (closeAtlas.leanRef) {
           client.bind(ref, "u_leanAtlas", closeAtlas.leanRef);
@@ -272,9 +344,6 @@ module.exports = {
           client.uniform(ref, "u_ic", [].concat(idle.grid, idle.cropGrid, idle.crop, [idle.count, idle.period, 0, 0]), {
             type: "vec4",
           });
-          const ish = [];
-          for (let i = 0; i < IDLE_SHIFT_SLOTS; i++) ish.push(idle.shift[i] || 0);
-          client.uniform(ref, "u_ish", ish, { type: "vec4" });
         } else client.uniform(ref, "u_ic", [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0], { type: "vec4" });
       }
       return;
@@ -565,13 +634,16 @@ module.exports = {
         else if (turned <= MIKU_TURN_BACK) state.idleMs = (state.idleMs || 0) + (now - (state.idleAt || now));
         state.idleAt = now;
         const loopMs = state.idlePeriod * 1000;
-        close.c.uniform(close.ref, "u_idleT", [((state.idleMs || 0) % loopMs) / 1000]);
+        state.idleT = ((state.idleMs || 0) % loopMs) / 1000;
       }
     }
-    // close-up only: the lean goes to the close-up layer (it draws the driving set)
-    if (only && close && (force || drive[0] !== state.leanSent)) {
-      state.leanSent = drive[0];
-      close.c.uniform(close.ref, "u_lean", [drive[0]]);
+    // close-up only: the frames the close-up layer blends and their slides, from the lean, the turn and the idle
+    if (only && close) {
+      const pk = pickOf(state, zoomVals[0], zoomVals[1], drive[0]);
+      if (force || !state.pkSent || pk.join("|") !== state.pkSent.join("|")) {
+        state.pkSent = pk;
+        close.c.uniform(close.ref, "u_pk", pk, { type: "vec4" });
+      }
     }
     const key = drive.join("|");
     if (!force && key === state.last) return;

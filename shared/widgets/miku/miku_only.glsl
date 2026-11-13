@@ -7,9 +7,11 @@
 // an atlas of its own on the same grid (u_leanAtlas, its crops from u_lc.z), so the close-up's keeps room for the turn.
 // u_zoom = (expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there): the app brings the expressions
 // on over about 0.8 s when the car has stood still for 1 s or an indicator is on, and off again as she drives on.
-// At 0 she leans with the car (u_lean -1 braking .. 1 pulling away) and blinks; in between the in-steps play; at 1 she
+// At 0 she leans with the car (braking .. pulling away, the app picks the frames) and blinks; in between the in-steps play; at 1 she
 // plays her idle loop (a close.idle bake, its own atlas u_idle; else upright) and turns her head toward the indicator. Two nearest baked frames are blended
-// everywhere, each slid so the heads meet (u_tsh: each turn and lean frame's head shift, px).
+// everywhere, each slid so the heads meet. The app picks the two frames and their slides (u_pk): the head-shift
+// tables looked up here (u_tsh[11], u_ish[10], each in a loop over the array, as GLSL ES 1.00 indexes a fragment
+// shader's uniform array) restarted the KOMBI (Custom HUD 0.1.31 and 0.1.32), the loops unrolled past what it holds.
 #ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
 #else
@@ -17,17 +19,17 @@ precision mediump float;
 #endif
 varying vec2 v_uv;
 uniform float u_clock;   // seconds, from the app: the blink, every 2 s
-uniform float u_idleT;   // seconds into the idle loop, from the app (it holds and restarts it round a turn)
 uniform sampler2D u_atlas;
 uniform vec2 u_atlasSize;
 uniform vec4 u_zoom;     // expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there (0: draw nothing)
-uniform float u_lean;    // -1 .. 1, driving
-uniform vec4 u_tsh[11];   // the turn frames' head shifts (px), left to right, then the lean frames', four a vec4
+// the app's pick: [0] the pose pair (the lean's or the turn's chain position of its first frame, the blend to the
+// next), the idle loop's (its frame now, the blend to the next); [1] their head slides, px: the pose pair's two
+// frames, the idle's two (each frame's shift less the blended one, so the heads meet)
+uniform vec4 u_pk[2];
 
 uniform sampler2D u_idle; // the stopped idle loop's own atlas (a close.idle bake), laid out as u_atlas
 uniform vec2 u_idleSize;
 uniform vec4 u_ic[4];    // its grid, crop grid, eyes' rect (as u_cl[4 .. 6]); frames, period (s) (0 frames: no loop)
-uniform vec4 u_ish[10];  // its frames' head shifts (px), four a vec4: up to 40 frames
 uniform sampler2D u_leanAtlas; // the lean's own atlas (the driving set), on the close-up's grid
 uniform vec4 u_lc;       // its w, h, the y of its crops' first row
 uniform vec4 u_cl[10];   // the bake's fixed values, as one array (cluster-render's 32 uniform names a layer)
@@ -35,7 +37,7 @@ uniform vec4 u_cl[10];   // the bake's fixed values, as one array (cluster-rende
 #define u_cropGrid u_cl[5]   // crop cell w, h, columns, y of the first row
 #define u_crop u_cl[6]   // the eyes' rect in a frame, px
 #define u_pose u_cl[7]   // the sway's pivot x, y (frame px), its turn at the left and right sway (rad, clockwise)
-#define u_drv u_cl[8]    // the lean's steps each way
+#define u_drv u_cl[8]    // the lean's steps each way (the middle, upright, is the in-steps' first)
 #define u_frames u_cl[9]   // frame w, h, in-steps, turn steps each way
 
 vec4 tap(vec2 at, vec2 size, vec2 p) {
@@ -107,42 +109,19 @@ vec4 idleFrame(float n, vec2 q, float eh) {
     }
     return c;
 }
-#define IDLE_BLEND 0.35
-float idleShift(float i) {
-    float q = floor(i / 4.0 + 0.01), r = i - q * 4.0;
-    vec4 v = vec4(0.0);
-    for (int k = 0; k < 10; k++) if (abs(float(k) - q) < 0.5) v = u_ish[k];
-    return r < 0.5 ? v.x : r < 1.5 ? v.y : r < 2.5 ? v.z : v.w;
-}
 // her stopped idle now (the clock's place in the loop), its two nearest frames slid so the heads meet; without a loop
 // in the bake, the upright pose
 vec4 idleNow(vec2 q, float eh, float wy) {
     float n = u_ic[3].x;
     if (n < 0.5) return frameAt(u_frames.z + 1.0, 1.0, q, eh);
-    float k = mod(u_idleT, u_ic[3].y) / u_ic[3].y * n, i0 = min(floor(k), n - 1.0);
-    // each frame holds, then crossfades into the next over the last IDLE_BLEND of its time: a full crossfade showed
-    // two poses at once for most of a frame (her hair and shoulders blurred while she bobbed)
-    float f = smoothstep(1.0 - IDLE_BLEND, 1.0, k - i0);
+    // the app's frame and blend (index.js idlePick: each frame holds, then crossfades into the next)
+    float i0 = u_pk[0].z, f = u_pk[0].w;
     float i1 = i0 + 1.0 > n - 0.5 ? 0.0 : i0 + 1.0;
-    float h0 = idleShift(i0), h1 = idleShift(i1), hc = mix(h0, h1, f);
-    vec4 c = idleFrame(i0, q + vec2((h0 - hc) * wy, 0.0), eh);
-    return mix(c, idleFrame(i1, q + vec2((h1 - hc) * wy, 0.0), eh), f);
+    vec4 c = idleFrame(i0, q + vec2(u_pk[1].z * wy, 0.0), eh);
+    return mix(c, idleFrame(i1, q + vec2(u_pk[1].w * wy, 0.0), eh), f);
 }
-// head shift i (0 the first turn frame; the lean frames after the turn's), px
-float shiftAt(float i) {
-    float q = floor(i / 4.0 + 0.01), r = i - q * 4.0;
-    // GLSL ES 1.00 indexes a fragment shader's uniform array only by a constant or a loop's index
-    vec4 v = vec4(0.0);
-    for (int k = 0; k < 11; k++) if (abs(float(k) - q) < 0.5) v = u_tsh[k];
-    return r < 0.5 ? v.x : r < 1.5 ? v.y : r < 2.5 ? v.z : v.w;
-}
-// the turn's chain position j (0 .. 2 * steps; the middle is the sway): its pose and head shift
+// the turn's chain position j (0 .. 2 * steps; the middle is her idle): its pose
 float turnPose(float j) { return j < u_frames.w ? 3.0 + j : 2.0 + j; }
-float turnShift(float j) {
-    return abs(j - u_frames.w) < 0.5 ? 0.0 : shiftAt(j < u_frames.w ? j : j - 1.0);
-}
-// the lean's chain position m (0 .. 2 * steps, upright in the middle): its head shift (its frame is leanFrame(m))
-float leanShift(float m) { return shiftAt(2.0 * u_frames.w + m); }
 
 void main() {
     if (u_zoom.w < 0.5) { gl_FragColor = vec4(0.0); return; }
@@ -158,17 +137,14 @@ void main() {
     bool idle0 = false, idle1 = false, lean0 = false, lean1 = false;
     vec2 q0 = q, q1 = q;
     if (y < 0.001) {
-        // driving: the lean's two nearest frames, slid so the heads meet
-        float n = u_drv.x, k = (clamp(u_lean, -1.0, 1.0) + 1.0) * n;
-        float m0 = min(floor(k), 2.0 * n - 1.0);
-        f = k - m0;
-        float h0 = leanShift(m0), h1 = leanShift(m0 + 1.0), hc = mix(h0, h1, f);
+        // driving: the lean's two nearest frames (the app's pick), slid so the heads meet
+        f = u_pk[0].y;
         lean0 = true;
         lean1 = true;
-        p0 = m0;
-        p1 = m0 + 1.0;
-        q0 = q + vec2((h0 - hc) * wy, 0.0);
-        q1 = q + vec2((h1 - hc) * wy, 0.0);
+        p0 = u_pk[0].x;
+        p1 = p0 + 1.0;
+        q0 = q + vec2(u_pk[1].x * wy, 0.0);
+        q1 = q + vec2(u_pk[1].y * wy, 0.0);
     } else if (y < 0.999) {
         // the expressions coming on or going off: driving upright, the in-steps, her idle; no blink meanwhile
         float k = y * (steps + 1.0), i0 = min(floor(k), steps);
@@ -183,16 +159,15 @@ void main() {
         float turn = clamp(u_zoom.y, -1.0, 1.0);
         if (abs(turn) < 0.001) idle0 = true;
         else {
-            float n = 2.0 * u_frames.w, kt = (turn + 1.0) * u_frames.w;
-            float t0 = min(floor(kt), n - 1.0), t1 = t0 + 1.0;
-            f = kt - t0;
-            float h0 = turnShift(t0), h1 = turnShift(t1), hc = mix(h0, h1, f);
+            // the turn's two nearest frames (the app's pick)
+            float t0 = u_pk[0].x, t1 = t0 + 1.0;
+            f = u_pk[0].y;
             idle0 = abs(t0 - u_frames.w) < 0.5;
             idle1 = abs(t1 - u_frames.w) < 0.5;
             p0 = turnPose(t0);
             p1 = turnPose(t1);
-            q0 = q + vec2((h0 - hc) * wy, 0.0);
-            q1 = q + vec2((h1 - hc) * wy, 0.0);
+            q0 = q + vec2(u_pk[1].x * wy, 0.0);
+            q1 = q + vec2(u_pk[1].y * wy, 0.0);
         }
     }
     vec4 ic = vec4(0.0);

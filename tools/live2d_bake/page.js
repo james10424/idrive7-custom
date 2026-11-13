@@ -202,8 +202,7 @@ const DEFAULT_TAILS_ROOT = 0.15; // where the tails hang from, a fraction down t
 const ZOOM_STEPS_MAX = 3; // close-up zoom steps, also the default
 const TURN_STEPS_DEFAULT = 2; // close-up turn steps each way by default
 const IDLE_FRAME_S = 0.25; // close.idle without a "period": this long a frame
-const LEAN_SHIFT_SLOTS = 44; // the turn's and the lean's head shifts together at most (miku_only.glsl u_tsh[11])
-const IDLE_FRAMES_MAX = 40; // close.idle.poses at most: the head shifts the app sends (miku_only.glsl u_ish[10])
+const IDLE_FRAMES_MAX = 40; // close.idle.poses at most (40 is 2048x1820: its atlas holds little more)
 const IN_STEPS_DEFAULT = 6; // close.only: frames between no expressions and all (Yandere's hands rising)
 const TURN_STEPS_MAX = 17; // and at most: what a 2048x2048 close-up atlas holds with 3 zoom steps and 3 sway poses
 const DEFAULT_SWAY = { ParamAngleZ: 4 }; // the close-up's sway at a full swing
@@ -1097,9 +1096,6 @@ async function bakeClose(loaded, cfg, at) {
   // (lean.rgba), laid out as the close-up's, so the close-up atlas keeps its room for the turn
   const leanPosed = lean ? posed.slice(poses.length) : [],
     closePosed = lean ? posed.slice(0, poses.length) : posed;
-  if (lean && turnShift.length > LEAN_SHIFT_SLOTS)
-    throw new Error("the turn and the lean have " + turnShift.length + " steps together, over " + LEAN_SHIFT_SLOTS +
-      ": fewer close.turnSteps or close.lean.poses");
   const MAX = only || turnSteps > TURN_STEPS_DEFAULT ? CLOSE_ATLAS_MAX : ATLAS_MAX,
     cell = [frameW + 2 * pad, frameH + 2 * pad],
     cols = Math.floor(MAX / cell[0]),
