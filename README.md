@@ -58,6 +58,26 @@ To try a build on the car before releasing it, install it the way the Store does
 
    The deploy tool marks it local (`"mguLocalOnly": true`).
 
+### When the HUD or the cluster stays off (the guard)
+
+If the KOMBI restarts twice right after cluster-render shows a display (a shader it can't draw, say), cluster-render's guard turns that display off, even across reboots, and the app's status row says "cluster-render's guard disabled this display". Find out why first, or the next try restarts it again:
+
+```bash
+ssh root@<car> 'grep -E "guard|refused|error" /var/opt/cluster-render/log/cluster-render.log | tail -40'
+```
+
+Then reset it as root. `cluster-render` isn't on the car's `PATH`, so run the installed binary:
+
+```bash
+ssh root@<car> '/var/opt/cluster-render/current/cluster-render -c /var/opt/cluster-render/current/cluster-render.conf guard-reset'
+```
+
+It removes `/var/opt/cluster-render/state/guard.txt` and restarts cluster-render. Doing that by hand is the same:
+
+```bash
+ssh root@<car> 'rm -f /var/opt/cluster-render/state/guard.txt && systemctl restart cluster-render'
+```
+
 ## Both apps at once
 
 From cluster-render 0.5.1 on, the cluster panel has a scene id of its own (0x010004f8) and the HUD keeps 0x01000400, so Custom HUD and Custom Cluster show together with nothing to set. Before 0.5.1 they shared 0x01000400 and only one showed at a time: whichever asked first kept it, and the other waited ("waiting: the cluster layout has the scene the HUD shares" on Custom HUD's page). That message can still come back if the KOMBI refuses the panel's own id: cluster-render then falls back to the shared one for the rest of the boot and logs it.
