@@ -29,6 +29,36 @@ Puts your own Live2D character on the windshield HUD, standing beside BMW's spee
 
 The Store builds each app on the car from this repo. No BMW code is in it. Both apps are tested on a 2020 BMW M340i (G20); each app's page says what has been checked on the car and what is still open. Version history is in [CHANGELOG.md](CHANGELOG.md).
 
+### Local deployment over SSH
+
+For your own layouts and Miku bakes, push files straight to the installed app from this repo, with no Store release. You need SSH as root to the car (`root@<car>`, its IP or hostname) and the app installed from the Store first. The scripts find the app's folder on the car (`/var/opt/public/oap/oap_<uid>/`, by its `source/package.json`) and keep the files' owner.
+
+- **Layouts** land in the app's `data/layouts/`, where a file overrides the built-in layout of the same name. The app watches that folder and redraws by itself. With no files, the script pushes the repo's built-in layouts.
+
+  ```bash
+  ./scripts/deploy.sh root@<car> my-layout.json
+  ```
+
+  ```bash
+  APP=custom_cluster ./scripts/deploy.sh root@<car> regal.json
+  ```
+
+  Delete a file from `data/layouts/` to go back to the built-in layout.
+
+- **Miku bakes** land in Custom HUD's `data/miku/`: `atlas.json`, `atlas.etc2`, and `close.etc2` and `idle.etc2` when the bake made them. Old frames are removed first. Switch to another layout and back (or restart the app) to load them. ETC2 needs cluster-render 0.5.9 or later.
+
+  ```bash
+  ./scripts/deploy.sh root@<car> --miku <bake folder>
+  ```
+
+- **Remove Miku's frames** (`-y` skips the question; your bake folders stay):
+
+  ```bash
+  ./scripts/remove-miku.sh root@<car> --miku
+  ```
+
+App code itself (`apps/`, `shared/`) still comes from the Store: push a release tag and update the app there.
+
 ## Both apps at once
 
 From cluster-render 0.5.1 on, the cluster panel has a scene id of its own (0x010004f8) and the HUD keeps 0x01000400, so Custom HUD and Custom Cluster show together with nothing to set. Before 0.5.1 they shared 0x01000400 and only one showed at a time: whichever asked first kept it, and the other waited ("waiting: the cluster layout has the scene the HUD shares" on Custom HUD's page). That message can still come back if the KOMBI refuses the panel's own id: cluster-render then falls back to the shared one for the rest of the boot and logs it.
@@ -75,10 +105,10 @@ The Miku layout draws a Live2D model you own. Nothing of it ships with the app: 
    ./scripts/deploy.sh root@<car> --miku <folder>
    ```
 
-   It finds Custom HUD's folder on the car and puts the two files in its `data/miku/`.
+   It finds Custom HUD's folder on the car and puts the bake's files in its `data/miku/` (see [Local deployment over SSH](#local-deployment-over-ssh)).
 5. **Load:** on the center screen open **Custom HUD**, pick another layout, then **Miku** again. The status row should say "HUD on: Miku layout, 1 layer". Until the frames are there, the layout draws nothing and the status row says why.
 
-To change her, bake again and run the deploy again; to remove her, delete `data/miku/` on the car.
+To change her, bake again and run the deploy again; to remove her, run `./scripts/remove-miku.sh root@<car> --miku`.
 
 ## Credits
 
