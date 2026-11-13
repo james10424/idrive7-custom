@@ -363,6 +363,8 @@ function helloMsg() {
       readsCrash: shaderBudget.READS_CRASH,
       tokensGood: shaderBudget.TOKENS_GOOD,
       tokensCrash: shaderBudget.TOKENS_CRASH,
+      lookupsGood: shaderBudget.LOOKUPS_GOOD,
+      lookupsCrash: shaderBudget.LOOKUPS_CRASH,
     },
     t: "hello",
     targets: TARGETS,
@@ -721,7 +723,8 @@ const renderServer = net.createServer((sock) => {
           newLayer.image = Buffer.alloc(msg.iw * msg.ih * 4);
         } else if (msg.kind === "effect") {
           if (!msg.fs) return refuse("layer", msg.ref, "effect without fs");
-          // shaders that crashed the car's KOMBI (38 texture reads, Custom HUD 0.1.15; 8724 tokens, the M theme): refused here first
+          // shaders that crashed the car's KOMBI (38 texture reads, Custom HUD 0.1.15; 8724 tokens, the M theme; 48
+          // uniform-array lookup steps, Custom HUD 0.1.30/0.1.31): refused here first
           const budget = shaderBudget.check(msg.fs);
           if (budget.level === "crash")
             return refuse("layer", msg.ref, "shader " + budget.text);
@@ -731,6 +734,7 @@ const renderServer = net.createServer((sock) => {
           newLayer.budget = {
             reads: budget.reads,
             tokens: budget.tokens,
+            lookups: budget.lookups,
             level: budget.level,
           };
           newLayer.time = !!msg.time;

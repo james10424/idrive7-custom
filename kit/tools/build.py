@@ -1149,16 +1149,40 @@ def gz_header_free(path):
     return gzip.GzipFile(path, "wb", mtime=0)
 
 
+def shader_budget():
+    """Refuse to build while a widget shader is at a mark that restarted the instrument cluster (tools/shader_budget.js:
+    texture reads, size, uniform-array lookups; it also checks its car-tested fixtures). Skipped if the repo has no
+    tools/shader_budget.js."""
+    import subprocess
+
+    tool = os.path.join(ROOT, "tools", "shader_budget.js")
+    if not os.path.exists(tool):
+        return
+    run = subprocess.run(["node", tool], cwd=ROOT, capture_output=True, text=True)
+    flagged = [l for l in run.stdout.splitlines() if l.startswith(("X ", "! ")) or l.startswith("      ")]
+    if flagged:
+        print("shader budget:\n" + "\n".join(flagged))
+    if run.returncode != 0:
+        sys.exit("shader budget failed (node tools/shader_budget.js): not building" + ("\n" + run.stderr if run.stderr else ""))
+
+
 def main():
     import argparse
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--language", choices=languages(), default="en")
     parser.add_argument("apps", nargs="*")
+    parser.add_argument(
+        "--no-shader-budget",
+        action="store_true",
+        help="skip tools/shader_budget.js (every widget shader against what crashed the car's KOMBI)",
+    )
     args = parser.parse_args()
     ids = args.apps or sorted(
         d for d in os.listdir(APPS) if os.path.exists(os.path.join(APPS, d, "app.json"))
     )
+    if not args.no_shader_budget:
+        shader_budget()
     for i in ids:
         build(i, args.language)
 
