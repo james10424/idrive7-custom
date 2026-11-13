@@ -71,6 +71,7 @@ const etc2 = require("../tools/etc2"); // etc2rgba assets, decoded for the page
  * @property {number} [bpp] bytes a pixel: 4, or 1 for an r8 asset
  * @property {Buffer} [image] image or asset pixels
  * @property {string} [format] asset only: "r8", "rgba8" or "etc2rgba"
+ * @property {number} [readyAt] asset only: when its bytes are up (Date.now() ms), at the car's upload rate
  * @property {number} [memBpp] bytes a pixel in the service's pixel memory, when not bpp (etc2rgba: 1; its image here is
  *   the decoded RGBA, for the page)
  * @property {string} [fs] effect only: the fragment shader
@@ -848,6 +849,7 @@ const renderServer = net.createServer((sock) => {
         if (asset.target !== layer.target)
           return refuse("bind", msg.ref, "the asset is on another target");
         layer.binds[msg.sampler] = asset.key;
+        holdSamplers(asset);
         sceneChanged();
         return;
       }
@@ -996,6 +998,43 @@ const renderServer = net.createServer((sock) => {
    * @param {Buffer} body
    * @returns {void}
    */
+  /**
+   * The effect layers on this connection sampling an asset still going up: waiting until it is, then shown.
+   * @param {BenchLayer} asset
+   */
+  function holdSamplers(asset) {
+    const left = (asset.readyAt || 0) - Date.now();
+    if (left <= 0) return;
+    /** @type {BenchLayer[]} */
+    const held = [];
+    layers.forEach((other) => {
+      if (other.conn !== conn || !other.binds) return;
+      if (!Object.keys(other.binds).some((sampler) => other.binds[sampler] === asset.key)) return;
+      if (other.state !== "shown") return; // waiting for something else (the layer cap): left as it is
+      other.state = "waiting";
+      other.reason = NOT_WRITTEN;
+      writeEv(sock, { ev: "layer", ref: other.ref, state: "waiting", reason: NOT_WRITTEN });
+      held.push(other);
+    });
+    if (!held.length) return;
+    sceneChanged();
+    setTimeout(() => {
+      held.forEach((other) => {
+        if (other.state !== "waiting" || other.reason !== NOT_WRITTEN || layers.get(other.key) !== other) return;
+        // still another asset of its going up: it waits for that one's timer
+        const pending = Object.keys(other.binds || {}).some((sampler) => {
+          const bound = layers.get(other.binds[sampler]);
+          return bound && (bound.readyAt || 0) > Date.now();
+        });
+        if (pending) return;
+        other.state = "shown";
+        other.reason = "";
+        writeEv(sock, { ev: "layer", ref: other.ref, state: "shown" });
+      });
+      sceneChanged();
+    }, left + 1);
+  }
+
   function onFrame(body) {
     if (body.length < FRAME_HEAD) return bad("frame message too short");
     const ref = body.readUInt32LE(0);
@@ -1066,6 +1105,11 @@ const renderServer = net.createServer((sock) => {
       }
     }
     layer.sentWhole = true;
+    if (layer.kind === "asset" && UPLOAD_BYTES_PER_MS) {
+      const start = Math.max(Date.now(), uploadFreeAt);
+      layer.readyAt = uploadFreeAt = start + pixels.length / UPLOAD_BYTES_PER_MS;
+      holdSamplers(layer);
+    }
     sendPixels(layer);
   }
 });
@@ -1317,6 +1361,13 @@ apps.forEach((app) => watchFor(app.dir, [app]));
 const MAX_BODY_CHARS = 1e5; // a POST's JSON body
 const MAX_SHOT_CHARS = 2e7; // a /shot PNG data URL
 const MAX_BACKDROP_BYTES = 2048 * 1024 * 4; // a /backdrop capture, raw RGBA
+// Assets go up as the car's do: one after another at about 5.6 MB a second (car log Nov 13 2026: 4 MiB textures 0.75 s
+// apart). Until an asset's bytes are up, the effect layers sampling it are "waiting" with cluster-render's reason, and
+// not drawn. BENCH_UPLOAD_KBPS sets the rate (0: at once).
+const UPLOAD_BYTES_PER_MS =
+  process.env.BENCH_UPLOAD_KBPS === undefined ? 5600 : Math.max(0, Number(process.env.BENCH_UPLOAD_KBPS) || 0);
+const NOT_WRITTEN = "an asset it samples is not written yet"; // cluster-render's reason (compositor.cpp)
+let uploadFreeAt = 0; // when the last queued asset is up
 const MAX_CLIP_FRAME = 9999,
   CLIP_FRAME_DIGITS = 4; // a README GIF's frame numbers, 0000.png..9999.png
 /**

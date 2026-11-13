@@ -18,6 +18,9 @@ const STATUS_SOON_MS = 500; // a burst of events waits this long for one status 
  * @property {string} [lastDetail] the detail line last shown
  */
 
+// cluster-render's reason for a layer whose texture is still going up (compositor.cpp)
+const UPLOADING = /asset it samples is not written yet/;
+
 module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
   /**
    * fn(text) whenever the status line changes.
@@ -80,12 +83,14 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
     let shown = 0,
       /** @type {?string} */
       why = null,
-      whyN = 0;
+      whyN = 0,
+      loading = 0;
     refs.forEach((layerRef) => {
       const layerState = this.layerStates.get(layerRef.key);
       if (layerState && layerState.state === "shown") shown++;
       else if (layerState) {
         whyN++;
+        if (layerState.state === "waiting" && UPLOADING.test(layerState.reason || "")) loading++;
         if (!why)
           why =
             layerState.state +
@@ -93,6 +98,10 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
       }
     });
     if (shown === refs.length || (!why && !shown)) return refused;
+    // every layer not drawn yet waits for a texture still going up (the atlases, a backdrop: about 5.6 MB a second
+    // after a scene comes back, so a few seconds for big ones): loading
+    if (loading === whyN)
+      return ", loading (" + shown + " of " + this._layerCount(refs.length) + " drawn)" + refused;
     return (
       ", " +
       shown +
