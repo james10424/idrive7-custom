@@ -1002,6 +1002,24 @@ const renderServer = net.createServer((sock) => {
    * The effect layers on this connection sampling an asset still going up: waiting until it is, then shown.
    * @param {BenchLayer} asset
    */
+  // A safety net under holdSamplers' timers: once a second, a layer still held for an asset that is up by now is shown
+  // (a Miku close-up layer once stayed "not written yet" with all three of its textures up; not reproduced since)
+  const unheld = setInterval(() => {
+    layers.forEach((other) => {
+      if (other.conn !== conn || other.state !== "waiting" || other.reason !== NOT_WRITTEN) return;
+      const pending = Object.keys(other.binds || {}).some((sampler) => {
+        const bound = layers.get(other.binds[sampler]);
+        return bound && (bound.readyAt || 0) > Date.now();
+      });
+      if (pending) return;
+      other.state = "shown";
+      other.reason = "";
+      writeEv(sock, { ev: "layer", ref: other.ref, state: "shown" });
+      sceneChanged();
+    });
+  }, 1000);
+  sock.on("close", () => clearInterval(unheld));
+
   function holdSamplers(asset) {
     const left = (asset.readyAt || 0) - Date.now();
     if (left <= 0) return;
