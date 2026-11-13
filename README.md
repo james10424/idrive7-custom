@@ -31,33 +31,33 @@ The Store builds each app on the car from this repo. No BMW code is in it. Both 
 
 ### Local deployment over SSH
 
-For your own layouts and Miku bakes, push files straight to the installed app from this repo, with no Store release. You need SSH as root to the car (`root@<car>`, its IP or hostname) and the app installed from the Store first. The scripts find the app's folder on the car (`/var/opt/public/oap/oap_<uid>/`, by its `source/package.json`) and keep the files' owner.
+To try a build on the car before releasing it, install it the way the Store does, with mgu-store's deploy tool (a checkout of `mgu-store` beside this repo, and SSH as root to the car; `deploy/hu connect` finds it, see mgu-store's `deploy/README.md`).
 
-- **Layouts** land in the app's `data/layouts/`, where a file overrides the built-in layout of the same name. The app watches that folder and redraws by itself. With no files, the script pushes the repo's built-in layouts.
+1. **Once, get the real oap-sdk from the car.** BMW's SDK is built into every stock app, so copy one off the car (`oap_12204` is x_call, the example in `kit/tools/extract_sdk.js`; any stock BMW app works):
 
-  ```bash
-  ./scripts/deploy.sh root@<car> my-layout.json
-  ```
+   ```bash
+   mkdir -p ~/oap-donor/javascript
+   scp root@<car>:/var/opt/public/oap/oap_12204/source/package.json ~/oap-donor/
+   scp root@<car>:/var/opt/public/oap/oap_12204/source/javascript/app.js ~/oap-donor/javascript/
+   ```
 
-  ```bash
-  APP=custom_cluster ./scripts/deploy.sh root@<car> regal.json
-  ```
+2. **Build** with it. The bench's `oap-sdk/` is a stub that must never ship, so swap it out and back:
 
-  Delete a file from `data/layouts/` to go back to the built-in layout.
+   ```bash
+   rm -rf oap-sdk && node kit/tools/extract_sdk.js ~/oap-donor/javascript/app.js oap-sdk
+   python3 kit/tools/build.py custom_hud
+   rm -rf oap-sdk
+   ```
 
-- **Miku bakes** land in Custom HUD's `data/miku/`: `atlas.json`, `atlas.etc2`, and `close.etc2` and `idle.etc2` when the bake made them. Old frames are removed first. Switch to another layout and back (or restart the app) to load them. ETC2 needs cluster-render 0.5.9 or later.
+   This writes `dist/custom_hud@<version>.tgz` (`custom_cluster` the same way). The bench writes its stub again the next time it runs.
 
-  ```bash
-  ./scripts/deploy.sh root@<car> --miku <bake folder>
-  ```
+3. **Install** it, as the renderer test was:
 
-- **Remove Miku's frames** (`-y` skips the question; your bake folders stay):
+   ```bash
+   ../mgu-store/deploy/hu install --artifact dist/custom_hud@<version>.tgz
+   ```
 
-  ```bash
-  ./scripts/remove-miku.sh root@<car> --miku
-  ```
-
-App code itself (`apps/`, `shared/`) still comes from the Store: push a release tag and update the app there.
+   The deploy tool marks it local (`"mguLocalOnly": true`).
 
 ## Both apps at once
 
@@ -105,7 +105,7 @@ The Miku layout draws a Live2D model you own. Nothing of it ships with the app: 
    ./scripts/deploy.sh root@<car> --miku <folder>
    ```
 
-   It finds Custom HUD's folder on the car and puts the bake's files in its `data/miku/` (see [Local deployment over SSH](#local-deployment-over-ssh)).
+   It finds Custom HUD's folder on the car and puts the bake's files in its `data/miku/`.
 5. **Load:** on the center screen open **Custom HUD**, pick another layout, then **Miku** again. The status row should say "HUD on: Miku layout, 1 layer". Until the frames are there, the layout draws nothing and the status row says why.
 
 To change her, bake again and run the deploy again; to remove her, run `./scripts/remove-miku.sh root@<car> --miku`.
