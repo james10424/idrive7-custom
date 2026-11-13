@@ -201,6 +201,7 @@ const SHRINK_SLACK = 1.01; // halve while the half is still at least this much o
 const DEFAULT_TAILS_ROOT = 0.15; // where the tails hang from, a fraction down their sprite
 const ZOOM_STEPS_MAX = 3; // close-up zoom steps, also the default
 const TURN_STEPS_DEFAULT = 2; // close-up turn steps each way by default
+const IN_STEPS_DEFAULT = 6; // close.only: frames between no expressions and all (Yandere's hands rising)
 const TURN_STEPS_MAX = 17; // and at most: what a 2048x2048 close-up atlas holds with 3 zoom steps and 3 sway poses
 const DEFAULT_SWAY = { ParamAngleZ: 4 }; // the close-up's sway at a full swing
 const DEFAULT_TURN = { ParamAngleX: 30 }; // the close-up's head turn toward the right of the screen
@@ -880,18 +881,21 @@ async function bakeClose(loaded, cfg, at) {
       frameH,
     );
   };
-  const zoomSteps = Math.max(
-    1,
-    Math.min(ZOOM_STEPS_MAX, Math.round(close.zoomSteps || ZOOM_STEPS_MAX)),
-  );
+  // close.only: no standing figure and no zoom; the close-up all the time. Its "zoom steps" are then the expressions
+  // coming on (close.inSteps frames between none and all, at the close-up's framing: Yandere's hands rising, Blush), and
+  // close.lean adds the driving set (no expressions): the lean from a full lean left to right, upright in the middle
+  const only = !!close.only;
+  const zoomSteps = only
+    ? Math.max(1, Math.round(close.inSteps || IN_STEPS_DEFAULT))
+    : Math.max(1, Math.min(ZOOM_STEPS_MAX, Math.round(close.zoomSteps || ZOOM_STEPS_MAX)));
   /** @type {HTMLCanvasElement[]} */
   const full_ = [];
   /** @type {number[][]} */
   const rects = [];
   for (let k = 1; k <= zoomSteps; k++) {
     const u = k / (zoomSteps + 1);
-    full_.push(shot(toggles(u), camera(u)));
-    rects.push(inFrame(camera(u)));
+    full_.push(shot(toggles(u), only ? box1 : camera(u)));
+    rects.push(inFrame(only ? box1 : camera(u)));
   }
   rects.push(inFrame(box1));
   // the close-up's poses: sway (close.sway at -1, 0, 1) and the turn (close.turn at -1 .. 1 in turnSteps each way)
@@ -918,15 +922,28 @@ async function bakeClose(loaded, cfg, at) {
       poses.push(
         close.turnPoses ? close.turnPoses[k < 0 ? k + turnSteps : k + turnSteps - 1] : times(turn, k / turnSteps),
       );
+  // each pose with all the toggles on; close.only's driving set after them, with none on
+  /** @type {Params[]} */
+  const bases = poses.map((pose) => Object.assign(toggles(1), pose));
+  const lean = only ? close.lean : null,
+    leanSteps = lean && Array.isArray(lean.poses) ? lean.poses.length / 2 : 0;
+  if (lean && (!leanSteps || leanSteps !== Math.round(leanSteps)))
+    throw new Error("close.lean.poses: an even number, left to right without upright");
+  for (let k = -leanSteps; k <= leanSteps; k++) {
+    if (!lean) break;
+    const leanAt = k / leanSteps,
+      face = lean.face || DEFAULT_LEAN_FACE;
+    const base = Object.assign(toggles(0), k ? lean.poses[k < 0 ? k + leanSteps : k + leanSteps - 1] : {});
+    if (leanAt <= -face + LEAN_EPS) Object.assign(base, lean.left || {});
+    if (leanAt >= face - LEAN_EPS) Object.assign(base, lean.right || {});
+    bases.push(base);
+  }
   /** @type {HTMLCanvasElement[][]} */
-  const posed = poses.map((pose) => {
-    const base = Object.assign(toggles(1), pose);
-    return [
-      shot(base, box1),
-      shot(Object.assign({}, base, half), box1),
-      shot(Object.assign({}, base, shut), box1),
-    ];
-  });
+  const posed = bases.map((base) => [
+    shot(base, box1),
+    shot(Object.assign({}, base, half), box1),
+    shot(Object.assign({}, base, shut), box1),
+  ]);
   /**
    * A frame's pixels.
    * @param {HTMLCanvasElement} canvas
@@ -1063,7 +1080,7 @@ async function bakeClose(loaded, cfg, at) {
       " px",
   );
   // the grid: whole frames first, then the crops
-  const MAX = turnSteps > TURN_STEPS_DEFAULT ? CLOSE_ATLAS_MAX : ATLAS_MAX,
+  const MAX = only || turnSteps > TURN_STEPS_DEFAULT ? CLOSE_ATLAS_MAX : ATLAS_MAX,
     cell = [frameW + 2 * pad, frameH + 2 * pad],
     cols = Math.floor(MAX / cell[0]),
     wholes = full_.concat(posed.map((frames) => frames[0])),
@@ -1113,6 +1130,10 @@ async function bakeClose(loaded, cfg, at) {
       frame: [frameW, frameH],
       zoomSteps,
       turnSteps,
+      // close.only: no standing figure or zoom; zoomSteps are then the expressions' in-steps, and leanSteps each way of
+      // the driving set follow the turn (poses 3 + 2 * turnSteps ..), upright in their middle
+      only,
+      leanSteps,
       // grid: cell w, h, columns, pad; cropGrid: cell w, h, columns, y of the first row
       grid: [cell[0], cell[1], cols, pad],
       cropGrid: [cropCell[0], cropCell[1], cropCols, cropY],

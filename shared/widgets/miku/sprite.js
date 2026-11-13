@@ -226,6 +226,14 @@ function sprite(hud, widget, connIndex) {
       );
     // the per-frame tables, which the shader reads (mikuData), in an RGBA8 asset of their own as wide as the atlas
     const data = mikuData(info, atlasWidth);
+    // a close.only bake: the standing frames aren't drawn, so they don't go up (the close-up's atlas is all of her)
+    if (info.close && info.close.only) {
+      const none = { ref: 0, c: hud._clientAt(connIndex), ci: connIndex, info, size: [atlasWidth, atlasHeight],
+        dataY: data.rows, counts: data.counts, bytes: 0 };
+      hud.atlases.set(key, none);
+      hud.log.info("miku: close-up only (its standing frames not uploaded)");
+      return none;
+    }
     const client = hud._clientAt(connIndex);
     const ref = client.asset({
       target: hud.target,

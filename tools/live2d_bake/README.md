@@ -16,6 +16,7 @@ Turns a Live2D model you own into the frames Custom HUD's **Miku** layout draws 
    - `params`: toggles to set on every frame, such as an outfit.
    - `heightPx`, `anchor`, `headY`, `waist`: her size, the point between her feet, her face and waist (by default 15% and 40% down the figure).
    - `close`: the close-up she zooms into when the car stops. `centre` and `height` frame her head and chest in model units (read them off `?inspect`; example.json's are RetrynowMiku's), `pivot` is her neck, `expressions` the `.exp3.json` files that blend on as she zooms in (RetrynowMiku: `["Blush.exp3.json", "Yandere.exp3.json"]`, hands on her cheeks). `size` and `window` are the HUD window she fills; leave them as they are for the Miku layout. Leave `close` out and she just stands.
+   - `close.only: true`: the close-up all the time, no standing figure and no zoom (she's hard to make out at HUD distance). Then `inSteps` (6) frames bring `expressions` on (Yandere's hands rising to her cheeks, Blush) when the car stops or an indicator goes on, `close.lean` (`poses`, one each step each way, left to right without upright; `left`, `right`, `face` as `lean`) is what she does while driving, without the expressions, and `turnSteps` (up to 17) with `turnPoses` the turn toward the indicator, with them. All of it is one close-up atlas up to 2048x2048; the HUD draws it on one layer (6 texture reads). RetrynowMiku's: 6 in-steps, 10 turn steps and 5 lean steps each way, 2048x1844, 3.6 MiB.
 2. Start the bake page:
 
    ```bash

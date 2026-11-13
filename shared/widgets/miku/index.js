@@ -4,7 +4,7 @@
  * close-up she zooms into when the car stops.
  */
 const { isNum } = require("../../engine/util");
-const { MIKU, MIKU_CLOSE } = require("./shader");
+const { MIKU, MIKU_CLOSE, MIKU_ONLY, MIKU_NONE } = require("./shader");
 const { sprite, closeSprite } = require("./sprite");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
@@ -23,6 +23,8 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {number[]} [zoomVals] the close-up layer's u_zoom, last sent
  * @property {number} [clockAt] when the close-up's u_clock last went up (ms)
  * @property {boolean} [blanked] (the close-up layer) told to draw nothing after a refusal
+ * @property {boolean} [only] (the standing layer) her bake is close-up only: it runs her and draws nothing
+ * @property {number} [leanSent] (the standing layer, close-up only) the close-up layer's u_lean, last sent
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -43,6 +45,7 @@ const MIKU_POINT_C = 16.7; // critically damped: it rises and settles without bo
 const MIKU_STILL_MS = 1000; // stood still (speed 0) this long: she zooms into her close-up
 const MIKU_CLOCK_MS = 33; // the close-up's own clock (u_clock) goes up this often while she is zoomed in
 const MIKU_ZOOM_MS = 1000; // the zoom, in or out
+const MIKU_IN_MS = 800; // close-up only: the expressions coming on (Yandere's hands rising, Blush), or going off
 const MIKU_ZOOM_OUT_KMH = 10; // past this she zooms back out to standing
 const MIKU_STILL_KMH = 0.5; // below this she counts as stood still
 const MIKU_NIGHT_BRIGHTNESS = 0.8; // she is drawn this bright in the night theme
@@ -65,6 +68,12 @@ const MIKU_CLOCK_LOOP_MS = 4000; // the close-up's u_clock runs 0 .. 4 s, then s
  * @returns {boolean}
  */
 const isClose = (widget) => widget.part === "close";
+/**
+ * Whether her bake is close-up only (atlas.json close.only): the close-up layer draws her all the time.
+ * @param {import("./sprite").SpriteAtlas} atlas
+ * @returns {boolean}
+ */
+const onlyClose = (atlas) => !!(atlas && atlas.info.close && atlas.info.close.only);
 
 /**
  * Whether the "Miku parts" setting leaves the close-up out ("noIdle", from before 0.1.21, means the same).
@@ -107,6 +116,15 @@ function zoomNow(hud) {
 }
 
 /**
+ * The lean the standing layer last sent (close-up only: the close-up layer's u_lean).
+ * @param {HudApp} hud
+ * @returns {number}
+ */
+function leanNow(hud) {
+  const standing = layerState(hud, false);
+  return standing && isNum(standing.leanSent) ? standing.leanSent : 0;
+}
+/**
  * Where the standing frame's top-left sits in a widget's layer (px): the bake's "anchor" (between her feet) on the
  * widget's "feet" point.
  * @param {Widget} widget
@@ -140,6 +158,11 @@ module.exports = {
     const atlas = sprite(hud, widget, connIndex);
     if (!atlas) return null;
     const parts = hud.setting("mikuParts");
+    if (onlyClose(atlas)) {
+      // close-up only: the "Miku parts" setting has nothing to leave out; the standing layer only runs her
+      if (!isClose(widget)) return MIKU_NONE;
+      return closeSprite(hud, atlas, connIndex) ? MIKU_ONLY : null;
+    }
     if (isClose(widget)) {
       if (noClose(parts) || !closeSprite(hud, atlas, connIndex)) return null;
       return MIKU_CLOSE;
@@ -152,6 +175,7 @@ module.exports = {
     miku: MIKU,
     "miku (bare)": "#define MIKU_BARE\n" + MIKU,
     "miku close-up": MIKU_CLOSE,
+    "miku close-up only": MIKU_ONLY,
   },
   /**
    * @param {HudApp} hud
@@ -165,19 +189,26 @@ module.exports = {
       info = atlas.info,
       origin = originOf(widget, info),
       close = info.close;
+    const only = onlyClose(atlas);
+    if (only && !isClose(widget)) {
+      state.only = true; // close-up only: the standing layer runs her (update) and draws nothing
+      return;
+    }
+    if (!isClose(widget)) state.only = false;
     if (isClose(widget)) {
       // the close-up: its own atlas and the bake's fixed values (shader.js MIKU_CLOSE u_cl); the standing layer
       // sends u_zoom as it moves
       const closeAtlas = closeSprite(hud, atlas, state.ci);
       client.bind(ref, "u_atlas", closeAtlas.ref);
-      client.uniform(ref, "u_size", [widget.w, widget.h]);
+      if (!only) client.uniform(ref, "u_size", [widget.w, widget.h]);
       client.uniform(ref, "u_atlasSize", closeAtlas.size);
-      client.uniform(ref, "u_cam", [
-        -origin[0],
-        -origin[1],
-        widget.w,
-        widget.h,
-      ]);
+      if (!only)
+        client.uniform(ref, "u_cam", [
+          -origin[0],
+          -origin[1],
+          widget.w,
+          widget.h,
+        ]);
       const rects = [0, 1, 2, 3].map(
         (i) => close.rects[Math.min(i, close.rects.length - 1)],
       );
@@ -196,7 +227,8 @@ module.exports = {
             close.swayAngle[0],
             close.swayAngle[1],
           ],
-          shift,
+          // close-up only: u_cl[8] holds the lean's steps each way (miku_only.glsl u_drv); else the first turn shifts
+          only ? [close.leanSteps || 0, 0, 0, 0] : shift,
           [close.frame[0], close.frame[1], close.zoomSteps, close.turnSteps],
         ),
         { type: "vec4" },
@@ -206,6 +238,7 @@ module.exports = {
       for (let i = 0; i < TURN_SHIFT_SLOTS; i++) tsh.push(close.turnShift[i] || 0);
       client.uniform(ref, "u_tsh", tsh, { type: "vec4" });
       client.uniform(ref, "u_zoom", zoomNow(hud));
+      if (only) client.uniform(ref, "u_lean", [leanNow(hud)]);
       return;
     }
     /** @type {(k: string) => number[]} */
@@ -351,7 +384,10 @@ module.exports = {
     // standing on a bus: the lean eases toward the g (as Unreal's FInterpTo, but 1 - exp(-dt / tau), the same at
     // any update rate), so she leans into a pull and straightens when it ends, without swaying back past upright;
     // the ease also smooths the car's steppy, noisy g
-    const leanTarget = isNum(data.gLong)
+    // close-up only: no lean while the expressions are (coming) on, so she drives off upright and leans from there
+    const only = !!state.only,
+      exprOn = only && ((state.zoom || 0) > 0 || (state.zoomT || 0) > 0);
+    const leanTarget = isNum(data.gLong) && !exprOn
       ? Math.max(-MIKU_LEAN_G, Math.min(MIKU_LEAN_G, data.gLong)) / MIKU_LEAN_G
       : 0;
     state.lean = isNum(state.lean)
@@ -360,7 +396,8 @@ module.exports = {
       : leanTarget;
     // pointing: toward the indicator ('L' -1, 'R' 1, hazards or none 0), on a quicker spring (about 1.3 Hz, no
     // overshoot) so the arm rises and falls smoothly; in the close-up it turns her head
-    const turnSide = hud._turnSide(),
+    // close-up only: the head turns once the expressions are all on (the turn frames have them)
+    const turnSide = only && (state.zoom || 0) < 1 ? 0 : hud._turnSide(),
       dtp = dt / 1000;
     if (!isNum(state.point)) {
       state.point = turnSide;
@@ -389,11 +426,13 @@ module.exports = {
     const close = layerState(hud, true),
       still = isNum(speed) && speed < MIKU_STILL_KMH;
     state.stillMs = still ? (state.stillMs || 0) + dt : 0;
-    if (!close || !isNum(speed) || speed > MIKU_ZOOM_OUT_KMH) state.zoomT = 0;
+    // close-up only: an indicator brings the expressions on too (she turns toward it with them), at any speed
+    if (close && only && hud._turnSide()) state.zoomT = 1;
+    else if (!close || !isNum(speed) || speed > MIKU_ZOOM_OUT_KMH) state.zoomT = 0;
     else if (state.stillMs >= MIKU_STILL_MS) state.zoomT = 1;
     const zoomT = state.zoomT || 0,
       zoom = isNum(state.zoom) ? state.zoom : 0,
-      move = dt / MIKU_ZOOM_MS;
+      move = dt / (only ? MIKU_IN_MS : MIKU_ZOOM_MS);
     state.zoom =
       zoomT > zoom
         ? Math.min(zoomT, zoom + move)
@@ -442,13 +481,18 @@ module.exports = {
     // the renderer's u_time didn't drive that layer on the car (a large u_time keeps no fractions in a mediump float)
     if (
       close &&
-      state.zoom > 0 &&
+      (only || state.zoom > 0) &&
       (force || now - (state.clockAt || 0) >= MIKU_CLOCK_MS)
     ) {
       state.clockAt = now;
       close.c.uniform(close.ref, "u_clock", [
         (((now % MIKU_CLOCK_LOOP_MS) + MIKU_CLOCK_LOOP_MS) % MIKU_CLOCK_LOOP_MS) / 1000,
       ]);
+    }
+    // close-up only: the lean goes to the close-up layer (it draws the driving set)
+    if (only && close && (force || drive[0] !== state.leanSent)) {
+      state.leanSent = drive[0];
+      close.c.uniform(close.ref, "u_lean", [drive[0]]);
     }
     const key = drive.join("|");
     if (!force && key === state.last) return;

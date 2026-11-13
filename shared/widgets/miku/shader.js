@@ -13,5 +13,10 @@ const glsl = require("../glsl");
 
 const MIKU = glsl(path.join(__dirname, "miku.glsl"));
 const MIKU_CLOSE = glsl(path.join(__dirname, "miku_close.glsl"));
+// a close.only bake: the close-up all the time, its layer the only one drawn (miku_only.glsl)
+const MIKU_ONLY = glsl(path.join(__dirname, "miku_only.glsl"));
+// the standing layer with a close.only bake: it runs her (index.js update) and draws nothing
+const MIKU_NONE =
+  "precision mediump float;\nvarying vec2 v_uv;\nvoid main() { gl_FragColor = vec4(0.0); }\n";
 
-module.exports = { MIKU, MIKU_CLOSE };
+module.exports = { MIKU, MIKU_CLOSE, MIKU_ONLY, MIKU_NONE };

@@ -109,6 +109,7 @@
     <section data-tab="signals">
       <h2>Vehicle signals</h2>
       <div class="seg"><button id="mDemo" class="on">Demo drive</button><button id="mManual">Manual</button></div>
+      <div class="seg" id="scenarios" title="Scenarios (Manual): the speed, its g, the revs and the gear move over time; the indicator cycle runs alongside either, until Stop"><button data-s="accel">0 → 100 km/h in 10 s</button><button data-s="decel">100 → 0 km/h in 10 s</button><button data-s="turns">Indicators OFF / LEFT / RIGHT, 5 s each</button><button data-s="stop">Stop</button></div>
       <div class="seg" id="drive" title="The drive mode buttons: FES statusFESVehicleDynamicSwitchHMI"><button data-v="" class="on">Mode not sent</button><button data-v="4">COMFORT</button><button data-v="1">SPORT</button><button data-v="2">SPORT+</button><button data-v="7">ECO PRO</button></div>
       <div class="seg" id="nav" title="Route guidance: navigation.guiding.Guidance guidanceState"><button data-v="" class="on">Guidance not sent</button><button data-v="ACTIVE">GUIDING</button><button data-v="INACTIVE">NO ROUTE</button></div>
       <div class="seg" id="assist" title="BMW's HUD driver assistance block: DisplayDataServer functionalLibraryData"><button data-v="" class="on">Assist not sent</button><button data-v="acc">ACC ON</button><button data-v="off">ACC OFF</button></div>
@@ -843,6 +844,50 @@
     fetch('/assist', { method: 'POST', body: JSON.stringify({ value: button.dataset.v === '' ? null : button.dataset.v }) });
   });
   document.getElementById('mManual').onclick = () => setMode('manual');
+  // scenarios: a speed ramp (0 to 100 km/h or back in 10 s, at the g that takes: 100 / 3.6 / 10 / 9.81, 0.28 g) and an
+  // indicator cycle (OFF, LEFT, RIGHT, 5 s each, round again), run alongside each other until Stop; Manual mode
+  const SCENARIO_MS = 10000, SCENARIO_TICK_MS = 100, SCENARIO_KMH = 100, TURN_EVERY_MS = 5000, G = 9.81;
+  const SCENARIO_KMH_PER_GEAR = 25, SCENARIO_RPM_LO = 1200, SCENARIO_RPM_SPAN = 3200;   // a gear every 25 km/h
+  let rampTimer = null, turnTimer = null;
+  const setSignals = (vals) => Object.entries(vals).forEach(([k, v]) => {
+    const slider = document.getElementById('s_' + k); slider.value = v; document.getElementById('o_' + k).textContent = slider.value;
+  });
+  const carSwitch = (k, v) => { const button = document.querySelector('#carsw .seg[data-k="' + k + '"] button[data-v="' + v + '"]'); if (button) button.click(); };
+  function speedRamp(from, to) {
+    clearInterval(rampTimer);
+    if (mode !== 'manual') setMode('manual');
+    const t0 = performance.now(), g = ((to - from) / 3.6 / (SCENARIO_MS / 1000)) / G;
+    const tick = () => {
+      const u = Math.min(1, (performance.now() - t0) / SCENARIO_MS), kmh = from + (to - from) * u;
+      const gear = Math.max(1, Math.ceil(kmh / SCENARIO_KMH_PER_GEAR));
+      const inGear = (kmh - (gear - 1) * SCENARIO_KMH_PER_GEAR) / SCENARIO_KMH_PER_GEAR;
+      setSignals({ speed: Math.round(kmh), gLong: u < 1 ? g.toFixed(2) : 0, gear, rpm: Math.round((SCENARIO_RPM_LO + SCENARIO_RPM_SPAN * inGear) / 50) * 50 });
+      pushSignals();
+      if (u >= 1) { clearInterval(rampTimer); rampTimer = null; }
+    };
+    tick();
+    rampTimer = setInterval(tick, SCENARIO_TICK_MS);
+  }
+  function turnCycle() {
+    clearInterval(turnTimer);
+    const sides = ['off', 'left', 'right'];
+    let i = 0;
+    carSwitch('turn', sides[0]);
+    turnTimer = setInterval(() => { i = (i + 1) % sides.length; carSwitch('turn', sides[i]); }, TURN_EVERY_MS);
+  }
+  document.querySelectorAll('#scenarios button').forEach((button) => button.onclick = () => {
+    const which = button.dataset.s;
+    if (which === 'accel') speedRamp(0, SCENARIO_KMH);
+    else if (which === 'decel') speedRamp(SCENARIO_KMH, 0);
+    else if (which === 'turns') turnCycle();
+    else {
+      clearInterval(rampTimer); clearInterval(turnTimer); rampTimer = turnTimer = null;
+      setSignals({ gLong: 0 }); if (mode === 'manual') pushSignals();
+      carSwitch('turn', 'off');
+    }
+    document.querySelectorAll('#scenarios button').forEach((other) => other.classList.toggle('on',
+      (other.dataset.s === 'turns' && !!turnTimer) || (other.dataset.s === which && which !== 'stop' && which !== 'turns' && !!rampTimer)));
+  });
   function renderSettings(msg) {
     const blk = appBlock(msg.app), box = blk && blk.querySelector('.settings');
     if (!box) return;
