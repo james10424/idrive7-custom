@@ -1,19 +1,25 @@
 "use strict";
 /**
- * A layout's baked backdrop ("backdrop": true, Grand National): what never changes while driving (the rdash shader's
- * frames, marks, zones and ticks, and the widgets marked "backdrop": true, the labels that depend on the Units setting
- * at most) drawn once on the bench into one opaque ETC2 image per Units setting, hud/backdrops/<layout>-<units>.etc2
- * with its .json ({ w, h, key }). On the car the rdash layer samples it (u_back, RDASH_LIVE) and draws only what moves
- * over it, and the backdrop widgets aren't drawn: a smaller shader, and the labels' sheets gone from the pixel memory.
+ * A layout's baked backdrop ("backdrop": true; Grand National and Sport): what never changes while driving (the base
+ * layer's static parts, and the widgets marked "backdrop": true, the labels that depend on the Units setting at most)
+ * drawn once on the bench into one ETC2 image per Units setting, hud/backdrops/<layout>-<units>.etc2 with its .json
+ * ({ w, h, key }). The base layer is the layout's rdash (Grand National: frames, marks, zones and ticks; opaque) or
+ * sdash (Sport: the black, the brackets' lines and label marks, the bars' rails; see-through in the map window). A
+ * base with a map window ("hole", Sport) has a second backdrop for while the window is open (guiding with "While
+ * navigating" on a layout with the map), <layout>-<units>-map.etc2, the window cut in its alpha; only one backdrop is
+ * ever in the pixel memory, the other dropped before it goes up. On the car the base layer samples it (u_back,
+ * RDASH_LIVE / SDASH_LIVE) and draws only what moves over it (or under it: Sport's bands), and the backdrop widgets
+ * aren't drawn: a smaller shader, and the labels' sheets gone from the pixel memory.
  *
- * The key ties a backdrop to what it was baked from: those widgets, the rdash widget, the Units setting, the theme's
- * colours, the bake pass's shader and the fonts the widgets use. A missing backdrop, or one whose key no longer
- * matches (the layout, theme, fonts or shader changed), is refused with the reason on the status row: bake it again
- * (bench, "bench-backdrop", see bench/README.md).
+ * The key ties a backdrop to what it was baked from: those widgets, the base widget, the Units setting, the theme's
+ * colours, the bake pass's shader and the fonts the widgets use, and where they matter whether the map window is open
+ * and the tank (config.tankLitres, the fuel labels' {{fuelFull}} and {{fuelHalf}}). A missing backdrop, or one whose
+ * key no longer matches (the layout, theme, fonts or shader changed), is refused with the reason on the status row:
+ * bake it again (bench, "bench-backdrop", see bench/README.md).
  *
  * With CLUSTER_BACKDROP_BAKE=1 in the environment (the bench's bake mode, never on the car) the app draws only the
- * backdrop's parts instead (RDASH_BAKE and the backdrop widgets) and writes <data>/backdrop-bake.json ({ layout,
- * units, key, w, h }) for the bench to name and stamp what it captures.
+ * backdrop's parts instead (the BAKE pass and the backdrop widgets) and writes <data>/backdrop-bake.json ({ layout,
+ * units, file, key, w, h }) for the bench to name and stamp what it captures.
  *
  * Plain Node 8.
  */
@@ -36,23 +42,35 @@ const BAKE = process.env.CLUSTER_BACKDROP_BAKE === "1";
  */
 
 /**
+ * The layer a backdrop belongs to: the layout's rdash (not its needles) or sdash widget.
+ * @param {Widget} w
+ * @returns {boolean}
+ */
+const isBase = (w) => (w.type === "rdash" && !w.needleOnly) || w.type === "sdash";
+
+/**
  * The key of a backdrop: a hash of everything it is drawn from.
  * @param {Widget[]} widgets the layout's widgets (after its mode)
  * @param {string} units the Units setting
  * @param {*} theme the active theme's colours
- * @param {string} bakeShader the rdash bake pass's source
+ * @param {string} bakeShader the base widget's bake pass's source
+ * @param {Record<string, *>} [more] whatever else it depends on (the map window, the tank); left out when empty, so
+ *   Grand National's keys stay what they were
  * @returns {string}
  */
-function backdropKey(widgets, units, theme, bakeShader) {
-  const parts = widgets.filter((w) => w.backdrop || (w.type === "rdash" && !w.needleOnly));
+function backdropKey(widgets, units, theme, bakeShader, more) {
+  const parts = widgets.filter((w) => w.backdrop || isBase(w));
   /** @type {Record<string, *>} */
   const fonts = {};
   parts.forEach((w) => {
     if (w.font && !fonts[w.font]) fonts[w.font] = data.json("fonts/" + w.font + ".json");
   });
+  /** @type {Record<string, *>} */
+  const what = { parts, units, theme, fonts };
+  if (more && Object.keys(more).length) what.more = more;
   return crypto
     .createHash("sha1")
-    .update(JSON.stringify({ parts, units, theme, fonts }))
+    .update(JSON.stringify(what))
     .update(bakeShader)
     .digest("hex")
     .slice(0, 16);
@@ -65,41 +83,50 @@ function backdropKey(widgets, units, theme, bakeShader) {
  * @param {import("./app").App} hud
  * @param {string} name the layout's file name
  * @param {Widget[]} shown the widgets the layout shows
- * @param {string} bakeShader
  * @returns {Widget[]}
  */
-function useBackdrop(hud, name, shown, bakeShader) {
-  const units = String(hud.setting("units") || "metric"),
-    key = backdropKey(shown, units, hud.theme, bakeShader),
-    rdash = shown.filter((w) => w.type === "rdash" && !w.needleOnly)[0];
-  if (!rdash) throw new Error('"backdrop": true needs an rdash widget');
+function useBackdrop(hud, name, shown) {
+  const layer = shown.filter(isBase)[0];
+  if (!layer) throw new Error('"backdrop": true needs an rdash or sdash widget');
+  const units = String(hud.setting("units") || "metric");
+  /** @type {Record<string, *>} */
+  const more = {};
+  // a map window ("hole"): one backdrop with it open, one closed
+  const map = !!layer.hole && hud._hole(layer)[2] > 0;
+  if (layer.hole) more.map = map;
+  if (/\{\{fuel(Full|Half)\}\}/.test(JSON.stringify(shown.filter((w) => w.backdrop))))
+    more.tankLitres = hud.config.tankLitres || null;
+  const key = backdropKey(shown, units, hud.theme, require("../widgets/" + layer.type).BAKE, more),
+    file = name + "-" + units + (map ? "-map" : ""),
+    what = units + " units" + (layer.hole ? ", map window " + (map ? "open" : "closed") : "");
   if (BAKE) {
     hud.backdrop = { bake: true, key };
     try {
       fs.writeFileSync(
         path.join(hud.ctx.dataDir || ".", "backdrop-bake.json"),
-        JSON.stringify({ layout: name, units, key, w: rdash.w, h: rdash.h }),
+        JSON.stringify({ layout: name, units, file, key, w: layer.w, h: layer.h }),
       );
     } catch (err) {
       hud.log.warn("backdrop bake: " + (err instanceof Error ? err.message : err));
     }
-    hud.log.info("backdrop bake: drawing only the backdrop's parts (" + name + ", " + units + ", key " + key + ")");
-    return shown.filter((w) => w.backdrop || (w.type === "rdash" && !w.needleOnly));
+    hud.log.info("backdrop bake: drawing only the backdrop's parts (" + file + ", key " + key + ")");
+    return shown.filter((w) => w.backdrop || isBase(w));
   }
-  const base = "backdrops/" + name + "-" + units,
+  const base = "backdrops/" + file,
     bake = "bake it on the bench (bench-backdrop, bench/README.md)";
   const meta = data.json(base + ".json"),
     bytes = data.buffer(base + ".etc2");
-  if (!bytes || !meta || !meta.key) throw new Error("no baked backdrop for " + units + " units (" + base + ".etc2): " + bake);
-  if (meta.key !== key) throw new Error("the backdrop for " + units + " units is out of date with the layout: " + bake + " again");
-  if (meta.w !== rdash.w || meta.h !== rdash.h || meta.w % ETC2_BLOCK_PX || meta.h % ETC2_BLOCK_PX ||
+  if (!bytes || !meta || !meta.key) throw new Error("no baked backdrop for " + what + " (" + base + ".etc2): " + bake);
+  if (meta.key !== key) throw new Error("the backdrop for " + what + " is out of date with the layout: " + bake + " again");
+  if (meta.w !== layer.w || meta.h !== layer.h || meta.w % ETC2_BLOCK_PX || meta.h % ETC2_BLOCK_PX ||
       bytes.length !== (meta.w / ETC2_BLOCK_PX) * (meta.h / ETC2_BLOCK_PX) * ETC2_BLOCK_BYTES)
-    throw new Error("the backdrop for " + units + " units doesn't fit its layer (" + meta.w + "x" + meta.h + "): " + bake + " again");
-  const conn = rdash.conn || 0,
-    cacheKey = "backdrop:" + conn + ":" + name + ":" + units + ":" + key;
+    throw new Error("the backdrop for " + what + " doesn't fit its layer (" + meta.w + "x" + meta.h + "): " + bake + " again");
+  const conn = layer.conn || 0,
+    cacheKey = "backdrop:" + conn + ":" + file + ":" + key;
   let atlas = hud.atlases.get(cacheKey);
   if (!atlas) {
-    // another backdrop on this connection (other units, a new bake): drop it first, so one is in the pixel memory
+    // another backdrop on this connection (other units, the map window, a new bake): drop it first, so one is in the
+    // pixel memory
     hud.atlases.forEach((other, k) => {
       if (k.indexOf("backdrop:" + conn + ":") === 0) {
         other.c.drop(other.ref);

@@ -1557,8 +1557,9 @@ const web = http.createServer(async (req, res) => {
   }
   if (req.method === "POST" && url === "/backdrop") {
     // bake mode (CLUSTER_BACKDROP_BAKE=1, launch config "bench-backdrop"): the page posts the cluster's display as raw
-    // RGBA; the app's <data>/backdrop-bake.json names it and gives its key; written as ETC2 to
-    // apps/<app>/hud/backdrops/<layout>-<units>.etc2 with its .json (engine/backdrop.js)
+    // RGBA (straight alpha: see-through where nothing is drawn, as Sport's map window); the app's
+    // <data>/backdrop-bake.json names it ("file": <layout>-<units>[-map]) and gives its key; written as ETC2 to
+    // apps/<app>/hud/backdrops/<file>.etc2 with its .json (engine/backdrop.js)
     /** @type {Buffer[]} */
     const chunks = [];
     let size = 0;
@@ -1576,7 +1577,7 @@ const web = http.createServer(async (req, res) => {
         if (rgba.length !== bake.w * bake.h * 4)
           throw new Error(rgba.length + " bytes is not " + bake.w + "x" + bake.h + " RGBA");
         const dir = path.join(app.dir, "hud", "backdrops"),
-          base = path.join(dir, bake.layout + "-" + bake.units);
+          base = path.join(dir, bake.file || bake.layout + "-" + bake.units);
         fs.mkdirSync(dir, { recursive: true });
         const start = Date.now();
         const out = etc2.encode(rgba, bake.w, bake.h);

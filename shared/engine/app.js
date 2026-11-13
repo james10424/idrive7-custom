@@ -686,7 +686,7 @@ class HudApp {
     // status row says why
     if (layout.backdrop) {
       try {
-        shown = useBackdrop(this, name, shown, require("../widgets/rdash").BAKE);
+        shown = useBackdrop(this, name, shown);
       } catch (err) {
         noBackdrop(this);
         this.problem = layout.name + ": " + (err instanceof Error ? err.message : err);
