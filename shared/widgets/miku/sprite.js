@@ -16,7 +16,7 @@ const BLOCK_PX = 3; // each entry is a 3x3 px block
 const CODE_OFFSET_PX = 1024; // a table value's code is (v + this) * 2, so -1024 .. 1023.5 px fit
 const CODE_MAX = 4095; // the code's 12 bits
 const PIXEL_MEM_BYTES = 8; // pixel memory counted per RGBA8 asset px (as the engine counts it: 4 bytes, twice)
-const ETC2_MEM_BYTES = 2; // and per ETC2 asset px (1 byte, twice)
+const ETC2_MEM_BYTES = 1; // and per ETC2 asset px (1 byte, charged once: no rectangle scratch, cluster-render PROTOCOL.md)
 const ETC2_BLOCK_PX = 4,
   ETC2_BLOCK_BYTES = 16;
 /** Bytes of a w x h ETC2 RGBA image. @param {number} w @param {number} h */

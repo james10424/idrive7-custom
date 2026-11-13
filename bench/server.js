@@ -155,7 +155,8 @@ function pixelBytes() {
   let bytes = 0;
   layers.forEach((layer) => {
     if (layer.image)
-      bytes += layer.iw * layer.ih * (layer.memBpp || layer.bpp || 4) * PIXEL_COPIES;
+      // an etc2rgba asset is charged its bytes once (cluster-render keeps no rectangle scratch for it), others twice
+      bytes += layer.iw * layer.ih * (layer.memBpp || layer.bpp || 4) * (layer.format === "etc2rgba" ? 1 : PIXEL_COPIES);
   });
   return bytes;
 }
@@ -790,7 +791,7 @@ const renderServer = net.createServer((sock) => {
           return refuse("asset", msg.ref, "too many assets");
         if (
           PIXEL_BYTES &&
-          pixelBytes() + msg.w * msg.h * memBpp * PIXEL_COPIES > PIXEL_BYTES
+          pixelBytes() + msg.w * msg.h * memBpp * (etc2Asset ? 1 : PIXEL_COPIES) > PIXEL_BYTES
         )
           return refuse("asset", msg.ref, "the service's pixel memory is full");
         layers.set(key, {
@@ -830,7 +831,7 @@ const renderServer = net.createServer((sock) => {
             "x" +
             msg.h +
             " (" +
-            mib(msg.w * msg.h * memBpp * PIXEL_COPIES) +
+            mib(msg.w * msg.h * memBpp * (etc2Asset ? 1 : PIXEL_COPIES)) +
             " of pixel memory)",
         );
         writeEv(sock, { ev: "layer", ref: msg.ref, state: "shown" });

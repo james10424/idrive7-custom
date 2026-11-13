@@ -73,7 +73,7 @@ The files must be there, under exactly those names, straight from the same bake 
 
 2. Make the app load them. It reads the frames only when it builds the layout, and does not watch the folder, so on the center screen open **Custom HUD**, pick another layout, then **Miku** again (or restart the app).
 
-3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "2 layers" and about "3.0 MiB" of pixels (it depends on the bake). The app's log has lines like `miku frames: 14 of 144x278, tails, 1024x564 ETC2 asset and its 1024x3 tables, 1.1 MiB of pixel memory` and `miku close-up: 3 zoom steps, 7 poses of 249x278, 1024x972 ETC2 asset, 1.9 MiB of pixel memory`.
+3. Check the app page's status row. With the frames loaded it says "HUD on", "Miku layout", "2 layers" and about "1.5 MiB" of pixels (it depends on the bake). The app's log has lines like `miku frames: 14 of 144x278, tails, 1024x564 ETC2 asset and its 1024x3 tables, 0.6 MiB of pixel memory` and `miku close-up: 3 zoom steps, 7 poses of 249x278, 1024x972 ETC2 asset, 0.9 MiB of pixel memory`.
 
 ### By hand
 
@@ -125,7 +125,7 @@ The status row says why, after "Miku:":
 | `atlas.etc2 is N bytes, ... ETC2 needs M` | The two files don't belong together (one from an older bake): deploy both again. |
 | `atlas WxH is over 1024 px a side` | A bake from an older tools/live2d_bake: bake again and deploy it. The app won't upload it (a precaution, see [What the cluster can take](#what-the-cluster-can-take)). |
 | `atlas asset refused` | cluster-render had no room: another app is using most of its pixel memory. |
-| `refused asset ... the service's pixel memory is full` (log), she never zooms in | The close-up (1.9 MiB) didn't fit next to the other apps' images. Upstream cluster-render has 16 MiB for every app together, Grand National on the cluster uses 7.5; our fork's `pixel_mib` (32) makes room. Without it she just stands. |
+| `refused asset ... the service's pixel memory is full` (log), she never zooms in | The close-up (0.9 MiB) didn't fit next to the other apps' images. Upstream cluster-render has 16 MiB for every app together, Grand National on the cluster uses 7.5; our fork's `pixel_mib` (32) makes room. Without it she just stands. |
 
 Nothing shows during route guidance either: that's on purpose, BMW's turn map uses her corner.
 
@@ -145,7 +145,7 @@ Two images, at most 1024 px a side, each written as `.rgba` (for you) and `.etc2
 
 The model itself is never changed.
 
-With RetrynowMiku the atlases are 1024x564 and 1024x972 (1.1 MiB with the standing shader's small RGBA table asset, and 1.9 MiB of pixel memory, compressed; 4.4 and 7.6 as RGBA). Heights are rounded up to whole 4x4 ETC2 blocks. On the car the GPU animates these: blinks, breathing, the lean as on a bus, the tails following her head and streaming out with speed, and the close-up when the car stops.
+With RetrynowMiku the atlases are 1024x564 and 1024x972 (0.6 MiB with the standing shader's small RGBA table asset, and 0.9 MiB of pixel memory, compressed: cluster-render charges an ETC2 texture's bytes once, an RGBA one's twice; 4.4 and 7.6 as RGBA). Heights are rounded up to whole 4x4 ETC2 blocks. On the car the GPU animates these: blinks, breathing, the lean as on a bus, the tails following her head and streaming out with speed, and the close-up when the car stops.
 
 ## What the cluster can take
 

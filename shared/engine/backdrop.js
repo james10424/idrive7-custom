@@ -24,7 +24,7 @@ const data = require("../hud_data");
 
 const ETC2_BLOCK_PX = 4,
   ETC2_BLOCK_BYTES = 16;
-const PIXEL_COPIES = 2; // cluster-render counts each image's bytes twice
+const PIXEL_COPIES = 1; // cluster-render charges an etc2rgba asset's bytes once (an RGBA one twice)
 const BAKE = process.env.CLUSTER_BACKDROP_BAKE === "1";
 
 /** @typedef {import("./app").Widget} Widget */
