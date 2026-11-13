@@ -922,6 +922,14 @@ async function bakeClose(loaded, cfg, at) {
       poses.push(
         close.turnPoses ? close.turnPoses[k < 0 ? k + turnSteps : k + turnSteps - 1] : times(turn, k / turnSteps),
       );
+  /**
+   * The params of a blink frame the pose sets itself, the pose's value: a pose's own eyes win over the blink's.
+   * @param {Params} base
+   * @param {Params} blink
+   * @returns {Params}
+   */
+  const keepOwn = (base, blink) =>
+    Object.fromEntries(Object.keys(blink).filter((id) => id in base && !(id in toggles(1))).map((id) => [id, base[id]]));
   // each pose with all the toggles on; close.only's driving set after them, with none on
   /** @type {Params[]} */
   const bases = poses.map((pose) => Object.assign(toggles(1), pose));
@@ -938,11 +946,13 @@ async function bakeClose(loaded, cfg, at) {
     if (leanAt >= face - LEAN_EPS) Object.assign(base, lean.right || {});
     bases.push(base);
   }
+  // its blink: the half shut and shut eyes, except what the pose sets itself (a face with its eyes already shut, as the
+  // happy face pulling away, stays shut; the blink half-opened them every 2 s)
   /** @type {HTMLCanvasElement[][]} */
   const posed = bases.map((base) => [
     shot(base, box1),
-    shot(Object.assign({}, base, half), box1),
-    shot(Object.assign({}, base, shut), box1),
+    shot(Object.assign({}, base, half, keepOwn(base, half)), box1),
+    shot(Object.assign({}, base, shut, keepOwn(base, shut)), box1),
   ]);
   /**
    * A frame's pixels.

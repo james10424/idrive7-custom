@@ -25,6 +25,9 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {boolean} [blanked] (the close-up layer) told to draw nothing after a refusal
  * @property {boolean} [only] (the standing layer) her bake is close-up only: it runs her and draws nothing
  * @property {number} [leanSent] (the standing layer, close-up only) the close-up layer's u_lean, last sent
+ * @property {number} [leanSteps] (the standing layer, close-up only) the bake's lean steps each way
+ * @property {number} [leanStep] (the standing layer, close-up only) the lean step she's going to, -leanSteps .. leanSteps
+ * @property {number} [leanEased] (the standing layer, close-up only) the lean shown, easing to leanStep's
  */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
@@ -60,6 +63,9 @@ const MIKU_SPEED_KMH = 130; // her speed's full scale
 const TURN_SHIFT_SLOTS = 36; // the close-up's turn head shifts sent (u_tsh[9], 4 a vec4)
 const MIKU_STEPS = 500; // the lean, speed, zoom and turn are sent in steps of 1/500
 const MIKU_LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
+const MIKU_LEAN_STEP_TAU_MS = 120; // close-up only: she eases to the lean's step this quickly
+const MIKU_LEAN_SNAP = 0.002; // and is there within this of it
+const MIKU_LEAN_HYST = 0.75; // close-up only: the lean's step changes this far (in steps) past it, not halfway
 const MIKU_CLOCK_LOOP_MS = 4000; // the close-up's u_clock runs 0 .. 4 s, then starts again
 
 /**
@@ -192,6 +198,7 @@ module.exports = {
     const only = onlyClose(atlas);
     if (only && !isClose(widget)) {
       state.only = true; // close-up only: the standing layer runs her (update) and draws nothing
+      state.leanSteps = atlas.info.close.leanSteps || 0;
       return;
     }
     if (!isClose(widget)) state.only = false;
@@ -354,6 +361,8 @@ module.exports = {
   reset(hud, state) {
     if (isClose(state.w)) return;
     state.lean = 0;
+    state.leanStep = 0;
+    state.leanEased = 0;
     state.spd = 0;
     state.point = 0;
     state.pointV = 0;
@@ -439,8 +448,24 @@ module.exports = {
         : Math.max(zoomT, zoom - move);
     const brightness = hud.themeName === "night" ? MIKU_NIGHT_BRIGHTNESS : 1;
     // a soft limit: past a full lean the spring's swing eases into it instead of stopping dead
+    // close-up only: the smoothed lean picks a baked step, with hysteresis (it moves on only MIKU_LEAN_HYST of a step
+    // past one, so a g jittering round a step's edge, where the faces start (eyes open, then shut), doesn't flick
+    // between the two), and she eases to that step: a steady pull rests on one frame, not a half-and-half blend of two
+    let leanShown = Math.tanh(state.lean * MIKU_LEAN_SOFT);
+    if (only && state.leanSteps) {
+      const n = state.leanSteps,
+        at = leanShown * n,
+        held = isNum(state.leanStep) ? state.leanStep : Math.round(at);
+      state.leanStep = Math.abs(at - held) > MIKU_LEAN_HYST ? Math.round(at) : held;
+      const to = state.leanStep / n;
+      state.leanEased = isNum(state.leanEased)
+        ? state.leanEased + (to - state.leanEased) * (1 - Math.exp(-dt / MIKU_LEAN_STEP_TAU_MS))
+        : to;
+      if (Math.abs(state.leanEased - to) < MIKU_LEAN_SNAP) state.leanEased = to;
+      leanShown = state.leanEased;
+    }
     const drive = [
-      step(Math.tanh(state.lean * MIKU_LEAN_SOFT)),
+      step(leanShown),
       step(state.spd),
       0, // standing she doesn't point toward the indicator; only the close-up turns her head (state.point)
       brightness,
