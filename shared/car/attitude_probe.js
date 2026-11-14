@@ -8,7 +8,9 @@
  * bend and through a turn can be read against them. Reads only.
  *
  * The candidates come from the unit's catalog (bmw_sdk someip-interfaces.json); app.json "signals" lists each as
- * optional, so a unit without one still installs.
+ * optional, so a unit without one still installs. One that the car's own catalog can't serve as asked fails the whole
+ * install (UPDATE_FAILED: 0.1.36's navigation.ADAS navigationGPS2 had no getter on the car); check a manifest on the
+ * car with tools/someip_manifest_check.js before releasing.
  */
 const fs = require("fs");
 const path = require("path");
@@ -30,7 +32,6 @@ const CANDIDATES = [
   { iface: "de.bmw.infotainment.navigation.positioning.Positioning", instance: "Main_Instance", fields: ["currentLocation"], what: "heading (navigation)" },
   { iface: "de.bmw.infotainment.navigation.mapcontrol.MapControl", instance: "Main_Instance_01", fields: ["compassAngle"], what: "compass (map)" },
   { iface: "de.bmw.infotainment.GPSData", instance: "1", fields: ["GPSPositionExtendedCAN"], what: "GPS heading" },
-  { iface: "de.bmw.infotainment.navigation.ADAS", instance: "1", fields: ["navigationGPS2"], poll: true, what: "heading (ADAS horizon)" },
 ];
 
 /**

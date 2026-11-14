@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.36",
+  "version": "0.1.37",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -106,10 +106,6 @@
     "de.bmw.infotainment.GPSData": {
       "GPSPositionExtendedCAN": "rs",
       "_optional": "the attitude probe's GPS heading"
-    },
-    "de.bmw.infotainment.navigation.ADAS": {
-      "navigationGPS2": "r",
-      "_optional": "the attitude probe's ADAS heading"
     }
   },
   "screens": [

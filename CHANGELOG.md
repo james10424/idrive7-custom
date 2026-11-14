@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 14 2026
+
+- **Custom HUD 0.1.37: installs again.** 0.1.36 failed to install from the Store (BMW's app manager: UPDATE_FAILED; the Store kept 0.1.35): the car's firmware refused to generate the SOME/IP config for one probe interface, `navigation.ADAS` `navigationGPS2`, which has no getter in the car's own catalog ("optional" only covers an interface the car doesn't list). Removed; the attitude probe watches the other eight. `tools/someip_manifest_check.js` runs the firmware's generator on the car once per manifest entry and names any it refuses (all 42 others pass).
+
 ## Nov 13 2026
 
 - **Custom HUD 0.1.36 / Custom Cluster: a layout no longer keeps another layout's textures.** Kept assets (glyph atlases, Miku's frames, a backdrop) stayed in cluster-render across layout switches, so under the F-16 layout Miku's 14 MiB of frames were still held, and sent again whenever the HUD came back after guidance. Each rebuild now notes what the new layout reads and drops the rest (`_dropUnusedAtlases`, every asset an entry holds); switching back uploads them again. Off, or a mode that draws nothing, keeps them. F-16: 0.0 MiB of pixel memory instead of 14.1.
