@@ -654,8 +654,11 @@ module.exports = {
         other.c.uniform(other.ref, "u_zoom", [0, 0, brightness, 0]);
       }
     });
+    // close-up only: the expressions come on and go off eased in and out (smoothstep), so Yandere's hands start
+    // rising gently and settle at her cheeks instead of moving at one speed and stopping dead
+    const zoomShown = only ? state.zoom * state.zoom * (3 - 2 * state.zoom) : state.zoom;
     const zoomVals = [
-        step(state.zoom),
+        step(zoomShown),
         step(state.point),
         brightness,
         close ? 1 : 0,
