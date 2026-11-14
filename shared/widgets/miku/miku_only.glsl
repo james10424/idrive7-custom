@@ -6,7 +6,7 @@
 // driving set without them, the lean from a full lean left to right (u_drv.x each way, upright in its middle), is in
 // an atlas of its own on the same grid (u_leanAtlas, its crops from u_lc.z), so the close-up's keeps room for the turn.
 // u_zoom = (expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there): the app brings the expressions
-// on over about 0.8 s when the car has stood still for 1 s or an indicator is on, and off again as she drives on.
+// on over 0.5 s (eased) when the car has stood still for 1 s or an indicator is on, and off again as she drives on.
 // At 0 she leans with the car (braking .. pulling away, the app picks the frames) and blinks; in between the in-steps play; at 1 she
 // plays her idle loop (a close.idle bake, its own atlas u_idle; else upright) and turns her head toward the indicator. Two nearest baked frames are blended
 // everywhere, each slid so the heads meet. The app picks the two frames and their slides (u_pk): the head-shift
