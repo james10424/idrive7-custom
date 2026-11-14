@@ -30,8 +30,11 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {number[]} [turnShift] (the standing layer, close-up only) the bake's turn, then lean, head shifts (px)
  * @property {number[]} [idleShift] (the standing layer, close-up only) the idle loop's head shifts (px)
  * @property {number} [idleCount] (the standing layer, close-up only) the idle loop's frames (0: none)
- * @property {?{ rate: number, closure: number[] }} [blink] (the standing layer, close-up only) the bake's blink curve
+ * @property {?{ rate: number, closure: number[] }} [blink] (the standing layer, close-up only) one blink, from the bake
  * @property {number} [ehSent] (the standing layer, close-up only) the close-up layer's u_eh, last sent
+ * @property {number} [blinkAt] (the standing layer, close-up only) when her last blink started (ms)
+ * @property {number} [blinkNext] (the standing layer, close-up only) when her next blink is due (ms)
+ * @property {number} [turnWas] (the standing layer, close-up only) the turn's target last update (-1, 0, 1)
  * @property {number} [leanSteps] (the standing layer, close-up only) the bake's lean steps each way
  * @property {number} [leanStep] (the standing layer, close-up only) the lean step she's going to, -leanSteps .. leanSteps
  * @property {number} [leanEased] (the standing layer, close-up only) the lean shown, easing to leanStep's
@@ -81,7 +84,8 @@ const MIKU_LEAN_SNAP = 0.002; // and is there within this of it
 const MIKU_LEAN_HYST = 0.75; // close-up only: the lean's step changes this far (in steps) past it, not halfway
 const MIKU_SETTLE_MS = 3000; // close-up only: her idle loop waits this long after her layer is (back) on the HUD
 const MIKU_CLOCK_LOOP_MS = 4000; // the close-up's u_clock runs 0 .. 4 s, then starts again
-const MIKU_BLINK_MS = 2000; // close-up only, a bake without close.blink: a blink this often
+const MIKU_BLINK_OPEN = 0.05; // close-up only: a recorded blink is over once her eyes are less shut than this
+const MIKU_BLINK_MS = [3000, 5000]; // close-up only: a blink this far apart (at random between), and as her head turns
 
 /**
  * Whether a widget is the close-up's layer.
@@ -137,42 +141,56 @@ function zoomNow(hud) {
 }
 
 /**
- * Close-up only: her eyes' closure now (0 open .. 1 shut, miku_only.glsl u_eh). From the bake's blink curve
- * (close.blink: a recording's eye closure sampled `rate` times a second, looped), else a blink every MIKU_BLINK_MS
- * (as the shader's own clock did before).
+ * Close-up only: her eyes' closure now (0 open .. 1 shut, miku_only.glsl u_eh): one blink, the bake's (close.blink, a
+ * recording's first blink) or else a made-up one, from state.blinkAt; a new one every MIKU_BLINK_MS at random, and
+ * when her head sets off on a turn (the update starts that one).
  * @param {MikuState} state the standing layer's
  * @param {number} now ms
  * @returns {number}
  */
 function eyeClosure(state, now) {
-  const blink = state.blink;
-  if (blink && blink.closure.length > 1) {
-    const n = blink.closure.length,
-      at = ((((now / 1000) * blink.rate) % n) + n) % n,
-      i = Math.floor(at),
-      a = blink.closure[i],
-      b = blink.closure[(i + 1) % n];
+  if (!isNum(state.blinkNext) || now >= state.blinkNext) {
+    if (isNum(state.blinkNext)) state.blinkAt = now;
+    state.blinkNext = now + MIKU_BLINK_MS[0] + Math.random() * (MIKU_BLINK_MS[1] - MIKU_BLINK_MS[0]);
+  }
+  const s = (now - (isNum(state.blinkAt) ? state.blinkAt : -1e9)) / 1000,
+    blink = state.blink;
+  if (blink) {
+    const at = s * blink.rate,
+      i = Math.floor(at);
+    if (i < 0 || i >= blink.closure.length) return 0;
+    const a = blink.closure[i],
+      b = i + 1 < blink.closure.length ? blink.closure[i + 1] : 0;
     return Math.round((a + (b - a) * (at - i)) * 100) / 100;
   }
-  const t = (((now % MIKU_BLINK_MS) + MIKU_BLINK_MS) % MIKU_BLINK_MS) / 1000,
-    /** @type {(a: number, b: number, x: number) => number} */
-    smooth = (a, b, x) => {
-      const k = Math.max(0, Math.min(1, (x - a) / (b - a)));
-      return k * k * (3 - 2 * k);
-    };
-  return Math.round(smooth(0, 0.06, t) * (1 - smooth(0.1, 0.22, t)) * 100) / 100;
+  /** @type {(a: number, b: number, x: number) => number} */
+  const smooth = (a, b, x) => {
+    const k = Math.max(0, Math.min(1, (x - a) / (b - a)));
+    return k * k * (3 - 2 * k);
+  };
+  return s < 0 || s > 0.3 ? 0 : Math.round(smooth(0, 0.06, s) * (1 - smooth(0.1, 0.22, s)) * 100) / 100;
 }
 
 /**
- * The bake's blink curve (atlas.json close.blink), if it's usable.
+ * One blink out of the bake's blink curve (atlas.json close.blink: a recording's eye closure, `rate` samples a
+ * second): from where her eyes first start to shut until they're open again; null if the curve has none.
  * @param {*} close
  * @returns {?{ rate: number, closure: number[] }}
  */
 function blinkOf(close) {
   const blink = close && close.blink;
   if (!blink || !(blink.rate > 0) || !Array.isArray(blink.closure) || blink.closure.length < 2) return null;
-  if (!blink.closure.every((v) => typeof v === "number" && v >= 0 && v <= 1)) return null;
-  return { rate: blink.rate, closure: blink.closure };
+  const c = blink.closure;
+  if (!c.every((v) => typeof v === "number" && v >= 0 && v <= 1)) return null;
+  let i0 = -1;
+  for (let i = 1; i < c.length && i0 < 0; i++) if (c[i] > 0 && c[i - 1] === 0) i0 = i - 1;
+  if (i0 < 0) return null;
+  // its end: open again (under MIKU_BLINK_OPEN past its peak; the curve stays a few % shut until the next blink)
+  let peak = i0 + 1;
+  while (peak + 1 < c.length && c[peak + 1] >= c[peak]) peak++;
+  let i1 = peak;
+  while (i1 < c.length && c[i1] >= MIKU_BLINK_OPEN) i1++;
+  return { rate: blink.rate, closure: c.slice(i0, i1).concat([0]) };
 }
 
 /**
@@ -552,6 +570,13 @@ module.exports = {
     // close-up only: the head turns once the expressions are all on (the turn frames have them)
     const turnSide = only && (state.zoom || 0) < 1 ? 0 : hud._turnSide(),
       dtp = dt / 1000;
+    // close-up only: she blinks as her head starts to turn, away or back, as in the turn recording (each of its four
+    // blinks comes as the head sets off); the next one MIKU_BLINK_MS after
+    if (only && isNum(state.turnWas) && turnSide !== state.turnWas) {
+      state.blinkAt = now;
+      state.blinkNext = now + MIKU_BLINK_MS[0] + Math.random() * (MIKU_BLINK_MS[1] - MIKU_BLINK_MS[0]);
+    }
+    state.turnWas = turnSide;
     if (!isNum(state.point)) {
       state.point = turnSide;
       state.pointV = 0;
