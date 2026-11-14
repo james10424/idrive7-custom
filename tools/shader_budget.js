@@ -14,6 +14,7 @@
  *   Custom HUD 0.1.31 before the lean (1d74600)        15 reads, 4258 tokens, 56 lookup steps   restarted the KOMBI
  *   Custom HUD 0.1.31/0.1.32, Miku close-up only       21 reads, 5281 tokens, 64 lookup steps   restarted the KOMBI
  *   Custom HUD 0.1.33 (the app picks, no lookups)      21 reads, 4465 tokens                    holds (test client)
+ *   Custom HUD 0.1.35 (4 textures: idle even/odd)      21 reads, 4411 tokens                    holds (Nov 13 2026)
  *
  * Either can crash it: the crashed Miku is smaller than Sport but reads more textures, and M reads none but is
  * bigger than Sport. And a third: uniform-array lookups (lookupSteps), which reads and tokens don't see: 0.1.31's
