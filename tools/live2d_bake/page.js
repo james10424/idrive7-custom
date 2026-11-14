@@ -1831,6 +1831,17 @@ async function bake(loaded, cfg) {
   });
   if (closeUp) {
     info.close = closeUp.info;
+    // close.only's blink: a recording's eye closure (0 open .. 1 shut) sampled `rate` times a second, which the app
+    // loops to drive the half shut and shut crops (instead of a blink every 2 s)
+    const blink = cfg.close && cfg.close.blink;
+    if (blink) {
+      if (!(blink.rate > 0) || !Array.isArray(blink.closure) || blink.closure.length < 2 ||
+        !blink.closure.every((v) => typeof v === "number" && v >= 0 && v <= 1))
+        throw new Error("close.blink: { rate: samples a second, closure: [0 open .. 1 shut, ...] }");
+      info.close.blink = { rate: blink.rate, closure: blink.closure };
+      log("blink: " + blink.closure.length + " samples at " + blink.rate + " a second (" +
+        (blink.closure.length / blink.rate).toFixed(1) + " s, looped)");
+    }
     // close.only's idle loop: its own atlas, idle.rgba (serve.js compresses it to idle.etc2)
     // and its lean: lean.rgba (serve.js compresses it to lean.etc2)
     if (closeUp.lean) {

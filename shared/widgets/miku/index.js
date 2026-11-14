@@ -30,6 +30,8 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {number[]} [turnShift] (the standing layer, close-up only) the bake's turn, then lean, head shifts (px)
  * @property {number[]} [idleShift] (the standing layer, close-up only) the idle loop's head shifts (px)
  * @property {number} [idleCount] (the standing layer, close-up only) the idle loop's frames (0: none)
+ * @property {?{ rate: number, closure: number[] }} [blink] (the standing layer, close-up only) the bake's blink curve
+ * @property {number} [ehSent] (the standing layer, close-up only) the close-up layer's u_eh, last sent
  * @property {number} [leanSteps] (the standing layer, close-up only) the bake's lean steps each way
  * @property {number} [leanStep] (the standing layer, close-up only) the lean step she's going to, -leanSteps .. leanSteps
  * @property {number} [leanEased] (the standing layer, close-up only) the lean shown, easing to leanStep's
@@ -79,6 +81,7 @@ const MIKU_LEAN_SNAP = 0.002; // and is there within this of it
 const MIKU_LEAN_HYST = 0.75; // close-up only: the lean's step changes this far (in steps) past it, not halfway
 const MIKU_SETTLE_MS = 3000; // close-up only: her idle loop waits this long after her layer is (back) on the HUD
 const MIKU_CLOCK_LOOP_MS = 4000; // the close-up's u_clock runs 0 .. 4 s, then starts again
+const MIKU_BLINK_MS = 2000; // close-up only, a bake without close.blink: a blink this often
 
 /**
  * Whether a widget is the close-up's layer.
@@ -131,6 +134,45 @@ function zoomNow(hud) {
       0,
     ]
   );
+}
+
+/**
+ * Close-up only: her eyes' closure now (0 open .. 1 shut, miku_only.glsl u_eh). From the bake's blink curve
+ * (close.blink: a recording's eye closure sampled `rate` times a second, looped), else a blink every MIKU_BLINK_MS
+ * (as the shader's own clock did before).
+ * @param {MikuState} state the standing layer's
+ * @param {number} now ms
+ * @returns {number}
+ */
+function eyeClosure(state, now) {
+  const blink = state.blink;
+  if (blink && blink.closure.length > 1) {
+    const n = blink.closure.length,
+      at = ((((now / 1000) * blink.rate) % n) + n) % n,
+      i = Math.floor(at),
+      a = blink.closure[i],
+      b = blink.closure[(i + 1) % n];
+    return Math.round((a + (b - a) * (at - i)) * 100) / 100;
+  }
+  const t = (((now % MIKU_BLINK_MS) + MIKU_BLINK_MS) % MIKU_BLINK_MS) / 1000,
+    /** @type {(a: number, b: number, x: number) => number} */
+    smooth = (a, b, x) => {
+      const k = Math.max(0, Math.min(1, (x - a) / (b - a)));
+      return k * k * (3 - 2 * k);
+    };
+  return Math.round(smooth(0, 0.06, t) * (1 - smooth(0.1, 0.22, t)) * 100) / 100;
+}
+
+/**
+ * The bake's blink curve (atlas.json close.blink), if it's usable.
+ * @param {*} close
+ * @returns {?{ rate: number, closure: number[] }}
+ */
+function blinkOf(close) {
+  const blink = close && close.blink;
+  if (!blink || !(blink.rate > 0) || !Array.isArray(blink.closure) || blink.closure.length < 2) return null;
+  if (!blink.closure.every((v) => typeof v === "number" && v >= 0 && v <= 1)) return null;
+  return { rate: blink.rate, closure: blink.closure };
 }
 
 /**
@@ -280,6 +322,7 @@ module.exports = {
       state.turnShift = atlas.info.close.turnShift || [];
       state.idleShift = atlas.info.close.idle ? atlas.info.close.idle.shift || [] : [];
       state.idleCount = atlas.info.close.idle ? atlas.info.close.idle.count || 0 : 0;
+      state.blink = blinkOf(atlas.info.close);
       return;
     }
     if (!isClose(widget)) state.only = false;
@@ -331,6 +374,7 @@ module.exports = {
       client.uniform(ref, "u_zoom", zoomNow(hud));
       if (only) {
         client.uniform(ref, "u_pk", pickNow(hud), { type: "vec4" });
+        client.uniform(ref, "u_eh", [0]);
         // the lean's own atlas (miku_only.glsl u_leanAtlas): its size and where its crops start
         if (closeAtlas.leanRef) {
           client.bind(ref, "u_leanAtlas", closeAtlas.leanRef);
@@ -612,9 +656,17 @@ module.exports = {
       (force || now - (state.clockAt || 0) >= MIKU_CLOCK_MS)
     ) {
       state.clockAt = now;
-      close.c.uniform(close.ref, "u_clock", [
-        (((now % MIKU_CLOCK_LOOP_MS) + MIKU_CLOCK_LOOP_MS) % MIKU_CLOCK_LOOP_MS) / 1000,
-      ]);
+      // close-up only: her eyes' closure (the bake's blink curve) instead of the clock, sent when it changes
+      if (only) {
+        const eh = eyeClosure(state, now);
+        if (force || eh !== state.ehSent) {
+          state.ehSent = eh;
+          close.c.uniform(close.ref, "u_eh", [eh]);
+        }
+      } else
+        close.c.uniform(close.ref, "u_clock", [
+          (((now % MIKU_CLOCK_LOOP_MS) + MIKU_CLOCK_LOOP_MS) % MIKU_CLOCK_LOOP_MS) / 1000,
+        ]);
       // close-up only with an idle loop: where she is in it. From its first frame (upright, where the in-steps end) as
       // the expressions finish coming on; held while her head turns away (the turn blends from that frame), and back
       // to its first frame once she's past the turn's first step (no longer seen), so turning back lands on upright,

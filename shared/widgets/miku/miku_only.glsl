@@ -18,7 +18,8 @@ precision highp float;
 precision mediump float;
 #endif
 varying vec2 v_uv;
-uniform float u_clock;   // seconds, from the app: the blink, every 2 s
+uniform float u_eh;      // her eyes' closure from the app, 0 open .. 1 shut: the bake's blink (close.blink, a recording's
+                         // blinks), else a blink every 2 s
 uniform sampler2D u_atlas;
 uniform vec2 u_atlasSize;
 uniform vec4 u_zoom;     // expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there (0: draw nothing)
@@ -126,9 +127,7 @@ float turnPose(float j) { return j < u_frames.w ? 3.0 + j : 2.0 + j; }
 void main() {
     if (u_zoom.w < 0.5) { gl_FragColor = vec4(0.0); return; }
     vec2 q = v_uv * u_frames.xy;   // frame px: the layer is the close-up's size
-    float y = clamp(u_zoom.x, 0.0, 1.0), t = u_clock;
-    float bt = mod(t, 2.0);
-    float eh = smoothstep(0.0, 0.06, bt) * (1.0 - smoothstep(0.1, 0.22, bt));
+    float y = clamp(u_zoom.x, 0.0, 1.0), eh = clamp(u_eh, 0.0, 1.0);
     // the heads meet above the shoulders: the slide fades out below the sway's pivot
     float wy = 1.0 - smoothstep(u_pose.y - 20.0, u_pose.y + 30.0, q.y);
     // every case blends two endpoints: pose p0 at q0 and p1 at q1 by f, or her idle now in place of either (idle0,
