@@ -301,13 +301,33 @@ const CLEAR_BLOCK = (() => {
  * @returns {Buffer} (w / 4) * (h / 4) * 16 bytes
  */
 function encode(rgba, w, h) {
+  check(rgba, w, h);
+  return encodeRows(rgba, w, 0, h / BLOCK);
+}
+
+/**
+ * @param {Uint8Array} rgba
+ * @param {number} w
+ * @param {number} h
+ */
+function check(rgba, w, h) {
   if (w % BLOCK || h % BLOCK) throw new Error("etc2: " + w + "x" + h + " is not whole 4x4 blocks");
   if (rgba.length !== w * h * 4) throw new Error("etc2: " + rgba.length + " bytes is not " + w + "x" + h + " RGBA");
+}
+
+/**
+ * Block rows by0 .. by1 (exclusive) of a w-wide RGBA image, as encode() writes them.
+ * @param {Uint8Array} rgba
+ * @param {number} w
+ * @param {number} by0
+ * @param {number} by1
+ * @returns {Buffer}
+ */
+function encodeRows(rgba, w, by0, by1) {
   const bw = w / BLOCK,
-    bh = h / BLOCK,
-    out = Buffer.alloc(bw * bh * BLOCK_BYTES),
+    out = Buffer.alloc(bw * (by1 - by0) * BLOCK_BYTES),
     block = new Uint8Array(PIXELS * 4);
-  for (let by = 0; by < bh; by++)
+  for (let by = by0; by < by1; by++)
     for (let bx = 0; bx < bw; bx++) {
       let empty = true;
       for (let p = 0; p < PIXELS; p++) {
@@ -317,7 +337,7 @@ function encode(rgba, w, h) {
         for (let c = 0; c < 4; c++) block[p * 4 + c] = rgba[s + c];
         if (rgba[s] || rgba[s + 1] || rgba[s + 2] || rgba[s + 3]) empty = false;
       }
-      const at = (by * bw + bx) * BLOCK_BYTES;
+      const at = ((by - by0) * bw + bx) * BLOCK_BYTES;
       if (empty) CLEAR_BLOCK.copy(out, at);
       else {
         encodeAlpha(block).copy(out, at);
@@ -385,9 +405,81 @@ function decode(data, w, h) {
 /** Bytes of a w x h ETC2 RGBA image. @param {number} w @param {number} h */
 const etc2Bytes = (w, h) => (w / BLOCK) * (h / BLOCK) * BLOCK_BYTES;
 
-module.exports = { encode, decode, etc2Bytes, BLOCK };
+/** Block rows a worker takes at a time: small enough to keep every core busy to the end. */
+const ROWS_PER_JOB = 8;
 
-if (require.main === module) {
+/**
+ * Encodes several images at once on worker threads (one per core by default), each split into runs of block rows:
+ * the same bytes as encode() on each. The images go to the workers once, in shared memory.
+ * @param {Array<{ rgba: Uint8Array, w: number, h: number }>} images
+ * @param {number} [threads] default: the machine's cores
+ * @returns {Promise<Buffer[]>}
+ */
+function encodeMany(images, threads) {
+  const { Worker } = require("worker_threads");
+  const n = Math.max(1, threads || require("os").cpus().length);
+  images.forEach((img) => check(img.rgba, img.w, img.h));
+  const shared = images.map((img) => {
+    const sab = new SharedArrayBuffer(img.rgba.length);
+    new Uint8Array(sab).set(img.rgba);
+    return sab;
+  });
+  const outs = images.map((img) => Buffer.alloc(etc2Bytes(img.w, img.h)));
+  /** @type {Array<{ i: number, by0: number, by1: number }>} */
+  const jobs = [];
+  images.forEach((img, i) => {
+    for (let by = 0; by < img.h / BLOCK; by += ROWS_PER_JOB)
+      jobs.push({ i, by0: by, by1: Math.min(img.h / BLOCK, by + ROWS_PER_JOB) });
+  });
+  if (!jobs.length) return Promise.resolve(outs);
+  return new Promise((resolve, reject) => {
+    let next = 0,
+      done = 0,
+      failed = false;
+    const workers = [];
+    for (let k = 0; k < Math.min(n, jobs.length); k++) {
+      const worker = new Worker(__filename, { workerData: { images: shared, widths: images.map((img) => img.w) } });
+      workers.push(worker);
+      const give = () => {
+        if (next < jobs.length) worker.postMessage(jobs[next++]);
+        else worker.postMessage(null);
+      };
+      worker.on("message", (msg) => {
+        const job = msg.job,
+          bytes = images[job.i].w / BLOCK * BLOCK_BYTES;
+        Buffer.from(msg.out).copy(outs[job.i], job.by0 * bytes);
+        if (++done === jobs.length) {
+          workers.forEach((other) => other.terminate());
+          resolve(outs);
+        } else give();
+      });
+      worker.on("error", (err) => {
+        if (failed) return;
+        failed = true;
+        workers.forEach((other) => other.terminate());
+        reject(err);
+      });
+      give();
+    }
+  });
+}
+
+module.exports = { encode, encodeMany, decode, etc2Bytes, BLOCK };
+
+// an encodeMany worker: block rows of the shared images, as asked
+const threads = require("worker_threads");
+if (!threads.isMainThread && threads.workerData && threads.workerData.images) {
+  const images = threads.workerData.images.map((/** @type {SharedArrayBuffer} */ sab) => new Uint8Array(sab)),
+    widths = threads.workerData.widths;
+  const port = /** @type {import("worker_threads").MessagePort} */ (threads.parentPort);
+  port.on("message", (job) => {
+    if (!job) return; // nothing left: it's terminated once every job is in
+    const out = encodeRows(images[job.i], widths[job.i], job.by0, job.by1);
+    port.postMessage({ job, out }, [out.buffer]);
+  });
+}
+
+if (require.main === module && threads.isMainThread) {
   const fs = require("fs");
   const [cmd, input, ws, hs, output] = process.argv.slice(2);
   const w = Number(ws),

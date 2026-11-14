@@ -86,10 +86,12 @@ function send(res, file) {
 }
 
 /**
- * atlas.rgba and close.rgba (when the bake has a close-up) to atlas.etc2 and close.etc2, sized as atlas.json says.
+ * atlas.rgba and close.rgba (when the bake has a close-up; its idle and lean too) to .etc2, sized as atlas.json says,
+ * all at once on every core (etc2.encodeMany: the same bytes as one at a time).
  * @param {string} dir
+ * @returns {Promise<void>}
  */
-function compressAtlases(dir) {
+async function compressAtlases(dir) {
   const info = JSON.parse(fs.readFileSync(path.join(dir, "atlas.json"), "utf8"));
   /** @type {Array<[string, number[]]>} */
   const atlases = [["atlas", info.atlas]];
@@ -98,15 +100,16 @@ function compressAtlases(dir) {
     atlases.push(["idle", info.close.idle.atlas]);
   if (info.close && info.close.leanAtlas && fs.existsSync(path.join(dir, "lean.rgba")))
     atlases.push(["lean", info.close.leanAtlas.atlas]);
-  atlases.forEach(([name, size]) => {
-    const start = Date.now();
-    const out = etc2.encode(fs.readFileSync(path.join(dir, name + ".rgba")), size[0], size[1]);
-    fs.writeFileSync(path.join(dir, name + ".etc2"), out);
-    console.log(
-      "wrote " + path.join(dir, name + ".etc2") + " (" + out.length + " bytes, ETC2 " + size[0] + "x" + size[1] +
-        ", " + ((Date.now() - start) / 1000).toFixed(1) + " s)",
-    );
+  const start = Date.now();
+  const outs = await etc2.encodeMany(
+    atlases.map(([name, size]) => ({ rgba: fs.readFileSync(path.join(dir, name + ".rgba")), w: size[0], h: size[1] })),
+  );
+  atlases.forEach(([name, size], i) => {
+    fs.writeFileSync(path.join(dir, name + ".etc2"), outs[i]);
+    console.log("wrote " + path.join(dir, name + ".etc2") + " (" + outs[i].length + " bytes, ETC2 " + size[0] + "x" + size[1] + ")");
   });
+  console.log("etc2: " + atlases.length + " atlases in " + ((Date.now() - start) / 1000).toFixed(1) + " s on " +
+    require("os").cpus().length + " cores");
 }
 
 http
@@ -137,13 +140,15 @@ http
         // the page writes atlas.json last of the atlases: compress them both to ETC2 before answering, so the page's
         // "done" means the .etc2 files are there too
         if (rel === "atlas.json") {
-          try {
-            compressAtlases(path.dirname(dest));
-          } catch (err) {
-            console.error("etc2: " + (err instanceof Error ? err.message : err));
-            res.writeHead(500);
-            return res.end("etc2: " + (err instanceof Error ? err.message : err));
-          }
+          compressAtlases(path.dirname(dest)).then(
+            () => res.end("ok"),
+            (err) => {
+              console.error("etc2: " + (err instanceof Error ? err.message : err));
+              res.writeHead(500);
+              res.end("etc2: " + (err instanceof Error ? err.message : err));
+            },
+          );
+          return;
         }
         res.end("ok");
       });
