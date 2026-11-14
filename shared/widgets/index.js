@@ -48,6 +48,7 @@ const TYPES = {
   boxes: require("./boxes"),
   atext: require("./atext"),
   odo: require("./odo"),
+  f16: require("./f16"),
   text: require("./text"),
   scale: require("./scale"),
   stripe: require("./stripe"),
