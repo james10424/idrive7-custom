@@ -198,7 +198,10 @@
     gl.bindTexture(gl.TEXTURE_2D, texture.tex);
     if (texture.stamp !== (source.stamp || 0)) {
       texture.stamp = source.stamp || 0;
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      // from the fetched bytes when they are the whole image as it is now (no canvas readback), else the canvas
+      if (source.rgba && source.rgbaStamp === source.stamp)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, source.width, source.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(source.rgba.buffer, source.rgba.byteOffset, source.rgba.length));
+      else gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -773,8 +776,14 @@
         .then((response) => (response.ok ? response.arrayBuffer() : null))
         .then((buf) => {
           if (!buf || images.get(msg.key) !== image) return;
-          image.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf), msg.w, msg.h), msg.x, msg.y);
+          const bytes = new Uint8ClampedArray(buf);
+          image.getContext('2d').putImageData(new ImageData(bytes, msg.w, msg.h), msg.x, msg.y);
           image.stamp = (image.stamp || 0) + 1;
+          // a whole image's bytes are kept for WebGL (textureOf): uploading a big canvas copied it before WebKit had
+          // finished writing it once (Miku's even idle frames lost their top rows and she flickered on the bench)
+          const whole = msg.x === 0 && msg.y === 0 && msg.w === msg.iw && msg.h === msg.ih;
+          image.rgba = whole ? bytes : null;
+          image.rgbaStamp = whole ? image.stamp : -1;
           dbgPx++; const owner = scene.find((layer) => layer.key === msg.key); markDirty(owner && owner.target);
         }).catch(() => {});
     } else if (msg.t === 'nav' || msg.t === 'assist') {
