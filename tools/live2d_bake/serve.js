@@ -98,6 +98,8 @@ async function compressAtlases(dir) {
   if (info.close && fs.existsSync(path.join(dir, "close.rgba"))) atlases.push(["close", info.close.atlas]);
   if (info.close && info.close.idle && fs.existsSync(path.join(dir, "idle.rgba")))
     atlases.push(["idle", info.close.idle.atlas]);
+  if (info.close && info.close.idle && info.close.idle.split && fs.existsSync(path.join(dir, "idle2.rgba")))
+    atlases.push(["idle2", info.close.idle.atlas]);
   if (info.close && info.close.leanAtlas && fs.existsSync(path.join(dir, "lean.rgba")))
     atlases.push(["lean", info.close.leanAtlas.atlas]);
   const start = Date.now();

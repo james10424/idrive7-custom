@@ -30,6 +30,7 @@ const { sprite, closeSprite } = require("./sprite");
  * @property {number[]} [turnShift] (the standing layer, close-up only) the bake's turn, then lean, head shifts (px)
  * @property {number[]} [idleShift] (the standing layer, close-up only) the idle loop's head shifts (px)
  * @property {number} [idleCount] (the standing layer, close-up only) the idle loop's frames (0: none)
+ * @property {boolean} [idleSplit] (the standing layer, close-up only) its even frames in one atlas, the odd in another
  * @property {?{ rate: number, closure: number[] }} [blink] (the standing layer, close-up only) one blink, from the bake
  * @property {number} [ehSent] (the standing layer, close-up only) the close-up layer's u_eh, last sent
  * @property {number} [blinkAt] (the standing layer, close-up only) when her last blink started (ms)
@@ -200,13 +201,15 @@ function blinkOf(close) {
  */
 function pickNow(hud) {
   const standing = layerState(hud, false);
-  return (standing && standing.pkSent) || [0, 0, 0, 0, 0, 0, 0, 0];
+  return (standing && standing.pkSent) || [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
 }
 
 /**
  * Close-up only: the two frames miku_only.glsl blends and how far, and their head slides, as u_pk[2]: [the lean's or
  * the turn's chain position of the first frame, the blend to the next, the idle loop's frame, the blend to its next;
- * the slides (px) of those four frames, each frame's head shift less the blended one, so the heads meet]. The branch
+ * the slides (px) of those four frames, each frame's head shift less the blended one, so the heads meet; the idle's
+ * two frames as the shader reads them, one from each idle atlas (u_idle, u_idle2): their slots there and the second's
+ * weight (split, the even frame first: the even frames are in u_idle, the odd in u_idle2)]. The branch
  * follows the shader's: driving (no expressions) the lean, all expressions on and turned the turn. Worked out here,
  * not in the shader: its lookups over the shift tables restarted the KOMBI.
  * @param {MikuState} state the standing layer's
@@ -262,9 +265,20 @@ function pickOf(state, zoom, turn, lean) {
     g0 = a - c;
     g1 = b - c;
   }
+  // the idle's two frames, one from each atlas: split, the even one from u_idle (slot n >> 1), the odd from u_idle2
+  const i1 = n ? (i0 + 1 > n - 0.5 ? 0 : i0 + 1) : 0;
+  let a = [i0, g0],
+    b = [i1, g1],
+    wb = fi;
+  if (state.idleSplit && i0 % 2) {
+    a = [i1, g1];
+    b = [i0, g0];
+    wb = 1 - fi;
+  }
+  const slot = (/** @type {number} */ k) => (state.idleSplit ? k >> 1 : k);
   /** @type {(v: number) => number} */
   const r = (v) => Math.round(v * 1000) / 1000;
-  return [p, r(f), i0, r(fi), r(h0 - hc), r(h1 - hc), r(g0), r(g1)];
+  return [p, r(f), i0, r(fi), r(h0 - hc), r(h1 - hc), r(a[1]), r(b[1]), slot(a[0]), slot(b[0]), r(wb), 0];
 }
 /**
  * Where the standing frame's top-left sits in a widget's layer (px): the bake's "anchor" (between her feet) on the
@@ -340,6 +354,7 @@ module.exports = {
       state.turnShift = atlas.info.close.turnShift || [];
       state.idleShift = atlas.info.close.idle ? atlas.info.close.idle.shift || [] : [];
       state.idleCount = atlas.info.close.idle ? atlas.info.close.idle.count || 0 : 0;
+      state.idleSplit = !!(atlas.info.close.idle && atlas.info.close.idle.split);
       state.blink = blinkOf(atlas.info.close);
       return;
     }
@@ -402,6 +417,8 @@ module.exports = {
         const idle = close.idle;
         if (idle && closeAtlas.idleRef) {
           client.bind(ref, "u_idle", closeAtlas.idleRef);
+          // its odd frames (close.idle.split); else the same asset, so the shader's second idle read has a texture
+          client.bind(ref, "u_idle2", closeAtlas.idle2Ref || closeAtlas.idleRef);
           client.uniform(ref, "u_idleSize", closeAtlas.idleSize || [1, 1]);
           client.uniform(ref, "u_ic", [].concat(idle.grid, idle.cropGrid, idle.crop, [idle.count, idle.period, 0, 0]), {
             type: "vec4",

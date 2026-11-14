@@ -25,10 +25,12 @@ uniform vec2 u_atlasSize;
 uniform vec4 u_zoom;     // expressions 0 .. 1, turn -1 .. 1, brightness, 1 once the atlas is there (0: draw nothing)
 // the app's pick: [0] the pose pair (the lean's or the turn's chain position of its first frame, the blend to the
 // next), the idle loop's (its frame now, the blend to the next); [1] their head slides, px: the pose pair's two
-// frames, the idle's two (each frame's shift less the blended one, so the heads meet)
-uniform vec4 u_pk[2];
+// frames, the idle's two (each frame's shift less the blended one, so the heads meet); [2] the idle's two frames,
+// one in each atlas (their slots in u_idle and u_idle2), the second's weight
+uniform vec4 u_pk[3];
 
 uniform sampler2D u_idle; // the stopped idle loop's own atlas (a close.idle bake), laid out as u_atlas
+uniform sampler2D u_idle2; // its odd frames (close.idle.split), the same size; unsplit, the same asset as u_idle
 uniform vec2 u_idleSize;
 uniform vec4 u_ic[4];    // its grid, crop grid, eyes' rect (as u_cl[4 .. 6]); frames, period (s) (0 frames: no loop)
 uniform sampler2D u_leanAtlas; // the lean's own atlas (the driving set), on the close-up's grid
@@ -110,16 +112,35 @@ vec4 idleFrame(float n, vec2 q, float eh) {
     }
     return c;
 }
+// the same from u_idle2 (the odd frames)
+vec4 itap2(vec2 at, vec2 size, vec2 p) {
+    if (p.x < 0.0 || p.y < 0.0 || p.x > size.x || p.y > size.y) return vec4(0.0);
+    vec4 t = texture2D(u_idle2, (at + p) / u_idleSize);
+    return vec4(t.rgb * t.a, t.a);
+}
+vec4 idleFrame2(float n, vec2 q, float eh) {
+    float row = floor((n + 0.5) / u_ic[0].z);
+    vec4 c = itap2(vec2(n - row * u_ic[0].z, row) * u_ic[0].xy + u_ic[0].w, u_frames.xy, q);
+    vec2 e = q - u_ic[2].xy;
+    if (eh > 0.001 && e.x >= 0.0 && e.y >= 0.0 && e.x <= u_ic[2].z && e.y <= u_ic[2].w) {
+        e = clamp(e, vec2(0.5), u_ic[2].zw - 0.5);
+        float m = 2.0 * n, mr = floor((m + 0.5) / u_ic[1].z);
+        vec2 a0 = vec2(m - mr * u_ic[1].z, mr) * u_ic[1].xy + vec2(0.0, u_ic[1].w) + u_ic[0].w;
+        float m1 = m + 1.0, mr1 = floor((m1 + 0.5) / u_ic[1].z);
+        vec2 a1 = vec2(m1 - mr1 * u_ic[1].z, mr1) * u_ic[1].xy + vec2(0.0, u_ic[1].w) + u_ic[0].w;
+        c = mix(c, itap2(a0, u_ic[2].zw, e), min(1.0, eh * 2.0));              // half shut
+        c = mix(c, itap2(a1, u_ic[2].zw, e), max(0.0, eh * 2.0 - 1.0));        // shut
+    }
+    return c;
+}
 // her stopped idle now (the clock's place in the loop), its two nearest frames slid so the heads meet; without a loop
 // in the bake, the upright pose
 vec4 idleNow(vec2 q, float eh, float wy) {
-    float n = u_ic[3].x;
-    if (n < 0.5) return frameAt(u_frames.z + 1.0, 1.0, q, eh);
-    // the app's frame and blend (index.js idlePick: each frame holds, then crossfades into the next)
-    float i0 = u_pk[0].z, f = u_pk[0].w;
-    float i1 = i0 + 1.0 > n - 0.5 ? 0.0 : i0 + 1.0;
-    vec4 c = idleFrame(i0, q + vec2(u_pk[1].z * wy, 0.0), eh);
-    return mix(c, idleFrame(i1, q + vec2(u_pk[1].w * wy, 0.0), eh), f);
+    if (u_ic[3].x < 0.5) return frameAt(u_frames.z + 1.0, 1.0, q, eh);
+    // the app's two frames (index.js pickOf: each holds, then crossfades into the next), one from each atlas: split,
+    // the even frames are in u_idle and the odd in u_idle2, so a blend always takes one from each
+    vec4 c = idleFrame(u_pk[2].x, q + vec2(u_pk[1].z * wy, 0.0), eh);
+    return mix(c, idleFrame2(u_pk[2].y, q + vec2(u_pk[1].w * wy, 0.0), eh), u_pk[2].z);
 }
 // the turn's chain position j (0 .. 2 * steps; the middle is her idle): its pose
 float turnPose(float j) { return j < u_frames.w ? 3.0 + j : 2.0 + j; }

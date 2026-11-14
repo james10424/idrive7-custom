@@ -87,6 +87,7 @@ function etc2Problem(name, n, w, h) {
  * @property {number} [tableRef] the standing atlas's tables (RGBA8; u_table)
  * @property {number} [idleRef] the close-up's idle loop (a close.idle bake; u_idle)
  * @property {number[]} [idleSize] its [w, h]
+ * @property {number} [idle2Ref] the idle loop's odd frames (close.idle.split: idle2.etc2, u_idle2; the even in idleRef)
  * @property {number} [leanRef] the close-up's lean (a close.only bake's driving set, lean.etc2; u_leanAtlas)
  * @property {number[]} [leanSize] its [w, h]
  * @property {Client} c
@@ -332,6 +333,7 @@ function closeSprite(hud, standing, connIndex) {
     if (k.indexOf(pre) === 0) {
       atlas.c.drop(atlas.ref);
       if (atlas.idleRef) atlas.c.drop(atlas.idleRef);
+      if (atlas.idle2Ref) atlas.c.drop(atlas.idle2Ref);
       if (atlas.leanRef) atlas.c.drop(atlas.leanRef);
       hud.atlases.delete(k);
     }
@@ -399,27 +401,41 @@ function closeSprite(hud, standing, connIndex) {
     if (idle) {
       const iw = (idle.atlas || [])[0],
         ih = (idle.atlas || [])[1];
-      let idleBytes = null;
-      try {
-        idleBytes = fs.readFileSync(path.join(dir, "idle.etc2"));
-      } catch (err) {
-        /* named below */
-      }
-      const badIdle = !idleBytes
-        ? "no idle.etc2 (deploy the bake again)"
-        : !(iw > 0 && ih > 0) || iw > CLOSE_MAX_SIDE_PX || ih > CLOSE_MAX_SIDE_PX
-          ? "bad close.idle.atlas size " + iw + "x" + ih
-          : etc2Problem("idle.etc2", idleBytes.length, iw, ih);
+      // the even frames in idle.etc2 and, split, the odd in idle2.etc2 (the same size)
+      const files = idle.split ? ["idle.etc2", "idle2.etc2"] : ["idle.etc2"];
+      /** @type {Buffer[]} */
+      const bytes = [];
+      let badIdle = "";
+      files.forEach((file) => {
+        let data = null;
+        try {
+          data = fs.readFileSync(path.join(dir, file));
+        } catch (err) {
+          /* named below */
+        }
+        if (badIdle) return;
+        badIdle = !data
+          ? "no " + file + " (deploy the bake again)"
+          : !(iw > 0 && ih > 0) || iw > CLOSE_MAX_SIDE_PX || ih > CLOSE_MAX_SIDE_PX
+            ? "bad close.idle.atlas size " + iw + "x" + ih
+            : etc2Problem(file, data.length, iw, ih) || "";
+        if (data) bytes.push(data);
+      });
       if (badIdle) hud.log.warn("miku idle: " + badIdle + "; she stands upright when stopped");
       else {
-        const idleRef = client.asset({ target: hud.target, format: "etc2rgba", w: iw, h: ih, sampling: "bilinear" });
-        if (idleRef) {
-          client.pixels(idleRef, null, /** @type {Buffer} */ (idleBytes));
-          atlas.idleRef = idleRef;
+        const refs = files.map(() => client.asset({ target: hud.target, format: "etc2rgba", w: iw, h: ih, sampling: "bilinear" }));
+        if (refs.every(Boolean)) {
+          refs.forEach((ref, i) => client.pixels(ref, null, bytes[i]));
+          atlas.idleRef = refs[0];
+          if (refs[1]) atlas.idle2Ref = refs[1];
           atlas.idleSize = [iw, ih];
-          atlas.bytes += iw * ih * ETC2_MEM_BYTES;
-          hud.log.info("miku idle: " + idle.count + " frames over " + idle.period + " s, " + iw + "x" + ih + " ETC2 asset");
-        } else hud.log.warn("miku idle: asset refused (" + iw + "x" + ih + ")");
+          atlas.bytes += refs.length * iw * ih * ETC2_MEM_BYTES;
+          hud.log.info("miku idle: " + idle.count + " frames over " + idle.period + " s, " + (idle.split ? "even/odd in two " : "") +
+            iw + "x" + ih + " ETC2 asset" + (idle.split ? "s" : ""));
+        } else {
+          refs.forEach((ref) => ref && client.drop(ref));
+          hud.log.warn("miku idle: asset refused (" + iw + "x" + ih + ")");
+        }
       }
     }
     hud.atlases.set(key, atlas);
