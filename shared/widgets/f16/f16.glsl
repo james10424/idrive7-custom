@@ -24,7 +24,8 @@ uniform vec4 u_rpm;       // rpm / 10, tape px a unit, label step, the scale's t
 uniform vec4 u_att;       // pitch deg (nose up +), roll rad (right wing down +), flight path vector x, y px
 uniform vec4 u_hdg;       // heading deg, 1 when known, px a degree, 0
 uniform vec4 u_geo;       // ladder centre x, y; px a degree of pitch; the tapes' half height
-uniform vec4 u_box;       // speed tape's line x, rpm tape's line x, tapes' middle y, bank scale radius
+uniform vec4 u_box;       // speed tape's line x, rpm tape's line x, tapes' middle y, 0
+uniform vec4 u_bank;      // the bank scale: its centre x, y, radius, the ladder's lowest y
 
 #define LINE 0.75
 #define PI 3.14159265
@@ -113,7 +114,7 @@ void main() {
     c = max(c, tape(p, u_box.y, 1.0, u_rpm.x, u_rpm.y, u_rpm.z, u_rpm.w, my, hh, cell));
 
     // the pitch ladder and the horizon, between the tapes: in the horizon's frame (rolled), rung n is n * 5 deg
-    if (p.x > u_box.x + 30.0 && p.x < u_box.y - 30.0 && abs(p.y - my) < hh) {
+    if (p.x > u_box.x + 30.0 && p.x < u_box.y - 30.0 && abs(p.y - my) < hh && p.y < u_bank.w) {
         vec2 q = rot(p - ctr, -u_att.y);
         float t = u_att.x - q.y / u_geo.z, n = floor(t / 5.0 + 0.5);
         float y = (u_att.x - n * 5.0) * u_geo.z, d = q.y - y, ax = abs(q.x);
@@ -140,16 +141,16 @@ void main() {
     if (abs(f.x) > 6.0 && abs(f.x) < 17.0) c = max(c, ink(f.y));
     if (abs(f.x) < 1.0 + LINE && f.y < -6.0 && f.y > -12.0) c = max(c, ink(f.x));
 
-    // the bank angle scale under the ladder: ticks at 0, 10, 20, 30 and 45 deg from straight down, the pointer at the roll
-    vec2 b = p - ctr;
+    // the bank angle scale at the bottom: ticks at 0, 10, 20, 30 and 45 deg from straight down, the pointer at the roll
+    vec2 b = p - u_bank.xy;
     float br = length(b), ba = atan(b.x, b.y) * 180.0 / PI, aa = abs(ba);
     if (b.y > 0.0 && aa < 50.0) {
         float tk = aa < 37.5 ? floor(aa / 10.0 + 0.5) * 10.0 : 45.0;
         float len = tk < 0.5 ? 12.0 : tk > 44.0 || abs(tk - 30.0) < 0.5 ? 9.0 : 6.0;
         float off = (aa - tk) * PI / 180.0 * br;            // px from the tick's ray
-        if (br > u_box.w && br < u_box.w + len) c = max(c, ink(off));
+        if (br > u_bank.z && br < u_bank.z + len) c = max(c, ink(off));
         vec2 pp = rot(b, u_att.y);                          // the pointer, turned with the roll
-        float py = u_box.w - 2.0 - pp.y;                    // 0 at its tip, growing inward
+        float py = u_bank.z - 2.0 - pp.y;                    // 0 at its tip, growing inward
         if (py >= 0.0 && py <= 9.0 && abs(pp.x) <= py * 0.55) c = max(c, 1.0);
     }
 

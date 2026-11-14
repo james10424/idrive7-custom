@@ -17,15 +17,16 @@ const F16_SPEED_STEP = { kmh: 20, mph: 10 }; // labels every this many
 const F16_RPM_TOP = 700; // the altitude tape: rpm / 10, 0 .. 7000 rpm
 const F16_RPM_PX = 0.6; // tape px a unit (rpm / 10)
 const F16_RPM_STEP = 100; // labels every 1000 rpm
-const F16_TAPE_HALF = 92; // the tapes' and the ladder's half height, px
+const F16_TAPE_EDGE = 15; // the tapes end this far from the layer's top and bottom, px
 const F16_PITCH_PX = 8; // ladder px a degree of pitch
 const F16_HDG_PX = 4; // heading tape px a degree
-const F16_BANK_R = 96; // the bank scale's radius from the ladder's centre, px
+const F16_BANK_R = 110; // the bank scale's radius, px: an arc at the bottom, its centre above it
+const F16_BANK_BOTTOM = 266; // its lowest tick's end, layer px from the top (the pointer under it)
+const F16_LADDER_CLEAR = 60; // the ladder stops this far above the bank scale's bottom
 // the g fallback, until the car's own pitch, roll and heading are found (car/attitude_probe.js)
 const F16_PITCH_DEG_G = 12; // pitch (nose up) a g of longitudinal acceleration
 const F16_ROLL_DEG_G = 30; // bank a g of lateral acceleration (into the turn, as a jet banks)
-const F16_FPV_X_G = 110; // the flight path vector's px a g sideways (toward the turn)
-const F16_FPV_Y_G = 80; // and up a g of acceleration (down braking)
+const F16_FPV_X_G = 110; // the flight path vector's px a g sideways (toward the turn), along the horizon
 const F16_FPV_MAX = 70; // it stays this near the middle, px
 const F16_G_TAU_MS = 200; // the g eased this smoothly
 const F16_MAX_DT_MS = 500;
@@ -45,7 +46,7 @@ const F16_SEND_MS = 33; // the attitude goes up at most this often
  * @property {string} [lastVals] the tapes' values last sent
  */
 
-const DOCS = `effect layer (f16/f16.glsl): an F-16 style HUD in HUD green, one layer the visible window's size. The airspeed tape on the left is the speed (0..260 km/h, 0..160 mph with US units), its box the speed in digits; the altitude tape on the right is the rpm / 10 (0..700), its box likewise; the pitch ladder (rungs every 5 deg, dashed below the horizon) and the horizon line between them show pitch and roll, the flight path vector moves with the g, the bank angle scale under it points at the roll, and the heading tape shows at the top once the car gives a heading. Until the car's own pitch, roll and heading are read, the pitch is the longitudinal g (12 deg a g), the roll the lateral g (30 deg a g, into the turn) and there is no heading. Its numbers come from the "font" glyph atlas (mid). Fields: "tapeX" [airspeed line x, altitude line x] (layer px, default 112 and 448), "mid" [ladder centre x, tapes' middle y] (default the layer's middle, 116).`;
+const DOCS = `effect layer (f16/f16.glsl): an F-16 style HUD in HUD green, one layer the visible window's size. The airspeed tape on the left is the speed (0..260 km/h, 0..160 mph with US units), its box the speed in digits; the altitude tape on the right is the rpm / 10 (0..700), its box likewise; the pitch ladder (rungs every 5 deg, dashed below the horizon) and the horizon line between them show pitch and roll, the flight path vector shows where the car travels (on the horizon as the nose pitches, sliding toward the turn), the bank angle scale under it points at the roll, and the heading tape shows at the top once the car gives a heading. Until the car's own pitch, roll and heading are read, the pitch is the longitudinal g (12 deg a g), the roll the lateral g (30 deg a g, into the turn) and there is no heading. Its numbers come from the "font" glyph atlas (mid). The tapes run the window's full height (BMW's speed sign draws over the airspeed tape's lower part), the bank scale sits at the bottom. Fields: "tapeX" [airspeed line x, altitude line x] (layer px, default 112 and 448), "mid" [ladder centre x, tapes' middle y] (default the layer's middle).`;
 
 /**
  * The layer's geometry: the tapes' lines, the ladder's centre, the tapes' middle.
@@ -54,7 +55,7 @@ const DOCS = `effect layer (f16/f16.glsl): an F-16 style HUD in HUD green, one l
  */
 function geometry(widget) {
   const tape = Array.isArray(widget.tapeX) ? widget.tapeX : [112, widget.w - 112];
-  const mid = Array.isArray(widget.mid) ? widget.mid : [widget.w / 2, 116];
+  const mid = Array.isArray(widget.mid) ? widget.mid : [widget.w / 2, widget.h / 2];
   return { sx: tape[0], rx: tape[1], cx: mid[0], my: mid[1] };
 }
 
@@ -91,8 +92,12 @@ module.exports = {
     client.uniform(ref, "u_dig", dig, { type: "vec4" });
     client.uniform(ref, "u_size", [widget.w, widget.h]);
     client.uniform(ref, "u_color", rgba([F16_GREEN[0] * night, F16_GREEN[1] * night, F16_GREEN[2] * night, 255]));
-    client.uniform(ref, "u_geo", [g.cx, g.my, F16_PITCH_PX, F16_TAPE_HALF]);
-    client.uniform(ref, "u_box", [g.sx, g.rx, g.my, F16_BANK_R]);
+    const half = Math.min(g.my, widget.h - g.my) - F16_TAPE_EDGE,
+      bankBottom = Math.min(widget.h - 4, F16_BANK_BOTTOM);
+    client.uniform(ref, "u_geo", [g.cx, g.my, F16_PITCH_PX, half]);
+    client.uniform(ref, "u_box", [g.sx, g.rx, g.my, 0]);
+    // the bank scale's centre above its arc, so the 0 deg tick ends at bankBottom (its pointer just inside)
+    client.uniform(ref, "u_bank", [g.cx, bankBottom - 12 - F16_BANK_R, F16_BANK_R, bankBottom - F16_LADDER_CLEAR]);
     client.uniform(ref, "u_hdg", [0, 0, F16_HDG_PX, 0]);
     state.lastAtt = "";
     state.lastVals = "";
@@ -136,8 +141,14 @@ module.exports = {
     const clampFpv = (/** @type {number} */ v) => Math.max(-F16_FPV_MAX, Math.min(F16_FPV_MAX, v));
     const pitch = state.gLong * F16_PITCH_DEG_G,
       roll = (state.gLat * F16_ROLL_DEG_G * Math.PI) / 180,
-      fx = clampFpv(-state.gLat * F16_FPV_X_G),
-      fy = clampFpv(-state.gLong * F16_FPV_Y_G);
+      // the flight path vector shows where the car travels, not where its nose points: as the nose pitches up
+      // pulling away (down braking) it stays back on the horizon, the road ahead, so it moves against the pitch; it
+      // slides along the horizon toward the turn. In the horizon's frame (x along it, y the pitch's offset), then
+      // rolled to the screen as the shader rolls the ladder
+      hx = -state.gLat * F16_FPV_X_G,
+      hy = pitch * F16_PITCH_PX,
+      fx = clampFpv(Math.cos(roll) * hx - Math.sin(roll) * hy),
+      fy = clampFpv(Math.sin(roll) * hx + Math.cos(roll) * hy);
     const att = [Math.round(pitch * 20) / 20, Math.round(roll * 500) / 500, Math.round(fx), Math.round(fy)];
     const key = att.join(",");
     if (!force && key === state.lastAtt) return;
