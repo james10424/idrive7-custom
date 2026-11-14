@@ -273,6 +273,34 @@ const FLASH_HALF_MS = 62.5; // the shift light's blink: on and off this long eac
  * @property {() => void} flush
  */
 
+/**
+ * The kept assets (glyph atlases, Miku's frames, a backdrop): a Map that notes every key a rebuild reads or sets
+ * (used, while a rebuild runs), so the rebuild can drop the ones the new layout no longer reads (_dropUnusedAtlases).
+ * @extends {Map<string, *>}
+ */
+class AtlasMap extends Map {
+  constructor() {
+    super();
+    /** @type {?Set<string>} the keys this rebuild read or set; null between rebuilds' starts */
+    this.used = null;
+  }
+  /** @param {string} key */
+  get(key) {
+    if (this.used) this.used.add(key);
+    return super.get(key);
+  }
+  /** @param {string} key */
+  has(key) {
+    if (this.used && super.has(key)) this.used.add(key);
+    return super.has(key);
+  }
+  /** @param {string} key @param {*} value */
+  set(key, value) {
+    if (this.used) this.used.add(key);
+    return super.set(key, value);
+  }
+}
+
 class HudApp {
   /**
    * @param {HudCtx} ctx
@@ -310,7 +338,7 @@ class HudApp {
     this.activeName = null; // the layout shown now ('off' = nothing)
     this.pixelBytes = 0; // what the layout's image layers and glyph atlases cost of cluster-render's pixel memory
     /** @type {Map<string, GlyphAtlas | Record<string, *>>} */
-    this.atlases = new Map(); // "<conn>:<font>" -> glyph atlas { ref, c, ci, cols, rows, cellW, cellH, chars, bytes } (R8), other keys: a widget module's own assets; assets kept across rebuilds
+    this.atlases = new AtlasMap(); // "<conn>:<font>" -> glyph atlas { ref, c, ci, cols, rows, cellW, cellH, chars, bytes } (R8), other keys: a widget module's own assets; assets kept across rebuilds
     /** @type {?TargetState} */
     this.targetState = null; // { state, holder, reason } of our target
     /** @type {?number} */
@@ -588,6 +616,31 @@ class HudApp {
   /* ---------------- layers ---------------- */
 
   /**
+   * Drops the kept assets the layout just built didn't read (another layout's: Miku's frames under the F-16 layout
+   * took 14 MiB of pixel memory, all of it sent again whenever the HUD came back after guidance). Every asset an
+   * entry holds goes (its ref and any other *Ref: Miku's tables, idle and lean atlases). Switching back uploads them
+   * again. Only after a layout was built: off, or a mode with nothing drawn, keeps them.
+   * @returns {void}
+   * @this {App}
+   */
+  _dropUnusedAtlases() {
+    const used = this.atlases.used;
+    if (!used) return;
+    /** @type {string[]} */
+    const gone = [];
+    this.atlases.forEach((atlas, key) => {
+      if (used.has(key)) return;
+      if (atlas && atlas.c)
+        Object.keys(atlas).forEach((k) => {
+          if (/^(ref|\w+Ref)$/.test(k) && typeof atlas[k] === "number") atlas.c.drop(atlas[k]);
+        });
+      gone.push(key);
+    });
+    gone.forEach((key) => Map.prototype.delete.call(this.atlases, key));
+    if (gone.length) this.log.info("dropped " + gone.length + " asset set(s) this layout doesn't use: " + gone.join(", "));
+  }
+
+  /**
    * Drops the layers and builds the layout for now again (never throws).
    * @returns {void}
    * @this {App}
@@ -605,6 +658,7 @@ class HudApp {
   _rebuildInner() {
     if (!this.client.ready) return; // the 'ready' handler calls us again
     this._layerRefs().forEach((layerRef) => layerRef.c.drop(layerRef.ref));
+    this.atlases.used = new Set(); // what this layout reads of the kept assets (_dropUnusedAtlases)
     this.widgets.forEach((state) => {
       if (state.timer) clearInterval(state.timer);
     });
@@ -733,6 +787,7 @@ class HudApp {
         this._guard("widget " + entry.w.id, () => this._create(entry.w, null));
       }
     });
+    this._dropUnusedAtlases();
     const atlasBytes = this._atlasBytes();
     pixelBytes += atlasBytes;
     this.pixelBytes = pixelBytes;
