@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.35",
+  "version": "0.1.36",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -71,6 +71,45 @@
     "de.bmw.dass.GapVehicleAhead": {
       "DataFrontVehicle": "s",
       "GapVehicleDrivingAhead": "s"
+    },
+    "de.bmw.infotainment.vehicle.VehiclePitchAngle": {
+      "vehicleAngle": "rs",
+      "_optional": "the attitude probe's pitch angle (car/attitude_probe.js)"
+    },
+    "de.bmw.chassis.VehicleModel": {
+      "LaneSlope": "s",
+      "OdometryVehicle1": "s",
+      "_optional": "the attitude probe's road gradients and yaw angle"
+    },
+    "de.bmw.chassis.RollPitchRateAccelerationVerticalProvision": {
+      "_broadcasts": ["pitchRateCog", "rollRateCog"],
+      "_optional": "the attitude probe's pitch and roll rates"
+    },
+    "de.bmw.chassis.SurfaceInformationProvision": {
+      "_broadcasts": ["longitudinalGradientSurface", "lateralGradientSurface"],
+      "_optional": "the attitude probe's surface gradients"
+    },
+    "de.bmw.chassis.YawRateProvision": {
+      "_broadcasts": ["yawRate"],
+      "_optional": "the attitude probe's yaw rate"
+    },
+    "de.bmw.infotainment.navigation.positioning.Positioning": {
+      "_instances": "Main_Instance",
+      "currentLocation": "rs",
+      "_optional": "the attitude probe's navigation heading"
+    },
+    "de.bmw.infotainment.navigation.mapcontrol.MapControl": {
+      "_instances": "Main_Instance_01",
+      "compassAngle": "rs",
+      "_optional": "the attitude probe's map compass"
+    },
+    "de.bmw.infotainment.GPSData": {
+      "GPSPositionExtendedCAN": "rs",
+      "_optional": "the attitude probe's GPS heading"
+    },
+    "de.bmw.infotainment.navigation.ADAS": {
+      "navigationGPS2": "r",
+      "_optional": "the attitude probe's ADAS heading"
     }
   },
   "screens": [

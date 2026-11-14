@@ -517,6 +517,8 @@ class HudApp {
    * @this {App}
    */
   start() {
+    // the attitude probe (car/attitude_probe.js), only with its flag file in the data folder
+    this._guard("attitude probe", () => require("../car/attitude_probe").start(this));
     this.log.info("connecting to cluster-render at " + this.socketPath);
     this.started = true;
     this.clients.forEach((client) => client.connect());
