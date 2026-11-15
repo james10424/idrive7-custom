@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Heated steering wheel signals: are they on this car? (run on the Mac, car on)
+# ClimateMaster statusSteeringWheelHeating is in the car's catalog and subscribes, but nothing on the G20 sends it
+# (Custom Cluster 0.1.60, Nov 14 2026). These are the other fields that carry the wheel heat.
 #
 #   tools/wheel_heat_check.sh root@$CAR_IP
 #
 # Step 1 looks the candidates up in the car's own catalog (/etc/oap/someip/someip-interfaces.json): interface,
-# service id, field, getter / notifier.
+# service id, field, getter / notifier, members.
 # Step 2 runs the firmware's generator on a test manifest of just those entries (tools/someip_manifest_check.js),
 # so we know which can go in app.json without failing the install.
 # Writes only to /tmp/wheel_heat_check on the car and removes it after. Installs nothing.
@@ -19,17 +21,18 @@ trap 'rm -rf "$LOCAL"' EXIT
 cat > "$LOCAL/manifest.json" <<'EOF'
 {
   "proxies": {
-    "de.bmw.infotainment.climate.climatemaster.ClimateMaster": {
+    "de.bmw.body.steeringwheelcomfort.SteeringWheelClimate": {
       "instances": "1",
       "attributes": {
-        "statusSteeringWheelHeating": "rs",
-        "statusAvailableSteeringWheelHeating": "rs"
+        "heatingState": "rs"
       }
     },
     "de.bmw.infotainment.climate.Climate": {
       "instances": "1",
       "attributes": {
-        "statusAURAPerso": "s"
+        "statusSeatAutoClimateDR": "rs",
+        "statusAURAPerso": "s",
+        "statusAURAPerso2": "s"
       }
     }
   },
@@ -41,8 +44,8 @@ cat > "$LOCAL/lookup.js" <<'EOF'
 'use strict';
 const db = JSON.parse(require('fs').readFileSync('/etc/oap/someip/someip-interfaces.json', 'utf8'));
 const want = {
-    'de.bmw.infotainment.climate.climatemaster.ClimateMaster': ['statusSteeringWheelHeating', 'statusAvailableSteeringWheelHeating'],
-    'de.bmw.infotainment.climate.Climate': ['statusAURAPerso', 'statusAURAPerso2'],
+    'de.bmw.body.steeringwheelcomfort.SteeringWheelClimate': ['heatingState'],
+    'de.bmw.infotainment.climate.Climate': ['statusSeatAutoClimateDR', 'statusAURAPerso', 'statusAURAPerso2'],
 };
 Object.keys(want).forEach((name) => {
     const i = db.interfaces && db.interfaces[name];
@@ -52,9 +55,10 @@ Object.keys(want).forEach((name) => {
         const x = i.fields && i.fields[f];
         if (!x) { console.log('  MISSING ' + f); return; }
         console.log('  ' + f + ' ' + x.dataRef + (x.getter ? ' getter' : ' NO getter') + (x.notifier ? ' notifier' : ' NO notifier'));
+        const t = db.datatypes && db.datatypes[x.dataRef];
+        if (t && t.members) console.log('    members: ' + t.members.map((m) => m.name).join(' '));
     });
 });
-Object.keys(db.interfaces || {}).filter((n) => /climate/i.test(n)).forEach((n) => console.log('climate iface: ' + n));
 EOF
 
 ssh "$CAR" "rm -rf $TMP && mkdir -p $TMP"

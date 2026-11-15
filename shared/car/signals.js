@@ -31,6 +31,7 @@ const {
   driveVariantOf,
   enumNum,
   unitName,
+  WHEEL_ACT,
 } = require("./consts");
 const { isNum, pad2 } = require("../engine/util");
 
@@ -221,6 +222,25 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {void}
    */
   _setupVehicleData() {
+    // the heated steering wheel's sources (null until each says): on if any says on, off if any says and none on
+    /** @type {Record<string, ?boolean>} */
+    const wheelBy = {};
+    /** @type {Record<string, string>} */
+    const wheelLast = {};
+    /** @type {(what: string, msg: *) => void} */
+    const wheelRaw = (what, msg) => {
+      const raw = JSON.stringify(msg);
+      if (raw !== wheelLast[what]) this.log.info("wheel heat " + what + " raw " + raw);
+      wheelLast[what] = raw;
+    };
+    /** @type {(source: string, on: ?boolean) => void} */
+    const wheelSource = (source, on) => {
+      wheelBy[source] = on;
+      const known = Object.keys(wheelBy).filter((k) => wheelBy[k] !== null);
+      this.wheelHeat = known.length
+        ? known.some((k) => wheelBy[k] === true)
+        : null;
+    };
     /** @type {Signals} */
     const extra = {
       // fuel and range (cauliflowermossgrape's live_data, MIT): litres (255 = none) and km (4095 = none)
@@ -500,15 +520,43 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           this.parkBrake = engaged;
         },
       },
-      // the heated steering wheel (the Grand National HEAT STR lamp): on while its actual level is above 0
-      "de.bmw.infotainment.climate.climatemaster.ClimateMaster": {
-        statusSteeringWheelHeating: (msg) => {
-          const level = msg && msg.actualIntensityLevel;
-          const on = isNum(level) && level < BYTE_NONE ? level > 0 : null; // 255: not sent
-          if (on !== this.wheelHeat)
-            this.log.info("steering wheel heating raw " + JSON.stringify(msg));
-          this.wheelHeat = on;
+      // the heated steering wheel (the Grand National HEAT STR lamp). ClimateMaster statusSteeringWheelHeating is in the
+      // G20's catalog but nothing sends it (0.1.60), so three other sources, on if any says on; each one's raw is
+      // logged on change (and statusAURAPerso's, a saved setting maybe, logged only) to find which the car really sends
+      "de.bmw.body.steeringwheelcomfort.SteeringWheelClimate": {
+        heatingState: (msg) => {
+          wheelRaw("heatingState", msg);
+          wheelSource(
+            "swc",
+            msg && msg.availability === false ? null : !!(msg && msg.heating),
+          );
         },
+      },
+      "de.bmw.infotainment.climate.Climate": {
+        statusSeatAutoClimateDR: (msg) => {
+          wheelRaw("statusSeatAutoClimateDR", msg);
+          const act = enumNum(
+            msg && msg.statusSteeringWheelActivationDRS,
+            WHEEL_ACT,
+          );
+          wheelSource(
+            "act",
+            act === WHEEL_ACT.LENKRADHEIZUNGSFUNKTION_AN
+              ? true
+              : act === WHEEL_ACT.LENKRADHEIZUNGSFUNKTION_AUS
+                ? false
+                : null,
+          );
+        },
+        statusAURAPerso2: (msg) => {
+          wheelRaw("statusAURAPerso2", msg);
+          const level = msg && msg.actualIntensitySteeringWheelHeater;
+          wheelSource(
+            "aura2",
+            isNum(level) && level < BYTE_NONE ? level > 0 : null, // 255: not sent
+          );
+        },
+        statusAURAPerso: (msg) => wheelRaw("statusAURAPerso", msg),
       },
       // Auto Hold (the same lamp, green): statusAutoH 2 = on and holding the car, 1 = on, 0 = off
       "de.bmw.chassis.VehicleStabilizationManagement": {
@@ -607,7 +655,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       delete extra["de.bmw.infrastructure.MileageSupreme"];
       delete extra["de.bmw.infotainment.vehicle.Vehicle2"];
       delete extra["de.bmw.chassis.VehicleStabilizationManagement"];
-      delete extra["de.bmw.infotainment.climate.climatemaster.ClimateMaster"];
+      delete extra["de.bmw.body.steeringwheelcomfort.SteeringWheelClimate"];
+      delete extra["de.bmw.infotainment.climate.Climate"];
       if (extra["de.bmw.infotainment.vehicle.CDS"])
         delete extra["de.bmw.infotainment.vehicle.CDS"].statusHandBrake;
     }

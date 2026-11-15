@@ -650,14 +650,9 @@ const CAR_SW = {
     ),
   wheelHeat: (value) =>
     stub.feed(
-      "de.bmw.infotainment.climate.climatemaster.ClimateMaster",
-      "statusSteeringWheelHeating",
-      {
-        configuredIntensityLevel: value === "on" ? 1 : 0,
-        actualIntensityLevel: value === "on" ? 1 : 0,
-        availableRange: { minValue: 0, maxValue: 1 },
-        saveLUM: false,
-      },
+      "de.bmw.body.steeringwheelcomfort.SteeringWheelClimate",
+      "heatingState",
+      { functionalityCoded: true, availability: true, heating: value === "on" },
     ),
 };
 // sent when a switch changes (and once when the app starts), as the car's subscriptions report changes, not on a

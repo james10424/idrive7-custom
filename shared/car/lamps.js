@@ -98,7 +98,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
-   * The Grand National HEAT STR lamp lit: the heated steering wheel on (ClimateMaster statusSteeringWheelHeating).
+   * The Grand National HEAT STR lamp lit: the heated steering wheel on (SteeringWheelClimate or Climate; car/signals.js).
    * @returns {boolean}
    */
   _heatLit() {
