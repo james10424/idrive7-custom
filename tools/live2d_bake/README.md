@@ -53,6 +53,17 @@ node tools/live2d_bake/clip_idle.js <clip.json> <from s> <to s> <bake config.jso
 
 It writes a copy of the config with the new loop: her rest pose plus how far the clip moved from its start, as 80 poses (`--poses`), with what's left over at the end taken off evenly so the loop closes, each value kept in its parameter's range. It takes the same parameters as the config's current idle (head, gaze, breath, hair, twin tails: not the eyes' openness, so a blink in the clip is left out; the app blinks her on its own), and plays the loop 1.15 times as fast as recorded, as the first one (`--speed`). RetrynowMiku's: `wave_2026-11-15_12-55.json` from 1.92 to 7.51 s, 80 poses over 4.86 s. For Miku Live2D, turn the new config into the app's pose file with `live_pose.js` (the main README, "New poses"); for Miku Bake, bake it.
 
+### The turn and the lean from a clip
+
+Record a clip turning (or leaning) one way, holding, coming back, then the other way. Then, with the times of each way's stretch (from her rest just before she moves to where she settles, in seconds):
+
+```bash
+node tools/live2d_bake/clip_chain.js turn <clip.json> <left from> <left to> <right from> <right to> <bake config.json> <new config.json>
+node tools/live2d_bake/clip_chain.js lean <clip.json> <left from> <left to> <right from> <right to> <bake config.json> <new config.json>
+```
+
+It writes a copy of the config with the new `close.turnPoses` (or `close.lean.poses`): each pose her rest pose plus how far the clip moved from the stretch's start, kept in the model's range (a recording swings past its ±30 deg), as many steps each way as the config has now (`--steps`), spaced evenly along the path her head takes (its turn, nod and tilt together). It takes the config's current chain's parameters; `--add ParamBodyAngleX,ParamBodyAngleY,ParamBodyAngleZ` adds the body's, when the clip turns it too. Remade from RetrynowMiku's first turn clip it comes within 0.8 deg of her hand-made turn. RetrynowMiku's second takes: `turn wave_turn_2026-11-15_01-12.json 0.5 1.6 8.9 10.2` and `lean wave_lean_2026-11-15_01-03.json 0.4 2.4 4.95 7.05`, with the body's angles.
+
 ## Deploy to the car
 
 ### Where the HUD looks
