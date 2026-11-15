@@ -8,10 +8,71 @@ clothes) on top. It knows nothing about any particular model: what the model
 does is the app's (Custom HUD's "Miku Live2D" layout, for one).
 
 iDrive 7 only. It is the one process here that drives the GPU itself, at CPU
-priority 19, so BMW's HMI always comes first. On a 2020 G20's head unit
-(Intel HD 505, Mesa 19), RetrynowMiku's 248x280 close-up at 15 fps takes about
-39% of each frame's time: Cubism's Core ~10.5 ms, drawing ~12.8 ms, the 4:2:0
-~1.9 ms.
+priority 19, so BMW's HMI always comes first. On a 2020 G20's head unit,
+RetrynowMiku's close-up at 15 fps takes about 39% of each frame's time and
+29% of one CPU core ([Performance on the car](#performance-on-the-car)).
+
+## Performance on the car
+
+Measured on a 2020 M340i (G20) head unit, Nov 14 and 15 2026: Intel Atom (4
+cores) with Intel HD Graphics 505 (Broxton), Mesa 19.0.6, OpenGL ES 3.2.
+
+**The model**, RetrynowMiku (Cubism 5), as Custom HUD's Miku Live2D draws it:
+
+| | |
+| --- | --- |
+| Drawables | 484 |
+| Vertices | 65,368 (all drawables together) |
+| Triangles | 96,230 (288,690 indices) |
+| Clipping masks | 59, in 2 mask textures of 256 px (one holds 36) |
+| Parameters | 232; the HUD drives 137 of them |
+| Physics | 39 settings: 95 inputs, 167 outputs, 138 particles |
+| Moc | 6.9 MB |
+| Textures | 17, shrunk from 4096 to 1024 px (38 MB of PNG to 5.5 MB), no mipmaps |
+| Picture | 324x278 (248x280 before Custom HUD 0.1.42), 15 fps, 4:2:0 to cluster-render |
+
+**A frame** (live2d-render's own timing line, every 5 s; a frame has 67 ms at
+15 fps):
+
+| Part | ms | |
+| --- | --- | --- |
+| Cubism Core (the moc's update) | ~10.3 | Live2D's closed library: deforms the 65,368 vertices from the parameters |
+| Physics | ~0.85 | the Framework's, 39 settings |
+| Drawing | ~12.6 | the masks, then the 484 drawables, with `glue/apply_fast.py` |
+| 4:2:0 and reading it back | ~1.95 | on the GPU (`src/gpu.cpp`), 1.5 bytes a pixel read |
+| **Together** | **~25.7** | **37 to 41% of the frame**, a steady 15.1 to 15.2 fps |
+
+**How it got there** (248x280, the same model; the first rows from a test
+program with the same drawing code):
+
+| Step | Update | Draw | Read + 4:2:0 | Of a frame |
+| --- | --- | --- | --- | --- |
+| Stock Cubism renderer, 4:2:0 on the CPU | 10.8 | 19.5 (masks 6.4, model 14.3) | 1.9 + 3.6 | 54% |
+| 4:2:0 on the GPU | 10.8 | 19.5 | 1.2 + 0.65 | 50% |
+| Patched renderer (one vertex upload a frame, GL state only when it changes) | 10.5 | 12.8 (masks 5.2, model 7.6) | 1.9 | 39% |
+
+The drawing's cost is the driver's work per draw call on the Atom, not
+pixels: mask textures of 128 px instead of 256 changed nothing, and the
+patched renderer, which sends the same pixels with far fewer GL calls, cut the
+model's drawing in half. Cubism Core is now the biggest part; it scales with
+the vertices, not the picture's size, so drawing smaller saves little
+(estimated 1 to 2 ms at 75%).
+
+**The whole head unit** (`tools/car_usage.sh root@<car> 30`; Miku Live2D,
+then Miku Bake with live2d-render idle, a few minutes apart):
+
+| | Miku Live2D | Miku Bake |
+| --- | --- | --- |
+| live2d-render | 29.4% of a core, 41 MB, 2 threads | 0% (idle until it exits) |
+| cluster-render | 4.2% (her video frames) | 1.9% |
+| Custom HUD | 6.2%, 91 MB | 5.3%, 77 MB |
+| GPU clock | 643 MHz average, 750 top | 100 MHz (idle) |
+| Memory available | 1,937 of 5,644 MB | 1,922 of 5,644 MB |
+
+So about a third of a core of CPU (8% of the unit), and the GPU, which BMW's
+3D HMI shares, working near its top clock the whole time. Opening the model
+took 15.4 s on the first run as a service (about 1 s for the test program),
+to watch.
 
 ## The Cubism SDK
 
