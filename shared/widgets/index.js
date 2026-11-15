@@ -13,6 +13,8 @@
  *   shaders  { name: GLSL } every shader it can send, for tools/shader_budget.js
  *   create(hud, w, x)         sets up its layer once made (fixed uniforms, the first paint)
  *   update(hud, x, now, force)  sends what changed (force: everything)
+ *   external true: drawn by another service's layer, not ours (no shader; create and update run as usual)
+ *   gone(hud, x)              its layout is going (rebuilt, or the app stopping): let go of what it holds
  */
 /** @typedef {import("../engine/app").App} App */
 /** @typedef {import("../engine/app").Widget} Widget */
@@ -28,6 +30,8 @@
  * @property {boolean} [time]
  * @property {string[]} [cfg]
  * @property {Record<string, string>} [shaders]
+ * @property {boolean} [external]
+ * @property {(hud: App, state: WidgetState) => void} [gone]
  * @property {(hud: App, widget: Widget, state: WidgetState) => void} [create]
  * @property {(hud: App, state: WidgetState, now: number, force: boolean) => void} [update]
  * @property {(hud: App, state: WidgetState) => void} [reset] restarts its animations (the "reset" settings)
@@ -35,6 +39,7 @@
 /** @type {Record<string, WidgetModule>} */
 const TYPES = {
   miku: require("./miku"),
+  miku_live: require("./miku_live"),
   rdash: require("./rdash"),
   shiftbar: require("./shiftbar"),
   arc: require("./arc"),

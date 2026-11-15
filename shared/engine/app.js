@@ -243,8 +243,8 @@ const FLASH_HALF_MS = 62.5; // the shift light's blink: on and off this long eac
 /**
  * @typedef {object} WidgetStateCore
  * @property {Widget} w
- * @property {number} ref its layer, or its sheet's
- * @property {Client} c
+ * @property {number} ref its layer, or its sheet's (0: an external widget's, none of ours)
+ * @property {Client} c (null for an external widget)
  * @property {number} ci connection index
  * @property {?Sheet} sheet
  * @property {unknown} last the last values sent (a key, as the widget type makes it)
@@ -253,6 +253,7 @@ const FLASH_HALF_MS = 62.5; // the shift light's blink: on and off this long eac
  * @property {ReturnType<typeof setInterval>} [timer] its own update timer (a module that sets one: the tick skips it)
  * @property {number} [at] ms of the last eased update
  * @property {boolean} [refused] cluster-render refused something it sent (its layer, a bind, a uniform)
+ * @property {boolean} [external] drawn by another service's layer (the module's "external")
  * A widget module keeps its own state on it too (see its typedef).
  */
 /**
@@ -589,6 +590,7 @@ class HudApp {
     clearTimeout(this.fontT);
     this.widgets.forEach((state) => {
       if (state.timer) clearInterval(state.timer);
+      this._gone(state);
     });
     this.clients.forEach((client) => client.close());
     this.atlases.clear();
@@ -661,6 +663,7 @@ class HudApp {
     this.atlases.used = new Set(); // what this layout reads of the kept assets (_dropUnusedAtlases)
     this.widgets.forEach((state) => {
       if (state.timer) clearInterval(state.timer);
+      this._gone(state);
     });
     this.widgets.clear();
     this.sheets = [];
@@ -864,6 +867,15 @@ class HudApp {
    */
   _create(widget, sheet) {
     const mod = widgetTypes[widget.type];
+    if (mod.external) {
+      // drawn by another service's layer (live2d-render for Miku Live2D): none of ours, only its create and update
+      /** @type {WidgetState} */
+      const ext = { w: widget, ref: 0, c: /** @type {*} */ (null), ci: -1, sheet: null, last: null, lastPaint: 0, px: null, external: true };
+      this.widgets.set(widget.id, ext);
+      mod.create(this, widget, ext);
+      this._update(ext, Date.now(), true);
+      return;
+    }
     let ref, client;
     if (sheet) {
       ref = sheet.ref;
@@ -914,6 +926,18 @@ class HudApp {
     this.widgets.set(widget.id, state);
     mod.create(this, widget, state);
     this._update(state, Date.now(), true);
+  }
+
+  /**
+   * A widget's layout is going (rebuilt or the app stopping): a module with gone() lets go of what it holds outside
+   * our layers (Miku Live2D's live2d-render connection).
+   * @param {WidgetState} state
+   * @returns {void}
+   * @this {App}
+   */
+  _gone(state) {
+    const mod = widgetTypes[state.w.type];
+    if (mod && mod.gone) this._guard("widget " + state.w.id, () => mod.gone(this, state));
   }
 
   /**

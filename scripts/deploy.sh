@@ -4,6 +4,7 @@
 #   ./scripts/deploy.sh root@<car-ip-or-hostname> [layout.json ...]
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
 #   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
+#   ./scripts/deploy.sh root@<car> --miku-live <bake config.json> <model.model3.json>   (Miku Live2D)
 #
 # --miku copies the folder's atlas.json and atlas.etc2 (and close.etc2, the close-up, when the bake made one, with a
 # close-up-only bake's idle.etc2 (and idle2.etc2, its odd frames, past 40) and lean.etc2; ETC2 from
@@ -12,6 +13,12 @@
 # next time it builds the layout (switch to another layout and back, or restart the app).
 #
 # scripts/remove-miku.sh takes them off the car again.
+#
+# --miku-live is for the Miku Live2D layout, drawn live by live2d-render (idrive-apps-lib, with its Cubism SDK copied
+# to the car by hand: its README.md). It copies the bake config (the one tools/live2d_bake baked Miku Bake's close-up
+# from) and the expression files it names (found next to the model) to <app>/data/miku-live/, and the model itself
+# (its moc, physics and textures, the textures shrunk to 1024 px with sips) to
+# /var/opt/live2d-render/models/<model name>/, where the layout's "model" points. Neither goes in this repo.
 #
 # With no files it pushes the app's built-in layouts from apps/<app>/hud/layouts/.
 # They land in the app's data folder, <app>/data/layouts/, where a file overrides the
@@ -67,8 +74,44 @@ if [ "${1:-}" = "--miku" ]; then
         fi
     fi
 fi
+LIVE_CFG=""
+if [ "${1:-}" = "--miku-live" ]; then
+    [ $# -eq 3 ] && [ -f "$2" ] && [ -f "$3" ] || { echo "Usage: $(basename "$0") <car-ssh-host> --miku-live <bake config.json> <model.model3.json>" >&2; exit 1; }
+    LIVE_CFG="$2"; LIVE_MODEL="$3"; shift 3
+    python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); sys.exit(0 if "close" in c else 1)' "$LIVE_CFG" || { echo "$LIVE_CFG: not a bake config with a close-up (close)" >&2; exit 1; }
+    MODEL_DIR="$(cd "$(dirname "$LIVE_MODEL")" && pwd)"
+    MODEL_NAME="$(basename "$LIVE_MODEL" .model3.json)"
+    LIVE_TMP="$(mktemp -d)"; trap 'rm -rf "$LIVE_TMP"' EXIT
+    mkdir -p "$LIVE_TMP/data" "$LIVE_TMP/model"
+    cp "$LIVE_CFG" "$LIVE_TMP/data/config.json"
+    # the expressions the config names, from next to the model
+    python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["close"].get("expressions", [])))' "$LIVE_CFG" | while IFS= read -r e; do
+        [ -n "$e" ] || continue
+        [ -f "$MODEL_DIR/$e" ] || { echo "the config names $e, not next to the model in $MODEL_DIR" >&2; exit 1; }
+        cp "$MODEL_DIR/$e" "$LIVE_TMP/data/"
+    done
+    # the model: model3.json, moc, physics and textures as it names them, the textures shrunk to 1024 px
+    python3 - "$LIVE_MODEL" "$LIVE_TMP/model" <<'PY'
+import json, os, shutil, subprocess, sys
+src, out = sys.argv[1], sys.argv[2]
+d = os.path.dirname(os.path.abspath(src))
+m = json.load(open(src))
+refs = m["FileReferences"]
+files = [refs["Moc"]] + ([refs["Physics"]] if refs.get("Physics") else [])
+for f in files:
+    os.makedirs(os.path.join(out, os.path.dirname(f)), exist_ok=True)
+    shutil.copy(os.path.join(d, f), os.path.join(out, f))
+for t in refs.get("Textures", []):
+    os.makedirs(os.path.join(out, os.path.dirname(t)), exist_ok=True)
+    subprocess.run(["sips", "-Z", "1024", os.path.join(d, t), "--out", os.path.join(out, t)], check=True, stdout=subprocess.DEVNULL)
+keep = {"Moc", "Textures", "Physics"}
+m["FileReferences"] = {k: v for k, v in refs.items() if k in keep}
+json.dump(m, open(os.path.join(out, os.path.basename(src)), "w"), indent=1)
+print("model: %d textures shrunk to 1024 px" % len(refs.get("Textures", [])))
+PY
+fi
 LAYOUT_DIR="$(dirname "$SCRIPT_DIR")/apps/${APP_ID}/hud/layouts"
-if [ $# -eq 0 ] && [ -z "$MIKU_SRC" ]; then set -- "$LAYOUT_DIR"/*.json; fi
+if [ $# -eq 0 ] && [ -z "$MIKU_SRC" ] && [ -z "$LIVE_CFG" ]; then set -- "$LAYOUT_DIR"/*.json; fi
 
 # Check each file locally first: valid JSON, so the car never gets a file it would refuse.
 for f in "$@"; do
@@ -91,6 +134,17 @@ if [ -n "$MIKU_SRC" ]; then
     scp "${MIKU_FILES[@]}" "${CAR_HOST}:${APP_DIR}/data/${MIKU_DIR}/"
     ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/${MIKU_DIR}'"
     echo "Pushed the Miku frames to ${APP_DIR}/data/${MIKU_DIR}. Switch to another layout and back (or restart the app) to load them."
+    exit 0
+fi
+
+if [ -n "$LIVE_CFG" ]; then
+    OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
+    ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/miku-live' '/var/opt/live2d-render/models/${MODEL_NAME}'"
+    scp "$LIVE_TMP"/data/* "${CAR_HOST}:${APP_DIR}/data/miku-live/"
+    ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/miku-live'"
+    scp -r "$LIVE_TMP"/model/* "${CAR_HOST}:/var/opt/live2d-render/models/${MODEL_NAME}/"
+    echo "Pushed Miku Live2D's config to ${APP_DIR}/data/miku-live and her model to /var/opt/live2d-render/models/${MODEL_NAME}."
+    echo "Switch to another layout and back (or restart the app) to load them."
     exit 0
 fi
 

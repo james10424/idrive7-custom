@@ -334,6 +334,7 @@ module.exports = /** @satisfies {ThisType<import("./app").App>} */ ({
       /** @type {Record<string, boolean>} */
       seen = {};
     this.widgets.forEach((state) => {
+      if (state.external) return; // another service's layer, not ours
       const key = state.ci + ":" + state.ref;
       if (!seen[key]) {
         seen[key] = true;

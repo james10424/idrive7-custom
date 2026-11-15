@@ -129,6 +129,16 @@ The Miku layout draws a Live2D model you own. Nothing of it ships with the app: 
 
 To change her, bake again and run the deploy again; to remove her, run `./scripts/remove-miku.sh root@<car> --miku`.
 
+### Miku Live2D: drawn live
+
+The **Miku Live2D** layout draws her close-up live instead of from baked frames: Live2D Render (`native/live2d-render` in [idrive-apps-lib](https://github.com/james10424/idrive-apps-lib), installed from the Store) draws her model on the head unit's GPU at 15 fps, and Custom HUD drives her from the same bake config, blending her lean, turn, idle loop and expressions smoothly instead of between baked steps. Live2D's Cubism SDK never ships with it: build its glue on your computer and copy it to the car (its README, "The Cubism SDK"). Then copy her model and the bake config:
+
+```bash
+./scripts/deploy.sh root@<car> --miku-live <bake config.json> <model>.model3.json
+```
+
+It puts the config and its expressions in Custom HUD's `data/miku-live/` and the model (textures shrunk to 1024 px) in `/var/opt/live2d-render/models/<model>/`, where the layout's `model` points. Pick **Miku Live2D** under Layout; until all of it is there, nothing is drawn and the status row says why.
+
 ## Credits
 
 - [bimmer-lab/apps](https://github.com/bimmer-lab/apps) (MIT): the original HUD Widgets and Cluster Themes this repo starts from.

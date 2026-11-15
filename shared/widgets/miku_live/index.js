@@ -1,0 +1,318 @@
+"use strict";
+/**
+ * The "miku_live" widget: Miku drawn live with Live2D (the Miku Live2D layout). live2d-render (idrive-apps-lib)
+ * draws her model on the head unit's GPU as a video layer of its own; this widget runs her as the baked close-up
+ * does (../miku: the lean with the car, the expressions and her idle loop when stopped, the turn toward the
+ * indicator, the recorded blink) and sends her Cubism parameter values (pose.js) from the same bake config.
+ */
+const fs = require("fs");
+const path = require("path");
+const { isNum } = require("../../engine/util");
+const { eyeClosure, blinkOf, MIKU_BLINK_MS } = require("../miku/blink");
+const { rigOf, compose, changes, parseValues } = require("./pose");
+const { Live2dClient } = require("./live2d_client");
+
+/** @typedef {import("../../engine/app").Widget} Widget */
+/** @typedef {import("../../engine/app").WidgetState} WidgetState */
+/** @typedef {import("../../engine/app").App} HudApp */
+/**
+ * This type's own state on its WidgetState.
+ * @typedef {object} MikuLiveState
+ * @property {*} [config] the bake config (data/miku-live/config.json)
+ * @property {Record<string, *>} [exprFiles] its expression files, by name
+ * @property {?import("./live2d_client").Live2dClient} [live]
+ * @property {?import("./pose").Rig} [rig] once live2d-render has opened the model (its defaults are the rest)
+ * @property {Record<string, number>} [sent] the values live2d-render has
+ * @property {boolean} [hidden] told to hide (our display isn't showing us)
+ * @property {string} [layer] the video layer's state, from cluster-render
+ * @property {number} [statsAt] when stats were last logged (ms)
+ * @property {number} [lean] eased -1..1
+ * @property {number} [point] -1..1, the head's turn toward the indicator (a spring)
+ * @property {number} [pointV]
+ * @property {number} [zoom] 0..1, linear: the expressions coming on
+ * @property {number} [zoomT] where the zoom is going, 0 or 1
+ * @property {number} [stillMs] how long the car has stood still
+ * @property {number} [turnWas] the turn's target last update (-1, 0, 1)
+ * @property {number} [idleMs] how far into the idle loop she is (ms)
+ * @property {number} [idleAt] when idleMs last went on (ms)
+ * @property {number} [blinkAt] when her last blink started (ms)
+ * @property {number} [blinkNext] when her next blink is due (ms)
+ * @property {?{ rate: number, closure: number[] }} [blink] the bake's recorded blink
+ */
+
+const DOCS = `no layer of ours: live2d-render (idrive-apps-lib, its Cubism SDK copied to the car by hand) draws Miku's
+Live2D model live as its own video layer at the widget's rect, and this widget sends her parameter values. Her poses,
+expressions, idle loop and blink come from the Miku bake's config, copied with scripts/deploy.sh --miku-live into
+the app's data folder (miku-live/: config.json and its .exp3.json files); "model" is the .model3.json on the car
+(an absolute path, its textures shrunk to 1024 px), "params" fixed values ("Id=value ..."), "hide" parts left out
+(else the config's), "frame" [cx, cy, height] in model units (else the config's close.centre and close.height),
+"fps" (15). Without live2d-render or the files nothing is drawn and the status row says why`;
+
+// as the baked close-up's (../miku/index.js), so she moves the same
+const LIVE_MS = 66; // her update rate: live2d-render draws at 15 fps
+const LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly
+const LEAN_G = 0.4; // this longitudinal g is a full lean
+const LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
+const POINT_K = 70; // the head turn's spring (1/s^2): about 1.3 Hz
+const POINT_C = 16.7; // critically damped
+const POINT_STEP_S = 0.01;
+const STILL_MS = 1000; // stood still this long: the expressions come on
+const STILL_KMH = 0.5;
+const ZOOM_OUT_KMH = 10; // past this they go off
+const IN_MS = 500; // the expressions coming on or going off
+const TURN_BACK = 0.01; // her head this near straight counts as back from a turn
+const MAX_DT_MS = 500;
+const SEND_EPS = 0.002; // a value moving less than this isn't sent
+const STATS_LOG_MS = 60000;
+
+/**
+ * @param {number} x
+ * @returns {number}
+ */
+const smooth01 = (x) => {
+  const k = Math.max(0, Math.min(1, x));
+  return k * k * (3 - 2 * k);
+};
+
+/**
+ * The bake config and its expressions from the app's data folder; throws with what's missing.
+ * @param {HudApp} hud
+ * @returns {{ config: *, exprFiles: Record<string, *> }}
+ */
+function loadFiles(hud) {
+  const dir = path.join(hud.ctx.dataDir || ".", "miku-live"),
+    file = path.join(dir, "config.json");
+  if (!fs.existsSync(file)) throw new Error("no miku-live/config.json (scripts/deploy.sh --miku-live)");
+  const config = JSON.parse(fs.readFileSync(file, "utf8"));
+  if (!config || !config.close) throw new Error("miku-live/config.json has no close-up (close)");
+  /** @type {Record<string, *>} */
+  const exprFiles = {};
+  (config.close.expressions || []).forEach((/** @type {string} */ f) => {
+    const p = path.join(dir, path.basename(f));
+    if (!fs.existsSync(p)) throw new Error("no miku-live/" + path.basename(f) + " (scripts/deploy.sh --miku-live)");
+    exprFiles[f] = JSON.parse(fs.readFileSync(p, "utf8"));
+  });
+  return { config, exprFiles };
+}
+
+/**
+ * The status row's problem, or none.
+ * @param {HudApp} hud
+ * @param {?string} text
+ */
+function problem(hud, text) {
+  const p = text ? "Miku Live2D: " + text : null;
+  if (hud.problem === p) return;
+  if (p) hud.log.warn(p);
+  hud.problem = p;
+  hud._status();
+}
+
+/**
+ * live2d-render's open: the model, where her picture goes, how it is framed, her first values.
+ * @param {HudApp} hud
+ * @param {WidgetState & MikuLiveState} state
+ * @returns {Record<string, string | number | boolean>}
+ */
+function openMessage(hud, state) {
+  const w = state.w,
+    close = state.config.close,
+    frame = Array.isArray(w.frame) && w.frame.length === 3 ? w.frame : [(close.centre || [0, 0])[0], (close.centre || [0, 0])[1], close.height || 1],
+    hide = Array.isArray(w.hide) ? w.hide : state.config.hide || [];
+  return {
+    t: "open",
+    model: String(w.model),
+    w: Math.floor(w.w / 4) * 4,
+    h: Math.floor(w.h / 2) * 2,
+    fps: w.fps || 15,
+    target: hud.target,
+    x: w.x,
+    y: w.y,
+    z: w.z || 0,
+    frame: frame.join(" "),
+    hide: hide.join(","),
+    v: typeof w.params === "string" ? w.params : "",
+    visible: !hud._offScreen(),
+  };
+}
+
+/**
+ * Her drive state now, as the baked close-up's (../miku/index.js update, close-up only).
+ * @param {HudApp} hud
+ * @param {WidgetState & MikuLiveState} state
+ * @param {number} now
+ * @returns {import("./pose").Drive}
+ */
+function drive(hud, state, now) {
+  const data = hud.car.data(),
+    dt = state.at ? Math.min(MAX_DT_MS, now - state.at) : 0;
+  state.at = now;
+  // no lean while the expressions are (coming) on, so she drives off upright and leans from there
+  const exprOn = (state.zoom || 0) > 0 || (state.zoomT || 0) > 0;
+  const leanTarget = isNum(data.gLong) && !exprOn ? Math.max(-LEAN_G, Math.min(LEAN_G, data.gLong)) / LEAN_G : 0;
+  state.lean = isNum(state.lean) ? state.lean + (leanTarget - state.lean) * (1 - Math.exp(-dt / LEAN_TAU_MS)) : leanTarget;
+  // the head turns toward the indicator once the expressions are all on (the turn poses have them)
+  const turnSide = (state.zoom || 0) < 1 ? 0 : hud._turnSide();
+  // she blinks as her head starts to turn, away or back, as in the turn recording
+  if (isNum(state.turnWas) && turnSide !== state.turnWas) {
+    state.blinkAt = now;
+    state.blinkNext = now + MIKU_BLINK_MS[0] + Math.random() * (MIKU_BLINK_MS[1] - MIKU_BLINK_MS[0]);
+  }
+  state.turnWas = turnSide;
+  if (!isNum(state.point) || !isNum(state.pointV)) {
+    state.point = turnSide;
+    state.pointV = 0;
+  }
+  for (let left = dt / 1000; left > 0; left -= POINT_STEP_S) {
+    const s = Math.min(POINT_STEP_S, left);
+    state.pointV += (POINT_K * (turnSide - state.point) - POINT_C * state.pointV) * s;
+    state.point = Math.max(-1, Math.min(1, state.point + state.pointV * s));
+  }
+  // the expressions: on after standing still STILL_MS, or with an indicator (until her head is back); off past
+  // ZOOM_OUT_KMH
+  const speed = hud._raw("speed"),
+    still = isNum(speed) && speed < STILL_KMH;
+  state.stillMs = still ? (state.stillMs || 0) + dt : 0;
+  if (hud._turnSide() || Math.abs(state.point || 0) > TURN_BACK) state.zoomT = 1;
+  else if (!isNum(speed) || speed > ZOOM_OUT_KMH) state.zoomT = 0;
+  else if (state.stillMs >= STILL_MS) state.zoomT = 1;
+  const zoom = isNum(state.zoom) ? state.zoom : 0,
+    move = dt / IN_MS;
+  state.zoom = state.zoomT > zoom ? Math.min(state.zoomT, zoom + move) : Math.max(state.zoomT || 0, zoom - move);
+  const y = smooth01(state.zoom);
+  // her idle loop: from its start as the expressions finish coming on; back to its start while her head is turned
+  const turned = Math.abs(state.point || 0),
+    firstStep = 1 / Math.max(1, (state.rig && state.rig.turn && state.rig.turn.steps) || 1);
+  if (state.zoomT === 1 && state.zoom < 1) state.idleMs = 0;
+  else if (turned > firstStep) state.idleMs = 0;
+  else if (turned <= TURN_BACK) state.idleMs = (state.idleMs || 0) + (now - (state.idleAt || now));
+  state.idleAt = now;
+  // no blink while the expressions come on or go off (the baked in-steps have none)
+  const closure = y > 0.001 && y < 0.999 ? 0 : eyeClosure(state, now);
+  return {
+    lean: Math.tanh(state.lean * LEAN_SOFT) / Math.tanh(LEAN_SOFT),
+    turn: state.point,
+    y,
+    idleT: (state.idleMs || 0) / 1000,
+    idleW: y,
+    closure,
+  };
+}
+
+module.exports = {
+  type: "miku_live",
+  fields: ["model"],
+  external: true,
+  docs: DOCS,
+  /**
+   * @param {HudApp} hud
+   * @param {Widget} widget
+   * @param {WidgetState & MikuLiveState} state
+   */
+  create(hud, widget, state) {
+    try {
+      const files = loadFiles(hud);
+      state.config = files.config;
+      state.exprFiles = files.exprFiles;
+    } catch (err) {
+      problem(hud, err instanceof Error ? err.message : String(err));
+      return;
+    }
+    if (typeof widget.model !== "string" || widget.model[0] !== "/") {
+      problem(hud, '"model": the .model3.json on the car, an absolute path');
+      return;
+    }
+    state.blink = blinkOf(state.config.close);
+    state.rig = null;
+    state.sent = {};
+    const live = new Live2dClient();
+    state.live = live;
+    live.on("connect", () => {
+      state.rig = null;
+      state.sent = {};
+      state.hidden = false;
+      live.send(openMessage(hud, state));
+    });
+    live.on("opened", (/** @type {*} */ m) => {
+      state.rig = rigOf(state.config, state.exprFiles || {}, parseValues(m.defaults));
+      hud.log.info("miku live2d: opened in " + m.ms + " ms (" + m.gl + "), " + state.rig.keys.length + " of " + m.params + " parameters driven");
+      if (m.unknown || m.missing_parts) hud.log.warn("miku live2d: the model hasn't " + [m.unknown, m.missing_parts].filter(Boolean).join(", "));
+      problem(hud, null);
+      hud._update(state, Date.now(), true);
+    });
+    live.on("error", (/** @type {*} */ m) => problem(hud, (m.op === "open" ? "" : m.op + ": ") + m.reason));
+    live.on("layer", (/** @type {*} */ m) => {
+      if (m.state !== state.layer) hud.log.info("miku live2d: layer " + m.state + (m.reason ? " (" + m.reason + ")" : ""));
+      state.layer = m.state;
+    });
+    live.on("stats", (/** @type {*} */ m) => {
+      const now = Date.now();
+      if (state.statsAt && now - state.statsAt < STATS_LOG_MS) return;
+      state.statsAt = now;
+      hud.log.info("miku live2d: " + m.fps + " fps, update " + m.update + " ms, draw " + m.draw + " ms, " + m.busy + "% of a frame");
+    });
+    live.on("disconnect", () => {
+      state.rig = null;
+      problem(hud, "live2d-render stopped");
+    });
+    // not connected after a while: say why (not installed, not running)
+    setTimeout(() => {
+      if (state.live === live && !live.connected && live.why) problem(hud, live.why);
+    }, 4000);
+    state.timer = setInterval(
+      () =>
+        hud._guard("widget " + widget.id, () => {
+          if (hud._freshData) hud._freshData();
+          hud._update(state, Date.now(), false);
+        }),
+      LIVE_MS,
+    );
+  },
+  /**
+   * Her drive state and the parameter values that changed, to live2d-render; hidden while our display isn't ours.
+   * @param {HudApp} hud
+   * @param {WidgetState & MikuLiveState} state
+   * @param {number} now
+   * @param {boolean} force
+   */
+  update(hud, state, now, force) {
+    const live = state.live;
+    if (!live || !live.connected) return;
+    const off = hud._offScreen();
+    if (off !== !!state.hidden) {
+      state.hidden = off;
+      live.send({ t: off ? "hide" : "show" });
+    }
+    if (off || !state.rig) return;
+    const values = compose(state.rig, drive(hud, state, now));
+    if (force) state.sent = {};
+    const list = changes(values, state.sent || (state.sent = {}), SEND_EPS);
+    if (list) live.send({ t: "p", v: list });
+  },
+  /**
+   * Back to upright, the expressions off ("reset" settings).
+   * @param {HudApp} hud
+   * @param {WidgetState & MikuLiveState} state
+   */
+  reset(hud, state) {
+    state.lean = 0;
+    state.point = 0;
+    state.pointV = 0;
+    state.zoom = 0;
+    state.zoomT = 0;
+    state.stillMs = 0;
+    state.idleMs = 0;
+    state.at = Date.now();
+  },
+  /**
+   * The layout is going: the connection closes, and live2d-render lets her model go.
+   * @param {HudApp} hud
+   * @param {WidgetState & MikuLiveState} state
+   */
+  gone(hud, state) {
+    if (state.live) state.live.close();
+    state.live = null;
+  },
+  /** for tests (pose_test.js, tools): her drive state and the open message */
+  test: { drive, openMessage },
+};

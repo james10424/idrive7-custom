@@ -1,0 +1,20 @@
+{
+ "schemaVersion": 2,
+ "name": "Miku Live2D",
+ "_about": "Miku's close-up drawn live: live2d-render (idrive-apps-lib) draws her Live2D model on the head unit's GPU at 15 fps, as a video layer of its own in the visible window's bottom right, where Miku Bake's close-up sits; the miku_live widget runs her as Miku Bake's close-up does (leaning with the car, blushing with her hands on her cheeks and playing her idle loop when stopped, turning her head toward the indicator, the recorded blink), from the same bake config, and sends her Cubism parameter values. Needs live2d-render with its Cubism SDK copied to the head unit, her model at the path below (textures shrunk to 1024 px) and the bake config in the app's data folder (scripts/deploy.sh --miku-live); the art stays out of this repo. Without them nothing is drawn and the status row says why. Modes: cruise keeps her; nav and cruiseNav draw nothing, as Miku Bake.",
+ "modes": [
+  "cruise"
+ ],
+ "widgets": [
+  {
+   "id": "girl-live",
+   "type": "miku_live",
+   "x": 356,
+   "y": 100,
+   "w": 248,
+   "h": 278,
+   "model": "/var/opt/live2d-render/models/RetrynowMiku/RetrynowMiku.model3.json",
+   "params": "Watermark=1"
+  }
+ ]
+}
