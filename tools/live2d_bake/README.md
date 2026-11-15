@@ -43,6 +43,16 @@ Keep the clips next to your model, not in this repo.
 
 To watch a clip on the model, open `http://localhost:8095/replay` (or start the server with `--home replay`) and drop the clip anywhere on the page, or pick it on the right. Play, pause, scrub, step frame by frame (Space and the arrow keys), slow it down, loop it. The recorded values include VTube Studio's physics (hair, ribbons). The bake has none of its own (the HUD's shader swings the twin tails), so the page has a switch to show the clip with or without it: off keeps only what you acted, face and body, with the physics outputs (from the model's `.physics3.json`) at their defaults.
 
+### An idle loop from a clip
+
+To make her idle loop (`close.idle`) from a recording, pick a stretch that loops: one that starts and ends in about the same pose. Then:
+
+```bash
+node tools/live2d_bake/clip_idle.js <clip.json> <from s> <to s> <bake config.json> <new config.json>
+```
+
+It writes a copy of the config with the new loop: her rest pose plus how far the clip moved from its start, as 80 poses (`--poses`), with what's left over at the end taken off evenly so the loop closes, each value kept in its parameter's range. It takes the same parameters as the config's current idle (head, gaze, breath, hair, twin tails: not the eyes' openness, so a blink in the clip is left out; the app blinks her on its own), and plays the loop 1.15 times as fast as recorded, as the first one (`--speed`). RetrynowMiku's: `wave_2026-11-15_12-55.json` from 1.92 to 7.51 s, 80 poses over 4.86 s. For Miku Live2D, turn the new config into the app's pose file with `live_pose.js` (the main README, "New poses"); for Miku Bake, bake it.
+
 ## Deploy to the car
 
 ### Where the HUD looks

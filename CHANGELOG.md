@@ -4,6 +4,8 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 15 2026
 
+- **Custom HUD 0.1.44: Miku Live2D's new idle loop.** From a new recording (`wave_2026-11-15_12-55.json`, 1.92 to 7.51 s, where its ends meet within 4% of each part's range), 80 poses over 4.86 s instead of the first clip's 4.5 s: smoother (about half the frame-to-frame jitter), a bigger nod (26 deg against 7), less tilt (14 against 23), her gaze lower. The clip's blink at 3.19 s isn't taken (the idle carries no eye openness; the app blinks her itself). `tools/live2d_bake/clip_idle.js` makes an idle loop from a clip; it remakes the first loop from its clip exactly. Only the idle changed in `hud/miku-live/retrynowmiku.json`; the lean, turn, blink and expressions are the same. Checked off the car (a stop through the built app's own logic, drawn by Live2D Render). Miku Bake keeps its loop until baked again.
+
 - **Custom HUD 0.1.43: Miku Live2D shows on the car.** On the car (Nov 15 2026) live2d-render opened her model but drew nothing (0 fps): the widget told it to hide whenever the app's own HUD target wasn't shown, and in this layout the app has no layer of its own, so its target never shows. It no longer hides her: her video layer is live2d-render's own, and cluster-render hides it whenever BMW takes the HUD. The bench's fake cluster-render counts a target shown without layers, so it didn't show there. Opening her model took 15 s on the car (about 1 s on the bench); to watch.
 
 ## Nov 14 2026
