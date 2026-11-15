@@ -37,6 +37,7 @@
  * @property {number} idleT seconds into the idle loop
  * @property {number} idleW how much of the idle shows, 0 .. 1
  * @property {number} [holdT] seconds she's held the turn (its hold loop's clock)
+ * @property {Values} [extra] offsets added on top of the poses (the widget's wander and breathing while she drives)
  * @property {number} closure her eyes, 0 open .. 1 shut
  */
 
@@ -207,6 +208,10 @@ function compose(rig, d) {
     const loop = rig.hold && (d.turn < 0 ? rig.hold.left : rig.hold.right);
     if (loop) addLoop(loop, d.holdT || 0, v, Math.min(1, Math.abs(d.turn)));
   }
+  if (d.extra)
+    Object.keys(d.extra).forEach((id) => {
+      if (id in v) v[id] += d.extra[id];
+    });
   const y = Math.max(0, Math.min(1, d.y));
   if (y > 0) {
     Object.keys(rig.closeParams).forEach((id) => {

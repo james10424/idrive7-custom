@@ -75,6 +75,11 @@ near(compose(held, Object.assign({}, D, { turn: -0.5, holdT: 0.5 })).ParamAngleZ
 near(compose(held, Object.assign({}, D, { turn: 1, holdT: 0.5 })).ParamAngleZ, -2); // the right's own loop
 near(compose(held, Object.assign({}, D, { turn: 0, holdT: 0.5 })).ParamAngleZ, 0); // not turned: none
 
+// extra offsets on top, only for parameters the rig sets
+v = compose(rig, Object.assign({}, D, { lean: 0.75, extra: { ParamAngleZ: 1.5, Other: 9 } }));
+near(v.ParamAngleZ, 21.5);
+assert.ok(!("Other" in v));
+
 // changes: everything first, then only what moved
 /** @type {Record<string, number>} */
 const sent = {};

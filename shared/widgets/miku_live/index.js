@@ -36,6 +36,7 @@ const hudData = require("../../hud_data");
  * @property {number} [idleMs] how far into the idle loop she is (ms)
  * @property {number} [idleAt] when idleMs last went on (ms)
  * @property {number} [holdMs] how long she's held a turn (the hold loop's clock; 0 back upright)
+ * @property {number[]} [wanderPhase] the wander's random phases (WANDER's three waves each, radians)
  * @property {number} [blinkAt] when her last blink started (ms)
  * @property {number} [blinkNext] when her next blink is due (ms)
  * @property {?{ rate: number, closure: number[] }} [blink] the bake's recorded blink
@@ -66,6 +67,43 @@ const TURN_BACK = 0.01; // her head this near straight counts as back from a tur
 const MAX_DT_MS = 500;
 const SEND_EPS = 0.002; // a value moving less than this isn't sent
 const STATS_LOG_MS = 60000;
+// While she isn't idling (driving: the idle loop plays only with the expressions on), a small wander so she isn't
+// still between leans: each parameter [amplitude, base Hz] a mix of three slow waves (the base, 1.73 and 2.91
+// times it, weights WANDER_MIX) with random phases, so it never repeats. Offsets from her pose, faded out as her
+// idle comes in.
+const WANDER = {
+  ParamAngleX: [3, 0.13],
+  ParamAngleY: [2, 0.17],
+  ParamAngleZ: [2, 0.11],
+  ParamBodyAngleX: [1.5, 0.07],
+  ParamBodyAngleZ: [1, 0.09],
+  ParamEyeBallX: [0.1, 0.23],
+  ParamEyeBallY: [0.06, 0.19],
+};
+const WANDER_MIX = [0.6, 0.3, 0.1];
+const WANDER_RATIO = [1, 1.73, 2.91];
+const BREATH_HZ = 0.25; // and breathing (the idle loop breathes when she's stopped)
+
+/**
+ * The wander and breathing at t seconds, times weight: offsets for compose's "extra".
+ * @param {number[]} phase WANDER's three waves each
+ * @param {number} t
+ * @param {number} weight
+ * @returns {Record<string, number>}
+ */
+function wander(phase, t, weight) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  Object.keys(WANDER).forEach((k, i) => {
+    const [amp, hz] = WANDER[k];
+    let v = 0;
+    for (let w = 0; w < WANDER_MIX.length; w++)
+      v += WANDER_MIX[w] * Math.sin(2 * Math.PI * hz * WANDER_RATIO[w] * t + phase[i * WANDER_MIX.length + w]);
+    out[k] = amp * v * weight;
+  });
+  out.ParamBreath = (0.5 - 0.5 * Math.cos(2 * Math.PI * BREATH_HZ * t)) * weight;
+  return out;
+}
 
 /**
  * @param {number} x
@@ -201,7 +239,12 @@ function drive(hud, state, now) {
   state.idleAt = now;
   // no blink while the expressions come on or go off (the baked in-steps have none)
   const closure = y > 0.001 && y < 0.999 ? 0 : eyeClosure(state, now);
+  if (!state.wanderPhase) {
+    state.wanderPhase = [];
+    for (let i = 0; i < Object.keys(WANDER).length * WANDER_MIX.length; i++) state.wanderPhase.push(Math.random() * 2 * Math.PI);
+  }
   return {
+    extra: wander(state.wanderPhase, now / 1000, 1 - y),
     lean: Math.tanh(state.lean * LEAN_SOFT) / Math.tanh(LEAN_SOFT),
     turn: state.point,
     y,
