@@ -56,6 +56,11 @@ void offset_mvp(const float in[16], float ox, float oy, unsigned w, unsigned h, 
 
 std::vector<std::string> split_list(const std::string &s);
 
+/* From cluster-render's status text ("dcsm: Dcsm2 available for 12 s"): how
+ * many seconds the KOMBI's display service has been up; -1 not available (or
+ * not yet), -2 no display service line at all (not a car: a bench). */
+int display_up_s(const std::string &status_text);
+
 }  // namespace l2r
 
 #endif

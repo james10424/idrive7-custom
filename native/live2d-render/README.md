@@ -148,6 +148,26 @@ live2d-render to the app:
 | `layer` | `state`, `reason`: the video layer's, from cluster-render |
 | `stats` | every 5 s while drawing: `fps`, `update`, `draw`, `read` (ms a frame), `busy` (% of the frame's time) |
 
+## Waiting for the KOMBI
+
+On Nov 15 2026, at a car start with Miku Live2D already selected, the KOMBI
+took her video layer, showed her for about 10 s, then froze on a still frame
+and stopped answering the head unit: the link between them (`ipsec-kombi`)
+went down and stayed down, the cluster showing its own gauges with no map until
+the car slept. Picked a minute into a drive, she ran without trouble. The
+KOMBI's display service answers well before it can take a steady video
+stream, it seems.
+
+So live2d-render sends no frames until the KOMBI's display service has been up
+for 30 s (`--display-wait S`, 0 off). It asks cluster-render's status every
+second while a model is open (its `dcsm: ... available for N s` line) and
+counts the 30 s again whenever the display goes away, so a KOMBI restart
+mid-drive is waited out too. The model opens meanwhile; at a car start she
+shows about 30 s after the KOMBI comes up. With no display line in the status
+(a bench's cluster-render) it doesn't wait; with no answer at all, it draws
+after 10 s. Tried off the car against a fake display service that comes up and
+goes away (Docker, Mesa's software renderer); not yet on the car.
+
 ## If the head unit restarted
 
 A GPU fault in an earlier test program once restarted the whole head unit. So

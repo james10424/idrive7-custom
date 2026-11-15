@@ -129,4 +129,20 @@ void offset_mvp(const float in[16], float ox, float oy, unsigned w, unsigned h, 
     out[13] -= 2.0f * oy / (float)h;
 }
 
+int display_up_s(const std::string &text)
+{
+    const std::string key = "dcsm: ";
+    for (size_t at = text.find(key); at != std::string::npos; at = text.find(key, at + 1)) {
+        if (at != 0 && text[at - 1] != '\n') continue;
+        /* the line's first part, before its subscriptions ("; subscription: ...") */
+        const size_t end = text.find_first_of(";\n", at);
+        const std::string line = text.substr(at, end == std::string::npos ? std::string::npos : end - at);
+        const size_t up = line.find(" available for ");
+        if (line.find("not available") != std::string::npos) return -1;
+        if (up == std::string::npos) continue;
+        return atoi(line.c_str() + up + 15);
+    }
+    return -2;
+}
+
 }  // namespace l2r

@@ -5,7 +5,12 @@
  * (README.md). One app at a time; the model goes when the app disconnects.
  *
  *   live2d-render [--socket PATH] [--sdk DIR] [--state DIR] [--cluster-socket PATH]
- *                 [--software] [--stdout] [--idle-exit S]
+ *                 [--software] [--stdout] [--idle-exit S] [--display-wait S]
+ *
+ * --display-wait (30): no frames until the KOMBI's display service has been up
+ * this long (cluster-render's status), counted again after it goes away; 0 off.
+ * At a car start the KOMBI took her scene and then hung 10 s into her frames,
+ * taking its link to the head unit down with it (Nov 15 2026).
  *
  * --software draws with Mesa's software renderer and --stdout writes the 4:2:0
  * frames to stdout instead of cluster-render: for trying it off the car. */
@@ -115,6 +120,7 @@ struct Options {
     std::string cluster_socket = cr::kDefaultSocket;
     bool software = false, to_stdout = false, check = false;
     int idle_exit_s = 60;
+    int display_wait_s = 30;
 };
 
 class Service {
@@ -143,6 +149,10 @@ private:
     uint32_t ref_ = 0;
     cr::LayerOptions lo_;
     bool visible_ = true;
+    /* the KOMBI's display service: up since (-1 not up), and its status asked or answered last */
+    int64_t display_since_ = -1;
+    bool display_known_ = false, display_held_ = false;
+    int64_t status_asked_ = 0, status_answered_ = 0, opened_at_ = 0;
     int64_t next_ = 0;
     double last_update_ = 0;
     uint64_t frame_id_ = 1;
@@ -160,6 +170,7 @@ private:
     void close_model();
     void draw_frame();
     void stats(int64_t now);
+    bool display_ready(int64_t now);
 };
 
 void Service::send(const std::string &json)
@@ -255,6 +266,20 @@ void Service::open_model(const cr::Json &m)
                 if (ref != ref_) return;
                 send(cr::json_object({{"t", "\"layer\""}, {"state", cr::json_quote(state)}, {"reason", cr::json_quote(why)}}));
             };
+            cr_->on_status = [this](const std::string &text) {
+                const int up = l2r::display_up_s(text);
+                const int64_t now = now_ms();
+                status_answered_ = now;
+                display_known_ = true;
+                if (up == -2) display_since_ = 0;   /* no display service line: not a car, nothing to wait for */
+                else if (up < 0) display_since_ = -1;
+                else if (display_since_ < 0 || std::llabs(display_since_ - (now - up * 1000LL)) > 3000)
+                    display_since_ = now - up * 1000LL;
+            };
+            cr_->on_target = [this](const std::string &target, const std::string &state, const std::string &,
+                                    const std::string &) {
+                if (target == req_.target && state == "unavailable") display_since_ = -1;
+            };
             cr_->on_error = [this](const std::string &op, uint32_t ref, const std::string &why) {
                 if (ref && ref != ref_) return;
                 reply_error("cluster-render " + op, why);
@@ -276,6 +301,10 @@ void Service::open_model(const cr::Json &m)
         ref_ = cr_->video(lo_, vo);
     }
     next_ = now_ms();
+    opened_at_ = next_;
+    status_asked_ = 0;
+    display_known_ = false;   /* asked again: the KOMBI may have restarted since the last model */
+    display_held_ = false;
     last_update_ = 0;
     stats_at_ = next_;
     frames_ = 0;
@@ -439,6 +468,36 @@ void Service::stats(int64_t now)
     s_update_ = s_draw_ = s_read_ = s_physics_ = s_core_ = 0;
 }
 
+bool Service::display_ready(int64_t now)
+{
+    if (!cr_ || opt_.display_wait_s <= 0) return true;
+    /* asked every second while a model is open: a KOMBI that goes away stops her frames within it */
+    if (now - status_asked_ >= 1000) {
+        status_asked_ = now;
+        cr_->request_status();
+    }
+    /* a cluster-render that never answers isn't waited for */
+    if (!display_known_ && now - opened_at_ > 10000) {
+        display_known_ = true;
+        display_since_ = 0;
+        fprintf(stderr, "live2d-render: cluster-render doesn't say how long the display has been up: drawing\n");
+    }
+    const bool ready = display_known_ && display_since_ >= 0 && now - display_since_ >= opt_.display_wait_s * 1000LL;
+    if (ready == display_held_ && display_known_) {
+        if (ready)
+            fprintf(stderr, "live2d-render: the KOMBI's display has been up %lld s: drawing\n",
+                    (long long)((now - display_since_) / 1000));
+        else if (display_since_ >= 0)
+            fprintf(stderr, "live2d-render: the KOMBI's display has been up %lld s: her frames wait until %d s\n",
+                    (long long)((now - display_since_) / 1000), opt_.display_wait_s);
+        else
+            fprintf(stderr, "live2d-render: the KOMBI's display isn't up: her frames wait until it has been for %d s\n",
+                    opt_.display_wait_s);
+        display_held_ = !ready;
+    }
+    return ready;
+}
+
 int Service::run(int listen_fd, bool activated)
 {
     guard_.start();
@@ -446,7 +505,7 @@ int Service::run(int listen_fd, bool activated)
     int64_t idle_since = now_ms();
     while (!g_stop) {
         const int64_t now = now_ms();
-        const bool drawing = model_ && visible_;
+        const bool drawing = model_ && visible_ && display_ready(now);
         int timeout = 250;
         if (drawing) timeout = next_ > now ? (int)std::min<int64_t>(next_ - now, 250) : 0;
         pollfd fds[3];
@@ -483,7 +542,10 @@ int Service::run(int listen_fd, bool activated)
             }
         }
         if (cr_) cr_->poll(now_ms());
-        if (model_ && visible_ && now_ms() >= next_) {
+        if (model_ && visible_ && !display_ready(now_ms())) {
+            next_ = now_ms();
+            stats_at_ = next_;   /* no stats while she waits */
+        } else if (model_ && visible_ && now_ms() >= next_) {
             draw_frame();
             const int64_t period = 1000 / (req_.fps ? req_.fps : 15);
             next_ += period;
@@ -533,9 +595,10 @@ int main(int argc, char **argv)
         else if (a == "--stdout") o.to_stdout = true;
         else if (a == "--check") o.check = true;
         else if (a == "--idle-exit") { std::string s; val(&s); o.idle_exit_s = atoi(s.c_str()); }
+        else if (a == "--display-wait") { std::string s; val(&s); o.display_wait_s = atoi(s.c_str()); }
         else {
             fprintf(stderr, "usage: live2d-render [--socket PATH] [--sdk DIR] [--state DIR] [--cluster-socket PATH] "
-                            "[--software] [--stdout] [--idle-exit S]\n");
+                            "[--software] [--stdout] [--idle-exit S] [--display-wait S]\n");
             return 1;
         }
     }

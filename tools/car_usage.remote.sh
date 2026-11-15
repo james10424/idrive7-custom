@@ -10,6 +10,16 @@ HZ=$(getconf CLK_TCK 2>/dev/null || echo $DEFAULT_HZ)
 CORES=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)
 TMP=/tmp/car_usage.$$
 GPU=$(ls -d /sys/class/drm/card*/gt_act_freq_mhz 2>/dev/null | head -1)
+# the processor's temperature: coretemp's hwmon (the car has no thermal zones), its "Package id 0" input
+CORETEMP=""
+for h in /sys/class/hwmon/hwmon*; do [ "$(cat $h/name 2>/dev/null)" = coretemp ] && CORETEMP=$h && break; done
+PKG_TEMP=""
+if [ -n "$CORETEMP" ]; then
+    for l in $CORETEMP/temp*_label; do
+        case "$(cat $l 2>/dev/null)" in Package*) PKG_TEMP=${l%_label}_input ;; esac
+    done
+    [ -n "$PKG_TEMP" ] || PKG_TEMP=$(ls $CORETEMP/temp*_input 2>/dev/null | head -1)
+fi
 
 # "pid label" for each process of ours
 find_ours() {
@@ -53,6 +63,8 @@ while [ "$round" -le "$ROUNDS" ]; do
     set -- $(cpu_total); busy0=$1; total0=$2
     # the GPU's clock, sampled through the window
     gpu_sum=0; gpu_n=0; gpu_max=0
+    # and the processor's temperature (millidegrees)
+    temp_sum=0; temp_n=0; temp_max=0
     t=0
     while [ "$t" -lt "$SECS" ]; do
         sleep 1
@@ -61,6 +73,11 @@ while [ "$round" -le "$ROUNDS" ]; do
             f=$(cat "$GPU" 2>/dev/null || echo 0)
             gpu_sum=$((gpu_sum + f)); gpu_n=$((gpu_n + 1))
             [ "$f" -gt "$gpu_max" ] && gpu_max=$f
+        fi
+        if [ -n "$PKG_TEMP" ]; then
+            c=$(cat "$PKG_TEMP" 2>/dev/null || echo 0)
+            temp_sum=$((temp_sum + c)); temp_n=$((temp_n + 1))
+            [ "$c" -gt "$temp_max" ] && temp_max=$c
         fi
     done
     all_ticks > $TMP.end
@@ -102,6 +119,13 @@ while [ "$round" -le "$ROUNDS" ]; do
         lo=$(cat $dir/gt_RPn_freq_mhz 2>/dev/null || cat $dir/gt_min_freq_mhz 2>/dev/null || echo ?)
         hi=$(cat $dir/gt_RP0_freq_mhz 2>/dev/null || cat $dir/gt_boost_freq_mhz 2>/dev/null || echo ?)
         echo "GPU clock: $((gpu_sum / gpu_n)) MHz average, $gpu_max MHz top (the hardware's range $lo to $hi MHz)"
+    fi
+    if [ -n "$PKG_TEMP" ] && [ "$temp_n" -gt 0 ]; then
+        cores=""
+        for l in $CORETEMP/temp*_label; do
+            case "$(cat $l 2>/dev/null)" in Core*) cores="$cores $(( $(cat ${l%_label}_input 2>/dev/null || echo 0) / 1000 ))" ;; esac
+        done
+        echo "CPU temperature: $((temp_sum / temp_n / 1000)) C average, $((temp_max / 1000)) C top (the package); cores now:$cores C"
     fi
     if command -v journalctl >/dev/null 2>&1 && grep -q ' live2d-render' $TMP.labels 2>/dev/null; then
         # its own timing, only from this window (a line from before, when it has stopped drawing since, says nothing)

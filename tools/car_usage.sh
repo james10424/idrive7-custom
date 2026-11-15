@@ -9,7 +9,8 @@
 #
 # For each process: % of one core over the window (100 = a whole core; the car has 4), its RSS (resident memory, MB)
 # and threads. Then the whole unit: CPU % of all cores, memory available, load, the GPU's clock (a rough sign of
-# how hard it's drawing: it climbs from its idle MHz as it works), and live2d-render's own last timing line from
+# how hard it's drawing: it climbs from its idle MHz as it works), the processor's temperature (coretemp: the
+# package's average and top over the window, each core's at its end), and live2d-render's own last timing line from
 # its log. Finds each app's folder the way scripts/deploy.sh does (the oap_* folder whose package.json names it),
 # then the processes whose command line or working folder is in it; cluster-render and live2d-render by name.
 # Reads /proc and /sys only: changes nothing. What runs on the unit is tools/car_usage.remote.sh.

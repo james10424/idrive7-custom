@@ -77,6 +77,12 @@ int main()
     CHECK(moved[0] == m[0] && moved[5] == m[5]);
 
     if (failed) { fprintf(stderr, "control_test: %d failed\n", failed); return 1; }
+    /* cluster-render's status text: how long the KOMBI's display service has been up */
+    CHECK(display_up_s("upload: cap 900 KB/s\ntarget hud: shown\ndcsm: Dcsm2 available for 42 s; subscription: x ok\n"
+                       "dcsm: since start: 3 not available; last slot table 1 s ago\n") == 42);
+    CHECK(display_up_s("dcsm: Dcsm2 not available for 3 s; subscription: no answer yet\n") == -1);
+    CHECK(display_up_s("dcsm: Dcsm2 not available yet; subscription: no answer yet\n") == -1);
+    CHECK(display_up_s("upload: cap 900 KB/s\ntarget hud: idle\n") == -2);
     printf("control_test: ok\n");
     return 0;
 }
