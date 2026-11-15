@@ -1,7 +1,7 @@
 {
  "schemaVersion": 2,
  "name": "Miku Live2D",
- "_about": "Miku's close-up drawn live: live2d-render (native/live2d-render) draws her Live2D model on the head unit's GPU at 15 fps, as a video layer of its own in the visible window's bottom right, where Miku Bake's close-up sits; the miku_live widget runs her as Miku Bake's close-up does (leaning with the car, blushing with her hands on her cheeks and playing her idle loop when stopped, turning her head toward the indicator, the recorded blink) and sends her Cubism parameter values, from her pose file bundled with the app (pose: made from RetrynowMiku's close-up bake config by tools/live2d_bake/live_pose.js; parameter values only). Needs live2d-render with its Cubism SDK copied to the head unit and her model at the path below, textures shrunk to 1024 px (scripts/deploy.sh --miku-live); the model stays out of this repo. Without them nothing is drawn and the status row says why. Modes: cruise keeps her; nav and cruiseNav draw nothing, as Miku Bake.",
+ "_about": "Miku's close-up drawn live: live2d-render (native/live2d-render) draws her Live2D model on the head unit's GPU at 15 fps, as a video layer of its own in the visible window's bottom right, from Miku Bake's close-up's left edge (x 356, past BMW's speed) to the window's right edge (680), framed (frame) so her bow and twin tails fit; the miku_live widget runs her as Miku Bake's close-up does (leaning with the car, blushing with her hands on her cheeks and playing her idle loop when stopped, turning her head toward the indicator, the recorded blink) and sends her Cubism parameter values, from her pose file bundled with the app (pose: made from RetrynowMiku's close-up bake config by tools/live2d_bake/live_pose.js; parameter values only). Needs live2d-render with its Cubism SDK copied to the head unit and her model at the path below, textures shrunk to 1024 px (scripts/deploy.sh --miku-live); the model stays out of this repo. Without them nothing is drawn and the status row says why. Modes: cruise keeps her; nav and cruiseNav draw nothing, as Miku Bake.",
  "modes": [
   "cruise"
  ],
@@ -11,10 +11,15 @@
    "type": "miku_live",
    "x": 356,
    "y": 100,
-   "w": 248,
+   "w": 324,
    "h": 278,
    "model": "/var/opt/live2d-render/models/RetrynowMiku/RetrynowMiku.model3.json",
    "pose": "miku-live/retrynowmiku.json",
+   "frame": [
+    0,
+    1.36,
+    0.95
+   ],
    "params": "Watermark=1"
   }
  ]
