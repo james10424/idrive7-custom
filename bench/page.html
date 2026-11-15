@@ -631,7 +631,7 @@
       hud.forEach((layer, i) => { if (layer.exclusive) start = i; });
       hud.slice(start).forEach((layer) => {
         ctx.globalAlpha = layer.opacity === undefined ? 1 : layer.opacity;
-        if (layer.kind === 'image') { const image = images.get(layer.key); if (image) ctx.drawImage(image, layer.x, layer.y, layer.w, layer.h); }
+        if (layer.kind === 'image' || layer.kind === 'video') { const image = images.get(layer.key); if (image) ctx.drawImage(image, layer.x, layer.y, layer.w, layer.h); }
         else if (layer.kind === 'effect') { const image = drawEffect(layer, t); if (image) ctx.drawImage(image, layer.x, layer.y, layer.w, layer.h); }
         ctx.globalAlpha = 1;
       });

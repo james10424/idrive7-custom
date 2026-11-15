@@ -17,7 +17,8 @@ class Live2dClient extends EventEmitter {
    */
   constructor(socketPath) {
     super();
-    this.path = socketPath || SOCKET;
+    // HUD_LIVE2D_SOCKET: the Mac bench's live2d-render in Docker ("host:port"); never set on the car
+    this.path = socketPath || process.env.HUD_LIVE2D_SOCKET || SOCKET;
     /** @type {?net.Socket} */
     this.sock = null;
     this.connected = false;
@@ -33,7 +34,8 @@ class Live2dClient extends EventEmitter {
   /** @returns {void} */
   _connect() {
     if (this.closed) return;
-    const sock = net.connect(this.path);
+    const tcp = /^([\w.-]+):(\d+)$/.exec(this.path);
+    const sock = tcp ? net.connect(Number(tcp[2]), tcp[1]) : net.connect(this.path);
     this.sock = sock;
     sock.setEncoding("utf8");
     sock.on("connect", () => {

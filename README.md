@@ -182,6 +182,14 @@ ssh root@<car> 'rm /var/opt/live2d-render/state/drawing'
 
 After 3 crashes of its own in one boot it also stops until the next start. Its log: `ssh root@<car> journalctl -u live2d-render`; every few seconds while drawing it logs its frame rate and how much of each frame it takes (about 39% for RetrynowMiku).
 
+**On the bench** (the Mac's Display Bench), Miku Live2D runs the real Live2D Render in Docker on Mesa's software renderer, at about 15 fps. Build its glue as in step 3 (`make glue`), then copy the model to the bench once:
+
+```bash
+node bench/live2d.js <model>.model3.json
+```
+
+The bench starts it by itself from then on (Docker running), and stops it with the bench; without it the status row says Live2D Render isn't installed, as on a car without it.
+
 **New poses.** Bake a new close-up config (tools/live2d_bake) and turn it into the app's pose file, expressions written in:
 
 ```bash

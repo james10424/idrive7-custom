@@ -35,7 +35,12 @@ H = $(BUILD)/host
 SRC = src/main.cpp src/gpu.cpp src/guard.cpp src/control.cpp $(CR)/client/client.cpp $(CR)/client/protocol.cpp
 HDR = $(wildcard src/*.h) $(wildcard $(CR)/include/cluster_render/*.h)
 
-.PHONY: all test target target-in-docker prebuilt glue glue-in-docker try deploy-sdk clean
+.PHONY: all test image target target-in-docker prebuilt glue glue-in-docker try deploy-sdk clean
+
+# the Docker image's name, built first if need be (the Mac bench runs live2d-render in it)
+image:
+	@$(DOCKER_IMAGE) >/dev/null
+	@echo $(IMAGE)
 
 all: test
 

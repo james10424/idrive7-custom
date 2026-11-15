@@ -36,6 +36,7 @@ const http = require("http");
 const path = require("path");
 const { fork, execFileSync } = require("child_process");
 const { takeBuildLock, BUILD_LOCK_WAIT_MS } = require("./build_lock");
+const live2d = require("./live2d");
 // What the driver sees of each target (hood curve, BMW's gear box and belt light, the HUD window):
 // one source of truth, shared with the app's layout check. The page gets it in the 'hello' event.
 const visible = require("../shared/visible");
@@ -52,7 +53,7 @@ const etc2 = require("../tools/etc2"); // etc2rgba assets, decoded for the page
  * @property {number} conn
  * @property {number} ref
  * @property {string} app the name in the connection's hello
- * @property {string} kind "image", "effect" or "asset" (others are registered, not drawn)
+ * @property {string} kind "image", "effect", "video" (its 4:2:0 frames made RGBA) or "asset" (others are registered, not drawn)
  * @property {string} target
  * @property {string} class
  * @property {number} z
@@ -721,6 +722,16 @@ const renderServer = net.createServer((sock) => {
           )
             return refuse("layer", msg.ref, "image iw/ih out of range");
           newLayer.image = Buffer.alloc(msg.iw * msg.ih * 4);
+        } else if (msg.kind === "video") {
+          // drawn as an image of its frames (live2d-render's, for Miku Live2D): each 4:2:0 frame made RGBA here
+          const vw = msg.vw || 1088,
+            vh = msg.vh || 480;
+          if (!(vw > 0 && vh > 0 && vw % 4 === 0 && vh % 2 === 0 && vw <= MAX_IMAGE_W && vh <= MAX_IMAGE_H))
+            return refuse("layer", msg.ref, "video vw/vh out of range");
+          newLayer.iw = vw;
+          newLayer.ih = vh;
+          newLayer.bpp = 4;
+          newLayer.image = Buffer.alloc(vw * vh * 4);
         } else if (msg.kind === "effect") {
           if (!msg.fs) return refuse("layer", msg.ref, "effect without fs");
           // shaders that crashed the car's KOMBI (38 texture reads, Custom HUD 0.1.15; 8724 tokens, the M theme; 48
@@ -1065,6 +1076,16 @@ const renderServer = net.createServer((sock) => {
     const rectCount = body.readUInt16LE(RECT_COUNT_AT);
     const layer = layers.get(conn + ":" + ref);
     if (!layer) return bad("frame for unknown ref " + ref);
+    if (layer.kind === "video") {
+      if (rectCount) return bad("video ref " + ref + ": whole frames only");
+      const yuv = body.slice(FRAME_HEAD);
+      if (yuv.length !== (layer.iw * layer.ih * 3) / 2)
+        return bad("video frame for ref " + ref + " is " + yuv.length + " bytes, " + layer.iw + "x" + layer.ih + " needs " + (layer.iw * layer.ih * 3) / 2);
+      yuvToRgba(yuv, layer.iw, layer.ih, layer.image);
+      layer.sentWhole = true;
+      sendPixels(layer);
+      return;
+    }
     if (layer.kind !== "image" && layer.kind !== "asset")
       return bad("frame for a " + layer.kind + " layer (ref " + ref + ")");
     const head = FRAME_HEAD + rectCount * RECT_BYTES,
@@ -1137,6 +1158,38 @@ const renderServer = net.createServer((sock) => {
     sendPixels(layer);
   }
 });
+
+/**
+ * A video layer's 4:2:0 atlas (Y, then each row of U and V side by side; BT.601 limited range) as RGBA, black as
+ * nothing (the HUD shows black as see-through): alpha is the brightest channel, the colour divided by it.
+ * @param {Buffer} yuv
+ * @param {number} w
+ * @param {number} h
+ * @param {Buffer} out w * h * 4
+ */
+function yuvToRgba(yuv, w, h, out) {
+  const uv = w * h;
+  /** @type {(v: number) => number} */
+  const clamp = (v) => (v < 0 ? 0 : v > 255 ? 255 : v);
+  for (let y = 0; y < h; y++) {
+    const row = uv + (y >> 1) * w;
+    for (let x = 0; x < w; x++) {
+      const c = 1.164 * (yuv[y * w + x] - 16),
+        u = yuv[row + (x >> 1)] - 128,
+        v = yuv[row + (w >> 1) + (x >> 1)] - 128;
+      const r = clamp(c + 1.596 * v),
+        g = clamp(c - 0.392 * u - 0.813 * v),
+        b = clamp(c + 2.017 * u),
+        a = Math.max(r, g, b),
+        k = a ? 255 / a : 0,
+        o = (y * w + x) * 4;
+      out[o] = r * k;
+      out[o + 1] = g * k;
+      out[o + 2] = b * k;
+      out[o + 3] = a;
+    }
+  }
+}
 
 /* ---------- the app children ---------- */
 
@@ -1720,6 +1773,10 @@ try {
 } catch (err) {
   /* not there */
 }
+// the same service on TCP, for live2d-render in Docker (Unix sockets don't cross into Docker on the Mac)
+const renderTcp = net.createServer(/** @type {(sock: net.Socket) => void} */ (renderServer.listeners("connection")[0]));
+/** @type {?{ addr: string, stop: () => void }} */
+let live2dRun = null;
 renderServer.listen(SOCK, () => {
   web.listen(PORT, "127.0.0.1", () => {
     log("info", "bench renderer on " + SOCK);
@@ -1741,15 +1798,21 @@ renderServer.listen(SOCK, () => {
         (PIXEL_BYTES ? mib(PIXEL_BYTES) : "unlimited") +
         " (every image counted twice)",
     );
-    apps.forEach(startApp);
+    // live2d-render in Docker (live2d.js) reaches this fake cluster-render over TCP, on the Mac's loopback only
+    renderTcp.listen(0, "127.0.0.1", () => {
+      live2dRun = live2d.start(/** @type {net.AddressInfo} */ (renderTcp.address()).port, log);
+      if (live2dRun) process.env.HUD_LIVE2D_SOCKET = live2dRun.addr;
+      apps.forEach(startApp);
+    });
   });
 });
-/** Stops the apps, removes the socket and exits. */
+/** Stops the apps and live2d-render, removes the socket and exits. */
 function shutdown() {
   apps.forEach((app) => {
     app.stopping = true;
     if (app.child) app.child.kill("SIGTERM");
   });
+  if (live2dRun) live2dRun.stop();
   try {
     fs.unlinkSync(SOCK);
   } catch (err) {
