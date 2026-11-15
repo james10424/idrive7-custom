@@ -25,6 +25,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
@@ -150,7 +151,9 @@ private:
     cr::LayerOptions lo_;
     bool visible_ = true;
     /* the KOMBI's display service: up since (-1 not up), and its status asked or answered last */
-    int64_t display_since_ = -1;
+    /* kNotUp: not up. A time, not a sign: up longer than this process's clock has run is below 0 */
+    static const int64_t kNotUp = INT64_MIN, kLongAgo = INT64_MIN / 2;
+    int64_t display_since_ = kNotUp;
     bool display_known_ = false, display_held_ = false;
     int64_t status_asked_ = 0, status_answered_ = 0, opened_at_ = 0;
     int64_t next_ = 0;
@@ -271,14 +274,14 @@ void Service::open_model(const cr::Json &m)
                 const int64_t now = now_ms();
                 status_answered_ = now;
                 display_known_ = true;
-                if (up == -2) display_since_ = 0;   /* no display service line: not a car, nothing to wait for */
-                else if (up < 0) display_since_ = -1;
-                else if (display_since_ < 0 || std::llabs(display_since_ - (now - up * 1000LL)) > 3000)
+                if (up == -2) display_since_ = kLongAgo;   /* no display service line: not a car, nothing to wait for */
+                else if (up < 0) display_since_ = kNotUp;
+                else if (display_since_ == kNotUp || display_since_ == kLongAgo || std::llabs(display_since_ - (now - up * 1000LL)) > 3000)
                     display_since_ = now - up * 1000LL;
             };
             cr_->on_target = [this](const std::string &target, const std::string &state, const std::string &,
                                     const std::string &) {
-                if (target == req_.target && state == "unavailable") display_since_ = -1;
+                if (target == req_.target && state == "unavailable") display_since_ = kNotUp;
             };
             cr_->on_error = [this](const std::string &op, uint32_t ref, const std::string &why) {
                 if (ref && ref != ref_) return;
@@ -479,15 +482,16 @@ bool Service::display_ready(int64_t now)
     /* a cluster-render that never answers isn't waited for */
     if (!display_known_ && now - opened_at_ > 10000) {
         display_known_ = true;
-        display_since_ = 0;
+        display_since_ = kLongAgo;
         fprintf(stderr, "live2d-render: cluster-render doesn't say how long the display has been up: drawing\n");
     }
-    const bool ready = display_known_ && display_since_ >= 0 && now - display_since_ >= opt_.display_wait_s * 1000LL;
+    const bool ready = display_known_ && display_since_ != kNotUp && now - display_since_ >= opt_.display_wait_s * 1000LL;
     if (ready == display_held_ && display_known_) {
-        if (ready)
-            fprintf(stderr, "live2d-render: the KOMBI's display has been up %lld s: drawing\n",
-                    (long long)((now - display_since_) / 1000));
-        else if (display_since_ >= 0)
+        if (ready) {
+            if (display_since_ != kLongAgo)
+                fprintf(stderr, "live2d-render: the KOMBI's display has been up %lld s: drawing\n",
+                        (long long)((now - display_since_) / 1000));
+        } else if (display_since_ != kNotUp)
             fprintf(stderr, "live2d-render: the KOMBI's display has been up %lld s: her frames wait until %d s\n",
                     (long long)((now - display_since_) / 1000), opt_.display_wait_s);
         else

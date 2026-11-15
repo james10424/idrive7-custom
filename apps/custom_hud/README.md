@@ -32,6 +32,8 @@ Layout (Off, Miku or the calibration grid), Make room for BMW's guidance and cru
 
 The page's first row says what the HUD is doing and why anything is not drawn (for example "waiting: another app has this display").
 
+Under it, the head unit's CPU and temperature: "CPU 66% of 4 cores, ours 12%" (all four cores together, and how much of that is ours: Custom HUD, Custom Cluster, cluster-render and Live2D Render) and "CPU temperature 55 °C" (the processor's package). They update every 5 s while the page is open, and at once with **Refresh CPU and temperature**; nothing is read while the page is closed. The same figures `tools/car_usage.sh` gives.
+
 ## The visible window
 
 The HUD is an 800x480 screen, but only part of it comes through the windshield. Measured from a photo of the calibration grid on a 2020 M340i (Nov 12 2026), the visible window is **x 120, y 100, 560 x 280** (x 120 to 680, y 100 to 380). It moves a little with eye position and HUD height, and every layout sits inside it.

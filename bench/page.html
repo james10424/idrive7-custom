@@ -804,7 +804,23 @@
       renderSettings(msg);
     } else if (msg.t === 'status') {
       const block = appBlock(msg.app);
-      if (block) block.querySelector('.status').textContent = msg.s + (msg.d ? '\n' + msg.d : '');
+      if (block) {
+        block.querySelector('.status').textContent = msg.s + (msg.d ? '\n' + msg.d : '') + (msg.rows && msg.rows.length ? '\n' + msg.rows.join('\n') : '');
+        // the page's buttons (Custom HUD's Refresh), pressed as on the car
+        let bar = block.querySelector('.pagebuttons');
+        const want = (msg.buttons || []).map((b) => b[0]).join(',');
+        if (!bar) { bar = document.createElement('div'); bar.className = 'pagebuttons'; block.querySelector('.status').after(bar); }
+        if (bar.dataset.names !== want) {
+          bar.dataset.names = want;
+          bar.innerHTML = '';
+          (msg.buttons || []).forEach((b) => {
+            const button = document.createElement('button');
+            button.textContent = b[1];
+            button.onclick = () => fetch('/click', { method: 'POST', body: JSON.stringify({ app: msg.app, name: b[0] }) });
+            bar.appendChild(button);
+          });
+        }
+      }
     } else if (msg.t === 'app') {
       appStates[msg.app || '?'] = msg.state;
       const ids = Object.keys(appStates), stateEl = document.getElementById('appState'), allRunning = ids.every((k) => appStates[k] === 'running');

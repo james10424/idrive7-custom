@@ -1752,6 +1752,18 @@ const web = http.createServer(async (req, res) => {
     res.writeHead(204);
     return res.end();
   }
+  if (req.method === "POST" && url === "/click") {
+    // A button on the app's page (Custom HUD's Refresh), as the car's HMI reports it (run-app.js).
+    const reqBody = await body(req),
+      app = appOf(reqBody.app) || apps[0];
+    if (!app.child) {
+      res.writeHead(409);
+      return res.end("app not running");
+    }
+    app.child.send({ t: "click", name: reqBody.name });
+    res.writeHead(204);
+    return res.end();
+  }
   if (req.method === "POST" && url === "/setting") {
     // Pressed on the stub's RHMI components, as the car's settings page sends it (run-app.js).
     const reqBody = await body(req),

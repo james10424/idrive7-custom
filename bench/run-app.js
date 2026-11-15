@@ -29,11 +29,12 @@ const Module = require("module");
  *   | { t: "drive", value: number | null }
  *   | { t: "nav", value: string | null }
  *   | { t: "assist", value: "acc" | "off" | null }
- *   | { t: "car", key: string, value: string | null }} ToApp
+ *   | { t: "car", key: string, value: string | null }
+ *   | { t: "click", name: string }} ToApp
  */
 /**
  * A message to bench/server.js, which adds app (the app id) and passes it on to the page.
- * @typedef {{ t: "status", s: string, d: string, app?: string }
+ * @typedef {{ t: "status", s: string, d: string, rows?: string[], buttons?: string[][], app?: string }
  *   | { t: "settings", schema: any, values: Record<string, any>, app?: string }
  *   | { t: "values", mode: string, values: Record<string, number | null>, app?: string }} FromApp
  */
@@ -119,9 +120,24 @@ Module._load = function (req) {
   return exported;
 };
 
-// the center screen's status row
+// the center screen's status row, and its other text rows and buttons (Custom HUD's CPU and temperature, Refresh)
 let status = "",
   detail = "";
+const page = (spec.screens || [])[0] || { items: [] };
+/** @type {string[]} the page's other text rows, in its order */
+const rowNames = (page.items || []).filter((i) => i[0] === "text" && i[1] !== "STATUS" && i[1] !== "DETAIL").map((i) => i[1]);
+/** @type {Record<string, string>} */
+const rowText = {};
+rowNames.forEach((n) => {
+  const item = (page.items || []).filter((i) => i[1] === n)[0];
+  rowText[n] = item && item[2] ? String(item[2]).trim() : "";
+});
+/** @type {string[][]} [name, label] */
+const buttons = (page.items || []).filter((i) => i[0] === "button").map((i) => [i[1], i[2] || i[1]]);
+const sendStatus = () =>
+  send({ t: "status", s: status, d: detail, rows: rowNames.map((n) => rowText[n]).filter(Boolean), buttons: buttons });
+// the bench's center screen is always open: a menu page is shown, as when it's open on the car
+if (page.kind === "menu") setTimeout(() => ui.open(page.name), 0);
 const text = ui.text;
 /**
  * @param {string} name component name
@@ -132,11 +148,15 @@ const text = ui.text;
 ui.text = (name, value, row, cell) => {
   if (name === "STATUS" && !row) {
     status = String(value);
-    send({ t: "status", s: status, d: detail });
+    sendStatus();
   }
   if (name === "DETAIL" && !row) {
     detail = String(value).trim();
-    send({ t: "status", s: status, d: detail });
+    sendStatus();
+  }
+  if (rowNames.indexOf(name) >= 0 && !row) {
+    rowText[name] = String(value).trim();
+    sendStatus();
   }
   return text(name, value, row, cell);
 };
@@ -681,6 +701,7 @@ process.on(
       const want = mode === "manual" ? "off" : "on";
       if (settings.get("demo") !== want) press("demo", want);
     } else if (msg.t === "set") press(msg.key, msg.value);
+    else if (msg.t === "click") ui.comp(msg.name).emit("action", {});
     else if (msg.t === "drive") drive = msg.value;
     else if (msg.t === "nav") {
       // "not sent" after a value: the app would keep the last state it saw (a route that never ends, the HUD giving way
