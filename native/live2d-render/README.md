@@ -114,3 +114,18 @@ make prebuilt      # make target, copied to prebuilt/live2d-render
 
 then raise `component.json`'s `"version"` and commit both; the Store offers
 the new version from the next release tag of this repo.
+
+To try a build on the car before releasing it, install it without the Store,
+with mgu-store's deploy tool (a checkout of `mgu-store` beside this repo),
+from the repo's root:
+
+```sh
+../mgu-store/deploy/hu artifact native/live2d-render --out dist
+../mgu-store/deploy/hu install --host <car> --identity <root key> --artifact dist/live2d-render@<version>.tgz
+```
+
+The first packs `prebuilt/live2d-render`, the systemd units and
+`component.json` as the Store would; the second installs it to
+`/var/opt/live2d-render/current/` and enables its socket.
+`deploy/hu uninstall live2d-render --yes` takes it off. The SDK and the
+models aren't part of it: `make deploy-sdk`, and the app's own model copy.

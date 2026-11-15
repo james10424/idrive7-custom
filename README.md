@@ -58,6 +58,15 @@ To try a build on the car before releasing it, install it the way the Store does
 
    The deploy tool marks it local (`"mguLocalOnly": true`).
 
+**Live2D Render** (`native/live2d-render`, for Miku Live2D) installs the same way, as a tool. No oap-sdk needed: pack the committed `prebuilt/live2d-render` with its systemd units, then install that file:
+
+```bash
+../mgu-store/deploy/hu artifact native/live2d-render --out dist
+../mgu-store/deploy/hu install --host <car> --identity <root key> --artifact dist/live2d-render@<version>.tgz
+```
+
+The tool goes to `/var/opt/live2d-render/current/` and its socket is enabled, as from the Store. After a change to its source, run `make prebuilt` in `native/live2d-render` first (its README, "Releasing"). The Cubism SDK and the model are still copied by hand ([Miku Live2D](#miku-live2d-drawn-live), steps 3 and 4). To take it off: `../mgu-store/deploy/hu uninstall live2d-render --yes` (with the same `--host` and `--identity`).
+
 ### When the HUD or the cluster stays off (the guard)
 
 If the KOMBI restarts twice right after cluster-render shows a display (a shader it can't draw, say), cluster-render's guard turns that display off, even across reboots, and the app's status row says "cluster-render's guard disabled this display". Find out why first, or the next try restarts it again:
