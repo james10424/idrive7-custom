@@ -60,6 +60,21 @@ v = compose(rig, Object.assign({}, D, { closure: 1 }));
 near(v.ParamEyeLOpen, 0);
 near(compose(rig, Object.assign({}, D, { closure: 0.5 })).ParamEyeROpen, 0.3);
 
+// the turn's hold loops: offsets on top of the turn, each way its own, scaled by how far she's turned
+const held = rigOf(
+  Object.assign({}, config, { close: Object.assign({}, config.close, { turnHold: {
+    left: { period: 2, poses: [{ ParamAngleZ: 0 }, { ParamAngleZ: 4 }] },
+    right: { period: 1, poses: [{ ParamAngleZ: 0 }, { ParamAngleZ: -2 }] },
+  } }) }),
+  exprs,
+  defaults,
+);
+near(compose(held, Object.assign({}, D, { turn: -1, holdT: 0 })).ParamAngleZ, 0); // starts at the loop's start
+near(compose(held, Object.assign({}, D, { turn: -1, holdT: 0.5 })).ParamAngleZ, 2); // a quarter in: halfway to 4
+near(compose(held, Object.assign({}, D, { turn: -0.5, holdT: 0.5 })).ParamAngleZ, 1); // half turned: half of it
+near(compose(held, Object.assign({}, D, { turn: 1, holdT: 0.5 })).ParamAngleZ, -2); // the right's own loop
+near(compose(held, Object.assign({}, D, { turn: 0, holdT: 0.5 })).ParamAngleZ, 0); // not turned: none
+
 // changes: everything first, then only what moved
 /** @type {Record<string, number>} */
 const sent = {};

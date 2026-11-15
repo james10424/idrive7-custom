@@ -35,6 +35,7 @@ const hudData = require("../../hud_data");
  * @property {number} [turnWas] the turn's target last update (-1, 0, 1)
  * @property {number} [idleMs] how far into the idle loop she is (ms)
  * @property {number} [idleAt] when idleMs last went on (ms)
+ * @property {number} [holdMs] how long she's held a turn (the hold loop's clock; 0 back upright)
  * @property {number} [blinkAt] when her last blink started (ms)
  * @property {number} [blinkNext] when her next blink is due (ms)
  * @property {?{ rate: number, closure: number[] }} [blink] the bake's recorded blink
@@ -177,6 +178,8 @@ function drive(hud, state, now) {
     state.pointV += (POINT_K * (turnSide - state.point) - POINT_C * state.pointV) * s;
     state.point = Math.max(-1, Math.min(1, state.point + state.pointV * s));
   }
+  // while turned, the hold loop's clock (it starts with the turn, at the loop's start, so it joins smoothly)
+  state.holdMs = Math.abs(state.point || 0) > TURN_BACK ? (state.holdMs || 0) + dt : 0;
   // the expressions: on after standing still STILL_MS, or with an indicator (until her head is back); off past
   // ZOOM_OUT_KMH
   const speed = hud._raw("speed"),
@@ -204,6 +207,7 @@ function drive(hud, state, now) {
     y,
     idleT: (state.idleMs || 0) / 1000,
     idleW: y,
+    holdT: (state.holdMs || 0) / 1000,
     closure,
   };
 }

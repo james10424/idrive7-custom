@@ -2,7 +2,7 @@
 /**
  * Live Miku's pose file, bundled with Custom HUD (apps/custom_hud/hud/miku-live/): from a close-up bake config, only
  * what the Miku Live2D layout reads (shared/widgets/miku_live/pose.js: her rest params and hidden parts, and the
- * close-up's framing, lean, turn, idle loop, blink and expressions), the expressions' parameters written in (from
+ * close-up's framing, lean, turn and its hold loops, idle loop, blink and expressions), the expressions' parameters written in (from
  * their .exp3.json files next to the model), every number rounded to 3 decimals. Parameter values only: no art.
  *
  *   node tools/live2d_bake/live_pose.js <bake config.json> <model folder> <out.json>
@@ -48,6 +48,12 @@ const out = round({
     lean: close.lean && close.lean.poses ? { poses: close.lean.poses } : undefined,
     turnPoses: close.turnPoses,
     idle: close.idle && close.idle.poses ? { period: close.idle.period, poses: close.idle.poses } : undefined,
+    turnHold: close.turnHold
+      ? {
+          left: close.turnHold.left && { period: close.turnHold.left.period, poses: close.turnHold.left.poses },
+          right: close.turnHold.right && { period: close.turnHold.right.period, poses: close.turnHold.right.poses },
+        }
+      : undefined,
     blink: close.blink,
   },
   expressions,

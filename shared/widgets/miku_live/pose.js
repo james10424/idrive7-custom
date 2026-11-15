@@ -7,6 +7,8 @@
  *   - driving, the lean (close.lean.poses: a full lean left .. right, the upright middle left out);
  *   - stopped or an indicator on, the expressions (close.expressions, e.g. Blush and Yandere) and close.params
  *     coming on, her idle loop (close.idle: poses over its period) and the turn toward the indicator (close.turnPoses);
+ *   - while she holds a turn, its hold loop on top (close.turnHold.left / .right: offsets from the full turn, as the
+ *     recording moved while held, e.g. her head bobbing), scaled by how far she's turned;
  *   - her eyes shut by the blink's closure on top.
  * Each pose set is the model's rest plus the recording's movement, so each adds its offset from the rest.
  */
@@ -14,12 +16,14 @@
 /** @typedef {Record<string, number>} Values parameter id -> value */
 /** @typedef {{ steps: number, poses: Values[] }} Chain poses from a full -1 to a full 1, the upright 0 left out */
 /** @typedef {{ id: string, value: number, blend: string }} ExprParam */
+/** @typedef {{ period: number, poses: Values[] }} Loop poses evenly over its period, round and round */
 /**
  * @typedef {object} Rig
  * @property {Values} rest
  * @property {?Chain} lean
  * @property {?Chain} turn
  * @property {?{ period: number, poses: Values[] }} idle
+ * @property {?{ left: ?Loop, right: ?Loop }} hold the turn's hold loops (offsets), each way
  * @property {ExprParam[][]} expressions
  * @property {Values} closeParams
  * @property {string[]} eyes the eye openness parameters the blink shuts
@@ -32,6 +36,7 @@
  * @property {number} y the expressions coming on, 0 .. 1 (eased)
  * @property {number} idleT seconds into the idle loop
  * @property {number} idleW how much of the idle shows, 0 .. 1
+ * @property {number} [holdT] seconds she's held the turn (its hold loop's clock)
  * @property {number} closure her eyes, 0 open .. 1 shut
  */
 
@@ -83,19 +88,22 @@ function rigOf(config, expressionFiles, defaults) {
     close.idle && close.idle.period > 0 && Array.isArray(close.idle.poses) && close.idle.poses.length && close.idle.poses.every(isValues)
       ? { period: close.idle.period, poses: close.idle.poses }
       : null;
+  /** @type {(l: *) => ?Loop} */
+  const loopOf = (l) => (l && l.period > 0 && Array.isArray(l.poses) && l.poses.length && l.poses.every(isValues) ? { period: l.period, poses: l.poses } : null);
+  const hold = close.turnHold ? { left: loopOf(close.turnHold.left), right: loopOf(close.turnHold.right) } : null;
   const expressions = (Array.isArray(close.expressions) ? close.expressions : []).map((f) => expressionOf(expressionFiles[f]));
   const closeParams = isValues(close.params) ? close.params : {};
   /** @type {Set<string>} */
   const keys = new Set(Object.keys(isValues(config && config.params) ? config.params : {}));
   /** @type {(v: Values) => void} */
   const add = (v) => Object.keys(v).forEach((k) => keys.add(k));
-  [lean, turn, idle].forEach((set) => set && set.poses.forEach(add));
+  [lean, turn, idle, hold && hold.left, hold && hold.right].forEach((set) => set && set.poses.forEach(add));
   expressions.forEach((e) => e.forEach((p) => keys.add(p.id)));
   add(closeParams);
   EYES.forEach((k) => keys.add(k));
   // only parameters the model has (a pose from another model's recording names some it hasn't)
   const known = Array.from(keys).filter((k) => k in defaults);
-  return { rest, lean, turn, idle, expressions, closeParams, eyes: EYES.filter((k) => k in defaults), keys: known };
+  return { rest, lean, turn, idle, hold, expressions, closeParams, eyes: EYES.filter((k) => k in defaults), keys: known };
 }
 
 /**
@@ -158,6 +166,27 @@ function addIdle(idle, t, rest, out, weight) {
 }
 
 /**
+ * A loop of offsets at t seconds, blended between its two nearest poses, added into out times weight.
+ * @param {Loop} loop
+ * @param {number} t
+ * @param {Values} out
+ * @param {number} weight
+ */
+function addLoop(loop, t, out, weight) {
+  const n = loop.poses.length,
+    k = ((((t % loop.period) + loop.period) % loop.period) / loop.period) * n,
+    i0 = Math.min(Math.floor(k), n - 1),
+    f = k - i0,
+    a = loop.poses[i0],
+    b = loop.poses[(i0 + 1) % n];
+  Object.keys(a).forEach((id) => {
+    if (!(id in out)) return;
+    const vb = id in b ? b[id] : 0;
+    out[id] += (a[id] + (vb - a[id]) * f) * weight;
+  });
+}
+
+/**
  * Every parameter the rig sets, for the drive state now.
  * @param {Rig} rig
  * @param {Drive} d
@@ -172,7 +201,12 @@ function compose(rig, d) {
   if (rig.lean && Math.abs(d.lean) > 1e-4) addChain(rig.lean, d.lean, rig.rest, v, 1);
   const turned = rig.turn ? Math.min(1, Math.abs(d.turn) * rig.turn.steps) : 0;
   if (rig.idle && d.idleW > 0) addIdle(rig.idle, d.idleT, rig.rest, v, d.idleW * (1 - turned));
-  if (rig.turn && Math.abs(d.turn) > 1e-4) addChain(rig.turn, d.turn, rig.rest, v, 1);
+  if (rig.turn && Math.abs(d.turn) > 1e-4) {
+    addChain(rig.turn, d.turn, rig.rest, v, 1);
+    // held, as the recording moved while held: fading in with the turn, so it starts and ends with it
+    const loop = rig.hold && (d.turn < 0 ? rig.hold.left : rig.hold.right);
+    if (loop) addLoop(loop, d.holdT || 0, v, Math.min(1, Math.abs(d.turn)));
+  }
   const y = Math.max(0, Math.min(1, d.y));
   if (y > 0) {
     Object.keys(rig.closeParams).forEach((id) => {
