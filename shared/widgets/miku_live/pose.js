@@ -42,6 +42,8 @@
  * @property {number} idleW how much of the idle shows, 0 .. 1
  * @property {number} [holdT] seconds she's held the turn (its hold loop's clock)
  * @property {Values} [extra] offsets added on top of the poses (the widget's wander and breathing while she drives)
+ * @property {{ w: number, x: number }} [glance] her eyes glancing back at you holding a turn: w 0..1 of the way to
+ *   gaze x (and her rest gaze's height), whatever the poses had
  * @property {number} closure her eyes, 0 open .. 1 shut
  */
 
@@ -248,6 +250,13 @@ function compose(rig, d) {
         else v[p.id] += p.value * y;
       }),
     );
+  }
+  if (d.glance && d.glance.w > 0) {
+    const w = Math.min(1, d.glance.w),
+      to = { ParamEyeBallX: d.glance.x, ParamEyeBallY: rig.rest.ParamEyeBallY || 0 };
+    Object.keys(to).forEach((id) => {
+      if (id in v) v[id] += (to[id] - v[id]) * w;
+    });
   }
   const open = 1 - Math.max(0, Math.min(1, d.closure));
   rig.eyes.forEach((k) => {

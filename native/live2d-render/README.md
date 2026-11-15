@@ -135,7 +135,7 @@ App to live2d-render:
 | `p` | `v`: "Id=value Id=value ..." (space or comma separated); `reset` 1 sets every parameter back to its default first. Values not sent keep their last |
 | `show`, `hide` | the layer shown or hidden; hidden, nothing is drawn |
 | `move` | `x`, `y`, `z`: the layer, whole pixels |
-| `offset` | `x`, `y`: the model moved inside its picture, in px (fractions too, at most a quarter of the picture each way); an app's bounce (Miku Live2D's road bumps). Since 0.1.1: 0.1.0 answers it with an `error` |
+| `offset` | `x`, `y`: the model moved inside its picture, in px (fractions too, at most a quarter of the picture each way); an app's own movement (Miku Live2D's bob). Since 0.1.1: 0.1.0 answers it with an `error` |
 | `close` | the model goes |
 
 live2d-render to the app:

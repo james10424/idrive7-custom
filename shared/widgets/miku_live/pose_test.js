@@ -143,4 +143,18 @@ if (file) {
       ", " + real.expressions.length + " expressions; " + n + " drive corners finite",
   );
 }
+// the glance holding a turn: her eyes w of the way from the turn's gaze to x, at her rest gaze's height
+{
+  const eyes = rigOf(
+    { params: { ParamEyeBallY: -0.2 }, close: { turnPoses: [{ ParamEyeBallX: -1, ParamEyeBallY: 0.4 }, { ParamEyeBallX: 1, ParamEyeBallY: 0.4 }] } },
+    {},
+    { ParamEyeBallX: 0, ParamEyeBallY: 0 },
+  );
+  near(compose(eyes, Object.assign({}, D, { turn: 1 })).ParamEyeBallX, 1);
+  const full = compose(eyes, Object.assign({}, D, { turn: 1, glance: { w: 1, x: -0.8 } }));
+  near(full.ParamEyeBallX, -0.8);
+  near(full.ParamEyeBallY, -0.2);
+  near(compose(eyes, Object.assign({}, D, { turn: 1, glance: { w: 0.5, x: -0.8 } })).ParamEyeBallX, 0.1);
+  near(compose(eyes, Object.assign({}, D, { turn: 1, glance: { w: 0, x: -0.8 } })).ParamEyeBallX, 1);
+}
 console.log("pose_test: ok");

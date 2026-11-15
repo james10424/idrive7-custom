@@ -37,12 +37,11 @@ const hudData = require("../../hud_data");
  * @property {number} [idleAt] when idleMs last went on (ms)
  * @property {number} [holdMs] how long she's held a turn (the hold loop's clock; 0 back upright)
  * @property {number[]} [wanderPhase] the wander's random phases (WANDER's three waves each, radians)
- * @property {number} [gSlow] the longitudinal g, smoothed (what a jolt stands out from)
- * @property {?{ sign: number, mag: number, at: number }} [jolt] the last jolt past the deadband (its pair kicks)
- * @property {number} [bounceY] px she's moved down in her picture by the road's bumps (a spring)
- * @property {number} [bounceV] its speed, px/s
- * @property {number} [bounceSent] the offset live2d-render has
- * @property {boolean} [noOffset] live2d-render is older than 0.1.1 (no "offset"): no bounce
+ * @property {number[]} [bobPhase] the bob's random phases (BOB's three waves)
+ * @property {number} [bobY] px she's moved down in her picture by the bob
+ * @property {number} [bobSent] the offset live2d-render has
+ * @property {boolean} [noOffset] live2d-render is older than 0.1.1 (no "offset"): no bob
+ * @property {number} [glanceN] the glances she's started in this turn hold
  * @property {number} [blinkAt] when her last blink started (ms)
  * @property {number} [blinkNext] when her next blink is due (ms)
  * @property {?{ rate: number, closure: number[] }} [blink] the bake's recorded blink
@@ -89,19 +88,18 @@ const WANDER = {
 const WANDER_MIX = [0.6, 0.3, 0.1];
 const WANDER_RATIO = [1, 1.73, 2.91];
 const BREATH_HZ = 0.25; // and breathing (the idle loop breathes when she's stopped)
-// Road bumps bounce her in her picture. The car sends no vertical g, but a bump jolts the longitudinal g away from
-// its smoothed value one way and straight back the other as the car pitches over it; braking or accelerating, even
-// hard, pulls it one way only. So a pair of opposite jolts past a deadband, within BUMP_PAIR_MS, kicks a lightly
-// damped spring that moves her down a few px and lets her settle back.
-const BUMP_SLOW_TAU_MS = 400; // the g's slow part, accelerating and braking
-const BUMP_DEADBAND_G = 0.03; // jolts smaller than this are the g's noise
-const BUMP_KICK = 600; // px/s down per g of jolt past the deadband
-const BUMP_HZ = 2.2; // the spring
-const BUMP_DAMPING = 0.3; // of critical: it bounces a little before it settles
-const BUMP_MAX_PX = 8;
-const BUMP_MIN_KMH = 5; // stood still, no bumps (the engine's shake is no road)
-const BUMP_PAIR_MS = 300; // a jolt's opposite this soon after: a bump
-const BUMP_SEND_PX = 0.1; // an offset moving less than this isn't sent
+// And while her idle loop isn't playing (driving, or turned), her whole figure bobs up and down in her picture
+// (live2d-render's "offset"), as if riding along: [amplitude px, base Hz], the same mix of three waves with random
+// phases, faded out as her idle comes in
+const BOB = [3, 0.21];
+const BOB_SEND_PX = 0.1; // an offset moving less than this isn't sent
+// Holding a turn, every GLANCE_EVERY_MS she glances back at you: her eyes swing to the side opposite her turned head
+// (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all, easing
+// GLANCE_EASE_MS each way; she blinks as each glance starts. Her head stays turned.
+const GLANCE_EVERY_MS = 2000;
+const GLANCE_MS = 500;
+const GLANCE_EASE_MS = 120;
+const GLANCE_X = 0.8;
 
 /**
  * The wander and breathing at t seconds, times weight: offsets for compose's "extra".
@@ -122,6 +120,31 @@ function wander(phase, t, weight) {
   });
   out.ParamBreath = (0.5 - 0.5 * Math.cos(2 * Math.PI * BREATH_HZ * t)) * weight;
   return out;
+}
+
+/**
+ * The bob at t seconds, times weight: px down in her picture.
+ * @param {number[]} phase BOB's three waves
+ * @param {number} t
+ * @param {number} weight
+ * @returns {number}
+ */
+function bob(phase, t, weight) {
+  let v = 0;
+  for (let w = 0; w < WANDER_MIX.length; w++) v += WANDER_MIX[w] * Math.sin(2 * Math.PI * BOB[1] * WANDER_RATIO[w] * t + phase[w]);
+  return BOB[0] * v * weight;
+}
+
+/**
+ * The glance's weight holding a turn for holdMs: 0 looking along the turn, 1 looking back at you.
+ * @param {number} holdMs
+ * @returns {number}
+ */
+function glanceWeight(holdMs) {
+  if (holdMs < GLANCE_EVERY_MS) return 0;
+  const into = holdMs % GLANCE_EVERY_MS;
+  if (into >= GLANCE_MS) return 0;
+  return smooth01(Math.min(into, GLANCE_MS - into) / GLANCE_EASE_MS);
 }
 
 /**
@@ -235,35 +258,17 @@ function drive(hud, state, now) {
     state.pointV += (POINT_K * (turnSide - state.point) - POINT_C * state.pointV) * s;
     state.point = Math.max(-1, Math.min(1, state.point + state.pointV * s));
   }
-  // road bumps: jolts in the longitudinal g kick the bounce's spring
-  if (isNum(data.gLong)) {
-    state.gSlow = isNum(state.gSlow) ? state.gSlow + (data.gLong - state.gSlow) * (1 - Math.exp(-dt / BUMP_SLOW_TAU_MS)) : data.gLong;
-    const res = data.gLong - state.gSlow,
-      moving = isNum(hud._raw("speed")) && hud._raw("speed") > BUMP_MIN_KMH;
-    if (Math.abs(res) > BUMP_DEADBAND_G && moving) {
-      const sign = res > 0 ? 1 : -1,
-        last = state.jolt;
-      if (last && last.sign !== sign && now - last.at <= BUMP_PAIR_MS) {
-        // the jolt back: a bump, as big as the pair's swing past the deadband
-        state.bounceV = (state.bounceV || 0) + ((Math.abs(res) + last.mag) / 2 - BUMP_DEADBAND_G) * BUMP_KICK;
-        state.jolt = null;
-      } else if (!last || last.sign !== sign || now - last.at > BUMP_PAIR_MS) {
-        state.jolt = { sign, mag: Math.abs(res), at: now };
-      } else {
-        last.mag = Math.max(last.mag, Math.abs(res));
-        last.at = now;
-      }
-    }
-  }
-  const kSpring = Math.pow(2 * Math.PI * BUMP_HZ, 2),
-    cSpring = 2 * BUMP_DAMPING * Math.sqrt(kSpring);
-  for (let left = dt / 1000; left > 0; left -= POINT_STEP_S) {
-    const s = Math.min(POINT_STEP_S, left);
-    state.bounceV = (state.bounceV || 0) + (-kSpring * (state.bounceY || 0) - cSpring * (state.bounceV || 0)) * s;
-    state.bounceY = Math.max(-BUMP_MAX_PX, Math.min(BUMP_MAX_PX, (state.bounceY || 0) + state.bounceV * s));
-  }
   // while turned, the hold loop's clock (it starts with the turn, at the loop's start, so it joins smoothly)
   state.holdMs = Math.abs(state.point || 0) > TURN_BACK ? (state.holdMs || 0) + dt : 0;
+  // holding the turn (the indicator still on), she glances back at you every GLANCE_EVERY_MS, blinking as each starts
+  const glancing = turnSide !== 0 && state.holdMs >= GLANCE_EVERY_MS;
+  const glanceN = glancing ? Math.floor(state.holdMs / GLANCE_EVERY_MS) : 0;
+  if (glanceN > (state.glanceN || 0)) {
+    state.blinkAt = now;
+    state.blinkNext = now + MIKU_BLINK_MS[0] + Math.random() * (MIKU_BLINK_MS[1] - MIKU_BLINK_MS[0]);
+  }
+  state.glanceN = glanceN;
+  const glanceW = glancing ? glanceWeight(state.holdMs) * Math.min(1, Math.abs(state.point || 0)) : 0;
   // the expressions: on after standing still STILL_MS, or with an indicator (until her head is back); off past
   // ZOOM_OUT_KMH
   const speed = hud._raw("speed"),
@@ -289,6 +294,10 @@ function drive(hud, state, now) {
     state.wanderPhase = [];
     for (let i = 0; i < Object.keys(WANDER).length * WANDER_MIX.length; i++) state.wanderPhase.push(Math.random() * 2 * Math.PI);
   }
+  if (!state.bobPhase) state.bobPhase = WANDER_MIX.map(() => Math.random() * 2 * Math.PI);
+  // faded out as her idle loop comes in: it plays only with the expressions on and her head not turned (pose.js)
+  const idleShown = y * (1 - Math.min(1, turned * Math.max(1, (state.rig && state.rig.turn && state.rig.turn.steps) || 1)));
+  state.bobY = bob(state.bobPhase, now / 1000, 1 - idleShown);
   return {
     extra: wander(state.wanderPhase, now / 1000, 1 - y),
     lean: Math.tanh(state.lean * LEAN_SOFT) / Math.tanh(LEAN_SOFT),
@@ -297,6 +306,7 @@ function drive(hud, state, now) {
     idleT: (state.idleMs || 0) / 1000,
     idleW: y,
     holdT: (state.holdMs || 0) / 1000,
+    glance: glanceW > 0 ? { w: glanceW, x: -GLANCE_X * Math.sign(turnSide) } : undefined,
     closure,
   };
 }
@@ -334,7 +344,7 @@ module.exports = {
       state.rig = null;
       state.sent = {};
       state.noOffset = false;
-      state.bounceSent = 0;
+      state.bobSent = 0;
       live.send(openMessage(hud, state));
     });
     live.on("opened", (/** @type {*} */ m) => {
@@ -345,9 +355,9 @@ module.exports = {
       hud._update(state, Date.now(), true);
     });
     live.on("error", (/** @type {*} */ m) => {
-      // live2d-render 0.1.0 doesn't know "offset": no bounce, and nothing wrong otherwise
+      // live2d-render 0.1.0 doesn't know "offset": no bob, and nothing wrong otherwise
       if (/"offset"/.test(String(m.reason))) {
-        if (!state.noOffset) hud.log.info("miku live2d: live2d-render takes no offsets (older than 0.1.1): no bounce on bumps");
+        if (!state.noOffset) hud.log.info("miku live2d: live2d-render takes no offsets (older than 0.1.1): no bob");
         state.noOffset = true;
         return;
       }
@@ -397,10 +407,10 @@ module.exports = {
     if (force) state.sent = {};
     const list = changes(values, state.sent || (state.sent = {}), SEND_EPS);
     if (list) live.send({ t: "p", v: list });
-    // the bump's bounce, when live2d-render takes offsets (0.1.1 on)
-    const y = Math.round((state.bounceY || 0) * 10) / 10;
-    if (!state.noOffset && (force || Math.abs(y - (state.bounceSent || 0)) >= BUMP_SEND_PX)) {
-      state.bounceSent = y;
+    // her bob, when live2d-render takes offsets (0.1.1 on)
+    const y = Math.round((state.bobY || 0) * 10) / 10;
+    if (!state.noOffset && (force || Math.abs(y - (state.bobSent || 0)) >= BOB_SEND_PX)) {
+      state.bobSent = y;
       live.send({ t: "offset", x: 0, y });
     }
   },
@@ -429,5 +439,5 @@ module.exports = {
     state.live = null;
   },
   /** for tests (pose_test.js, tools): her drive state and the open message */
-  test: { drive, openMessage },
+  test: { drive, openMessage, glanceWeight, bob },
 };
