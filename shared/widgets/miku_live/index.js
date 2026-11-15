@@ -146,7 +146,7 @@ function openMessage(hud, state) {
 }
 
 /**
- * Her drive state now, as the baked close-up's (../miku/index.js update, close-up only).
+ * Her drive state now: the baked close-up's timings (../miku/index.js update, close-up only), each part free of the others.
  * @param {HudApp} hud
  * @param {WidgetState & MikuLiveState} state
  * @param {number} now
@@ -156,12 +156,12 @@ function drive(hud, state, now) {
   const data = hud.car.data(),
     dt = state.at ? Math.min(MAX_DT_MS, now - state.at) : 0;
   state.at = now;
-  // no lean while the expressions are (coming) on, so she drives off upright and leans from there
-  const exprOn = (state.zoom || 0) > 0 || (state.zoomT || 0) > 0;
-  const leanTarget = isNum(data.gLong) && !exprOn ? Math.max(-LEAN_G, Math.min(LEAN_G, data.gLong)) / LEAN_G : 0;
+  // the lean, the turn, the idle and the expressions are each blended on their own (pose.js adds them), so unlike
+  // the baked close-up, which showed one baked frame at a time, she leans whenever the g pulls (expressions on or
+  // not) and turns toward the indicator from wherever she is: leaning, mid-way into the expressions, idling
+  const leanTarget = isNum(data.gLong) ? Math.max(-LEAN_G, Math.min(LEAN_G, data.gLong)) / LEAN_G : 0;
   state.lean = isNum(state.lean) ? state.lean + (leanTarget - state.lean) * (1 - Math.exp(-dt / LEAN_TAU_MS)) : leanTarget;
-  // the head turns toward the indicator once the expressions are all on (the turn poses have them)
-  const turnSide = (state.zoom || 0) < 1 ? 0 : hud._turnSide();
+  const turnSide = hud._turnSide();
   // she blinks as her head starts to turn, away or back, as in the turn recording
   if (isNum(state.turnWas) && turnSide !== state.turnWas) {
     state.blinkAt = now;
