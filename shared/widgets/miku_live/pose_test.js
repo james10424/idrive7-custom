@@ -81,7 +81,13 @@ near(compose(happy, Object.assign({}, D, { lean: 0.5 })).Blush, 0);
 near(compose(happy, Object.assign({}, D, { lean: 0.75 })).Blush, 0.5); // halfway: the S curve's middle
 near(compose(happy, Object.assign({}, D, { lean: 1 })).Blush, 1);
 near(compose(happy, Object.assign({}, D, { lean: 1 })).ParamEyeLOpen, 0);
-near(compose(happy, Object.assign({}, D, { lean: -1 })).Blush, 0); // braking: none
+near(compose(happy, Object.assign({}, D, { lean: -1 })).Blush, 0); // braking: not the happy face
+// and braking, its own face, the same way
+const both = rigOf(Object.assign({}, config, { close: Object.assign({}, config.close, { leanFace: { from: 0.5, right: { Blush: 1 }, left: { Hands: 1 } } }) }), exprs, defaults);
+near(compose(both, Object.assign({}, D, { lean: -0.75 })).Hands, 0.5);
+near(compose(both, Object.assign({}, D, { lean: -1 })).Hands, 1);
+near(compose(both, Object.assign({}, D, { lean: -1 })).Blush, 0);
+near(compose(both, Object.assign({}, D, { lean: 1 })).Hands, 0);
 
 // extra offsets on top, only for parameters the rig sets
 v = compose(rig, Object.assign({}, D, { lean: 0.75, extra: { ParamAngleZ: 1.5, Other: 9 } }));
