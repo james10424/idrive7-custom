@@ -26,7 +26,13 @@ find_ours() {
     for p in /proc/[0-9]*; do
         pid=${p#/proc/}
         name=$(cat $p/comm 2>/dev/null) || continue
-        case "$name" in cluster-render*|live2d-render*) echo "$pid $name" ;; esac
+        case "$name" in
+            cluster-render*|live2d-render*)
+                # the program's own name: comm stops at 15 characters (cluster-render-idrive7 read "cluster-render-")
+                # (the first argument whose file name starts with comm's 15)
+                full=$(tr '\0' '\n' < $p/cmdline 2>/dev/null | awk -v c="$name" '{ n = $0; sub(/.*\//, "", n); if (index(n, c) == 1) { print n; exit } }')
+                echo "$pid ${full:-$name}" ;;
+        esac
     done
 }
 # "pid ticks comm" for every process (utime + stime; comm without spaces), in one pass: an awk a process would
@@ -42,6 +48,7 @@ mem_mb() { awk -v k="$1" '$1 == k":" { printf "%.0f", $2 / 1024 }' /proc/meminfo
 round=1
 while [ "$round" -le "$ROUNDS" ]; do
     OURS=$(find_ours)
+    since=$(date '+%Y-%m-%d %H:%M:%S')   # the window's start, for journalctl (every systemd reads this form)
     all_ticks > $TMP.start
     set -- $(cpu_total); busy0=$1; total0=$2
     # the GPU's clock, sampled through the window
@@ -62,6 +69,7 @@ while [ "$round" -le "$ROUNDS" ]; do
     echo "== $(date '+%H:%M:%S'), over $SECS s ($CORES cores, load $(cut -d' ' -f1-3 /proc/loadavg))"
     printf '%-7s %-22s %7s %8s %5s\n' pid process "% core" "RSS MB" thr
     echo "$OURS" | awk 'NF { print $1 }' > $TMP.ours
+    echo "$OURS" > $TMP.labels
     if [ -z "$OURS" ]; then
         echo "        (none of our processes running)"
     else
@@ -89,13 +97,19 @@ while [ "$round" -le "$ROUNDS" ]; do
     echo "memory: $(mem_mb MemAvailable) MB available of $(mem_mb MemTotal) MB"
     if [ -n "$GPU" ] && [ "$gpu_n" -gt 0 ]; then
         dir=${GPU%/*}
-        echo "GPU clock: $((gpu_sum / gpu_n)) MHz average, $gpu_max MHz top (idles at $(cat $dir/gt_min_freq_mhz 2>/dev/null || echo ?), up to $(cat $dir/gt_max_freq_mhz 2>/dev/null || echo ?))"
+        # its hardware range: RPn (lowest) to RP0 (highest); gt_max_freq_mhz is a lower soft limit the GPU went past
+        # on the car (750 MHz against 450), so not the top
+        lo=$(cat $dir/gt_RPn_freq_mhz 2>/dev/null || cat $dir/gt_min_freq_mhz 2>/dev/null || echo ?)
+        hi=$(cat $dir/gt_RP0_freq_mhz 2>/dev/null || cat $dir/gt_boost_freq_mhz 2>/dev/null || echo ?)
+        echo "GPU clock: $((gpu_sum / gpu_n)) MHz average, $gpu_max MHz top (the hardware's range $lo to $hi MHz)"
     fi
-    if command -v journalctl >/dev/null 2>&1; then
-        last=$(journalctl -u live2d-render -n 20 --no-pager -o cat 2>/dev/null | grep ' fps, ' | tail -1)
-        [ -n "$last" ] && echo "live2d-render's own: ${last#live2d-render: }"
+    if command -v journalctl >/dev/null 2>&1 && grep -q ' live2d-render' $TMP.labels 2>/dev/null; then
+        # its own timing, only from this window (a line from before, when it has stopped drawing since, says nothing)
+        last=$(journalctl -u live2d-render --since "$since" --no-pager -o cat 2>/dev/null | grep ' fps, ' | tail -1)
+        if [ -n "$last" ]; then echo "live2d-render's own: ${last#live2d-render: }"
+        else echo "live2d-render's own: not drawing in this window"; fi
     fi
-    rm -f $TMP.start $TMP.end $TMP.ours
+    rm -f $TMP.start $TMP.end $TMP.ours $TMP.labels
     round=$((round + 1))
     if [ "$round" -le "$ROUNDS" ]; then echo; fi
 done
