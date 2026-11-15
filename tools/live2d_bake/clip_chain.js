@@ -18,7 +18,9 @@
  * close.turnHold, a loop each way the app plays on top of the full turn (scaled by how far she's turned): the
  * stretch's offsets from its start, HOLD_RATE poses a second. When its ends meet (each head angle back within
  * LOOP_MEET of its range over the stretch), it loops, what's left at the end taken off evenly; else it plays forward
- * then back, which loops without a jump (RetrynowMiku's left hold rises slowly through the whole hold).
+ * then back, which loops without a jump (RetrynowMiku's left hold rises slowly through the whole hold). Her gaze
+ * (GAZE) is calmed in the holds: averaged over --hold-gaze-smooth seconds (0.4) and --hold-gaze of its movement
+ * kept (0.35), so her eyes drift a little rather than flick as recorded eyes do; the rest moves as recorded.
  */
 const fs = require("fs");
 
@@ -28,6 +30,10 @@ const ROUND = 1000; // 3 decimals
 const HOLD_RATE = 10; // hold loop poses a second of clip
 const LOOP_MEET = 0.2; // a hold's ends this close (of each head angle's range over it): a true loop
 const HOLD_MIN_RANGE = 5; // deg: an angle that hardly moves in the hold (her turn, held) is judged against this
+const GAZE = ["ParamEyeBallX", "ParamEyeBallY"]; // calmed in the holds
+const DEFAULT_HOLD_GAZE = 0.35; // of her gaze's movement kept in the holds
+const DEFAULT_HOLD_GAZE_SMOOTH_S = 0.4; // averaged over this
+const GAZE_TAPS = 9; // the average's samples
 
 const args = process.argv.slice(2);
 /** @type {(name: string) => ?string} */
@@ -37,7 +43,9 @@ const opt = (name) => {
 };
 const stepsOpt = opt("steps"),
   addOpt = opt("add"),
-  holdOpt = opt("hold");
+  holdOpt = opt("hold"),
+  holdGaze = Number(opt("hold-gaze") || DEFAULT_HOLD_GAZE),
+  holdGazeSmooth = Number(opt("hold-gaze-smooth") || DEFAULT_HOLD_GAZE_SMOOTH_S);
 const [kind, clipPath, l0, l1, r0, r1, cfgPath, outPath] = args;
 if (!outPath || (kind !== "turn" && kind !== "lean")) {
   console.error(
@@ -136,12 +144,23 @@ function hold(t0, t1) {
     meet = Math.max(meet, Math.abs(off(t1, k)) / Math.max(hi - lo, HOLD_MIN_RANGE));
   });
   const loop = meet <= LOOP_MEET;
+  /** @type {(t: number, k: string) => number} her gaze, averaged over holdGazeSmooth inside the stretch, scaled */
+  const gaze = (t, k) => {
+    let sum = 0;
+    for (let i = 0; i < GAZE_TAPS; i++) {
+      const u = Math.max(t0, Math.min(t1, t + holdGazeSmooth * (i / (GAZE_TAPS - 1) - 0.5)));
+      sum += off(u, k);
+    }
+    return (sum / GAZE_TAPS) * holdGaze;
+  };
+  /** @type {(t: number, k: string) => number} */
+  const offOf = (t, k) => (GAZE.indexOf(k) >= 0 ? gaze(t, k) - gaze(t0, k) : off(t, k));
   /** @type {(s: number) => Record<string, number>} */
   const pose = (s) => {
     /** @type {Record<string, number>} */
     const p = {};
     keys.forEach((k) => {
-      p[k] = Math.round((off(t0 + ((t1 - t0) * s) / n, k) - (loop ? (off(t1, k) * s) / n : 0)) * ROUND) / ROUND;
+      p[k] = Math.round((offOf(t0 + ((t1 - t0) * s) / n, k) - (loop ? (offOf(t1, k) * s) / n : 0)) * ROUND) / ROUND;
     });
     return p;
   };
