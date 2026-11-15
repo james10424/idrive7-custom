@@ -152,6 +152,8 @@ struct l2d_model : public CubismUserModel {
             if (read_file(dir + setting->GetPhysicsFileName(), &ph)) LoadPhysics(ph.data(), (csmSizeInt)ph.size());
         }
         CreateRenderer(w, h, masks ? masks : 1);
+        if (const char *ms = getenv("CUBISM_MASK_SIZE"))   /* debugging: the mask textures' size (Cubism's 256) */
+            GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->SetDrawableClippingMaskBufferSize((float)atof(ms), (float)atof(ms));
         for (int i = 0; i < setting->GetTextureCount(); i++) {
             const std::string tp = dir + setting->GetTextureFileName(i);
             int tw, th, ch;
@@ -162,9 +164,12 @@ struct l2d_model : public CubismUserModel {
             glBindTexture(GL_TEXTURE_2D, tex);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
             stbi_image_free(px);
-            glGenerateMipmap(GL_TEXTURE_2D);
-            /* set once: the patched renderer no longer sets them every draw (csm_fast.hpp) */
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            /* No mipmaps: a model's drawings sit tightly packed in its textures, and their smaller levels blend
+             * each drawing with its neighbours. With RetrynowMiku's textures shrunk to 1024 px her small mouth
+             * then showed the other mouth shapes beside it, like a moustache; plain bilinear draws it clean (and
+             * saves a third of the texture memory). Set once: the patched renderer no longer sets them every
+             * draw (csm_fast.hpp). */
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
@@ -223,7 +228,8 @@ void l2d_update(l2d_model *m, const float *values, const int *part_index, const 
     const int n = (int)m->ids.size();
     for (int i = 0; i < n; i++) model->SetParameterValue(i, values[i]);
     double p0 = now_ms();
-    if (m->physics() && dt > 0) m->physics()->Evaluate(model, dt);
+    static const bool noPhysics = getenv("CUBISM_NO_PHYSICS") != nullptr;   /* debugging: the pose without physics */
+    if (m->physics() && dt > 0 && !noPhysics) m->physics()->Evaluate(model, dt);
     double p1 = now_ms();
     for (int k = 0; k < parts; k++)
         if (part_index[k] >= 0) model->SetPartOpacity(part_index[k], part_opacity[k]);

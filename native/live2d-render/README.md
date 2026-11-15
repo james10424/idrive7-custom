@@ -92,6 +92,12 @@ seconds (or sends `SCRIPT=`'s messages, a JSON line a frame), checks every
 frame's 4:2:0 against the CPU's byte for byte, and saves the frames to
 `build/try/`.
 
+For finding what draws wrong, the glue reads two switches from the
+environment: `CUBISM_NO_PHYSICS=1` (the pose without physics) and
+`CUBISM_MASK_SIZE=1024` (the clipping-mask textures' size, Cubism's 256).
+Textures load without mipmaps: their smaller levels blended RetrynowMiku's
+packed mouth shapes into one another at 1024 px (a "moustache").
+
 `third_party/cluster_render/` is cluster-render 0.6.2's C++ client (MPL-2.0),
 copied unchanged; copy it again when cluster-render's protocol changes.
 
