@@ -70,8 +70,26 @@ export namespace de.bmw.chassistypes.ChassisTypes {
   /** LED_AUS 0, LED_EIN 1, AUTOHOLD_NICHT_VERBAUT 2, SIGNAL_UNBEFUELLT 3 */
   type ControlLedAutoHold = "LED_AUS" | "LED_EIN" | "AUTOHOLD_NICHT_VERBAUT" | "SIGNAL_UNBEFUELLT" | number;
 
+  interface LaneSlopeWrapper {
+    cRCTiltRoadway?: number;
+    aliveTiltRoadway?: number;
+    dummy1?: number;
+    actualValueLongitudinalGradientRoadway?: number;
+    qualifierActualValueLongitudinalGradientRoadway?: de.bmw.chassistypes.ChassisTypes.QualifierActualValueLongitudinalGradientRoadway;
+    actualValueTransverseGradientRoadway?: number;
+    qualifierActualValueTransverseGradientRoadway?: de.bmw.chassistypes.ChassisTypes.QualifierActualValueTransverseGradientRoadway;
+    actualValueLongitudinalGradientRoadwayFast?: number;
+    dummy2?: number;
+  }
+
   /** TASTER_NICHT_BETAETIGT 0, TASTER_GEZOGEN 1, TASTER_GEDRUECKT 2, TASTER_DEFEKT 4, FUNKTIONSSCHNITTSTELLE_IST_NICHT_VERFUEGBAR 13, FUNKTION_MELDET_FEHLER 14, SIGNAL_UNBEFUELLT 15 */
   type OperationPushButtonEPB = "TASTER_NICHT_BETAETIGT" | "TASTER_GEZOGEN" | "TASTER_GEDRUECKT" | "TASTER_DEFEKT" | "FUNKTIONSSCHNITTSTELLE_IST_NICHT_VERFUEGBAR" | "FUNKTION_MELDET_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
+
+  /** RESERVED 1, SIGNALWERT_IST_GUELTIG 2, RESERVED_1 3, RESERVED_2 4, RESERVED_3 6, RESERVED_4 7, INITIALISIERUNG 8, RESERVED_5 9, SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER 10, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER 11, ERSATZWERT__ZUSTAND_S_STATUS_TEMPORAER 12, SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER 14, SIGNAL_UNGUELTIG 15 */
+  type QualifierActualValueLongitudinalGradientRoadway = "RESERVED" | "SIGNALWERT_IST_GUELTIG" | "RESERVED_1" | "RESERVED_2" | "RESERVED_3" | "RESERVED_4" | "INITIALISIERUNG" | "RESERVED_5" | "SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER" | "ERSATZWERT__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNAL_UNGUELTIG" | number;
+
+  /** SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT 1, SIGNALWERT_IST_GUELTIG 2, RESERVED 3, RESERVED_1 4, RESERVED_2 6, RESERVED_3 7, INITIALISIERUNG 8, SIGNALWERT_IST_GUELTIG__ABGESICHERT_UND_PLAUSIBILISIERT__ZUSTAND_S_STATUS_TEMPORAER 9, SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER 10, RESERVED_4 11, RESERVED_5 12, SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER 14, SIGNAL_UNGUELTIG 15 */
+  type QualifierActualValueTransverseGradientRoadway = "SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT" | "SIGNALWERT_IST_GUELTIG" | "RESERVED" | "RESERVED_1" | "RESERVED_2" | "RESERVED_3" | "INITIALISIERUNG" | "SIGNALWERT_IST_GUELTIG__ABGESICHERT_UND_PLAUSIBILISIERT__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "RESERVED_4" | "RESERVED_5" | "SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNAL_UNGUELTIG" | number;
 
   /** FUNKTION_BEREIT 1, FUNKTION_MELDET_FEHLER 6, FUNKTION_AKTIV 9, FUNKTIONSSCHNITTSTELLE_IST_NICHT_VERFUEGBAR 14, SIGNAL_UNBEFUELLT 15 */
   type QualifierFunctionPostcrashIBrake = "FUNKTION_BEREIT" | "FUNKTION_MELDET_FEHLER" | "FUNKTION_AKTIV" | "FUNKTIONSSCHNITTSTELLE_IST_NICHT_VERFUEGBAR" | "SIGNAL_UNBEFUELLT" | number;
@@ -152,6 +170,24 @@ export namespace de.bmw.dasstypes.DASSTypes {
 export namespace de.bmw.environmentalmodel.common.Common {
   /** EVENT_DATA_AVAILABLE 0, EVENT_DATA_AVAILABLE_REDUCED 1, EVENT_DATA_NOT_AVAILABLE 2, EVENT_DATA_INVALID_OR_TIMEOUT 255 */
   type CommonEventDataQualifier = "EVENT_DATA_AVAILABLE" | "EVENT_DATA_AVAILABLE_REDUCED" | "EVENT_DATA_NOT_AVAILABLE" | "EVENT_DATA_INVALID_OR_TIMEOUT" | number;
+}
+
+export namespace de.bmw.infotainment.climate.climatemastertypes.ClimateMasterTypes {
+  interface AvailableRange {
+    minValue?: de.bmw.infotainment.climate.climatemastertypes.ClimateMasterTypes.Range;
+    maxValue?: de.bmw.infotainment.climate.climatemastertypes.ClimateMasterTypes.Range;
+  }
+
+  type IntensityLevel = number;
+
+  type Range = number;
+
+  interface StatusSteeringWheelHeating {
+    configuredIntensityLevel?: de.bmw.infotainment.climate.climatemastertypes.ClimateMasterTypes.IntensityLevel;
+    actualIntensityLevel?: de.bmw.infotainment.climate.climatemastertypes.ClimateMasterTypes.IntensityLevel;
+    availableRange?: de.bmw.infotainment.climate.climatemastertypes.ClimateMasterTypes.AvailableRange;
+    saveLUM?: boolean;
+  }
 }
 
 export namespace de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes {
@@ -509,6 +545,16 @@ export namespace de.bmw.infotainment.navigation.NavigationDataTypes {
     latitude?: number;
     height?: de.bmw.infotainment.navigation.NaviCommonTypes.Distance;
   }
+}
+
+export namespace de.bmw.infotainment.navigation.PositioningTypes {
+  interface CurrentLocation {
+    heading?: de.bmw.infotainment.navigation.NaviCommonTypes.DirectionAbsolute;
+    status?: de.bmw.infotainment.navigation.PositioningTypes.MapMatchingStatus;
+  }
+
+  /** ON_ROAD 1, OFF_ROAD 2, RESTRICTED_AREA 3, OFF_MAP 4, IN_RNC_AREA 5, INDOOR_PARKING_AREA 6, INDOOR_PARKING_AREA_LOW_CONFIDENCE 7 */
+  type MapMatchingStatus = "ON_ROAD" | "OFF_ROAD" | "RESTRICTED_AREA" | "OFF_MAP" | "IN_RNC_AREA" | "INDOOR_PARKING_AREA" | "INDOOR_PARKING_AREA_LOW_CONFIDENCE" | number;
 }
 
 export namespace de.bmw.infotainment.navigation.RoutingTypes {
@@ -871,6 +917,9 @@ export interface Fields {
     LampExterior: de.bmw.bodytypes.BodyTypes.LampExteriorWrapper;
     StatusFunctionsIndicators: de.bmw.bodytypes.BodyTypes.ControlFunktionsIndicatorsWrapper;
   };
+  "de.bmw.chassis.VehicleModel": {
+    LaneSlope: de.bmw.chassistypes.ChassisTypes.LaneSlopeWrapper;
+  };
   "de.bmw.chassis.VehicleStabilizationManagement": {
     StandStillFunction: de.bmw.chassistypes.ChassisTypes.StandStillFunctionWrapper;
   };
@@ -881,6 +930,9 @@ export interface Fields {
   "de.bmw.infotainment.KombiIF": {
     statusRangeTankStatus: de.bmw.infotainmenttypes.InfotainmentTypes.RangeTankStatusWrapper;
     statusShowTimeDate: de.bmw.infotainmenttypes.InfotainmentTypes.ShowTimeDateWrapper;
+  };
+  "de.bmw.infotainment.climate.climatemaster.ClimateMaster": {
+    statusSteeringWheelHeating: de.bmw.infotainment.climate.climatemastertypes.ClimateMasterTypes.StatusSteeringWheelHeating;
   };
   "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
     functionalLibraryData: de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes.FunctionalLibraryData;
@@ -905,6 +957,9 @@ export interface Fields {
     finalDestinationInfo: de.bmw.infotainment.navigation.GuidingTypes.DestinationInfo;
     guidanceState: de.bmw.infotainment.navigation.GuidingTypes.GuidanceState;
     travelledDistance: de.bmw.infotainment.navigation.GuidingTypes.FormattedDistance;
+  };
+  "de.bmw.infotainment.navigation.positioning.Positioning": {
+    currentLocation: de.bmw.infotainment.navigation.PositioningTypes.CurrentLocation;
   };
   "de.bmw.infotainment.resetlogic.ResetLogic": {
     averageConsumption: de.bmw.infotainment.resetlogictypes.ResetLogicTypes.ConsumptionAverage;

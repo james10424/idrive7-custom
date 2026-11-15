@@ -11,6 +11,8 @@ const DEMO_TURN_PHASES = 4; // off, left, off, right
 const BLINK_HALF_MS = 400; // a turn lamp's blink: on and off this long each (1.25 Hz)
 const DEMO_CRUISE_MS = 10000; // the demo drive's cruise lamp: one phase this long
 const DEMO_CRUISE_PHASES = 3; // lit in the last
+const DEMO_HEAT_MS = 14000; // the demo drive's HEAT STR lamp: one phase this long
+const DEMO_HEAT_PHASES = 2; // lit in the second
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** The Grand National lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
@@ -92,6 +94,18 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       this.accOn ||
       (!!this.car.data().demo &&
         Math.floor(Date.now() / DEMO_CRUISE_MS) % DEMO_CRUISE_PHASES === 2)
+    );
+  },
+
+  /**
+   * The Grand National HEAT STR lamp lit: the heated steering wheel on (ClimateMaster statusSteeringWheelHeating).
+   * @returns {boolean}
+   */
+  _heatLit() {
+    if (this.wheelHeat !== null) return this.wheelHeat;
+    return (
+      !!this.car.data().demo &&
+      Math.floor(Date.now() / DEMO_HEAT_MS) % DEMO_HEAT_PHASES === 1
     );
   },
 

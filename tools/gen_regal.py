@@ -22,6 +22,9 @@ FUEL_LINE = 468                    # where the fuel marks split (a horizontal li
 POD = (300, 292, 112, 146)         # left pod needle pivot, tick radii (right pod mirrored)
 LED = (1104, 466, 312, 22)
 LED2 = (2 * 933 - 1104 - 312, 466, 312, 22)   # the boost bar, the rev bar mirrored about the lower window's middle
+CTR = (397, 110, 1072, 429)       # the centre panel's frame ('ctr')
+LAMP_ROW_Y = CTR[1] + CTR[3] + 12  # the idiot light row, under the centre panel's frame
+LAMP_H = (CTR[0], LAMP_ROW_Y, 112, 28)  # its first lamp, HEAT STR (heated steering wheel), left edge with the centre panel's
 POD_L = (90, 110, 180, 553)       # the left pod's box ('podL'; the right pod mirrored)
 POD_CX = 180                      # the left pod's middle (its x + w / 2): lamps, gear number, clock (right: W - POD_CX)
 POD_WIN_X, POD_WIN_W = 104, 152   # the left pod's inner box ('podWin')
@@ -65,7 +68,7 @@ def centred(id, cx, cy, w, h, t, font, color='fg', **kw):
 wd = [{
     'id': 'regal', 'type': 'rdash', 'class': 'ambient', 'z': -10, 'x': 0, 'y': 0, 'w': W, 'h': H,
     'podL': list(POD_L), 'podWin': [POD_WIN_X, 124, POD_WIN_W, 336],
-    'ctr': [397, 110, 1072, 429], 'win1': [413, 122, 1040, 270], 'win2': [413, 400, 1040, 128],
+    'ctr': list(CTR), 'win1': [413, 122, 1040, 270], 'win2': [413, 400, 1040, 128],
     'vfdL': [0, 0, 0, 0], 'vfdR': [0, 0, 0, 0],   # no VFD boxes: the speed sits over the scale, the clock and range in the pods
     'spd': [PIVOT[0], PIVOT[1], NUM_Y, TICK_Y], 'spdVirt': list(VIRT), 'spdMax': SPD_MAX, 'spdMin': SPD_MIN, 'spdMid': SPD_MID, 'spdAmber': SPD_AMBER, 'spdStep': 5, 'spdRest': 12, 'fuelG': list(FUEL), 'podG': list(POD),
     'podSignals': [{'signal': 'volt12', 'range': [8, 16], 'mid': 14},   # 14 V at the middle: the green 12.5..15 about centred, charging near the middle
@@ -77,7 +80,7 @@ wd = [{
     'led2': list(LED2), 'led2N': 15, 'led2Signal': 'boost', 'led2Range': [0, 1.5], 'led2RangeUs': [0, round(BOOST_MAX_PSI / PSI_PER_BAR, 4)],
     'gearRow': [GEAR_X0, GEAR_P, GEAR_Y],
     'gearNeedle': [POD_WIN_X + POD_WIN_W / 2, GEAR_Y + GEAR_NEEDLE[2], GEAR_NEEDLE[0], GEAR_NEEDLE[1]],
-    'lampB': [120, 478, 120, 36], 'arrow': [0, 0, 0], 'batIcon': list(BAT_ICON),   # arrow size 0: no turn arrows
+    'lampB': [120, 478, 120, 36], 'lampH': list(LAMP_H), 'arrow': [0, 0, 0], 'batIcon': list(BAT_ICON),   # arrow size 0: no turn arrows
 }]
 
 # speed numbers (mph) on their marks: 5, 15 ... 85, the 55 in amber; no km/h row (as the Turbo 3.8's)
@@ -182,12 +185,14 @@ wd.append(text('pod_tunit', W - POD_CX + TEMP_R + TEMP_GAP, 618, 34, LBL_H, '{{u
 # the clock where the right turn signal was, level with the range
 wd.append(centred('pod_clock', W - POD_CX, 563, 132, 36, '{{time}}', 'r_seg_m', 'vfd'))
 wd.append(centred('lamp_cruise', W - POD_CX, 496, 112, 17, '{{lampCruise}}', 'r_tiny', 'lampTextG'))
+wd.append(centred('lamp_heat', LAMP_H[0] + LAMP_H[2] / 2, LAMP_H[1] + LAMP_H[3] / 2, LAMP_H[2] - 8, 17, '{{lampHeat}}', 'r_tiny',
+                  'lampText'))
 
 # the dash sits DY px lower than drawn above: the pods' outer top corners clear the hood (x 90 / 1830 hidden above
 # y ~150) and the centre panel's top lines up with the pods', clear of the dash camera (x ~760..1200, down to y ~132;
 # car photo, Nov 8 2026).
 DY = 45
-BOX_KEYS = ('podL', 'podWin', 'ctr', 'win1', 'win2', 'vfdL', 'vfdR', 'fuelG', 'podG', 'led', 'led2', 'lampB',
+BOX_KEYS = ('podL', 'podWin', 'ctr', 'win1', 'win2', 'vfdL', 'vfdR', 'fuelG', 'podG', 'led', 'led2', 'lampB', 'lampH',
             'arrow', 'batIcon')
 for k in BOX_KEYS:
     wd[0][k][1] += DY
@@ -202,7 +207,7 @@ for w in wd[1:]:
 # the gaps either side of it are equal: the photo's centre panel sat 27 px left of the middle (gaps 127 and 181 px)
 POD_IN_L = wd[0]['podL'][0] + wd[0]['podL'][2]           # the left pod's inner edge; the right pod is its mirror
 DX = round(W / 2 - (wd[0]['ctr'][0] + wd[0]['ctr'][2] / 2))
-for k in ('ctr', 'win1', 'win2', 'fuelG', 'led', 'led2'):
+for k in ('ctr', 'win1', 'win2', 'fuelG', 'led', 'led2', 'lampH'):
     wd[0][k][0] += DX
 wd[0]['spd'][0] += DX                                     # the speed needle's pivot x
 for w in wd[1:]:
@@ -224,7 +229,7 @@ wd.append(ndl)
 # (hud/backdrops/regal-<units>.etc2, bench "Bake backdrop"); the app draws it under the live parts. Not baked: what
 # changes while driving, the see-through P R N D S letters (the gear needle shows through them) and the pods' scale
 # numbers (their needles sweep by them)
-LIVE_TEXT = {'spd_val', 'odo', 'range_drums', 'lamp_brake', 'lamp_cruise', 'pod_gear', 'pod_temp', 'pod_clock'}
+LIVE_TEXT = {'spd_val', 'odo', 'range_drums', 'lamp_brake', 'lamp_cruise', 'lamp_heat', 'pod_gear', 'pod_temp', 'pod_clock'}
 # the live text left over sits far apart (centre, both pods): each on a layer of its own ("own"), its own size, instead
 # of sheets spanning the gaps between them
 for w in wd[1:]:
@@ -237,7 +242,7 @@ for w in wd[1:]:
 
 out = {
     'schemaVersion': 2, 'name': 'Grand National', 'theme': 'regal', 'backdrop': True,
-    '_about': "After a 1987 Buick Grand National's dash (generated by tools/gen_regal.py, edit that): chrome-framed side pods, the left a 12 V voltmeter (8 / 14 / 16 V) and the right oil temperature (50 / 110 / 150 C), each needle pivoting from the pod's inner edge, with the BRAKE lamp and CRUISE under them; the centre panel holds a swinging speed needle over a straight row of mph numbers, 5 to 85 spread evenly with 55 amber right of the middle (as the Turbo 3.8's), the speed big in the VFD orange over the middle, a rolling odometer under it (the needle, a layer of its own, sweeps over it), the gear number with P R N D S under it in the left pod (white, a red needle under them from a far pivot) and the clock in the right, where the turn signals were, the fuel needle centred between a yellow LED boost bar (0..1.5 bar) and the LED rev bar (0..7000 rpm in 28 segments, green with each 1000's orange, a red mark above the labels from the Redline setting to the end; the fuel gauge's marks split at one horizontal line that E, the pump and F stand on, UNLEADED FUEL ONLY over it and PREMIUM FUEL under it, as the Grand National's); no map window. Shader rdash plus text sheets.",
+    '_about': "After a 1987 Buick Grand National's dash (generated by tools/gen_regal.py, edit that): chrome-framed side pods, the left a 12 V voltmeter (8 / 14 / 16 V) and the right oil temperature (50 / 110 / 150 C), each needle pivoting from the pod's inner edge, with the BRAKE lamp and CRUISE under them; the centre panel holds a swinging speed needle over a straight row of mph numbers, 5 to 85 spread evenly with 55 amber right of the middle (as the Turbo 3.8's), the speed big in the VFD orange over the middle, a rolling odometer under it (the needle, a layer of its own, sweeps over it), the gear number with P R N D S under it in the left pod (white, a red needle under them from a far pivot) and the clock in the right, where the turn signals were, the fuel needle centred between a yellow LED boost bar (0..1.5 bar) and the LED rev bar (0..7000 rpm in 28 segments, green with each 1000's orange, a red mark above the labels from the Redline setting to the end; the fuel gauge's marks split at one horizontal line that E, the pump and F stand on, UNLEADED FUEL ONLY over it and PREMIUM FUEL under it, as the Grand National's), and an idiot light row under the centre panel (a red HEAT STR: the heated steering wheel); no map window. Shader rdash plus text sheets.",
     'widgets': wd,
 }
 p = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'apps', 'custom_cluster', 'hud', 'layouts', 'regal.json')

@@ -106,6 +106,7 @@ const TZ_MIN_H = -12,
  * @property {?boolean} parkBrakeCds the same from CDS statusHandBrake (a fallback)
  * @property {?boolean} [parkBrakeVsm] the same from VehicleStabilizationManagement
  * @property {?string} autoHold Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
+ * @property {?boolean} wheelHeat the heated steering wheel on, null until the car says
  * @property {?number} volt12 V, the 12 V system from the engine unit
  * @property {number} volt12At
  * @property {boolean} needsVolt a shown widget uses volt12 (the engine unit is only asked then)
@@ -186,6 +187,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.parkBrake = null; // the parking brake set (true / false), null until the car says
     this.parkBrakeCds = null; // the same from CDS statusHandBrake (a fallback)
     this.autoHold = null; // Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
+    this.wheelHeat = null; // the heated steering wheel on (true / false), null until the car says
     this.volt12 = null;
     this.volt12At = 0; // V, the 12 V system from the engine unit
     this.needsVolt = false; // a shown widget uses volt12 (the engine unit is only asked then)
@@ -498,6 +500,16 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           this.parkBrake = engaged;
         },
       },
+      // the heated steering wheel (the Grand National HEAT STR lamp): on while its actual level is above 0
+      "de.bmw.infotainment.climate.climatemaster.ClimateMaster": {
+        statusSteeringWheelHeating: (msg) => {
+          const level = msg && msg.actualIntensityLevel;
+          const on = isNum(level) && level < BYTE_NONE ? level > 0 : null; // 255: not sent
+          if (on !== this.wheelHeat)
+            this.log.info("steering wheel heating raw " + JSON.stringify(msg));
+          this.wheelHeat = on;
+        },
+      },
       // Auto Hold (the same lamp, green): statusAutoH 2 = on and holding the car, 1 = on, 0 = off
       "de.bmw.chassis.VehicleStabilizationManagement": {
         StandStillFunction: (msg) => {
@@ -595,6 +607,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       delete extra["de.bmw.infrastructure.MileageSupreme"];
       delete extra["de.bmw.infotainment.vehicle.Vehicle2"];
       delete extra["de.bmw.chassis.VehicleStabilizationManagement"];
+      delete extra["de.bmw.infotainment.climate.climatemaster.ClimateMaster"];
       if (extra["de.bmw.infotainment.vehicle.CDS"])
         delete extra["de.bmw.infotainment.vehicle.CDS"].statusHandBrake;
     }

@@ -648,6 +648,17 @@ const CAR_SW = {
         }[value],
       },
     ),
+  wheelHeat: (value) =>
+    stub.feed(
+      "de.bmw.infotainment.climate.climatemaster.ClimateMaster",
+      "statusSteeringWheelHeating",
+      {
+        configuredIntensityLevel: value === "on" ? 1 : 0,
+        actualIntensityLevel: value === "on" ? 1 : 0,
+        availableRange: { minValue: 0, maxValue: 1 },
+        saveLUM: false,
+      },
+    ),
 };
 // sent when a switch changes (and once when the app starts), as the car's subscriptions report changes, not on a
 // timer: a timer here hid an app that forgot a signal held longer than a few seconds

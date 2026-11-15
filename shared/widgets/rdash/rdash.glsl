@@ -39,6 +39,8 @@ uniform vec4 u_gearN;     // the gear needle: its far pivot x, y (below the P R 
 uniform vec2 u_gearV;     // where it points: the row's point from the pivot (x, y; y < 0)
 uniform vec4 u_lampB;     // the parking brake / Auto Hold lamp box (left pod; its mirror in the right pod is the green CRUISE lamp)
 uniform vec3 u_arrow;     // the left turn arrow: centre x, y, size (right: mirrored)
+uniform vec4 u_lampH;     // the HEAT STR lamp box (red; w 0 = none)
+uniform float u_heatV;    // HEAT STR on (1) / off (0)
 uniform vec4 u_lamps;     // left lamp (0 off, 1 red: parking brake, 2 green: Auto Hold), left turn, right turn, cruise on (1) / off (0)
 uniform vec2 u_batIcon;   // the battery glyph's centre
 #ifdef RDASH_LIVE
@@ -284,10 +286,11 @@ void main() {
         c = mix(c, mix(GEAR_RED, GEAR_RED * 0.7, smoothstep(0.0, ghw, gpe)), cov(max(gpe - ghw, max(gr0 - gal, gal - gr1))));
     }
 
-    // lamps: PARK BRAKE (left, red) or AUTO HOLD (left, green), CRUISE (right, green), the turn arrows
+    // lamps: PARK BRAKE (left, red) or AUTO HOLD (left, green), CRUISE (right, green), HEAT STR (centre, red), the turn arrows
     vec4 lampR = vec4(W - u_lampB.x - u_lampB.z, u_lampB.yzw);
     c = mix(c, u_lamps.x > 1.5 ? LAMP_G : u_lamps.x > 0.5 ? LAMP_R : LAMP_OFF, cov(rbox(p, u_lampB, 3.0)));
     c = mix(c, mix(LAMP_GOFF, LAMP_G, u_lamps.w), cov(rbox(p, lampR, 3.0)));
+    if (u_lampH.z > 0.0) c = mix(c, mix(LAMP_OFF, LAMP_R, u_heatV), cov(rbox(p, u_lampH, 3.0)));
     for (int s = 0; s < 2; s++) {
         if (u_arrow.z <= 0.0) break;   // no turn arrows (size 0)
         float on = s == 0 ? u_lamps.y : u_lamps.z;
