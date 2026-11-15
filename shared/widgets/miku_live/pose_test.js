@@ -75,6 +75,14 @@ near(compose(held, Object.assign({}, D, { turn: -0.5, holdT: 0.5 })).ParamAngleZ
 near(compose(held, Object.assign({}, D, { turn: 1, holdT: 0.5 })).ParamAngleZ, -2); // the right's own loop
 near(compose(held, Object.assign({}, D, { turn: 0, holdT: 0.5 })).ParamAngleZ, 0); // not turned: none
 
+// the lean's happy face: none up to "from", eased in to a full lean
+const happy = rigOf(Object.assign({}, config, { close: Object.assign({}, config.close, { leanFace: { from: 0.5, right: { Blush: 1, ParamEyeLOpen: 0 } } }) }), exprs, defaults);
+near(compose(happy, Object.assign({}, D, { lean: 0.5 })).Blush, 0);
+near(compose(happy, Object.assign({}, D, { lean: 0.75 })).Blush, 0.5); // halfway: the S curve's middle
+near(compose(happy, Object.assign({}, D, { lean: 1 })).Blush, 1);
+near(compose(happy, Object.assign({}, D, { lean: 1 })).ParamEyeLOpen, 0);
+near(compose(happy, Object.assign({}, D, { lean: -1 })).Blush, 0); // braking: none
+
 // extra offsets on top, only for parameters the rig sets
 v = compose(rig, Object.assign({}, D, { lean: 0.75, extra: { ParamAngleZ: 1.5, Other: 9 } }));
 near(v.ParamAngleZ, 21.5);

@@ -4,7 +4,8 @@
  * the close-up from) and the drive state the widget works out, as the baked close-up's shader (miku/miku_only.glsl)
  * picks its frames, but blended smoothly instead of between baked steps:
  *   - her rest: the model's defaults with the config's "params" on top (her eyes' gaze and openness);
- *   - driving, the lean (close.lean.poses: a full lean left .. right, the upright middle left out);
+ *   - driving, the lean (close.lean.poses: a full lean left .. right, the upright middle left out), and pulling
+ *     away hard its happy face (close.leanFace: from leanFace.from of a full lean right, eased in to a full lean);
  *   - stopped or an indicator on, the expressions (close.expressions, e.g. Blush and Yandere) and close.params
  *     coming on, her idle loop (close.idle: poses over its period) and the turn toward the indicator (close.turnPoses);
  *   - while she holds a turn, its hold loop on top (close.turnHold.left / .right: offsets from the full turn, as the
@@ -24,6 +25,7 @@
  * @property {?Chain} turn
  * @property {?{ period: number, poses: Values[] }} idle
  * @property {?{ left: ?Loop, right: ?Loop }} hold the turn's hold loops (offsets), each way
+ * @property {?{ from: number, right: Values }} leanFace the happy face (absolute values) and the lean it starts at
  * @property {ExprParam[][]} expressions
  * @property {Values} closeParams
  * @property {string[]} eyes the eye openness parameters the blink shuts
@@ -92,6 +94,10 @@ function rigOf(config, expressionFiles, defaults) {
   /** @type {(l: *) => ?Loop} */
   const loopOf = (l) => (l && l.period > 0 && Array.isArray(l.poses) && l.poses.length && l.poses.every(isValues) ? { period: l.period, poses: l.poses } : null);
   const hold = close.turnHold ? { left: loopOf(close.turnHold.left), right: loopOf(close.turnHold.right) } : null;
+  const leanFace =
+    close.leanFace && isValues(close.leanFace.right) && close.leanFace.from >= 0 && close.leanFace.from < 1
+      ? { from: close.leanFace.from, right: close.leanFace.right }
+      : null;
   const expressions = (Array.isArray(close.expressions) ? close.expressions : []).map((f) => expressionOf(expressionFiles[f]));
   const closeParams = isValues(close.params) ? close.params : {};
   /** @type {Set<string>} */
@@ -100,11 +106,12 @@ function rigOf(config, expressionFiles, defaults) {
   const add = (v) => Object.keys(v).forEach((k) => keys.add(k));
   [lean, turn, idle, hold && hold.left, hold && hold.right].forEach((set) => set && set.poses.forEach(add));
   expressions.forEach((e) => e.forEach((p) => keys.add(p.id)));
+  if (leanFace) add(leanFace.right);
   add(closeParams);
   EYES.forEach((k) => keys.add(k));
   // only parameters the model has (a pose from another model's recording names some it hasn't)
   const known = Array.from(keys).filter((k) => k in defaults);
-  return { rest, lean, turn, idle, hold, expressions, closeParams, eyes: EYES.filter((k) => k in defaults), keys: known };
+  return { rest, lean, turn, idle, hold, leanFace, expressions, closeParams, eyes: EYES.filter((k) => k in defaults), keys: known };
 }
 
 /**
@@ -207,6 +214,15 @@ function compose(rig, d) {
     // held, as the recording moved while held: fading in with the turn, so it starts and ends with it
     const loop = rig.hold && (d.turn < 0 ? rig.hold.left : rig.hold.right);
     if (loop) addLoop(loop, d.holdT || 0, v, Math.min(1, Math.abs(d.turn)));
+  }
+  // pulling away hard, her happy face eases in (an S curve from leanFace.from of a full lean to a full lean)
+  if (rig.leanFace && d.lean > rig.leanFace.from) {
+    const x = Math.min(1, (d.lean - rig.leanFace.from) / (1 - rig.leanFace.from)),
+      w = x * x * (3 - 2 * x),
+      face = rig.leanFace.right;
+    Object.keys(face).forEach((id) => {
+      if (id in v) v[id] += (face[id] - v[id]) * w;
+    });
   }
   if (d.extra)
     Object.keys(d.extra).forEach((id) => {
