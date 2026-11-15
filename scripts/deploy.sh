@@ -119,7 +119,11 @@ print("model: %d textures shrunk to 1024 px" % len(refs.get("Textures", [])))
 PY
     # live2d-render's folder, not the app's: no app to look for
     ssh "$CAR_HOST" "mkdir -p '/var/opt/live2d-render/models/${MODEL_NAME}'"
-    scp -r "$LIVE_TMP"/* "${CAR_HOST}:/var/opt/live2d-render/models/${MODEL_NAME}/"
+    # a tar stream, not scp -r: the Mac's scp (SFTP) can't upload a folder into one the car doesn't have yet
+    # ("path canonicalization failed"). Plain ustar without macOS's extra files and attributes, for BusyBox tar;
+    # -o: the files root's, not the Mac user's id
+    COPYFILE_DISABLE=1 tar -C "$LIVE_TMP" --format ustar --no-mac-metadata --no-xattrs -cf - . \
+        | ssh "$CAR_HOST" "tar -C '/var/opt/live2d-render/models/${MODEL_NAME}' -o -xf -"
     echo "Pushed the model to /var/opt/live2d-render/models/${MODEL_NAME}. Pick Miku Live2D (or another layout and back) to load it."
     exit 0
 fi
