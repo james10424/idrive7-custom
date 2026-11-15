@@ -151,7 +151,7 @@ void main() {
         float len = tk < 0.5 ? 12.0 : tk > 44.0 || abs(tk - 30.0) < 0.5 ? 9.0 : 6.0;
         float off = (aa - tk) * PI / 180.0 * br;            // px from the tick's ray
         if (br > u_bank.z && br < u_bank.z + len) c = max(c, ink(off));
-        vec2 pp = rot(b, u_att.y);                          // the pointer, turned with the roll
+        vec2 pp = rot(b, -u_att.y);                         // the pointer, toward the low side (left bank: left)
         float py = u_bank.z - 2.0 - pp.y;                    // 0 at its tip, growing inward
         if (py >= 0.0 && py <= 9.0 && abs(pp.x) <= py * 0.55) c = max(c, 1.0);
     }
