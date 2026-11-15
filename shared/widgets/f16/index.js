@@ -27,11 +27,14 @@ const F16_LADDER_CLEAR = 60; // the ladder stops this far above the bank scale's
 const F16_PITCH_DEG_G = 12; // pitch (nose up) a g of longitudinal acceleration
 const F16_FPV_X_G = 110; // the flight path vector's px a g sideways (toward the turn), the ladder with it
 const F16_FPV_MAX = 70; // it stays this near the middle, px
-const F16_G_TAU_MS = 200; // the g eased this smoothly
+const F16_G_TAU_MS = 350; // the g eased this smoothly
+const F16_G_DEAD = 0.02; // the g's noise standing still (it read +-0.01..0.02 parked, Nov 14 2026) is taken off first
 const F16_MAX_DT_MS = 500;
 const F16_SEND_MS = 33; // the attitude goes up at most this often
 const F16_FRESH_MS = 3000; // the car's slope and heading count this long after they last came
-const F16_SLOPE_TAU_MS = 400; // the road's slope eased this smoothly (it comes in 0.1 % steps)
+const F16_SLOPE_TAU_MS = 1500; // the road's slope eased this smoothly (it comes in 0.1 % steps that flicker by one
+// parked; the road itself changes slowly)
+const F16_PX_STEP = 0.1; // the ladder and the vector are sent in tenths of a px (the shader antialiases: no 1 px hops)
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
@@ -123,8 +126,10 @@ module.exports = {
       const to = isNum(v) ? v : 0;
       return isNum(was) ? was + (to - was) * k : to;
     };
-    state.gLong = ease(state.gLong, data.gLong);
-    state.gLat = ease(state.gLat, data.gLat);
+    /** @type {(v: *) => *} the g less its noise: nothing under F16_G_DEAD, and no jump past it */
+    const dead = (v) => (isNum(v) ? Math.sign(v) * Math.max(0, Math.abs(v) - F16_G_DEAD) : v);
+    state.gLong = ease(state.gLong, dead(data.gLong));
+    state.gLat = ease(state.gLat, dead(data.gLat));
     // the tapes: the speed in the units setting's unit, the rpm / 10
     const us = hud.setting("units") === "us",
       unit = us ? "mph" : "kmh",
@@ -174,12 +179,14 @@ module.exports = {
       hy = gPitch * F16_PITCH_PX,
       fx = clampFpv(lat - Math.sin(roll) * hy),
       fy = clampFpv(Math.cos(roll) * hy);
-    const att = [Math.round(pitch * 20) / 20, Math.round(roll * 500) / 500, Math.round(fx), Math.round(fy)];
-    const key = att.join(",") + "|" + Math.round(lat);
+    /** @type {(v: number) => number} */
+    const px = (v) => Math.round(v / F16_PX_STEP) * F16_PX_STEP;
+    const att = [Math.round(pitch * 100) / 100, Math.round(roll * 2000) / 2000, px(fx), px(fy)];
+    const key = att.join(",") + "|" + px(lat);
     if (!force && key === state.lastAtt) return;
     state.lastAtt = key;
     state.sentAt = now;
     state.c.uniform(state.ref, "u_att", att);
-    state.c.uniform(state.ref, "u_lat", [Math.round(lat)]);
+    state.c.uniform(state.ref, "u_lat", [px(lat)]);
   },
 };
