@@ -7,3 +7,5 @@ __pycache__/
 # agent worktrees and local tool state
 .claude/
 node_modules/
+# native components: build output (live2d-render's build/sdk holds Live2D's SDK: never committed)
+native/*/build/

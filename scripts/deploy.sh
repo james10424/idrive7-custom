@@ -4,7 +4,8 @@
 #   ./scripts/deploy.sh root@<car-ip-or-hostname> [layout.json ...]
 #   APP=custom_cluster ./scripts/deploy.sh root@<car> gt3.json      (the cluster app; default: Custom HUD)
 #   ./scripts/deploy.sh root@<car> --miku <bake output folder>      (the Miku layout's baked frames)
-#   ./scripts/deploy.sh root@<car> --miku-live <bake config.json> <model.model3.json>   (Miku Live2D)
+#   ./scripts/deploy.sh root@<car> --miku-live <model.model3.json>  (Miku Live2D's model)
+#   ./scripts/deploy.sh root@<car> --miku-live-config <bake config.json> <model.model3.json>   (trying poses)
 #
 # --miku copies the folder's atlas.json and atlas.etc2 (and close.etc2, the close-up, when the bake made one, with a
 # close-up-only bake's idle.etc2 (and idle2.etc2, its odd frames, past 40) and lean.etc2; ETC2 from
@@ -14,11 +15,14 @@
 #
 # scripts/remove-miku.sh takes them off the car again.
 #
-# --miku-live is for the Miku Live2D layout, drawn live by live2d-render (idrive-apps-lib, with its Cubism SDK copied
-# to the car by hand: its README.md). It copies the bake config (the one tools/live2d_bake baked Miku Bake's close-up
-# from) and the expression files it names (found next to the model) to <app>/data/miku-live/, and the model itself
-# (its moc, physics and textures, the textures shrunk to 1024 px with sips) to
-# /var/opt/live2d-render/models/<model name>/, where the layout's "model" points. Neither goes in this repo.
+# --miku-live is for the Miku Live2D layout, drawn live by live2d-render (native/live2d-render, with its Cubism SDK
+# copied to the car by hand: its README.md). It copies the model (its moc, physics and textures, the textures shrunk
+# to 1024 px with sips) to /var/opt/live2d-render/models/<model name>/, where the layout's "model" points: once, as
+# her poses come with the app (hud/miku-live/). The model never goes in this repo.
+#
+# --miku-live-config tries other poses without a new app: it copies a close-up bake config and the expression files
+# it names (found next to the model) to <app>/data/miku-live/, which the layout then reads in place of the app's
+# pose file. Delete that folder on the car to go back to the app's.
 #
 # With no files it pushes the app's built-in layouts from apps/<app>/hud/layouts/.
 # They land in the app's data folder, <app>/data/layouts/, where a file overrides the
@@ -74,24 +78,28 @@ if [ "${1:-}" = "--miku" ]; then
         fi
     fi
 fi
-LIVE_CFG=""
-if [ "${1:-}" = "--miku-live" ]; then
-    [ $# -eq 3 ] && [ -f "$2" ] && [ -f "$3" ] || { echo "Usage: $(basename "$0") <car-ssh-host> --miku-live <bake config.json> <model.model3.json>" >&2; exit 1; }
-    LIVE_CFG="$2"; LIVE_MODEL="$3"; shift 3
+LIVE_MODE=""
+if [ "${1:-}" = "--miku-live-config" ]; then
+    [ $# -eq 3 ] && [ -f "$2" ] && [ -f "$3" ] || { echo "Usage: $(basename "$0") <car-ssh-host> --miku-live-config <bake config.json> <model.model3.json>" >&2; exit 1; }
+    LIVE_MODE="config"; LIVE_CFG="$2"; LIVE_MODEL="$3"; shift 3
     python3 -c 'import json,sys; c=json.load(open(sys.argv[1])); sys.exit(0 if "close" in c else 1)' "$LIVE_CFG" || { echo "$LIVE_CFG: not a bake config with a close-up (close)" >&2; exit 1; }
     MODEL_DIR="$(cd "$(dirname "$LIVE_MODEL")" && pwd)"
-    MODEL_NAME="$(basename "$LIVE_MODEL" .model3.json)"
     LIVE_TMP="$(mktemp -d)"; trap 'rm -rf "$LIVE_TMP"' EXIT
-    mkdir -p "$LIVE_TMP/data" "$LIVE_TMP/model"
-    cp "$LIVE_CFG" "$LIVE_TMP/data/config.json"
+    cp "$LIVE_CFG" "$LIVE_TMP/config.json"
     # the expressions the config names, from next to the model
     python3 -c 'import json,sys; print("\n".join(json.load(open(sys.argv[1]))["close"].get("expressions", [])))' "$LIVE_CFG" | while IFS= read -r e; do
         [ -n "$e" ] || continue
         [ -f "$MODEL_DIR/$e" ] || { echo "the config names $e, not next to the model in $MODEL_DIR" >&2; exit 1; }
-        cp "$MODEL_DIR/$e" "$LIVE_TMP/data/"
+        cp "$MODEL_DIR/$e" "$LIVE_TMP/"
     done
+fi
+if [ "${1:-}" = "--miku-live" ]; then
+    [ $# -eq 2 ] && [ -f "$2" ] || { echo "Usage: $(basename "$0") <car-ssh-host> --miku-live <model.model3.json>" >&2; exit 1; }
+    LIVE_MODE="model"; LIVE_MODEL="$2"; shift 2
+    MODEL_NAME="$(basename "$LIVE_MODEL" .model3.json)"
+    LIVE_TMP="$(mktemp -d)"; trap 'rm -rf "$LIVE_TMP"' EXIT
     # the model: model3.json, moc, physics and textures as it names them, the textures shrunk to 1024 px
-    python3 - "$LIVE_MODEL" "$LIVE_TMP/model" <<'PY'
+    python3 - "$LIVE_MODEL" "$LIVE_TMP" <<'PY'
 import json, os, shutil, subprocess, sys
 src, out = sys.argv[1], sys.argv[2]
 d = os.path.dirname(os.path.abspath(src))
@@ -109,9 +117,14 @@ m["FileReferences"] = {k: v for k, v in refs.items() if k in keep}
 json.dump(m, open(os.path.join(out, os.path.basename(src)), "w"), indent=1)
 print("model: %d textures shrunk to 1024 px" % len(refs.get("Textures", [])))
 PY
+    # live2d-render's folder, not the app's: no app to look for
+    ssh "$CAR_HOST" "mkdir -p '/var/opt/live2d-render/models/${MODEL_NAME}'"
+    scp -r "$LIVE_TMP"/* "${CAR_HOST}:/var/opt/live2d-render/models/${MODEL_NAME}/"
+    echo "Pushed the model to /var/opt/live2d-render/models/${MODEL_NAME}. Pick Miku Live2D (or another layout and back) to load it."
+    exit 0
 fi
 LAYOUT_DIR="$(dirname "$SCRIPT_DIR")/apps/${APP_ID}/hud/layouts"
-if [ $# -eq 0 ] && [ -z "$MIKU_SRC" ] && [ -z "$LIVE_CFG" ]; then set -- "$LAYOUT_DIR"/*.json; fi
+if [ $# -eq 0 ] && [ -z "$MIKU_SRC" ] && [ -z "$LIVE_MODE" ]; then set -- "$LAYOUT_DIR"/*.json; fi
 
 # Check each file locally first: valid JSON, so the car never gets a file it would refuse.
 for f in "$@"; do
@@ -137,14 +150,13 @@ if [ -n "$MIKU_SRC" ]; then
     exit 0
 fi
 
-if [ -n "$LIVE_CFG" ]; then
+if [ "$LIVE_MODE" = "config" ]; then
     OWNER="$(ssh "$CAR_HOST" "stat -c '%u:%g' '${APP_DIR}/data'")"
-    ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/miku-live' '/var/opt/live2d-render/models/${MODEL_NAME}'"
-    scp "$LIVE_TMP"/data/* "${CAR_HOST}:${APP_DIR}/data/miku-live/"
+    ssh "$CAR_HOST" "mkdir -p '${APP_DIR}/data/miku-live'"
+    scp "$LIVE_TMP"/* "${CAR_HOST}:${APP_DIR}/data/miku-live/"
     ssh "$CAR_HOST" "chown -R '${OWNER}' '${APP_DIR}/data/miku-live'"
-    scp -r "$LIVE_TMP"/model/* "${CAR_HOST}:/var/opt/live2d-render/models/${MODEL_NAME}/"
-    echo "Pushed Miku Live2D's config to ${APP_DIR}/data/miku-live and her model to /var/opt/live2d-render/models/${MODEL_NAME}."
-    echo "Switch to another layout and back (or restart the app) to load them."
+    echo "Pushed the bake config to ${APP_DIR}/data/miku-live: Miku Live2D reads it in place of the app's poses."
+    echo "Switch to another layout and back to load it; delete that folder to go back to the app's poses."
     exit 0
 fi
 

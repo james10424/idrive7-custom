@@ -78,7 +78,8 @@ if (file) {
   const files = {};
   ((cfg.close && cfg.close.expressions) || []).forEach((/** @type {string} */ f) => {
     const p = path.join(dir, f);
-    files[f] = fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {};
+    // a bundled pose file has them written in (live_pose.js); a bake config, next to it
+    files[f] = cfg.expressions && cfg.expressions[f] ? cfg.expressions[f] : fs.existsSync(p) ? JSON.parse(fs.readFileSync(p, "utf8")) : {};
   });
   /** @type {Record<string, number>} */
   let defs = {};

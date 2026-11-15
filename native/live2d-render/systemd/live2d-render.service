@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 James Zhao
+[Unit]
+Description=live2d-render: a Live2D model drawn live on the GPU for an app
+RequiresMountsFor=/var/opt
+Requires=live2d-render.socket
+After=local-fs.target live2d-render.socket
+# A crash loop stops here; the crash guard (README.md) refuses to draw after 3
+# crashes in a boot anyway.
+StartLimitIntervalSec=120
+StartLimitBurst=4
+
+[Service]
+# root for /dev/dri/renderD128, as the tests on the car ran; it drops to CPU
+# priority 19 itself, so BMW's HMI always comes first.
+ExecStart=/var/opt/live2d-render/current/live2d-render --sdk /var/opt/live2d-render/sdk --state /var/opt/live2d-render/state
+Restart=on-failure
+RestartSec=5

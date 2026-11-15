@@ -10,5 +10,8 @@
       "sdk": "oap-sdk",
       "output": "dist/{id}@{version}.tgz"
     }
-  }
+  },
+  "components": [
+    { "id": "live2d-render", "kind": "tool", "path": "native/live2d-render" }
+  ]
 }

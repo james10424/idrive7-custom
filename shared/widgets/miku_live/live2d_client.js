@@ -1,6 +1,6 @@
 "use strict";
 /**
- * A client of live2d-render (idrive-apps-lib's native/live2d-render, README.md "Protocol"): its Unix socket, one flat
+ * A client of live2d-render (native/live2d-render, its README.md "Protocol"): its Unix socket, one flat
  * JSON object a line each way. Connects, and again every RETRY_MS while it can't (the service not installed or not
  * started yet); each connect emits "connect", where the widget sends its open. Every message from the service is
  * emitted by its "t" ("opened", "error", "layer", "stats", "unknown"). Node 8.

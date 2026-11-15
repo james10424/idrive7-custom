@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: MIT
+# Copyright (C) 2026 James Zhao
+[Unit]
+Description=live2d-render socket: a Live2D model drawn live for an app
+
+[Socket]
+# The first app to connect starts live2d-render.service; it exits a minute
+# after the last one goes, freeing the GPU memory.
+ListenStream=/dev/shm/live2d-render/render.sock
+DirectoryMode=0755
+SocketMode=0660
+# Every OAP app process has tm_oap_app as a supplementary group.
+SocketGroup=tm_oap_app
+
+[Install]
+WantedBy=sockets.target

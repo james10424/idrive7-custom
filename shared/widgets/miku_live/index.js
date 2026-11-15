@@ -1,6 +1,6 @@
 "use strict";
 /**
- * The "miku_live" widget: Miku drawn live with Live2D (the Miku Live2D layout). live2d-render (idrive-apps-lib)
+ * The "miku_live" widget: Miku drawn live with Live2D (the Miku Live2D layout). live2d-render (native/live2d-render)
  * draws her model on the head unit's GPU as a video layer of its own; this widget runs her as the baked close-up
  * does (../miku: the lean with the car, the expressions and her idle loop when stopped, the turn toward the
  * indicator, the recorded blink) and sends her Cubism parameter values (pose.js) from the same bake config.
@@ -11,6 +11,7 @@ const { isNum } = require("../../engine/util");
 const { eyeClosure, blinkOf, MIKU_BLINK_MS } = require("../miku/blink");
 const { rigOf, compose, changes, parseValues } = require("./pose");
 const { Live2dClient } = require("./live2d_client");
+const hudData = require("../../hud_data");
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
@@ -40,13 +41,14 @@ const { Live2dClient } = require("./live2d_client");
  * @property {?{ rate: number, closure: number[] }} [blink] the bake's recorded blink
  */
 
-const DOCS = `no layer of ours: live2d-render (idrive-apps-lib, its Cubism SDK copied to the car by hand) draws Miku's
-Live2D model live as its own video layer at the widget's rect, and this widget sends her parameter values. Her poses,
-expressions, idle loop and blink come from the Miku bake's config, copied with scripts/deploy.sh --miku-live into
-the app's data folder (miku-live/: config.json and its .exp3.json files); "model" is the .model3.json on the car
-(an absolute path, its textures shrunk to 1024 px), "params" fixed values ("Id=value ..."), "hide" parts left out
-(else the config's), "frame" [cx, cy, height] in model units (else the config's close.centre and close.height),
-"fps" (15). Without live2d-render or the files nothing is drawn and the status row says why`;
+const DOCS = `no layer of ours: live2d-render (native/live2d-render, its Cubism SDK copied to the car by hand) draws
+Miku's Live2D model live as its own video layer at the widget's rect, and this widget sends her parameter values.
+Her poses, expressions, idle loop and blink come from "pose", a pose file bundled in hud/ (made from the Miku bake's
+config by tools/live2d_bake/live_pose.js), or from a bake config in the app's data folder in its place
+(miku-live/config.json, scripts/deploy.sh --miku-live-config); "model" is the .model3.json on the car (an absolute
+path, its textures shrunk to 1024 px: scripts/deploy.sh --miku-live), "params" fixed values ("Id=value ..."),
+"hide" parts left out (else the pose file's), "frame" [cx, cy, height] in model units (else its close.centre and
+close.height), "fps" (15). Without live2d-render or her model nothing is drawn and the status row says why`;
 
 // as the baked close-up's (../miku/index.js), so she moves the same
 const LIVE_MS = 66; // her update rate: live2d-render draws at 15 fps
@@ -75,24 +77,32 @@ const smooth01 = (x) => {
 };
 
 /**
- * The bake config and its expressions from the app's data folder; throws with what's missing.
+ * Her poses: the pose file bundled with the app (the widget's "pose", in hud/: tools/live2d_bake/live_pose.js, its
+ * expressions written in), or a bake config in the app's data folder in its place, for trying one out
+ * (miku-live/config.json and its .exp3.json files: scripts/deploy.sh --miku-live-config). Throws with what's missing.
  * @param {HudApp} hud
- * @returns {{ config: *, exprFiles: Record<string, *> }}
+ * @param {Widget} widget
+ * @returns {{ config: *, exprFiles: Record<string, *>, from: string }}
  */
-function loadFiles(hud) {
+function loadFiles(hud, widget) {
   const dir = path.join(hud.ctx.dataDir || ".", "miku-live"),
     file = path.join(dir, "config.json");
-  if (!fs.existsSync(file)) throw new Error("no miku-live/config.json (scripts/deploy.sh --miku-live)");
-  const config = JSON.parse(fs.readFileSync(file, "utf8"));
-  if (!config || !config.close) throw new Error("miku-live/config.json has no close-up (close)");
-  /** @type {Record<string, *>} */
-  const exprFiles = {};
-  (config.close.expressions || []).forEach((/** @type {string} */ f) => {
-    const p = path.join(dir, path.basename(f));
-    if (!fs.existsSync(p)) throw new Error("no miku-live/" + path.basename(f) + " (scripts/deploy.sh --miku-live)");
-    exprFiles[f] = JSON.parse(fs.readFileSync(p, "utf8"));
-  });
-  return { config, exprFiles };
+  if (fs.existsSync(file)) {
+    const config = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (!config || !config.close) throw new Error("miku-live/config.json has no close-up (close)");
+    /** @type {Record<string, *>} */
+    const exprFiles = {};
+    (config.close.expressions || []).forEach((/** @type {string} */ f) => {
+      const p = path.join(dir, path.basename(f));
+      if (!fs.existsSync(p)) throw new Error("no miku-live/" + path.basename(f) + " (scripts/deploy.sh --miku-live-config)");
+      exprFiles[f] = JSON.parse(fs.readFileSync(p, "utf8"));
+    });
+    return { config, exprFiles, from: "data/miku-live/config.json" };
+  }
+  const rel = typeof widget.pose === "string" ? widget.pose : "";
+  const config = rel ? hudData.json(rel) : {};
+  if (!config || !config.close) throw new Error(rel ? "no poses in " + rel : '"pose": the pose file in hud/');
+  return { config, exprFiles: config.expressions || {}, from: rel };
 }
 
 /**
@@ -201,7 +211,7 @@ function drive(hud, state, now) {
 
 module.exports = {
   type: "miku_live",
-  fields: ["model"],
+  fields: ["model", "pose"],
   external: true,
   docs: DOCS,
   /**
@@ -211,7 +221,8 @@ module.exports = {
    */
   create(hud, widget, state) {
     try {
-      const files = loadFiles(hud);
+      const files = loadFiles(hud, widget);
+      hud.log.info("miku live2d: poses from " + files.from);
       state.config = files.config;
       state.exprFiles = files.exprFiles;
     } catch (err) {
