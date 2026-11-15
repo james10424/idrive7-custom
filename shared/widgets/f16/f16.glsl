@@ -2,7 +2,7 @@
 // the top-left; u_size px). In HUD green (u_color), lines antialiased about 1.5 px wide:
 //   the airspeed tape on the left (the car's speed, a box with it in digits at the tape's middle), the altitude tape
 //   on the right (the rpm / 10, its box likewise), the pitch ladder and the horizon line (pitch and roll, from the
-//   car or the g; rungs every 5 deg, dashed below the horizon, numbered both ends), the flight path vector (moved by
+//   car and the g; sliding sideways with the flight path vector; rungs every 5 deg, dashed below the horizon, numbered both ends), the flight path vector (moved by
 //   the g), the bank angle scale under it (ticks at 0, 10, 20, 30, 45 deg, a pointer at the roll) and, when the car
 //   gives a heading, the heading tape at the top.
 // Every number is read from one glyph atlas (u_font, R8; u_grid its columns and rows, u_dig the cells of 0..9), and
@@ -21,7 +21,8 @@ uniform vec4 u_cell;      // atlas cell w, h px; a digit's advance px; 1 when th
 uniform vec4 u_dig[3];    // atlas cells of 0..9 (10 of 12)
 uniform vec4 u_spd;       // speed (display unit), tape px a unit, label step, the scale's top (0 .. top)
 uniform vec4 u_rpm;       // rpm / 10, tape px a unit, label step, the scale's top
-uniform vec4 u_att;       // pitch deg (nose up +), roll rad (right wing down +), flight path vector x, y px
+uniform vec4 u_att;       // pitch deg (nose up +), roll rad, flight path vector x, y px (from the centre)
+uniform float u_lat;      // the ladder's and the horizon's sideways shift, px (the lateral g: centred on the vector)
 uniform vec4 u_hdg;       // heading deg, 1 when known, px a degree, 0
 uniform vec4 u_geo;       // ladder centre x, y; px a degree of pitch; the tapes' half height
 uniform vec4 u_box;       // speed tape's line x, rpm tape's line x, tapes' middle y, 0
@@ -115,8 +116,8 @@ void main() {
 
     // the pitch ladder and the horizon, between the tapes: in the horizon's frame (rolled), rung n is n * 5 deg
     // (under the heading tape while it shows)
-    if (p.x > u_box.x + 30.0 && p.x < u_box.y - 30.0 && abs(p.y - my) < hh && p.y < u_bank.w && (u_hdg.y < 0.5 || p.y > 46.0)) {
-        vec2 q = rot(p - ctr, -u_att.y);
+    if (p.x > u_box.x + 8.0 && p.x < u_box.y - 8.0 && abs(p.y - my) < hh && p.y < u_bank.w && (u_hdg.y < 0.5 || p.y > 46.0)) {
+        vec2 q = rot(p - ctr - vec2(u_lat, 0.0), -u_att.y);
         float t = u_att.x - q.y / u_geo.z, n = floor(t / 5.0 + 0.5);
         float y = (u_att.x - n * 5.0) * u_geo.z, d = q.y - y, ax = abs(q.x);
         if (abs(n) < 0.5) {
