@@ -89,6 +89,8 @@
   <span class="pill" id="pixels" title="cluster-render's pixel memory: 32 MiB (the fork's pixel_mib) for every image of every app together, each image counted twice">pixels: ?</span>
   <span class="pill" id="shaders" title="The heaviest effect shader against what the cluster's GPU took on the car (tools/shader_budget.js): texture reads with every function inlined (32 held; 38 restarted the instrument cluster, and the bench refuses that) and its inlined size in tokens (Sport's held). Per layer in the layers table.">shaders: ?</span>
   <button id="restart">Restart apps</button>
+  <span class="pill" id="l2dState" title="live2d-render in Docker (Miku Live2D, on Mesa's software renderer): running, paused (redraw off) or stopped">live2d: ?</span>
+  <button id="l2dStart" title="Starts live2d-render in Docker, or starts it afresh when it's stuck (the HUD finds it again within 3 s)">Start Live2D Render</button>
   <label class="chk" title="A lower per-connection cap to try a layout under (cluster-render draws 64 a connection since 0.4.2, 8 before). Layers past the cap get state waiting and are not drawn; 0 = unlimited. Changing it restarts the app."><span>layer cap</span> <input type="number" id="cap" min="0" max="64" step="1" value="0"></label>
 </header>
 <main>
@@ -947,6 +949,24 @@
   }
   function setSetting(app, key, value) { fetch('/setting', { method: 'POST', body: JSON.stringify({ app, key, value }) }); }
   document.getElementById('restart').onclick = () => fetch('/restart', { method: 'POST' });
+  // live2d-render in Docker: its state every 3 s, and its button (start, or start afresh)
+  const l2dState = document.getElementById('l2dState'), l2dStart = document.getElementById('l2dStart');
+  const showL2d = (s) => {
+    l2dState.textContent = 'live2d: ' + s.state;
+    l2dState.style.color = s.state === 'running' ? '' : s.state === 'paused' ? 'var(--warn)' : 'var(--err)';
+    l2dState.title = s.why ? 'live2d-render can\'t run on this bench: ' + s.why : 'live2d-render in Docker (Miku Live2D, on Mesa\'s software renderer): ' + s.state;
+    if (!l2dStart.disabled) l2dStart.textContent = s.state === 'stopped' || s.state === 'exited' ? 'Start Live2D Render' : 'Restart Live2D Render';
+  };
+  const pollL2d = () => fetch('/live2d').then((r) => r.json()).then(showL2d).catch(() => {});
+  setInterval(pollL2d, 3000);
+  pollL2d();
+  l2dStart.onclick = () => {
+    l2dStart.disabled = true;
+    l2dStart.textContent = 'Starting…';
+    fetch('/live2d', { method: 'POST', body: JSON.stringify({ start: true }) })
+      .then((r) => r.json()).then((s) => { l2dStart.disabled = false; showL2d(s); })
+      .catch(() => { l2dStart.disabled = false; pollL2d(); });
+  };
 })();
 </script>
 </body>

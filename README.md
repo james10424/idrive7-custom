@@ -197,7 +197,7 @@ After 3 crashes of its own in one boot it also stops until the next start. Its l
 node bench/live2d.js <model>.model3.json
 ```
 
-The bench starts it by itself from then on (Docker running), and stops it with the bench; without it the status row says Live2D Render isn't installed, as on a car without it.
+The bench starts it by itself from then on (Docker running), and stops it with the bench; without it the status row says Live2D Render isn't running. The bench's header shows its state (`live2d: running`, `paused` while redraw is off, `stopped`), and its **Start Live2D Render** button starts it, or starts it afresh when it's stuck (once, after a long pause, it spun without drawing); the HUD finds it again within 3 s.
 
 **New poses.** Bake a new close-up config (tools/live2d_bake) and turn it into the app's pose file, expressions written in:
 

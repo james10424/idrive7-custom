@@ -1622,12 +1622,14 @@ const web = http.createServer(async (req, res) => {
     res.writeHead(204);
     return res.end();
   }
-  if (req.method === "POST" && url === "/live2d") {
-    // the page's redraw switch: off freezes live2d-render's container (Miku Live2D), on runs it again
-    const reqBody = await body(req);
-    if (live2dRun) live2dRun.pause(!!reqBody.paused);
-    res.writeHead(204);
-    return res.end();
+  if (url === "/live2d" && (req.method === "GET" || req.method === "POST")) {
+    // live2d-render in Docker (Miku Live2D): its state; POST { paused } is the page's redraw switch (off freezes
+    // it), POST { start: true } its button (starts it, or starts it afresh when it's stuck)
+    const reqBody = req.method === "POST" ? await body(req) : {};
+    if (live2dRun && reqBody.start) live2dRun.start();
+    else if (live2dRun && "paused" in reqBody) live2dRun.pause(!!reqBody.paused);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    return res.end(JSON.stringify(live2dRun ? live2dRun.state() : { state: "stopped", why: "the bench has no TCP port for it" }));
   }
   if (req.method === "POST" && url === "/restart") {
     const reqBody = await body(req),
@@ -1782,7 +1784,7 @@ try {
 }
 // the same service on TCP, for live2d-render in Docker (Unix sockets don't cross into Docker on the Mac)
 const renderTcp = net.createServer(/** @type {(sock: net.Socket) => void} */ (renderServer.listeners("connection")[0]));
-/** @type {?{ addr: string, pause: (on: boolean) => void, stop: () => void }} */
+/** @type {?ReturnType<typeof live2d.controller>} */
 let live2dRun = null;
 renderServer.listen(SOCK, () => {
   web.listen(PORT, "127.0.0.1", () => {
@@ -1807,9 +1809,18 @@ renderServer.listen(SOCK, () => {
     );
     // live2d-render in Docker (live2d.js) reaches this fake cluster-render over TCP, on the Mac's loopback only
     renderTcp.listen(0, "127.0.0.1", () => {
-      live2dRun = live2d.start(/** @type {net.AddressInfo} */ (renderTcp.address()).port, log);
-      if (live2dRun) process.env.HUD_LIVE2D_SOCKET = live2dRun.addr;
-      apps.forEach(startApp);
+      // and a port for live2d-render's own socket, fixed for the bench's life: the apps get it now, and find
+      // live2d-render there whenever it runs (started now, or later with the page's button)
+      const probe = net.createServer();
+      probe.listen(0, "127.0.0.1", () => {
+        const hostPort = /** @type {net.AddressInfo} */ (probe.address()).port;
+        probe.close(() => {
+          live2dRun = live2d.controller(/** @type {net.AddressInfo} */ (renderTcp.address()).port, hostPort, log);
+          process.env.HUD_LIVE2D_SOCKET = live2dRun.addr;
+          live2dRun.start();
+          apps.forEach(startApp);
+        });
+      });
     });
   });
 });

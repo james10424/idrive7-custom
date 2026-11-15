@@ -10,8 +10,9 @@
  *
  *   node bench/live2d.js <model>.model3.json      to bench/.data/live2d-models/<model>/
  *
- * The bench then starts it by itself whenever the glue is built, the model is there and Docker runs (else it logs
- * why not, and Miku Live2D says live2d-render isn't installed, as on a car without it).
+ * The bench starts it by itself when the glue is built, the model is there and Docker runs (else it logs why not,
+ * and Miku Live2D says live2d-render isn't running), and the page's Live2D Render button starts it (again) any time:
+ * after Docker is started, or when it is stuck.
  */
 const fs = require("fs");
 const path = require("path");
@@ -38,75 +39,101 @@ function whyNot() {
 }
 
 /**
- * Starts live2d-render in Docker; null when it couldn't (it logged why).
+ * The bench's live2d-render: one container, on a host port fixed for the bench's life (the app is given it once,
+ * HUD_LIVE2D_SOCKET, before it starts), so it can be started later (Docker not running when the bench started) or
+ * restarted (stuck) and the app finds it again by itself (it retries every 3 s).
  * @param {number} renderPort the bench's fake cluster-render, on TCP
+ * @param {number} hostPort the Mac's loopback port live2d-render's socket is published on
  * @param {(level: string, text: string) => void} log
- * @returns {?{ addr: string, stop: () => void }}
  */
-function start(renderPort, log) {
-  const why = whyNot();
-  if (why) {
-    log("info", "live2d-render: not on this bench (" + why + "); Miku Live2D says it isn't installed");
-    return null;
-  }
-  const image = spawnSync("make", ["-s", "-C", DIR, "image"], { encoding: "utf8" });
-  if (image.status !== 0) {
-    log("warn", "live2d-render: its Docker image didn't build: " + (image.stderr || "").trim());
-    return null;
-  }
+function controller(renderPort, hostPort, log) {
   const name = "hud-bench-live2d-" + process.pid;
-  const script = [
-    "socat UNIX-LISTEN:/tmp/cr.sock,fork TCP:host.docker.internal:" + renderPort + " &",
-    "socat TCP-LISTEN:" + PORT_IN + ",fork,reuseaddr UNIX-CONNECT:/tmp/l2r.sock &",
-    "exec /lib64/ld-linux-x86-64.so.2 /w/prebuilt/live2d-render --software --socket /tmp/l2r.sock " +
-      "--cluster-socket /tmp/cr.sock --sdk /w/build/sdk --state /tmp/state --idle-exit 0",
-  ].join("\n");
-  const run = spawnSync(
-    "docker",
-    ["run", "-d", "--rm", "--name", name, "--platform", "linux/amd64", "-p", "127.0.0.1::" + PORT_IN,
-      "-v", DIR + ":/w:ro", "-v", MODELS + ":/var/opt/live2d-render/models:ro", image.stdout.trim(), "sh", "-c", script],
-    { encoding: "utf8" },
-  );
-  if (run.status !== 0) {
-    log("warn", "live2d-render: docker run failed: " + (run.stderr || "").trim());
-    return null;
-  }
-  const port = spawnSync("docker", ["port", name, String(PORT_IN)], { encoding: "utf8" });
-  const addr = (port.stdout || "").trim().split("\n")[0];
-  if (!/^[\d.]+:\d+$/.test(addr)) {
-    log("warn", "live2d-render: no port from Docker (" + addr + ")");
-    spawnSync("docker", ["stop", "-t", "1", name]);
-    return null;
-  }
-  // its log on the bench's
-  const logs = spawn("docker", ["logs", "-f", name], { stdio: ["ignore", "pipe", "pipe"] });
-  /** @param {Buffer} chunk */
-  const lines = (chunk) =>
-    String(chunk)
-      .split("\n")
-      .filter((l) => l.trim() && !/^libEGL warning/.test(l))
-      .forEach((l) => log("info", "live2d-render: " + l.replace(/^live2d-render: /, "")));
-  logs.stdout.on("data", lines);
-  logs.stderr.on("data", lines);
-  log("info", "live2d-render: in Docker (" + name + ", Mesa's software renderer) at " + addr + ", models from " + MODELS);
+  const addr = "127.0.0.1:" + hostPort;
+  /** @type {?import("child_process").ChildProcess} */
+  let logs = null;
   let paused = false;
+  /** @returns {string} "running", "paused", "exited", ... or "stopped" when there is no container */
+  const status = () => {
+    const r = spawnSync("docker", ["inspect", "-f", "{{.State.Status}}", name], { encoding: "utf8", timeout: 10000 });
+    return r.status === 0 ? r.stdout.trim() : "stopped";
+  };
+  const follow = () => {
+    if (logs) logs.kill();
+    logs = spawn("docker", ["logs", "-f", "--since", "1s", name], { stdio: ["ignore", "pipe", "pipe"] });
+    /** @param {Buffer} chunk */
+    const lines = (chunk) =>
+      String(chunk)
+        .split("\n")
+        .filter((l) => l.trim() && !/^libEGL warning/.test(l))
+        .forEach((l) => log("info", "live2d-render: " + l.replace(/^live2d-render: /, "")));
+    if (logs.stdout) logs.stdout.on("data", lines);
+    if (logs.stderr) logs.stderr.on("data", lines);
+  };
+  const remove = () => {
+    if (logs) logs.kill();
+    logs = null;
+    spawnSync("docker", ["rm", "-f", name], { timeout: 15000 });
+    paused = false;
+  };
   return {
     addr,
     /**
-     * Frozen (docker pause: no CPU at all, the app's connection kept) or running again; the page's redraw switch.
+     * Its state for the page: running, paused, stopped (and why it can't run, when it can't).
+     * @returns {{ state: string, why: string }}
+     */
+    state() {
+      const why = whyNot();
+      return { state: why === "Docker isn't running" ? "stopped" : status(), why };
+    },
+    /**
+     * Starts it, or starts it afresh (a container already there goes first: a stuck one is a fresh process).
+     * @returns {boolean} whether it runs now
+     */
+    start() {
+      const why = whyNot();
+      if (why) {
+        log("info", "live2d-render: not on this bench (" + why + "); Miku Live2D says it isn't installed");
+        return false;
+      }
+      const image = spawnSync("make", ["-s", "-C", DIR, "image"], { encoding: "utf8" });
+      if (image.status !== 0) {
+        log("warn", "live2d-render: its Docker image didn't build: " + (image.stderr || "").trim());
+        return false;
+      }
+      remove();
+      const script = [
+        "socat UNIX-LISTEN:/tmp/cr.sock,fork TCP:host.docker.internal:" + renderPort + " &",
+        "socat TCP-LISTEN:" + PORT_IN + ",fork,reuseaddr UNIX-CONNECT:/tmp/l2r.sock &",
+        "exec /lib64/ld-linux-x86-64.so.2 /w/prebuilt/live2d-render --software --socket /tmp/l2r.sock " +
+          "--cluster-socket /tmp/cr.sock --sdk /w/build/sdk --state /tmp/state --idle-exit 0",
+      ].join("\n");
+      const run = spawnSync(
+        "docker",
+        ["run", "-d", "--name", name, "--platform", "linux/amd64", "-p", addr + ":" + PORT_IN,
+          "-v", DIR + ":/w:ro", "-v", MODELS + ":/var/opt/live2d-render/models:ro", image.stdout.trim(), "sh", "-c", script],
+        { encoding: "utf8" },
+      );
+      if (run.status !== 0) {
+        log("warn", "live2d-render: docker run failed: " + (run.stderr || "").trim());
+        return false;
+      }
+      follow();
+      log("info", "live2d-render: started in Docker (" + name + ", Mesa's software renderer) at " + addr + ", models from " + MODELS);
+      return true;
+    },
+    /**
+     * Frozen (docker pause: no CPU at all) or running again; the page's redraw switch.
      * @param {boolean} on
      */
     pause(on) {
-      if (on === paused) return;
+      if (on === paused || status() !== (on ? "running" : "paused")) return;
       paused = on;
       const r = spawnSync("docker", [on ? "pause" : "unpause", name], { encoding: "utf8", timeout: 10000 });
       if (r.status !== 0) log("warn", "live2d-render: docker " + (on ? "pause" : "unpause") + " failed: " + (r.stderr || "").trim());
       else log("info", "live2d-render: " + (on ? "paused (redraw off)" : "running again"));
     },
     stop() {
-      if (paused) spawnSync("docker", ["unpause", name], { timeout: 10000 });
-      logs.kill();
-      spawnSync("docker", ["stop", "-t", "1", name], { timeout: 15000 });
+      remove();
     },
   };
 }
@@ -144,4 +171,4 @@ if (require.main === module) {
   setup(process.argv[2]);
 }
 
-module.exports = { start, whyNot };
+module.exports = { controller, whyNot };
