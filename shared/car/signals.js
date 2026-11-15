@@ -35,6 +35,9 @@ const {
 const { isNum, pad2 } = require("../engine/util");
 
 const BYTE_NONE = 255; // a byte signal's "none" (fuel, outside temperature, battery condition)
+const SLOPE_LEVEL = 1280; // LaneSlope: the gradient count when level (car/signals.js _onSlope)
+const SLOPE_PCT = 0.1; // and its grade a count, %
+const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the binding may hand enums over as numbers)
 const RANGE_NONE = 4095; // KombiIF range: none
 const MILEAGE_NONE = 0xffffff; // a 24-bit mileage: none
 const CONS_NONE = 65535; // a consumption raw: none
@@ -81,6 +84,11 @@ const TZ_MIN_H = -12,
  * @property {?string} driveMode 'comfort' | 'sport' | 'eco', once the car has said
  * @property {?string} driveVariant 'plus' (Sport+ / Comfort+ / Eco Pro+), 'individual', or null
  * @property {boolean} navActive BMW's route guidance is on (the HUD shows its own guidance then)
+ * @property {?number} slopePitch the road's gradient front to back, deg (nose up +; LaneSlope), null without one
+ * @property {?number} slopeRoll and side to side, deg (the left side lower +)
+ * @property {number} slopeAt when LaneSlope last came (ms)
+ * @property {?number} heading deg clockwise from north (navigation's position), null without one
+ * @property {number} headingAt when it last came (ms)
  * @property {unknown} navRaw the last guidanceState as the car sent it, for the log
  * @property {boolean} assistActive BMW's HUD shows its driver assistance block (ACC, DCC, STA)
  * @property {string | undefined} assistRaw the last summary of it, for the log
@@ -159,6 +167,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.driveMode = null; // 'comfort' | 'sport' | 'eco', once the car has said
     this.driveVariant = null; // 'plus' (Sport+ / Comfort+ / Eco Pro+), 'individual', or null
     this.navActive = false; // BMW's route guidance is on (the HUD shows its own guidance then)
+    this.slopePitch = null; // the road's gradient (LaneSlope), deg, nose up +
+    this.slopeRoll = null; // and side to side, deg, the left side lower +
+    this.slopeAt = 0;
+    this.heading = null; // deg from north (navigation's position)
+    this.headingAt = 0;
     this.navRaw = undefined; // the last guidanceState as the car sent it, for the log
     this.assistActive = false; // BMW's HUD shows its driver assistance block (ACC, DCC, STA)
     this.assistRaw = undefined; // the last summary of it, for the log
@@ -776,6 +789,73 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           "route guidance not available: " + ((err && err.message) || err),
         ),
       );
+  },
+
+  /**
+   * The car's attitude for the F-16 layout, with app.json config.attitude (and both interfaces in its "signals"): the road's gradient front to back and
+   * side to side (chassis.VehicleModel LaneSlope) and the heading (navigation.positioning.Positioning
+   * currentLocation, Main_Instance). Found with the attitude probe, Nov 14 2026 (the car offers no body pitch, roll or
+   * yaw rate interface to the head unit).
+   * @returns {void}
+   */
+  _startAttitude() {
+    // app.json config.attitude: the app lists both interfaces in its "signals" (the runtime spec doesn't carry that list)
+    if (!this.config.attitude) return;
+    /** @type {(iface: string, instance: string, handlers: Record<string, (msg: *) => void>, what: string) => void} */
+    const watch = (iface, instance, handlers, what) => {
+      Promise.resolve()
+        .then(() => this.ctx.signals.watch(iface, instance, handlers, this.log))
+        .then((/** @type {*} */ sub) =>
+          this.log.info("signal " + what + " " + (sub && sub.error ? "error: " + sub.error : "subscribed")),
+        )
+        .catch((/** @type {*} */ err) => this.log.info(what + " not available: " + ((err && err.message) || err)));
+    };
+    watch(
+      "de.bmw.chassis.VehicleModel",
+      "1",
+      { LaneSlope: (msg) => this._guard("slope", () => this._onSlope(msg)) },
+      "LaneSlope",
+    );
+    watch(
+      "de.bmw.infotainment.navigation.positioning.Positioning",
+      "Main_Instance",
+      { currentLocation: (msg) => this._guard("heading", () => this._onHeading(msg)) },
+      "heading",
+    );
+  },
+
+  /**
+   * LaneSlope: the gradient, front to back and side to side, in degrees. Each is a 12-bit count the binding hands
+   * over with its nibbles out of order (its low byte holds the count's upper 8 bits, its high nibble the lower 4:
+   * raw steps of 256 were single counts); then 1280 is level and a count 0.1 % of grade (parked on two slopes, the
+   * count against the accelerometer's g, Nov 14 2026). Signs as the accelerometer's at rest: nose up as gLong +
+   * (count under 1280), the left side lower as gLat - (count under 1280).
+   * @param {*} msg
+   * @returns {void}
+   */
+  _onSlope(msg) {
+    /** @type {(raw: *) => ?number} */
+    const count = (raw) => (isNum(raw) ? ((raw & 255) << 4) | ((raw >> 8) & 15) : null);
+    const ok = (/** @type {*} */ q) => q === "SIGNALWERT_IST_GUELTIG" || q === SLOPE_VALID_WIRE;
+    const lon = count(msg && msg.actualValueLongitudinalGradientRoadway),
+      tr = count(msg && msg.actualValueTransverseGradientRoadway);
+    /** @type {(c: number) => number} */
+    const deg = (c) => (Math.atan(((c - SLOPE_LEVEL) * SLOPE_PCT) / 100) * 180) / Math.PI;
+    this.slopePitch = lon !== null && ok(msg.qualifierActualValueLongitudinalGradientRoadway) ? -deg(lon) : null;
+    // bank: the left side lower is +, as the F-16's bank (a left turn's lateral g banks it left)
+    this.slopeRoll = tr !== null && ok(msg.qualifierActualValueTransverseGradientRoadway) ? -deg(tr) : null;
+    this.slopeAt = Date.now();
+  },
+
+  /**
+   * The heading from navigation's position: degrees clockwise from north, every ~0.3 s.
+   * @param {*} msg
+   * @returns {void}
+   */
+  _onHeading(msg) {
+    const heading = msg && msg.heading;
+    this.heading = isNum(heading) && msg.coordinatesValid !== false ? ((heading % 360) + 360) % 360 : null;
+    this.headingAt = Date.now();
   },
 
   /**

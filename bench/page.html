@@ -152,6 +152,9 @@
     ['rpm', 0, 8000, 50, 900], ['speed', 0, 250, 1, 0], ['oil', -20, 150, 1, 95], ['coolant', -20, 130, 1, 90],
     ['boost', 0, 2.5, 0.05, 0], ['gear', 0, 8, 1, 1], ['gLong', -1.5, 1.5, 0.05, 0], ['gLat', -1.5, 1.5, 0.05, 0],
     ['fuelL', 0, 65, 1, 40], ['range', 0, 800, 5, 450], ['ambient', -20, 45, 1, 22],
+    // the road's gradient and camber, % (nose up / the left side lower +), and the heading (deg; -1 none): the
+    // F-16 layout's attitude, as the car sends them (chassis.VehicleModel LaneSlope, navigation's position)
+    ['slope', -15, 15, 0.5, 0], ['camber', -10, 10, 0.5, 0], ['heading', -1, 359, 1, -1],
   ];
   // one display per app (its target), drawn in turn by frame(): canvas, ctx, view, VW, VH point at the one being drawn
   let canvas = document.getElementById('hud');

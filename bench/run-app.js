@@ -193,6 +193,9 @@ const SCALE = {
 const raw = (k, value) => Math.round((value - SCALE[k][1]) / SCALE[k][0]);
 // how often each feed goes out
 const SLOW_FEED_MS = 1000; // once a second, as the car sends these
+const ATTITUDE_FEED_MS = 100; // the road's slope and the heading go to the app this often (manual)
+const SLOPE_LEVEL = 1280; // LaneSlope's count when level (a copy of car/signals.js's)
+const SLOPE_PCT = 0.1; // and its grade a count, %
 const TRIP_FEED_MS = 2000; // the trip computer
 const SIGNAL_FEED_MS = 50; // the manual signals
 const VALUES_FEED_MS = 250; // what the app sees, to the page
@@ -257,6 +260,33 @@ setInterval(() => {
       { actualValueModeDrivingExperience: drive },
     );
 }, SLOW_FEED_MS);
+// manual: the road's slope and camber as LaneSlope (a 12-bit count, 1280 level, 0.1 % of grade a count, nose up and
+// the left side lower under 1280; the car hands its nibbles over out of order: car/signals.js _onSlope) and the heading
+// as navigation's position, 10 a second
+/** @type {(pct: number) => number} the count's raw value, scrambled as the car's */
+const slopeRaw = (pct) => {
+  const c = Math.max(0, Math.min(4095, Math.round(SLOPE_LEVEL - pct / SLOPE_PCT)));
+  return ((c & 15) << 8) | (c >> 4);
+};
+setInterval(() => {
+  if (mode !== "manual") return;
+  const slope = Number(manual.slope),
+    camber = Number(manual.camber),
+    heading = Number(manual.heading);
+  if (Number.isFinite(slope) || Number.isFinite(camber))
+    stub.feed("de.bmw.chassis.VehicleModel", "LaneSlope", {
+      actualValueLongitudinalGradientRoadway: slopeRaw(Number.isFinite(slope) ? slope : 0),
+      qualifierActualValueLongitudinalGradientRoadway: "SIGNALWERT_IST_GUELTIG",
+      actualValueTransverseGradientRoadway: slopeRaw(Number.isFinite(camber) ? camber : 0),
+      qualifierActualValueTransverseGradientRoadway: "SIGNALWERT_IST_GUELTIG",
+    });
+  if (Number.isFinite(heading) && heading >= 0)
+    stub.feed("de.bmw.infotainment.navigation.positioning.Positioning", "currentLocation", {
+      coordinatesValid: true,
+      heading,
+      status: "ON_ROAD",
+    });
+}, ATTITUDE_FEED_MS);
 // route guidance (Guidance guidanceState, the enum names oap-sdk reads), sent once a second
 setInterval(() => {
   if (nav !== null)

@@ -114,7 +114,8 @@ void main() {
     c = max(c, tape(p, u_box.y, 1.0, u_rpm.x, u_rpm.y, u_rpm.z, u_rpm.w, my, hh, cell));
 
     // the pitch ladder and the horizon, between the tapes: in the horizon's frame (rolled), rung n is n * 5 deg
-    if (p.x > u_box.x + 30.0 && p.x < u_box.y - 30.0 && abs(p.y - my) < hh && p.y < u_bank.w) {
+    // (under the heading tape while it shows)
+    if (p.x > u_box.x + 30.0 && p.x < u_box.y - 30.0 && abs(p.y - my) < hh && p.y < u_bank.w && (u_hdg.y < 0.5 || p.y > 46.0)) {
         vec2 q = rot(p - ctr, -u_att.y);
         float t = u_att.x - q.y / u_geo.z, n = floor(t / 5.0 + 0.5);
         float y = (u_att.x - n * 5.0) * u_geo.z, d = q.y - y, ax = abs(q.x);

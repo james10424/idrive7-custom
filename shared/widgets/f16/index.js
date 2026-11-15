@@ -23,7 +23,7 @@ const F16_HDG_PX = 4; // heading tape px a degree
 const F16_BANK_R = 110; // the bank scale's radius, px: an arc at the bottom, its centre above it
 const F16_BANK_BOTTOM = 266; // its lowest tick's end, layer px from the top (the pointer under it)
 const F16_LADDER_CLEAR = 60; // the ladder stops this far above the bank scale's bottom
-// the g fallback, until the car's own pitch, roll and heading are found (car/attitude_probe.js)
+// the g's part of the attitude, on top of the road's own slope (car/signals.js _onSlope)
 const F16_PITCH_DEG_G = 12; // pitch (nose up) a g of longitudinal acceleration
 const F16_ROLL_DEG_G = 30; // bank a g of lateral acceleration (into the turn, as a jet banks)
 const F16_FPV_X_G = 110; // the flight path vector's px a g sideways (toward the turn), along the horizon
@@ -31,6 +31,8 @@ const F16_FPV_MAX = 70; // it stays this near the middle, px
 const F16_G_TAU_MS = 200; // the g eased this smoothly
 const F16_MAX_DT_MS = 500;
 const F16_SEND_MS = 33; // the attitude goes up at most this often
+const F16_FRESH_MS = 3000; // the car's slope and heading count this long after they last came
+const F16_SLOPE_TAU_MS = 400; // the road's slope eased this smoothly (it comes in 0.1 % steps)
 
 /** @typedef {import("../../engine/app").Widget} Widget */
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
@@ -44,9 +46,12 @@ const F16_SEND_MS = 33; // the attitude goes up at most this often
  * @property {number} [sentAt] when the attitude last went up (ms)
  * @property {string} [lastAtt] the attitude last sent
  * @property {string} [lastVals] the tapes' values last sent
+ * @property {number} [roadPitch] the road's gradient front to back, deg, eased
+ * @property {number} [roadRoll] and side to side, deg, eased
+ * @property {string} [lastHdg] the heading last sent
  */
 
-const DOCS = `effect layer (f16/f16.glsl): an F-16 style HUD in HUD green, one layer the visible window's size. The airspeed tape on the left is the speed (0..260 km/h, 0..160 mph with US units), its box the speed in digits; the altitude tape on the right is the rpm / 10 (0..700), its box likewise; the pitch ladder (rungs every 5 deg, dashed below the horizon) and the horizon line between them show pitch and roll, the flight path vector shows where the car travels (on the horizon as the nose pitches, sliding toward the turn), the bank angle scale under it points at the roll, and the heading tape shows at the top once the car gives a heading. Until the car's own pitch, roll and heading are read, the pitch is the longitudinal g (12 deg a g), the roll the lateral g (30 deg a g, into the turn) and there is no heading. Its numbers come from the "font" glyph atlas (mid). The tapes run the window's full height (BMW's speed sign draws over the airspeed tape's lower part), the bank scale sits at the bottom. Fields: "tapeX" [airspeed line x, altitude line x] (layer px, default 112 and 448), "mid" [ladder centre x, tapes' middle y] (default the layer's middle).`;
+const DOCS = `effect layer (f16/f16.glsl): an F-16 style HUD in HUD green, one layer the visible window's size. The airspeed tape on the left is the speed (0..260 km/h, 0..160 mph with US units), its box the speed in digits; the altitude tape on the right is the rpm / 10 (0..700), its box likewise; the pitch ladder (rungs every 5 deg, dashed below the horizon) and the horizon line between them show pitch and roll, the flight path vector shows where the car travels (on the horizon as the nose pitches, sliding toward the turn), the bank angle scale under it points at the roll, and the heading tape shows at the top once the car gives a heading. The pitch and bank are the road's own gradient and camber (LaneSlope) plus the g's (12 deg a g of longitudinal g as the body squats or dives, 30 deg a g of lateral g as a jet banks into a turn); the heading comes from navigation's position. Its numbers come from the "font" glyph atlas (mid). The tapes run the window's full height (BMW's speed sign draws over the airspeed tape's lower part), the bank scale sits at the bottom. Fields: "tapeX" [airspeed line x, altitude line x] (layer px, default 112 and 448), "mid" [ladder centre x, tapes' middle y] (default the layer's middle).`;
 
 /**
  * The layer's geometry: the tapes' lines, the ladder's centre, the tapes' middle.
@@ -136,17 +141,36 @@ module.exports = {
       state.c.uniform(state.ref, "u_spd", spd);
       state.c.uniform(state.ref, "u_rpm", rpmv);
     }
-    // the attitude from the g (a left turn's lateral g is +: the jet banks left, the vector slides left)
+    // the heading tape, while navigation's position gives one
+    const hdgOn = isNum(hud.heading) && now - (hud.headingAt || 0) < F16_FRESH_MS,
+      hdg = [hdgOn ? Math.round(hud.heading * 10) / 10 : 0, hdgOn ? 1 : 0, F16_HDG_PX, 0],
+      hdgKey = hdg.join(",");
+    if (force || hdgKey !== state.lastHdg) {
+      state.lastHdg = hdgKey;
+      state.c.uniform(state.ref, "u_hdg", hdg);
+    }
+    // the attitude: the road's own slope (LaneSlope, car/signals.js; 0 without it) plus the g's, as the body squats
+    // pulling away, dives braking and, as a jet, banks into a turn (a left turn's lateral g is +: it banks left)
+    const slopeOn = now - (hud.slopeAt || 0) < F16_FRESH_MS,
+      ks = 1 - Math.exp(-dt / F16_SLOPE_TAU_MS);
+    /** @type {(was: number | undefined, v: *) => number} */
+    const easeSlope = (was, v) => {
+      const to = slopeOn && isNum(v) ? v : 0;
+      return isNum(was) ? was + (to - was) * ks : to;
+    };
+    state.roadPitch = easeSlope(state.roadPitch, hud.slopePitch);
+    state.roadRoll = easeSlope(state.roadRoll, hud.slopeRoll);
     if (!force && now - (state.sentAt || 0) < F16_SEND_MS) return;
     const clampFpv = (/** @type {number} */ v) => Math.max(-F16_FPV_MAX, Math.min(F16_FPV_MAX, v));
-    const pitch = state.gLong * F16_PITCH_DEG_G,
-      roll = (state.gLat * F16_ROLL_DEG_G * Math.PI) / 180,
-      // the flight path vector shows where the car travels, not where its nose points: as the nose pitches up
-      // pulling away (down braking) it stays back on the horizon, the road ahead, so it moves against the pitch; it
-      // slides along the horizon toward the turn. In the horizon's frame (x along it, y the pitch's offset), then
-      // rolled to the screen as the shader rolls the ladder
+    const gPitch = state.gLong * F16_PITCH_DEG_G,
+      pitch = state.roadPitch + gPitch,
+      roll = ((state.roadRoll + state.gLat * F16_ROLL_DEG_G) * Math.PI) / 180,
+      // the flight path vector shows where the car travels, not where its nose points: along the road, so climbing
+      // it sits above the horizon by the gradient, and as the nose squats or dives it stays where the road goes
+      // (it moves against the g's pitch); it slides along the horizon toward the turn. In the horizon's frame (x
+      // along it, y the offset from the nose), then rolled to the screen as the shader rolls the ladder
       hx = -state.gLat * F16_FPV_X_G,
-      hy = pitch * F16_PITCH_PX,
+      hy = gPitch * F16_PITCH_PX,
       fx = clampFpv(Math.cos(roll) * hx - Math.sin(roll) * hy),
       fy = clampFpv(Math.sin(roll) * hx + Math.cos(roll) * hy);
     const att = [Math.round(pitch * 20) / 20, Math.round(roll * 500) / 500, Math.round(fx), Math.round(fy)];

@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.37",
+  "version": "0.1.38",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -72,40 +72,14 @@
       "DataFrontVehicle": "s",
       "GapVehicleDrivingAhead": "s"
     },
-    "de.bmw.infotainment.vehicle.VehiclePitchAngle": {
-      "vehicleAngle": "rs",
-      "_optional": "the attitude probe's pitch angle (car/attitude_probe.js)"
-    },
     "de.bmw.chassis.VehicleModel": {
       "LaneSlope": "s",
-      "OdometryVehicle1": "s",
-      "_optional": "the attitude probe's road gradients and yaw angle"
-    },
-    "de.bmw.chassis.RollPitchRateAccelerationVerticalProvision": {
-      "_broadcasts": ["pitchRateCog", "rollRateCog"],
-      "_optional": "the attitude probe's pitch and roll rates"
-    },
-    "de.bmw.chassis.SurfaceInformationProvision": {
-      "_broadcasts": ["longitudinalGradientSurface", "lateralGradientSurface"],
-      "_optional": "the attitude probe's surface gradients"
-    },
-    "de.bmw.chassis.YawRateProvision": {
-      "_broadcasts": ["yawRate"],
-      "_optional": "the attitude probe's yaw rate"
+      "_optional": "the road's gradient and camber: the F-16 layout's pitch ladder and horizon (without it, from the g)"
     },
     "de.bmw.infotainment.navigation.positioning.Positioning": {
       "_instances": "Main_Instance",
       "currentLocation": "rs",
-      "_optional": "the attitude probe's navigation heading"
-    },
-    "de.bmw.infotainment.navigation.mapcontrol.MapControl": {
-      "_instances": "Main_Instance_01",
-      "compassAngle": "rs",
-      "_optional": "the attitude probe's map compass"
-    },
-    "de.bmw.infotainment.GPSData": {
-      "GPSPositionExtendedCAN": "rs",
-      "_optional": "the attitude probe's GPS heading"
+      "_optional": "the heading: the F-16 layout's heading tape"
     }
   },
   "screens": [
@@ -272,6 +246,7 @@
     },
     "indicators": true,
     "tankLitres": 65,
+    "attitude": true,
     "acc": {
       "comment": "The car ahead and the ACC set speed: raw * factor + offset. gap: the gap's raw value to metres, 0.1 m steps (the 1:1 reading was 10 times BMW's own on the car) (GapVehicleDrivingAhead, or DataFrontVehicle when the car sends it); rel: DataFrontVehicle's speed to km/h (without it the relative speed comes from the gap's rate); set: cruiseCtrlSpeedHUD. The car's catalog gives no units; the app logs 'car ahead raw: ...' when the values change, to calibrate these against BMW's own HUD.",
       "gap": {

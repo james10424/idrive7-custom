@@ -163,6 +163,7 @@ const FLASH_HALF_MS = 62.5; // the shift light's blink: on and off this long eac
  * @property {boolean} [lamps]
  * @property {boolean} [pedals]
  * @property {boolean} [indicators]
+ * @property {boolean} [attitude] read the road's slope and the heading (car/signals.js _startAttitude; the F-16 layout)
  * @property {boolean} [carAhead]
  */
 
@@ -545,8 +546,6 @@ class HudApp {
    * @this {App}
    */
   start() {
-    // the attitude probe (car/attitude_probe.js), only with its flag file in the data folder
-    this._guard("attitude probe", () => require("../car/attitude_probe").start(this));
     this.log.info("connecting to cluster-render at " + this.socketPath);
     this.started = true;
     this.clients.forEach((client) => client.connect());
@@ -571,6 +570,7 @@ class HudApp {
     this._startDme();
     this._startNav();
     this._startMedia();
+    this._startAttitude();
   }
 
   /**
