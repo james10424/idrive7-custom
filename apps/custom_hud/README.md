@@ -32,7 +32,7 @@ Layout (Off, Miku or the calibration grid), Make room for BMW's guidance and cru
 
 The page's first row says what the HUD is doing and why anything is not drawn (for example "waiting: another app has this display").
 
-Under it, the head unit's CPU and temperature: "CPU 66% of 4 cores, ours 12%" (all four cores together, and how much of that is ours: Custom HUD, Custom Cluster, cluster-render and Live2D Render) and "CPU temperature 55 °C" (the processor's package). They update every 5 s while the page is open, and at once with **Refresh CPU and temperature**; nothing is read while the page is closed. The same figures `tools/car_usage.sh` gives.
+Under it, the head unit's CPU and temperature on one row: "CPU 66% of 4 cores, ours 12%, 55 °C" (all four cores together, how much of that is ours: Custom HUD, Custom Cluster, cluster-render and Live2D Render, and the processor's package temperature). They update every 5 s while the page is open, and at once with **Refresh CPU and temperature**; nothing is read while the page is closed. The same figures `tools/car_usage.sh` gives.
 
 ## The visible window
 

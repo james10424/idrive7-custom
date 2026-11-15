@@ -15,12 +15,12 @@ const mgu = require("./kit/mgu");
 const HudApp = require("./hud");
 const usage = require("./usage");
 
-const USAGE_MS = 5000; // the CPU and temperature rows' refresh while the page is shown
+const USAGE_MS = 5000; // the CPU and temperature row's refresh while the page is shown
 const USAGE_FIRST_MS = 1000; // the first CPU figure after the page opens (or a Refresh right after a sample)
 const PAGE = "MAIN";
 
 /**
- * The CPU and temperature rows on the settings page.
+ * The CPU and temperature row on the settings page.
  * @param {*} ui the kit's ctx.ui
  */
 function usageRows(ui) {
@@ -30,9 +30,7 @@ function usageRows(ui) {
   let lastAt = 0;
   const show = () => {
     lastAt = Date.now();
-    const r = usage.rows(u.sample());
-    ui.text("CPU", r.cpu);
-    ui.text("TEMP", r.temp);
+    ui.text("CPU", usage.row(u.sample()));
   };
   /** @type {(ms: number) => void} the next sample in ms, then every USAGE_MS */
   const schedule = (ms) => {

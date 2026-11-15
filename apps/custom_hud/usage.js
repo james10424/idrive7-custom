@@ -1,6 +1,6 @@
 "use strict";
 /**
- * The head unit's CPU and temperature for the settings page (main.js): the whole unit's CPU over the last sample, ours
+ * The head unit's CPU and temperature for the settings page, on one row (main.js): the whole unit's CPU over the last sample, ours
  * beside it (Custom HUD, Custom Cluster, cluster-render, Live2D Render), and the processor's package temperature
  * (coretemp). The same figures as tools/car_usage.sh, read the same way: /proc and /sys, all readable by any app on
  * the car. Node 8.
@@ -140,7 +140,8 @@ class Usage {
       Object.keys(ours).forEach((pid) => {
         if (pid in this.lastOurs) sum += ours[pid] - this.lastOurs[pid];
       });
-      oursPct = (100 * sum) / span;
+      // read a moment after the totals: never more than the whole
+      oursPct = Math.min(cpu, (100 * sum) / span);
     }
     this.last = now;
     this.lastOurs = ours;
@@ -149,20 +150,18 @@ class Usage {
 }
 
 /**
- * The page's two rows.
+ * The page's row: "CPU 66% of 4 cores, ours 12%, 55 °C".
  * @param {{ cpu: ?number, ours: ?number, cores: number, temp: ?number }} s
- * @returns {{ cpu: string, temp: string }}
+ * @returns {string}
  */
-function rows(s) {
-  return {
-    cpu:
-      s.cpu == null
-        ? s.cores
-          ? "CPU: measuring"
-          : "CPU: not readable here"
-        : "CPU " + Math.round(s.cpu) + "% of " + s.cores + " cores, ours " + Math.round(s.ours || 0) + "%",
-    temp: s.temp == null ? "CPU temperature: not readable here" : "CPU temperature " + Math.round(s.temp) + " °C",
-  };
+function row(s) {
+  const cpu =
+    s.cpu == null
+      ? s.cores
+        ? "CPU measuring"
+        : "CPU not readable here"
+      : "CPU " + Math.round(s.cpu) + "% of " + s.cores + " cores, ours " + Math.round(s.ours || 0) + "%";
+  return cpu + ", " + (s.temp == null ? "temperature not readable here" : Math.round(s.temp) + " °C");
 }
 
-module.exports = { Usage, rows, cpuTotals, packageTemp };
+module.exports = { Usage, row, cpuTotals, packageTemp };
