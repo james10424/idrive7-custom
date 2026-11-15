@@ -1622,6 +1622,13 @@ const web = http.createServer(async (req, res) => {
     res.writeHead(204);
     return res.end();
   }
+  if (req.method === "POST" && url === "/live2d") {
+    // the page's redraw switch: off freezes live2d-render's container (Miku Live2D), on runs it again
+    const reqBody = await body(req);
+    if (live2dRun) live2dRun.pause(!!reqBody.paused);
+    res.writeHead(204);
+    return res.end();
+  }
   if (req.method === "POST" && url === "/restart") {
     const reqBody = await body(req),
       app = appOf(reqBody.app);
@@ -1775,7 +1782,7 @@ try {
 }
 // the same service on TCP, for live2d-render in Docker (Unix sockets don't cross into Docker on the Mac)
 const renderTcp = net.createServer(/** @type {(sock: net.Socket) => void} */ (renderServer.listeners("connection")[0]));
-/** @type {?{ addr: string, stop: () => void }} */
+/** @type {?{ addr: string, pause: (on: boolean) => void, stop: () => void }} */
 let live2dRun = null;
 renderServer.listen(SOCK, () => {
   web.listen(PORT, "127.0.0.1", () => {

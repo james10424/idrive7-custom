@@ -89,9 +89,22 @@ function start(renderPort, log) {
   logs.stdout.on("data", lines);
   logs.stderr.on("data", lines);
   log("info", "live2d-render: in Docker (" + name + ", Mesa's software renderer) at " + addr + ", models from " + MODELS);
+  let paused = false;
   return {
     addr,
+    /**
+     * Frozen (docker pause: no CPU at all, the app's connection kept) or running again; the page's redraw switch.
+     * @param {boolean} on
+     */
+    pause(on) {
+      if (on === paused) return;
+      paused = on;
+      const r = spawnSync("docker", [on ? "pause" : "unpause", name], { encoding: "utf8", timeout: 10000 });
+      if (r.status !== 0) log("warn", "live2d-render: docker " + (on ? "pause" : "unpause") + " failed: " + (r.stderr || "").trim());
+      else log("info", "live2d-render: " + (on ? "paused (redraw off)" : "running again"));
+    },
     stop() {
+      if (paused) spawnSync("docker", ["unpause", name], { timeout: 10000 });
       logs.kill();
       spawnSync("docker", ["stop", "-t", "1", name], { timeout: 15000 });
     },
