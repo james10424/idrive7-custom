@@ -209,6 +209,15 @@ To try a config on the car before building the app, `./scripts/deploy.sh root@<c
 
 **To remove her,** pick another layout and delete `/var/opt/live2d-render/models/<model>/`; uninstalling Live2D Render from the Store leaves `/var/opt/live2d-render/sdk/` behind, so delete that too.
 
+## Measuring what the apps take
+
+```bash
+tools/car_usage.sh root@<car> 30        # one 30 s window
+tools/car_usage.sh root@<car> 10 6      # a minute, a table every 10 s
+```
+
+For Custom HUD, Custom Cluster, cluster-render and Live2D Render: each process's CPU over the window (% of one core; the head unit has 4), its memory (RSS) and threads, and all of them together. Then the busiest other processes (BMW's own HMI), the whole unit's CPU and available memory, the GPU's clock (it climbs from idle as the GPU works), and Live2D Render's own last timing line from its log. It only reads `/proc` and `/sys` on the car; what runs there is `tools/car_usage.remote.sh` (BusyBox sh). `tools/car_usage.sh - 5` runs it on the machine you're on instead, for trying it on any Linux.
+
 ## Credits
 
 - [bimmer-lab/apps](https://github.com/bimmer-lab/apps) (MIT): the original HUD Widgets and Cluster Themes this repo starts from.
