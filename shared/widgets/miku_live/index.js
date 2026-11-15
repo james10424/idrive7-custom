@@ -37,6 +37,12 @@ const hudData = require("../../hud_data");
  * @property {number} [idleAt] when idleMs last went on (ms)
  * @property {number} [holdMs] how long she's held a turn (the hold loop's clock; 0 back upright)
  * @property {number[]} [wanderPhase] the wander's random phases (WANDER's three waves each, radians)
+ * @property {number} [gSlow] the longitudinal g, smoothed (what a jolt stands out from)
+ * @property {?{ sign: number, mag: number, at: number }} [jolt] the last jolt past the deadband (its pair kicks)
+ * @property {number} [bounceY] px she's moved down in her picture by the road's bumps (a spring)
+ * @property {number} [bounceV] its speed, px/s
+ * @property {number} [bounceSent] the offset live2d-render has
+ * @property {boolean} [noOffset] live2d-render is older than 0.1.1 (no "offset"): no bounce
  * @property {number} [blinkAt] when her last blink started (ms)
  * @property {number} [blinkNext] when her next blink is due (ms)
  * @property {?{ rate: number, closure: number[] }} [blink] the bake's recorded blink
@@ -83,6 +89,19 @@ const WANDER = {
 const WANDER_MIX = [0.6, 0.3, 0.1];
 const WANDER_RATIO = [1, 1.73, 2.91];
 const BREATH_HZ = 0.25; // and breathing (the idle loop breathes when she's stopped)
+// Road bumps bounce her in her picture. The car sends no vertical g, but a bump jolts the longitudinal g away from
+// its smoothed value one way and straight back the other as the car pitches over it; braking or accelerating, even
+// hard, pulls it one way only. So a pair of opposite jolts past a deadband, within BUMP_PAIR_MS, kicks a lightly
+// damped spring that moves her down a few px and lets her settle back.
+const BUMP_SLOW_TAU_MS = 400; // the g's slow part, accelerating and braking
+const BUMP_DEADBAND_G = 0.03; // jolts smaller than this are the g's noise
+const BUMP_KICK = 600; // px/s down per g of jolt past the deadband
+const BUMP_HZ = 2.2; // the spring
+const BUMP_DAMPING = 0.3; // of critical: it bounces a little before it settles
+const BUMP_MAX_PX = 8;
+const BUMP_MIN_KMH = 5; // stood still, no bumps (the engine's shake is no road)
+const BUMP_PAIR_MS = 300; // a jolt's opposite this soon after: a bump
+const BUMP_SEND_PX = 0.1; // an offset moving less than this isn't sent
 
 /**
  * The wander and breathing at t seconds, times weight: offsets for compose's "extra".
@@ -216,6 +235,33 @@ function drive(hud, state, now) {
     state.pointV += (POINT_K * (turnSide - state.point) - POINT_C * state.pointV) * s;
     state.point = Math.max(-1, Math.min(1, state.point + state.pointV * s));
   }
+  // road bumps: jolts in the longitudinal g kick the bounce's spring
+  if (isNum(data.gLong)) {
+    state.gSlow = isNum(state.gSlow) ? state.gSlow + (data.gLong - state.gSlow) * (1 - Math.exp(-dt / BUMP_SLOW_TAU_MS)) : data.gLong;
+    const res = data.gLong - state.gSlow,
+      moving = isNum(hud._raw("speed")) && hud._raw("speed") > BUMP_MIN_KMH;
+    if (Math.abs(res) > BUMP_DEADBAND_G && moving) {
+      const sign = res > 0 ? 1 : -1,
+        last = state.jolt;
+      if (last && last.sign !== sign && now - last.at <= BUMP_PAIR_MS) {
+        // the jolt back: a bump, as big as the pair's swing past the deadband
+        state.bounceV = (state.bounceV || 0) + ((Math.abs(res) + last.mag) / 2 - BUMP_DEADBAND_G) * BUMP_KICK;
+        state.jolt = null;
+      } else if (!last || last.sign !== sign || now - last.at > BUMP_PAIR_MS) {
+        state.jolt = { sign, mag: Math.abs(res), at: now };
+      } else {
+        last.mag = Math.max(last.mag, Math.abs(res));
+        last.at = now;
+      }
+    }
+  }
+  const kSpring = Math.pow(2 * Math.PI * BUMP_HZ, 2),
+    cSpring = 2 * BUMP_DAMPING * Math.sqrt(kSpring);
+  for (let left = dt / 1000; left > 0; left -= POINT_STEP_S) {
+    const s = Math.min(POINT_STEP_S, left);
+    state.bounceV = (state.bounceV || 0) + (-kSpring * (state.bounceY || 0) - cSpring * (state.bounceV || 0)) * s;
+    state.bounceY = Math.max(-BUMP_MAX_PX, Math.min(BUMP_MAX_PX, (state.bounceY || 0) + state.bounceV * s));
+  }
   // while turned, the hold loop's clock (it starts with the turn, at the loop's start, so it joins smoothly)
   state.holdMs = Math.abs(state.point || 0) > TURN_BACK ? (state.holdMs || 0) + dt : 0;
   // the expressions: on after standing still STILL_MS, or with an indicator (until her head is back); off past
@@ -287,6 +333,8 @@ module.exports = {
     live.on("connect", () => {
       state.rig = null;
       state.sent = {};
+      state.noOffset = false;
+      state.bounceSent = 0;
       live.send(openMessage(hud, state));
     });
     live.on("opened", (/** @type {*} */ m) => {
@@ -296,7 +344,15 @@ module.exports = {
       problem(hud, null);
       hud._update(state, Date.now(), true);
     });
-    live.on("error", (/** @type {*} */ m) => problem(hud, (m.op === "open" ? "" : m.op + ": ") + m.reason));
+    live.on("error", (/** @type {*} */ m) => {
+      // live2d-render 0.1.0 doesn't know "offset": no bounce, and nothing wrong otherwise
+      if (/"offset"/.test(String(m.reason))) {
+        if (!state.noOffset) hud.log.info("miku live2d: live2d-render takes no offsets (older than 0.1.1): no bounce on bumps");
+        state.noOffset = true;
+        return;
+      }
+      problem(hud, (m.op === "open" ? "" : m.op + ": ") + m.reason);
+    });
     live.on("layer", (/** @type {*} */ m) => {
       if (m.state !== state.layer) hud.log.info("miku live2d: layer " + m.state + (m.reason ? " (" + m.reason + ")" : ""));
       state.layer = m.state;
@@ -341,6 +397,12 @@ module.exports = {
     if (force) state.sent = {};
     const list = changes(values, state.sent || (state.sent = {}), SEND_EPS);
     if (list) live.send({ t: "p", v: list });
+    // the bump's bounce, when live2d-render takes offsets (0.1.1 on)
+    const y = Math.round((state.bounceY || 0) * 10) / 10;
+    if (!state.noOffset && (force || Math.abs(y - (state.bounceSent || 0)) >= BUMP_SEND_PX)) {
+      state.bounceSent = y;
+      live.send({ t: "offset", x: 0, y });
+    }
   },
   /**
    * Back to upright, the expressions off ("reset" settings).

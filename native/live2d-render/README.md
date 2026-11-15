@@ -134,7 +134,8 @@ App to live2d-render:
 | `open` | `model` (absolute path), `w`, `h` (w a multiple of 4, h even), `frame` ("cx cy height": the box in model units, y up, that fills the picture), and optionally `fps` (15), `masks` (clipping-mask textures, 2; one holds 36 masks), `target` ("hud"), `x`, `y`, `z`, `class`, `visible`, `hide` ("PartA,PartB": parts drawn transparent), `v` (the first values, as `p`'s) |
 | `p` | `v`: "Id=value Id=value ..." (space or comma separated); `reset` 1 sets every parameter back to its default first. Values not sent keep their last |
 | `show`, `hide` | the layer shown or hidden; hidden, nothing is drawn |
-| `move` | `x`, `y`, `z` |
+| `move` | `x`, `y`, `z`: the layer, whole pixels |
+| `offset` | `x`, `y`: the model moved inside its picture, in px (fractions too, at most a quarter of the picture each way); an app's bounce (Miku Live2D's road bumps). Since 0.1.1: 0.1.0 answers it with an `error` |
 | `close` | the model goes |
 
 live2d-render to the app:

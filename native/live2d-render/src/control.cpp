@@ -122,4 +122,11 @@ void frame_mvp(float cx, float cy, float height, unsigned w, unsigned h, float o
     for (int i = 0; i < 16; i++) out[i] = m[i];
 }
 
+void offset_mvp(const float in[16], float ox, float oy, unsigned w, unsigned h, float out[16])
+{
+    for (int i = 0; i < 16; i++) out[i] = in[i];
+    out[12] += 2.0f * ox / (float)w;   /* clip space is 2 wide and high; its y up, the picture's down */
+    out[13] -= 2.0f * oy / (float)h;
+}
+
 }  // namespace l2r

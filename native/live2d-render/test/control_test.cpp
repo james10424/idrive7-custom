@@ -70,6 +70,12 @@ int main()
     CHECK(std::fabs(m[5] * (1.31f + 0.41f) + m[13] - 1) < 1e-5);
     CHECK(std::fabs(m[0] / m[5] - 280.0f / 248.0f) < 1e-5);   /* square model units on the picture */
 
+    /* offset: 31 px right and 14 down of a 248x280 picture is a quarter and a tenth of clip space's 2 */
+    float moved[16];
+    offset_mvp(m, 31, 14, 248, 280, moved);
+    CHECK(std::fabs(moved[12] - m[12] - 0.25f) < 1e-6 && std::fabs(moved[13] - m[13] + 0.1f) < 1e-6);
+    CHECK(moved[0] == m[0] && moved[5] == m[5]);
+
     if (failed) { fprintf(stderr, "control_test: %d failed\n", failed); return 1; }
     printf("control_test: ok\n");
     return 0;

@@ -51,6 +51,8 @@ private:
 /* The column-major model-view-projection that puts the box (cx, cy, height),
  * the picture's aspect, over the whole w x h picture. */
 void frame_mvp(float cx, float cy, float height, unsigned w, unsigned h, float out[16]);
+/* in, its picture moved ox px right and oy px down (fractions of a pixel too: "offset", the app's bounce). */
+void offset_mvp(const float in[16], float ox, float oy, unsigned w, unsigned h, float out[16]);
 
 std::vector<std::string> split_list(const std::string &s);
 

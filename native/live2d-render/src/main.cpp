@@ -139,6 +139,7 @@ private:
     std::vector<int> hide_idx_;
     std::vector<float> hide_op_;
     float mvp_[16];
+    float offset_x_ = 0, offset_y_ = 0;   /* "offset": px the model is moved in the picture */
     uint32_t ref_ = 0;
     cr::LayerOptions lo_;
     bool visible_ = true;
@@ -244,6 +245,7 @@ void Service::open_model(const cr::Json &m)
         hide_op_.push_back(0.0f);
     }
     l2r::frame_mvp(r.cx, r.cy, r.height, r.w, r.h, mvp_);
+    offset_x_ = offset_y_ = 0;
     req_ = r;
     visible_ = r.visible;
     if (!opt_.to_stdout) {
@@ -344,6 +346,19 @@ void Service::handle(const std::string &line)
         if (cr_ && ref_) cr_->set(ref_, lo_);
         return;
     }
+    if (t == "offset") {
+        /* the model moved inside its picture (px, fractions too): an app's bounce; at most a quarter of the
+         * picture each way */
+        auto get = [&](const char *k, float lim, float *out) {
+            if (m.count(k)) {
+                float v = (float)atof(m[k].c_str());
+                *out = v > lim ? lim : v < -lim ? -lim : v;
+            }
+        };
+        get("x", req_.w / 4.0f, &offset_x_);
+        get("y", req_.h / 4.0f, &offset_y_);
+        return;
+    }
     if (t == "close") return close_model();
     reply_error("message", "unknown t \"" + t + "\"");
 }
@@ -358,7 +373,9 @@ void Service::draw_frame()
                  dt > 0.2f ? 0.2f : dt, &ph, &co);
     const double a1 = now_fms();
     gpu_->begin();
-    glue_.draw(model_, mvp_);
+    float mvp[16];
+    l2r::offset_mvp(mvp_, offset_x_, offset_y_, req_.w, req_.h, mvp);
+    glue_.draw(model_, mvp);
     glFinish();
     const double a2 = now_fms();
     std::string err;
