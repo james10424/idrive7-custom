@@ -96,7 +96,7 @@ const BOB_SEND_PX = 0.1; // an offset moving less than this isn't sent
 // Holding a turn, she looks along it GLANCE_AWAY_MS, then glances back at you: her eyes swing to the side opposite
 // her turned head (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all,
 // easing GLANCE_EASE_MS each way; and again. She blinks as each glance starts. Her head stays turned.
-const GLANCE_AWAY_MS = 2000;
+const GLANCE_AWAY_MS = 4000;
 const GLANCE_MS = 2000;
 const GLANCE_EASE_MS = 120;
 const GLANCE_X = 0.8;
