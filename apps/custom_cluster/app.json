@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Grand National dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.61",
+  "version": "0.1.62",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -105,12 +105,6 @@
     "de.bmw.body.steeringwheelcomfort.SteeringWheelClimate": {
       "heatingState": "rs",
       "_optional": "the heated steering wheel for the Grand National theme's HEAT STR lamp"
-    },
-    "de.bmw.infotainment.climate.Climate": {
-      "statusSeatAutoClimateDR": "rs",
-      "statusAURAPerso": "s",
-      "statusAURAPerso2": "s",
-      "_optional": "the heated steering wheel for the Grand National theme's HEAT STR lamp (other sources, being found)"
     }
   },
   "screens": [

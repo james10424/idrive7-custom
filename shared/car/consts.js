@@ -176,12 +176,6 @@ const PARK_BRAKE = {
   FUNKTION_MELDET_FEHLER: 14,
   SIGNAL_UNBEFUELLT: 15,
 };
-// Climate statusSeatAutoClimateDR.statusSteeringWheelActivationDRS (someip-interfaces.json)
-const WHEEL_ACT = {
-  LENKRADHEIZUNGSFUNKTION_AUS: 0,
-  LENKRADHEIZUNGSFUNKTION_AN: 1,
-  SIGNAL_UNGUELTIG: 3,
-};
 const AUTO_H = {
   AUTOH_NICHT_AKTIVIERT: 0,
   AUTOH_AKTIVIERT_UND_HAELT_FAHRZEUG_NICHT: 1,
@@ -340,7 +334,6 @@ module.exports = {
   ROUTE_UNIT,
   PARK_BRAKE,
   AUTO_H,
-  WHEEL_ACT,
   HAND_BRAKE,
   REGAL_GEARS,
   PEDAL_OK,

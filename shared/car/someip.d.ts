@@ -2,18 +2,6 @@
 // The SOME/IP fields and events the apps read (their names written in shared/, kit/runtime/, bench/run-app.js or an
 // app.json) and every type they reach. Struct members are all optional; enums are their names or wire numbers.
 
-export namespace de.bmw.body.climate.Climate {
-  interface StatusAURAPerso2Wrapper {
-    actualIntensityBlowerDriver?: number;
-    actualIntensityBlowerPassenger?: number;
-    actualIntensitySeatHeaterDriver?: number;
-    actualIntensitySeatHeaterPassenger?: number;
-    actualIntensitySeatClimateDriver?: number;
-    actualIntensitySeatClimatePassenger?: number;
-    actualIntensitySteeringWheelHeater?: number;
-  }
-}
-
 export namespace de.bmw.body.steeringwheelcomforttypes.SteeringWheelComfortTypes {
   interface HeatingState {
     functionalityCoded?: boolean;
@@ -190,76 +178,6 @@ export namespace de.bmw.dasstypes.DASSTypes {
 export namespace de.bmw.environmentalmodel.common.Common {
   /** EVENT_DATA_AVAILABLE 0, EVENT_DATA_AVAILABLE_REDUCED 1, EVENT_DATA_NOT_AVAILABLE 2, EVENT_DATA_INVALID_OR_TIMEOUT 255 */
   type CommonEventDataQualifier = "EVENT_DATA_AVAILABLE" | "EVENT_DATA_AVAILABLE_REDUCED" | "EVENT_DATA_NOT_AVAILABLE" | "EVENT_DATA_INVALID_OR_TIMEOUT" | number;
-}
-
-export namespace de.bmw.infotainment.climatetypes.ClimateTypes {
-  /** STUFE_0 0, STUFE_1 1, STUFE_2 2, STUFE_3 3, STUFE_4 4, RESERVIERT_NICHT_VERFUEGBAR 13, RESERVIERT_FEHLER 14, SIGNAL_UNBEFUELLT 15 */
-  type AURAPersoSteeringWheelHeaterAUTO = "STUFE_0" | "STUFE_1" | "STUFE_2" | "STUFE_3" | "STUFE_4" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
-
-  /** CELSIUS 0, FAHRENHEIT 1, SIGNAL_UNGUELTIG 3 */
-  type MeasurementTemperature = "CELSIUS" | "FAHRENHEIT" | "SIGNAL_UNGUELTIG" | number;
-
-  /** CHECKBOX_FUNKTION_AUTOMATISCH_NICHT_AKTIV 0, CHECKBOX_FUNKTION_AUTOMATISCH_AKTIV 1, KEINE_SIGNALAENDERUNG 2, SIGNAL_UNBEFUELLT 3 */
-  type StatusAURAPerso = "CHECKBOX_FUNKTION_AUTOMATISCH_NICHT_AKTIV" | "CHECKBOX_FUNKTION_AUTOMATISCH_AKTIV" | "KEINE_SIGNALAENDERUNG" | "SIGNAL_UNBEFUELLT" | number;
-
-  interface StatusAURAPersoWrapper {
-    statusSeatHeaterAUTODriver?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAUTOAURA;
-    statusSeatHeaterAUTOPassenger?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAUTOAURA;
-    statusSeatClimateAUTODriver?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAUTOAURA;
-    statusSeatClimateAUTOPassenger?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAUTOAURA;
-    statusSeatHeaterAICDriver?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAICAURA;
-    statusSeatHeaterAICPassenger?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAICAURA;
-    statusSeatClimateAICDriver?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAICAURA;
-    statusSeatClimateAICPassenger?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAICAURA;
-    statusSteeringWheelHeaterAUTO?: de.bmw.infotainment.climatetypes.ClimateTypes.AURAPersoSteeringWheelHeaterAUTO;
-    statusSteeringWheelHeater?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterAICAURA;
-    statusSeatClimateAUTOPersoDriver?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-    statusSeatClimateAUTOPersoPassenger?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-    statusSeatHeaterAUTOPersoDriver?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-    statusSeatHeaterAUTOPersoPassenger?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-    statusSteeringWheelHeaterAUTOPerso?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-    statusBlowerAUTOPersoDriver?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-    statusBlowerAUTOPersoPassenger?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-    statusGlobalOff?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-    statusIntelligentPassenger?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPerso;
-  }
-
-  /** TASTER_NICHT_BETAETIGT 0, TASTER_BETAETIGT 1, SIGNAL_UNBEFUELLT 3 */
-  type StatusButtonSteeringWheelHeating = "TASTER_NICHT_BETAETIGT" | "TASTER_BETAETIGT" | "SIGNAL_UNBEFUELLT" | number;
-
-  interface StatusSeatAutoClimateDRWrapper {
-    statusSeatHeaterThresholdValueDRS?: number;
-    statusSeatVentilationThresholdValueDRS?: number;
-    statusSeatVentilationStageDRS?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatVentilationStage;
-    statusSeatHeaterStageDRS?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterStage;
-    measurementTemperatureDRS?: de.bmw.infotainment.climatetypes.ClimateTypes.MeasurementTemperature;
-    statusSeatVentilationActivationDRS?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatVentilationActivation;
-    statusSeatHeaterActivationDRS?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatHeaterActivation;
-    statusSteeringWheelActivationDRS?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSteeringWheelActivation;
-    statusSteeringWheelHeatingThresholdValueDRS?: number;
-    statusButtonSteeringWheelHeating?: de.bmw.infotainment.climatetypes.ClimateTypes.StatusButtonSteeringWheelHeating;
-  }
-
-  /** STUFE_0 0, STUFE_1 1, STUFE_2 2, STUFE_3 3, RESERVIERT_NICHT_VERFUEGBAR 13, RESERVIERT_FEHLER 14, SIGNAL_UNBEFUELLT 15 */
-  type StatusSeatHeaterAICAURA = "STUFE_0" | "STUFE_1" | "STUFE_2" | "STUFE_3" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
-
-  /** STUFE_0 0, STUFE_1 1, STUFE_2 2, STUFE_3 3, STUFE_4 4, STUFE_5 5, RESERVIERT_NICHT_VERFUEGBAR 13, RESERVIERT_FEHLER 14, SIGNAL_UNBEFUELLT 15 */
-  type StatusSeatHeaterAUTOAURA = "STUFE_0" | "STUFE_1" | "STUFE_2" | "STUFE_3" | "STUFE_4" | "STUFE_5" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
-
-  /** SITZHEIZUNGSFUNKTION_AUS 0, SITZHEIZUNGSFUNKTION_AN 1, SIGNAL_UNGUELTIG 3 */
-  type StatusSeatHeaterActivation = "SITZHEIZUNGSFUNKTION_AUS" | "SITZHEIZUNGSFUNKTION_AN" | "SIGNAL_UNGUELTIG" | number;
-
-  /** STUFE_0 0, STUFE_1 1, STUFE_2 2, STUFE_3 3, SIGNAL_UNGUELTIG 15 */
-  type StatusSeatHeaterStage = "STUFE_0" | "STUFE_1" | "STUFE_2" | "STUFE_3" | "SIGNAL_UNGUELTIG" | number;
-
-  /** SITZLUEFTUNGSFUNKTION_AUS 0, SITZLUEFTUNGSFUNKTION_AN 1, SIGNAL_UNGUELTIG 3 */
-  type StatusSeatVentilationActivation = "SITZLUEFTUNGSFUNKTION_AUS" | "SITZLUEFTUNGSFUNKTION_AN" | "SIGNAL_UNGUELTIG" | number;
-
-  /** STUFE_0 0, STUFE_1 1, STUFE_2 2, STUFE_3 3, SIGNAL_UNGUELTIG 15 */
-  type StatusSeatVentilationStage = "STUFE_0" | "STUFE_1" | "STUFE_2" | "STUFE_3" | "SIGNAL_UNGUELTIG" | number;
-
-  /** LENKRADHEIZUNGSFUNKTION_AUS 0, LENKRADHEIZUNGSFUNKTION_AN 1, SIGNAL_UNGUELTIG 3 */
-  type StatusSteeringWheelActivation = "LENKRADHEIZUNGSFUNKTION_AUS" | "LENKRADHEIZUNGSFUNKTION_AN" | "SIGNAL_UNGUELTIG" | number;
 }
 
 export namespace de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes {
@@ -1005,11 +923,6 @@ export interface Fields {
   "de.bmw.infotainment.KombiIF": {
     statusRangeTankStatus: de.bmw.infotainmenttypes.InfotainmentTypes.RangeTankStatusWrapper;
     statusShowTimeDate: de.bmw.infotainmenttypes.InfotainmentTypes.ShowTimeDateWrapper;
-  };
-  "de.bmw.infotainment.climate.Climate": {
-    statusAURAPerso: de.bmw.infotainment.climatetypes.ClimateTypes.StatusAURAPersoWrapper;
-    statusAURAPerso2: de.bmw.body.climate.Climate.StatusAURAPerso2Wrapper;
-    statusSeatAutoClimateDR: de.bmw.infotainment.climatetypes.ClimateTypes.StatusSeatAutoClimateDRWrapper;
   };
   "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
     functionalLibraryData: de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes.FunctionalLibraryData;
