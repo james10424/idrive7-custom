@@ -131,13 +131,57 @@ To change her, bake again and run the deploy again; to remove her, run `./script
 
 ### Miku Live2D: drawn live
 
-The **Miku Live2D** layout draws her close-up live instead of from baked frames: Live2D Render (`native/live2d-render` in [idrive-apps-lib](https://github.com/james10424/idrive-apps-lib), installed from the Store) draws her model on the head unit's GPU at 15 fps, and Custom HUD drives her from the same bake config, blending her lean, turn, idle loop and expressions smoothly instead of between baked steps. Live2D's Cubism SDK never ships with it: build its glue on your computer and copy it to the car (its README, "The Cubism SDK"). Then copy her model and the bake config:
+The **Miku Live2D** layout draws her close-up live instead of from baked frames. Live2D Render (`native/live2d-render` in [idrive-apps-lib](https://github.com/james10424/idrive-apps-lib)) draws her model on the head unit's GPU at 15 fps as its own video layer, and Custom HUD drives her from the same bake config as Miku Bake, blending her lean, head turn, idle loop and expressions smoothly instead of stepping between baked frames. Her hair and clothes move with the model's own physics.
+
+Three things go on the car, and only the first comes from the Store:
+
+| What | Where on the car | How |
+| --- | --- | --- |
+| Live2D Render | `/var/opt/live2d-render/current/` | the Store |
+| Live2D's Cubism SDK (the glue library, Core, shaders) | `/var/opt/live2d-render/sdk/` | built on your computer, copied by hand |
+| Her model and the bake config | `/var/opt/live2d-render/models/<model>/` and Custom HUD's `data/miku-live/` | `scripts/deploy.sh --miku-live` |
+
+The SDK and the model never go in a repo or a release: the SDK is under Live2D's licence and the art belongs to its owner.
+
+1. **What you need:** Custom HUD 0.1.41 or later and cluster-render 0.6.0 or later on the car; root SSH to it; Docker on your computer; [Cubism SDK for Native](https://www.live2d.com/en/sdk/download/native/) 5-r.5, unzipped; your model (a `.model3.json` with its `.moc3`, physics and textures, and the `.exp3.json` expressions your bake config names, all in one folder); and the bake config you baked Miku Bake's close-up from (a close-up-only one, such as RetrynowMiku's `close-only-75.json`).
+2. **Install Live2D Render** from the Store (the idrive-apps-lib source). Alone it draws nothing: until the SDK is there it answers "no Cubism glue library".
+3. **Build and copy the SDK.** In idrive-apps-lib:
+
+   ```bash
+   cd native/live2d-render
+   make glue SDK=~/Downloads/CubismSdkForNative-5-r.5
+   make deploy-sdk CAR=root@<car>
+   ```
+
+   `make glue` builds in Docker, for the head unit's userland, into `build/sdk/`; `make deploy-sdk` copies it to `/var/opt/live2d-render/sdk/`. Do it again after a Live2D Render update that changes its glue (it refuses an old one and says "rebuild it: make glue").
+4. **Copy her model and the bake config.** In this repo:
+
+   ```bash
+   ./scripts/deploy.sh root@<car> --miku-live <bake config.json> <model>.model3.json
+   ```
+
+   It puts the config and the expressions it names (found next to the model) in Custom HUD's `data/miku-live/`, and the model, its textures shrunk to 1024 px (they draw the close-up just as well), in `/var/opt/live2d-render/models/<model>/`. The layout's `model` points at `/var/opt/live2d-render/models/RetrynowMiku/RetrynowMiku.model3.json`; for another model, change it in `apps/custom_hud/hud/layouts/miku_live2d.json` and push the layout (`./scripts/deploy.sh root@<car> miku_live2d.json`).
+5. **Load:** on the center screen open **Custom HUD** and pick **Miku Live2D** under Layout (if it was already picked, pick another layout and back). The first time takes about a second while Live2D Render starts and loads her.
+
+Until everything is there nothing is drawn, and the status row says what is missing:
+
+| Status row | What to do |
+| --- | --- |
+| Miku Live2D: no miku-live/config.json | step 4 |
+| Miku Live2D: live2d-render isn't installed | step 2 |
+| Miku Live2D: no Cubism glue library ... | step 3 |
+| Miku Live2D: cannot read ... model3.json | step 4, or the layout's `model` path |
+| Miku Live2D: the head unit restarted while live2d-render was drawing ... | below |
+
+**If the head unit restarted while she was drawing,** Live2D Render refuses to draw again until you have looked into it (it is the one process here that drives the GPU itself, and a GPU fault once restarted the whole unit). To let it draw again:
 
 ```bash
-./scripts/deploy.sh root@<car> --miku-live <bake config.json> <model>.model3.json
+ssh root@<car> 'rm /var/opt/live2d-render/state/drawing'
 ```
 
-It puts the config and its expressions in Custom HUD's `data/miku-live/` and the model (textures shrunk to 1024 px) in `/var/opt/live2d-render/models/<model>/`, where the layout's `model` points. Pick **Miku Live2D** under Layout; until all of it is there, nothing is drawn and the status row says why.
+After 3 crashes of its own in one boot it also stops until the next start. Its log: `ssh root@<car> journalctl -u live2d-render`; every few seconds while drawing it logs its frame rate and how much of each frame it takes (about 39% for RetrynowMiku).
+
+**To change her,** bake a new config or edit the model and run step 4 again. **To remove her,** pick another layout and delete `/var/opt/live2d-render/models/<model>/` and Custom HUD's `data/miku-live/`; uninstalling Live2D Render from the Store leaves `/var/opt/live2d-render/sdk/` behind, so delete that too.
 
 ## Credits
 
