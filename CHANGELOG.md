@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 15 2026
+
+- **Custom HUD 0.1.43: Miku Live2D shows on the car.** On the car (Nov 15 2026) live2d-render opened her model but drew nothing (0 fps): the widget told it to hide whenever the app's own HUD target wasn't shown, and in this layout the app has no layer of its own, so its target never shows. It no longer hides her: her video layer is live2d-render's own, and cluster-render hides it whenever BMW takes the HUD. The bench's fake cluster-render counts a target shown without layers, so it didn't show there. Opening her model took 15 s on the car (about 1 s on the bench); to watch.
+
 ## Nov 14 2026
 
 - **Custom HUD 0.1.42: Miku Live2D with room for her hair.** Her video was 248 px wide and framed tight, so her twin tails and the top of her bow were cut off. It now runs from x 356 (past BMW's speed) to the visible window's right edge (324 px wide), and she is framed 0.95 model units tall instead of 0.82 (`frame` [0, 1.36, 0.95]), a little smaller, so all of her hair shows. Checked on the bench, where Miku Live2D now runs the real Live2D Render in Docker (`node bench/live2d.js <model3.json>` once): about 15 fps, 36% of a frame on Mesa's software renderer. The bench draws video layers now.

@@ -24,7 +24,6 @@ const hudData = require("../../hud_data");
  * @property {?import("./live2d_client").Live2dClient} [live]
  * @property {?import("./pose").Rig} [rig] once live2d-render has opened the model (its defaults are the rest)
  * @property {Record<string, number>} [sent] the values live2d-render has
- * @property {boolean} [hidden] told to hide (our display isn't showing us)
  * @property {string} [layer] the video layer's state, from cluster-render
  * @property {number} [statsAt] when stats were last logged (ms)
  * @property {number} [lean] eased -1..1
@@ -142,7 +141,7 @@ function openMessage(hud, state) {
     frame: frame.join(" "),
     hide: hide.join(","),
     v: typeof w.params === "string" ? w.params : "",
-    visible: !hud._offScreen(),
+    visible: true,
   };
 }
 
@@ -241,7 +240,6 @@ module.exports = {
     live.on("connect", () => {
       state.rig = null;
       state.sent = {};
-      state.hidden = false;
       live.send(openMessage(hud, state));
     });
     live.on("opened", (/** @type {*} */ m) => {
@@ -280,7 +278,10 @@ module.exports = {
     );
   },
   /**
-   * Her drive state and the parameter values that changed, to live2d-render; hidden while our display isn't ours.
+   * Her drive state and the parameter values that changed, to live2d-render. Never hidden from here: her video layer
+   * is live2d-render's own, and cluster-render hides it whenever BMW takes the HUD. (The app's own target state, which
+   * other widgets go by, says nothing here: this layout has no layer of the app's, so its target never shows, and
+   * 0.1.41/0.1.42 kept her hidden on the car for good.)
    * @param {HudApp} hud
    * @param {WidgetState & MikuLiveState} state
    * @param {number} now
@@ -288,13 +289,7 @@ module.exports = {
    */
   update(hud, state, now, force) {
     const live = state.live;
-    if (!live || !live.connected) return;
-    const off = hud._offScreen();
-    if (off !== !!state.hidden) {
-      state.hidden = off;
-      live.send({ t: off ? "hide" : "show" });
-    }
-    if (off || !state.rig) return;
+    if (!live || !live.connected || !state.rig) return;
     const values = compose(state.rig, drive(hud, state, now));
     if (force) state.sent = {};
     const list = changes(values, state.sent || (state.sent = {}), SEND_EPS);
