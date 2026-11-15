@@ -34,6 +34,8 @@ const F16_SEND_MS = 33; // the attitude goes up at most this often
 const F16_FRESH_MS = 3000; // the car's slope and heading count this long after they last came
 const F16_SLOPE_TAU_MS = 1500; // the road's slope eased this smoothly (it comes in 0.1 % steps that flicker by one
 // parked; the road itself changes slowly)
+const F16_DEMO_HDG_START = 90; // demo: the made-up heading starts east
+const F16_DEMO_MIN_KMH = 3; // and turns only above this speed
 const F16_PX_STEP = 0.1; // the ladder and the vector are sent in tenths of a px (the shader antialiases: no 1 px hops)
 
 /** @typedef {import("../../engine/app").Widget} Widget */
@@ -51,9 +53,10 @@ const F16_PX_STEP = 0.1; // the ladder and the vector are sent in tenths of a px
  * @property {number} [roadPitch] the road's gradient front to back, deg, eased
  * @property {number} [roadRoll] and side to side, deg, eased
  * @property {string} [lastHdg] the heading last sent
+ * @property {number} [demoHdg] demo: the made-up heading, deg
  */
 
-const DOCS = `effect layer (f16/f16.glsl): an F-16 style HUD in HUD green, one layer the visible window's size. The airspeed tape on the left is the speed (0..260 km/h, 0..160 mph with US units), its box the speed in digits; the altitude tape on the right is the rpm / 10 (0..700), its box likewise; the pitch ladder (rungs every 5 deg, dashed below the horizon) and the horizon line between them show pitch and roll, the flight path vector shows where the car travels (along the road as the nose pitches, sliding toward the turn with the ladder), the bank angle scale points at the road's camber, and the heading tape shows at the top once the car gives a heading. The pitch and bank are the road's own gradient and camber (LaneSlope) plus the g's (12 deg a g of longitudinal g as the body squats or dives); the lateral g slides the flight path vector sideways toward the turn, the ladder and horizon centred on it; the heading comes from navigation's position. Its numbers come from the "font" glyph atlas (mid). The tapes run the window's full height (BMW's speed sign draws over the airspeed tape's lower part), the bank scale sits at the bottom. Fields: "tapeX" [airspeed line x, altitude line x] (layer px, default 112 and 448), "mid" [ladder centre x, tapes' middle y] (default the layer's middle).`;
+const DOCS = `effect layer (f16/f16.glsl): an F-16 style HUD in HUD green, one layer the visible window's size. The airspeed tape on the left is the speed (0..260 km/h, 0..160 mph with US units), its box the speed in digits; the altitude tape on the right is the rpm / 10 (0..700), its box likewise; the pitch ladder (rungs every 5 deg, dashed below the horizon) and the horizon line between them show pitch and roll, the flight path vector shows where the car travels (along the road as the nose pitches, sliding toward the turn with the ladder), the bank angle scale points at the road's camber, and the heading tape shows at the top once the car gives a heading. The pitch and bank are the road's own gradient and camber (LaneSlope) plus the g's (12 deg a g of longitudinal g as the body squats or dives); the lateral g slides the flight path vector sideways toward the turn, the ladder and horizon centred on it; the heading comes from navigation's position (in demo, made up from the demo's cornering). Its numbers come from the "font" glyph atlas (mid). The tapes run the window's full height (BMW's speed sign draws over the airspeed tape's lower part), the bank scale sits at the bottom. Fields: "tapeX" [airspeed line x, altitude line x] (layer px, default 112 and 448), "mid" [ladder centre x, tapes' middle y] (default the layer's middle).`;
 
 /**
  * The layer's geometry: the tapes' lines, the ladder's centre, the tapes' middle.
@@ -146,8 +149,18 @@ module.exports = {
       state.c.uniform(state.ref, "u_rpm", rpmv);
     }
     // the heading tape, while navigation's position gives one
-    const hdgOn = isNum(hud.heading) && now - (hud.headingAt || 0) < F16_FRESH_MS,
-      hdg = [hdgOn ? Math.round(hud.heading * 10) / 10 : 0, hdgOn ? 1 : 0, F16_HDG_PX, 0],
+    // demo (the kit's simulated drive, no navigation): a made-up heading that turns as the demo corners, the yaw rate
+    // being the lateral g over the speed (a left turn's lateral g is +, the heading falls)
+    const realHdg = isNum(hud.heading) && now - (hud.headingAt || 0) < F16_FRESH_MS;
+    if (!realHdg && data.demo) {
+      const was = isNum(state.demoHdg) ? state.demoHdg : F16_DEMO_HDG_START,
+        v = isNum(kmh) && kmh > F16_DEMO_MIN_KMH ? kmh / 3.6 : 0,
+        yawDeg = v ? (((state.gLat || 0) * 9.80665) / v) * (180 / Math.PI) * (dt / 1000) : 0;
+      state.demoHdg = (((was - yawDeg) % 360) + 360) % 360;
+    }
+    const hdgOn = realHdg || (data.demo && isNum(state.demoHdg)),
+      hdgNow = realHdg ? hud.heading : state.demoHdg || 0,
+      hdg = [hdgOn ? Math.round(hdgNow * 10) / 10 : 0, hdgOn ? 1 : 0, F16_HDG_PX, 0],
       hdgKey = hdg.join(",");
     if (force || hdgKey !== state.lastHdg) {
       state.lastHdg = hdgKey;
