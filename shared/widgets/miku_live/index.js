@@ -93,11 +93,11 @@ const BREATH_HZ = 0.25; // and breathing (the idle loop breathes when she's stop
 // phases, faded out as her idle comes in
 const BOB = [3, 0.21];
 const BOB_SEND_PX = 0.1; // an offset moving less than this isn't sent
-// Holding a turn, every GLANCE_EVERY_MS she glances back at you: her eyes swing to the side opposite her turned head
-// (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all, easing
-// GLANCE_EASE_MS each way; she blinks as each glance starts. Her head stays turned.
-const GLANCE_EVERY_MS = 2000;
-const GLANCE_MS = 500;
+// Holding a turn, she looks along it GLANCE_AWAY_MS, then glances back at you: her eyes swing to the side opposite
+// her turned head (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all,
+// easing GLANCE_EASE_MS each way; and again. She blinks as each glance starts. Her head stays turned.
+const GLANCE_AWAY_MS = 2000;
+const GLANCE_MS = 2000;
 const GLANCE_EASE_MS = 120;
 const GLANCE_X = 0.8;
 
@@ -141,9 +141,8 @@ function bob(phase, t, weight) {
  * @returns {number}
  */
 function glanceWeight(holdMs) {
-  if (holdMs < GLANCE_EVERY_MS) return 0;
-  const into = holdMs % GLANCE_EVERY_MS;
-  if (into >= GLANCE_MS) return 0;
+  const into = holdMs % (GLANCE_AWAY_MS + GLANCE_MS) - GLANCE_AWAY_MS;
+  if (into < 0) return 0;
   return smooth01(Math.min(into, GLANCE_MS - into) / GLANCE_EASE_MS);
 }
 
@@ -260,9 +259,9 @@ function drive(hud, state, now) {
   }
   // while turned, the hold loop's clock (it starts with the turn, at the loop's start, so it joins smoothly)
   state.holdMs = Math.abs(state.point || 0) > TURN_BACK ? (state.holdMs || 0) + dt : 0;
-  // holding the turn (the indicator still on), she glances back at you every GLANCE_EVERY_MS, blinking as each starts
-  const glancing = turnSide !== 0 && state.holdMs >= GLANCE_EVERY_MS;
-  const glanceN = glancing ? Math.floor(state.holdMs / GLANCE_EVERY_MS) : 0;
+  // holding the turn (the indicator still on), she glances back at you, blinking as each glance starts
+  const glancing = turnSide !== 0 && state.holdMs >= GLANCE_AWAY_MS;
+  const glanceN = glancing ? Math.floor((state.holdMs - GLANCE_AWAY_MS) / (GLANCE_AWAY_MS + GLANCE_MS)) + 1 : 0;
   if (glanceN > (state.glanceN || 0)) {
     state.blinkAt = now;
     state.blinkNext = now + MIKU_BLINK_MS[0] + Math.random() * (MIKU_BLINK_MS[1] - MIKU_BLINK_MS[0]);
