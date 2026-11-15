@@ -19,6 +19,7 @@ uniform sampler2D u_font;
 uniform vec2 u_grid;      // atlas columns, rows
 uniform vec4 u_cell;      // atlas cell w, h px; a digit's advance px; 1 when the atlas is there
 uniform vec4 u_dig[3];    // atlas cells of 0..9 (10 of 12)
+uniform vec4 u_nesw;      // atlas cells of N, E, S, W (the heading tape's 0, 90, 180, 270 deg)
 uniform vec4 u_spd;       // speed (display unit), tape px a unit, label step, the scale's top (0 .. top)
 uniform vec4 u_rpm;       // rpm / 10, tape px a unit, label step, the scale's top
 uniform vec4 u_att;       // pitch deg (nose up +), roll rad, flight path vector x, y px (from the centre)
@@ -163,7 +164,15 @@ void main() {
         float len = mod(n, 2.0) < 0.5 ? 9.0 : 5.0;
         c = max(c, vseg(p, 30.0 - len, 30.0, hx));
         float ln = floor(at / 10.0 + 0.5), lx = ctr.x + (ln * 10.0 - u_hdg.x) * u_hdg.z;
-        if (cell.x < 0.0) cell = number2(p, vec2(lx + u_cell.z * 0.55, 11.0), mod(ln + 36.0, 36.0), 0.55);
+        float h10 = mod(ln + 36.0, 36.0);
+        if (cell.x < 0.0) {
+            if (mod(h10, 9.0) < 0.5) {
+                // a cardinal point: its letter, one glyph centred on the tick, a little bigger than the numbers
+                float k = 0.7, w = u_cell.x * k, h = u_cell.y * k;
+                vec2 g = vec2((p.x - (lx - 0.5 * w)) / w, (p.y - (11.0 - 0.5 * h)) / h);
+                if (g.x >= 0.0 && g.x <= 1.0 && g.y >= 0.0 && g.y <= 1.0) cell = vec3(pick4(u_nesw, h10 / 9.0), g);
+            } else cell = number2(p, vec2(lx + u_cell.z * 0.55, 11.0), h10, 0.55);
+        }
         if (p.y > 32.0 && abs(p.x - ctr.x) <= (p.y - 32.0) * 0.6 + 0.5 && p.y < 39.0) c = max(c, 1.0);
     }
 
