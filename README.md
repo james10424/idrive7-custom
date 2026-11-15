@@ -169,7 +169,7 @@ The SDK and the model never go in this repo: the SDK is under Live2D's licence a
    ./scripts/deploy.sh root@<car> --miku-live <model>.model3.json
    ```
 
-   It copies the model, its textures shrunk to 1024 px (they draw the close-up just as well), to `/var/opt/live2d-render/models/<model>/`, where the layout's `model` points (`/var/opt/live2d-render/models/RetrynowMiku/RetrynowMiku.model3.json`).
+   It copies the model, its textures shrunk to 1024 px (they draw the close-up just as well), to `/var/opt/live2d-render/models/<model>/`, where the layout's `model` points (`/var/opt/live2d-render/models/RetrynowMiku/RetrynowMiku.model3.json`). The model goes as a `tar` stream over `ssh` (plain ustar, no macOS `._` files, unpacked by the car's BusyBox `tar` as root's files), not `scp -r`: the Mac's `scp` can't upload a folder such as `RetrynowMiku.4096` into one the car doesn't have yet ("path canonicalization failed"). Running it again replaces the model; an earlier failed copy needs no cleaning up.
 5. **Load:** on the center screen open **Custom HUD** and pick **Miku Live2D** under Layout (if it was already picked, pick another layout and back). The first time takes about a second while Live2D Render starts and loads her.
 
 After that, app updates bring new poses with them; the model and the SDK stay on the car.
