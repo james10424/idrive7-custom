@@ -58,6 +58,30 @@ model's drawing in half. Cubism Core is now the biggest part; it scales with
 the vertices, not the picture's size, so drawing smaller saves little
 (estimated 1 to 2 ms at 75%).
 
+**A smaller model beside it**: a chibi (a small, big-headed figure, a free
+model), drawn on the car by the same test program, before the renderer patch
+and with the 4:2:0 on the CPU, so against the first row above:
+
+| | Chibi | RetrynowMiku |
+| --- | --- | --- |
+| Drawables | 668 | 484 |
+| Vertices | 14,577 | 65,368 |
+| Triangles | 19,430 | 96,230 |
+| Parameters | 146 | 232 |
+| Physics | 21 settings, 65 particles | 39 settings, 138 particles |
+| Moc | 1.7 MB | 6.9 MB |
+| Textures | 1 of 2048 px | 17 of 1024 px |
+| Update (Core and physics) | 3.6 ms | 10.8 ms |
+| Draw | 7.0 ms | 19.5 ms |
+| Read + 4:2:0 | 1.8 + 3.3 ms | 1.9 + 3.6 ms |
+| Of a 67 ms frame | 24% | 54% |
+
+The update follows the vertices: 4.5 times the vertices took 3 times as
+long. The draw doesn't follow the drawables: the chibi has more of them, yet
+drew in a third of the time. What it lacks is RetrynowMiku's 59 clipping
+masks and her 17 textures (a texture switch between many draws); with the
+renderer patch both models would draw faster still, the chibi not measured so.
+
 **The whole head unit** (`tools/car_usage.sh root@<car> 30`; Miku Live2D,
 then Miku Bake with live2d-render idle, a few minutes apart):
 
