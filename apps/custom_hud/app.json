@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.55",
+  "version": "0.1.56",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -75,10 +75,6 @@
     "de.bmw.chassis.VehicleModel": {
       "LaneSlope": "s",
       "_optional": "the road's gradient and camber: the F-16 layout's pitch ladder and horizon (without it, from the g)"
-    },
-    "de.bmw.body.DoorsWindowsRoofMirrors": {
-      "CentralLockingSystemAndPanelStatus2": "s",
-      "_optional": "the door probe (car/signals.js DOOR_PROBE): which doors, the trunk and the hood are open"
     },
     "de.bmw.infotainment.navigation.positioning.Positioning": {
       "_instances": "Main_Instance",

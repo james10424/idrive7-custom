@@ -43,6 +43,10 @@ uniform vec4 u_lampH;     // the HEAT STR lamp box (red; w 0 = none)
 uniform float u_heatV;    // HEAT STR on (1) / off (0)
 uniform vec4 u_lamps;     // left lamp (0 off, 1 red: parking brake, 2 green: Auto Hold), left turn, right turn, cruise on (1) / off (0)
 uniform vec2 u_batIcon;   // the battery glyph's centre
+uniform vec4 u_doorBox;   // the door lamps: their centre line's x, the top row's y, a lamp's w, h (w 0 = none)
+uniform vec2 u_doorGap;   // between their rows (y), the side lamps' inner edges from the centre line (x)
+uniform vec3 u_doorA;     // lit (1) / dark (0, not drawn): HOOD, FRONT LEFT, FRONT RIGHT
+uniform vec3 u_doorB;     // REAR LEFT, REAR RIGHT, TRUNK
 #ifdef RDASH_LIVE
 uniform sampler2D u_back; // the baked backdrop (ETC2, the layer's size)
 #endif
@@ -291,6 +295,22 @@ void main() {
     c = mix(c, u_lamps.x > 1.5 ? LAMP_G : u_lamps.x > 0.5 ? LAMP_R : LAMP_OFF, cov(rbox(p, u_lampB, 3.0)));
     c = mix(c, mix(LAMP_GOFF, LAMP_G, u_lamps.w), cov(rbox(p, lampR, 3.0)));
     if (u_lampH.z > 0.0) c = mix(c, mix(LAMP_OFF, LAMP_R, u_heatV), cov(rbox(p, u_lampH, 3.0)));
+    // the door lamps, red while open and not drawn while shut: HOOD over FRONT LEFT / RIGHT over REAR LEFT / RIGHT over TRUNK,
+    // centred on one line; DOOR (text) sits between the side ones. Not in the needle layer (it returns before this; kept
+    // out so its shader stays the size it held at on the car)
+#ifndef NEEDLE_LAYER
+    if (u_doorBox.z > 0.0 && (dot(u_doorA, vec3(1.0)) + dot(u_doorB, vec3(1.0))) > 0.0) {
+        vec2 dz = u_doorBox.zw;
+        float dy = dz.y + u_doorGap.x, dl = u_doorBox.x - u_doorGap.y - dz.x, dr = u_doorBox.x + u_doorGap.y,
+              dm = u_doorBox.x - 0.5 * dz.x, d0 = u_doorBox.y;
+        c = mix(c, LAMP_R, u_doorA.x * cov(rbox(p, vec4(dm, d0, dz), 3.0)));
+        c = mix(c, LAMP_R, u_doorA.y * cov(rbox(p, vec4(dl, d0 + dy, dz), 3.0)));
+        c = mix(c, LAMP_R, u_doorA.z * cov(rbox(p, vec4(dr, d0 + dy, dz), 3.0)));
+        c = mix(c, LAMP_R, u_doorB.x * cov(rbox(p, vec4(dl, d0 + 2.0 * dy, dz), 3.0)));
+        c = mix(c, LAMP_R, u_doorB.y * cov(rbox(p, vec4(dr, d0 + 2.0 * dy, dz), 3.0)));
+        c = mix(c, LAMP_R, u_doorB.z * cov(rbox(p, vec4(dm, d0 + 3.0 * dy, dz), 3.0)));
+    }
+#endif
     for (int s = 0; s < 2; s++) {
         if (u_arrow.z <= 0.0) break;   // no turn arrows (size 0)
         float on = s == 0 ? u_lamps.y : u_lamps.z;

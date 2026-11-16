@@ -18,6 +18,8 @@
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
  * Grand National: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{range3}} (up to 999, no leading zeros), {{u:distUc}} (MI, KM), {{u:consUc}} (L/100KM, MPG), {{ambientN}} (outside, no + sign),
  * {{lampBrake}} (PARK BRAKE / AUTO HOLD) {{lampTurnL}} {{lampTurnR}} {{lampCruise}} {{lampHeat}} (the lamp's text while lit, else empty; config.lamps).
+ * {{doorFL}} {{doorFR}} {{doorRL}} {{doorRR}} {{doorHood}} {{doorTrunk}} (FRONT LEFT ... TRUNK while that one is open, else
+ * empty) {{doorAny}} (DOOR while any of the six is open; config.lamps).
  * The route while guiding (Guidance finalDestinationInfo / travelledDistance, apps with "navLayout"; "--" else): {{navLeft}} the
  * distance left as BMW formats it, {{u:navLeft}} its unit (km, mi, m, ft), {{navTime}} the time left h:mm.
  * {{musicTitle}}: the song title BMW's player shows (app.json config.music; HmiMediaState playerMetadata, the line typed TITLE),
@@ -137,6 +139,21 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         return this._cruiseLit() ? "CRUISE" : "";
       case "lampHeat":
         return this._heatLit() ? "HEAT STR" : "";
+      // the door lamps: their name while open, else nothing; doorAny "DOOR" while any of the six is
+      case "doorFL":
+        return this._doorOpen("fl") ? "FRONT LEFT" : "";
+      case "doorFR":
+        return this._doorOpen("fr") ? "FRONT RIGHT" : "";
+      case "doorRL":
+        return this._doorOpen("rl") ? "REAR LEFT" : "";
+      case "doorRR":
+        return this._doorOpen("rr") ? "REAR RIGHT" : "";
+      case "doorHood":
+        return this._doorOpen("hood") ? "HOOD" : "";
+      case "doorTrunk":
+        return this._doorOpen("trunk") ? "TRUNK" : "";
+      case "doorAny":
+        return this._doorOpen("any") ? "DOOR" : "";
       case "odometer": {
         // 6 digits, km or mi by the units setting
         const km = this._odometer();

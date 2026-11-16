@@ -128,7 +128,7 @@ const LIVE = variant("RDASH_LIVE");
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
-const DOCS = `effect layer; the whole Grand National theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMin" (0, the mph at the scale's start), "spdMid" (55, the middle; halfway between spdMin and spdMax makes the scale linear), "spdStep" (5, between marks; the first mark), "spdAmber" (55, the amber mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" [pivot x, y, the end marks' crossing of fuelLine (+-x), the lower band's height], "podG" [pivot x, y, tick r0, r1], "fuelLine" (y: where the fuel marks split, E, the pump and F sitting on it) and "fuelRowH" (the row above it: E, the pump, F and the marks' upper parts this tall, 21), "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "podZones" [{ low?, ok?: [lo, hi], high? }] x 2 (bands on the scale's outer edge, as deep as its short marks: up to low red on the left pod and blue on the right, ok green, from high red), "led" with "ledN" and "rpmMax" (green segments, every fourth orange; a red mark above from the Redline setting to the end, from "coldRedline" [rpm, cold C, warm C] while the oil is cold, gliding to the setting as it warms), "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]), or "led2RangeUs" with US units, in "led2N" (15) segments), "gearRow" [first letter's x, pitch, y] + "gearNeedle" [pivot x, y, tip y straight up, bottom y] (a red needle of one length behind the gear row P R N D S from a far pivot below it, pointing at the letter: S in S and M; it eases from letter to letter and stays put with no gear), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "lampH" (the red HEAT STR lamp, the heated steering wheel; none without it), "arrow" [x, y, size], "batIcon" [x, y]`;
+const DOCS = `effect layer; the whole Grand National theme (rdash/shader.js), every box [x, y, w, h] in target px: "podL" (left pod frame, the right is its mirror), "podWin" (its gauge window), "ctr", "win1", "win2" (centre panel, its upper and lower windows), "vfdL", "vfdR", "spd" [needle pivot x, y, number row's middle y, mark row's y], "spdVirt" [height, half sweep deg] (where the numbers sit: on the rays of a far pivot that high below the number row; the needle turns to point at them) with "spdMax" (85 mph), "spdMin" (0, the mph at the scale's start), "spdMid" (55, the middle; halfway between spdMin and spdMax makes the scale linear), "spdStep" (5, between marks; the first mark), "spdAmber" (55, the amber mark) and "spdRest" (12: the needle's rest at 0, deg past the scale's start, under the row), "fuelG" [pivot x, y, the end marks' crossing of fuelLine (+-x), the lower band's height], "podG" [pivot x, y, tick r0, r1], "fuelLine" (y: where the fuel marks split, E, the pump and F sitting on it) and "fuelRowH" (the row above it: E, the pump, F and the marks' upper parts this tall, 21), "podSignals" [{ signal, range, mid? }] x 2 (mid: the value at the middle mark), "podZones" [{ low?, ok?: [lo, hi], high? }] x 2 (bands on the scale's outer edge, as deep as its short marks: up to low red on the left pod and blue on the right, ok green, from high red), "led" with "ledN" and "rpmMax" (green segments, every fourth orange; a red mark above from the Redline setting to the end, from "coldRedline" [rpm, cold C, warm C] while the oil is cold, gliding to the setting as it warms), "led2" (a yellow bar: "led2Signal" (boost) over "led2Range" ([0, 1.5]), or "led2RangeUs" with US units, in "led2N" (15) segments), "gearRow" [first letter's x, pitch, y] + "gearNeedle" [pivot x, y, tip y straight up, bottom y] (a red needle of one length behind the gear row P R N D S from a far pivot below it, pointing at the letter: S in S and M; it eases from letter to letter and stays put with no gear), "lampB" (the parking brake / Auto Hold lamp, red / green; mirrored: the green CRUISE lamp), "lampH" (the red HEAT STR lamp, the heated steering wheel; none without it), "doorBox" [centre line x, top row y, w, h] + "doorGap" [row gap, the side lamps' inner edges from the centre line] (the door lamps, red while open and not drawn while shut: HOOD, FRONT LEFT and RIGHT, REAR LEFT and RIGHT, TRUNK in four rows; none without it), "arrow" [x, y, size], "batIcon" [x, y]`;
 
 module.exports = {
   type: "rdash",
@@ -179,9 +179,11 @@ module.exports = {
       "led2",
       "lampB",
       "lampH",
+      "doorBox",
     ].forEach((k) => {
       packer.uniform("u_" + k, rel(widget[k]));
     });
+    packer.uniform("u_doorGap", widget.doorGap || [0, 0]);
     packer.uniform("u_spd", [
       spdBox[0] - widget.x,
       spdBox[1] - widget.y,
@@ -319,6 +321,10 @@ module.exports = {
         hud._cruiseLit() ? 1 : 0,
       ],
       heat = widget.lampH && hud._heatLit() ? 1 : 0;
+    // the door lamps: HOOD, FRONT LEFT, FRONT RIGHT, REAR LEFT, REAR RIGHT, TRUNK (1 open)
+    const doors = widget.doorBox
+      ? ["hood", "fl", "fr", "rl", "rr", "trunk"].map((k) => (hud._doorOpen(k) ? 1 : 0))
+      : [0, 0, 0, 0, 0, 0];
     // speed on the spdMin..spdMax mph scale with spdMid at its middle, each half linear
     const lo = widget.spdMin || 0,
       mid = widget.spdMid || SPD_MID_MPH,
@@ -385,7 +391,8 @@ module.exports = {
       gearX +
       "|" +
       lamps.join("") +
-      heat;
+      heat +
+      doors.join("");
     if (!force && key === state.last) return;
     state.last = key;
     state.c.uniform(state.ref, "u_speedV", [vals[0]]);
@@ -405,5 +412,7 @@ module.exports = {
     ]);
     state.c.uniform(state.ref, "u_lamps", lamps);
     state.c.uniform(state.ref, "u_heatV", [heat]);
+    state.c.uniform(state.ref, "u_doorA", doors.slice(0, 3));
+    state.c.uniform(state.ref, "u_doorB", doors.slice(3));
   },
 };

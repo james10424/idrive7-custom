@@ -13,6 +13,9 @@ const DEMO_CRUISE_MS = 10000; // the demo drive's cruise lamp: one phase this lo
 const DEMO_CRUISE_PHASES = 3; // lit in the last
 const DEMO_HEAT_MS = 14000; // the demo drive's HEAT STR lamp: one phase this long
 const DEMO_HEAT_PHASES = 2; // lit in the second
+const DEMO_DOOR_MS = 4000; // the demo drive's door lamps: one phase this long
+/** @type {string[]} the demo drive's door lamps, one a phase in this order ("" none) */
+const DEMO_DOORS = ["", "", "fl", "fr", "rl", "rr", "hood", "trunk"];
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** The Grand National lamps. Brake: the brake lights (the demo drive: while slowing). Turn: blinking at 1.25 Hz while the car says
@@ -107,6 +110,24 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       !!this.car.data().demo &&
       Math.floor(Date.now() / DEMO_HEAT_MS) % DEMO_HEAT_PHASES === 1
     );
+  },
+
+  /**
+   * A Grand National door lamp lit: that one open (DoorsWindowsRoofMirrors, config.lamps). The demo drive opens each in turn.
+   * @param {string} which fl fr rl rr hood trunk, or "any" (any of the six)
+   * @returns {boolean}
+   */
+  _doorOpen(which) {
+    /** @type {?Record<string, ?boolean>} */
+    let doors = this.doors;
+    if (!doors && this.car.data().demo) {
+      const k = DEMO_DOORS[Math.floor(Date.now() / DEMO_DOOR_MS) % DEMO_DOORS.length];
+      doors = k ? { [k]: true } : {};
+    }
+    if (!doors) return false;
+    const d = doors;
+    if (which === "any") return Object.keys(d).some((k) => d[k] === true);
+    return d[which] === true;
   },
 
   /**

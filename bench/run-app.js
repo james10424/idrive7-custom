@@ -674,6 +674,20 @@ const CAR_SW = {
       "heatingState",
       { functionalityCoded: true, availability: true, heating: value === "on" },
     ),
+  // the doors as the car sends them (enum names; car, Nov 16 2026): one open, all, or all shut
+  doors: (value) => {
+    /** @type {(k: string, open: string, shut: string) => string} */
+    const st = (k, open, shut) => (value === "all" || value === k ? open : shut);
+    stub.feed("de.bmw.body.DoorsWindowsRoofMirrors", "CentralLockingSystemAndPanelStatus2", {
+      statusDoorSwitchDRD: st("fl", "FAT_IST_OFFEN", "FAT_IST_GESCHLOSSEN"),
+      statusDoorSwitchPSD: st("fr", "BEIFAHRERTUER_IST_OFFEN", "BEIFAHRERTUER_IST_GESCHLOSSEN"),
+      statusDoorSwitchDRDR: st("rl", "FATH_IST_OFFEN", "FATH_IST_GESCHLOSSEN"),
+      statusDoorSwitchPSDR: st("rr", "BFTH_IST_OFFEN", "BFTH_IST_GESCHLOSSEN"),
+      statusContactBonnet: st("hood", "MOTORHAUBE_OFFEN", "MOTORHAUBE_GESCHLOSSEN"),
+      statusContactBootLid: st("trunk", "HK_IST_OFFEN", "HK_IST_GESCHLOSSEN"),
+      statusContactBootLid2: "SIGNAL_UNPLAUSIBEL",
+    });
+  },
 };
 // sent when a switch changes (and once when the app starts), as the car's subscriptions report changes, not on a
 // timer: a timer here hid an app that forgot a signal held longer than a few seconds

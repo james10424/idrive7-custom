@@ -38,24 +38,6 @@ const BYTE_NONE = 255; // a byte signal's "none" (fuel, outside temperature, bat
 const SLOPE_LEVEL = 1280; // LaneSlope: the gradient count when level (car/signals.js _onSlope)
 const SLOPE_PCT = 0.1; // and its grade a count, %
 const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the binding may hand enums over as numbers)
-// Door probe (temporary, Nov 16 2026): does the car send which door, the trunk or the hood is open? With the slope
-// (config.attitude, the HUD), DoorsWindowsRoofMirrors CentralLockingSystemAndPanelStatus2 is logged on every change.
-const DOOR_PROBE = true;
-/** @type {[string, string][]} its members as logged: [short name, member] */
-const DOOR_FIELDS = [
-  ["driver", "statusDoorSwitchDRD"],
-  ["passenger", "statusDoorSwitchPSD"],
-  ["rearDriver", "statusDoorSwitchDRDR"],
-  ["rearPassenger", "statusDoorSwitchPSDR"],
-  ["trunk", "statusContactBootLid"],
-  ["trunk2", "statusContactBootLid2"],
-  ["hood", "statusContactBonnet"],
-  ["softClose", "statusContactSoftCloseAutomatic"],
-  ["lock", "statusCentralLockingSystem"],
-  ["lockCtl", "controlCentralLockingSystem"],
-  ["lockButton", "statusPushButtonCentralLockingSystem"],
-  ["hotel", "statusHotelMode"],
-];
 const RANGE_NONE = 4095; // KombiIF range: none
 const MILEAGE_NONE = 0xffffff; // a 24-bit mileage: none
 const CONS_NONE = 65535; // a consumption raw: none
@@ -125,6 +107,8 @@ const TZ_MIN_H = -12,
  * @property {?boolean} [parkBrakeVsm] the same from VehicleStabilizationManagement
  * @property {?string} autoHold Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
  * @property {?boolean} wheelHeat the heated steering wheel on, null until the car says
+ * @property {?Record<string, ?boolean>} doors open by fl fr rl rr hood trunk (config.lamps), null until the car says
+ * @property {string} doorsLine the last doors logged
  * @property {?number} volt12 V, the 12 V system from the engine unit
  * @property {number} volt12At
  * @property {boolean} needsVolt a shown widget uses volt12 (the engine unit is only asked then)
@@ -206,6 +190,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.parkBrakeCds = null; // the same from CDS statusHandBrake (a fallback)
     this.autoHold = null; // Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
     this.wheelHeat = null; // the heated steering wheel on (true / false), null until the car says
+    /** @type {?Record<string, ?boolean>} */
+    this.doors = null; // open (true / false / null unknown) by fl fr rl rr hood trunk, null until the car says
+    this.doorsLine = "";
     this.volt12 = null;
     this.volt12At = 0; // V, the 12 V system from the engine unit
     this.needsVolt = false; // a shown widget uses volt12 (the engine unit is only asked then)
@@ -529,6 +516,33 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           this.wheelHeat = on;
         },
       },
+      // the doors, hood and trunk (the Grand National theme's door lamps), sent on change within ~100 ms (door probe, car,
+      // Nov 16 2026: all six seen open and closed; enums arrive as their names). The car's driver side is its left.
+      "de.bmw.body.DoorsWindowsRoofMirrors": {
+        CentralLockingSystemAndPanelStatus2: (msg) => {
+          /** @type {(raw: *) => ?boolean} */
+          const open = (raw) =>
+            raw === 1 || (typeof raw === "string" && /_OFFEN$/.test(raw))
+              ? true
+              : raw === 0 || (typeof raw === "string" && /GESCHLOSSEN$/.test(raw))
+                ? false
+                : null;
+          const doors = msg
+            ? {
+                fl: open(msg.statusDoorSwitchDRD),
+                fr: open(msg.statusDoorSwitchPSD),
+                rl: open(msg.statusDoorSwitchDRDR),
+                rr: open(msg.statusDoorSwitchPSDR),
+                hood: open(msg.statusContactBonnet),
+                trunk: open(msg.statusContactBootLid),
+              }
+            : null;
+          const line = JSON.stringify(doors);
+          if (line !== this.doorsLine) this.log.info("doors " + line);
+          this.doorsLine = line;
+          this.doors = doors;
+        },
+      },
       // Auto Hold (the same lamp, green): statusAutoH 2 = on and holding the car, 1 = on, 0 = off
       "de.bmw.chassis.VehicleStabilizationManagement": {
         StandStillFunction: (msg) => {
@@ -627,6 +641,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       delete extra["de.bmw.infotainment.vehicle.Vehicle2"];
       delete extra["de.bmw.chassis.VehicleStabilizationManagement"];
       delete extra["de.bmw.body.steeringwheelcomfort.SteeringWheelClimate"];
+      delete extra["de.bmw.body.DoorsWindowsRoofMirrors"];
       if (extra["de.bmw.infotainment.vehicle.CDS"])
         delete extra["de.bmw.infotainment.vehicle.CDS"].statusHandBrake;
     }
@@ -854,28 +869,6 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       { currentLocation: (msg) => this._guard("heading", () => this._onHeading(msg)) },
       "heading",
     );
-    if (DOOR_PROBE)
-      watch(
-        "de.bmw.body.DoorsWindowsRoofMirrors",
-        "1",
-        { CentralLockingSystemAndPanelStatus2: (msg) => this._guard("doors", () => this._probeDoors(msg)) },
-        "doors",
-      );
-  },
-
-
-  /**
-   * The door probe (DOOR_PROBE): each member as the binding hands it over (an enum's name or wire number), logged
-   * when any changes.
-   * @param {*} msg
-   * @returns {void}
-   */
-  _probeDoors(msg) {
-    const line = DOOR_FIELDS.map((f) => f[0] + " " + (msg ? msg[f[1]] : undefined)).join(", ");
-    if (line === this.doorLine) return;
-    this.doorLine = line;
-    const extra = Object.keys(msg || {}).filter((k) => k !== "dummy" && !DOOR_FIELDS.some((f) => f[1] === k));
-    this.log.info("door probe: " + line + (extra.length ? " (also " + extra.join(" ") + ")" : ""));
   },
 
   /**
