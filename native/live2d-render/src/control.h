@@ -19,6 +19,7 @@ struct OpenRequest {
     unsigned w = 0, h = 0;        /* the picture (w a multiple of 4, h even) */
     unsigned fps = 15;
     unsigned masks = 2;           /* clipping-mask textures (one holds 36 masks) */
+    unsigned core = 1;            /* Cubism Core every core-th frame, the frames between blended */
     std::string target = "hud";   /* cluster-render's */
     int x = 0, y = 0, z = 0;
     std::string klass = "content";

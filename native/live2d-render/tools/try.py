@@ -23,6 +23,7 @@ ap.add_argument('--params', default='')
 ap.add_argument('--out', required=True)
 ap.add_argument('--size', default='248x280')
 ap.add_argument('--frames', type=int, default=90)
+ap.add_argument('--core', type=int, default=1, help='Cubism Core every core-th frame (the open\'s core)')
 ap.add_argument('--script', default='', help='messages to send, one JSON line a frame, instead of the head turn')
 a = ap.parse_args()
 W, H = (int(v) for v in a.size.split('x'))
@@ -45,7 +46,7 @@ def send(obj):
     s.sendall((json.dumps(obj) + '\n').encode())
 
 
-send({'t': 'open', 'model': a.model, 'w': W, 'h': H, 'fps': 15, 'frame': a.frame, 'hide': a.hide, 'v': a.params})
+send({'t': 'open', 'model': a.model, 'w': W, 'h': H, 'fps': 15, 'frame': a.frame, 'hide': a.hide, 'v': a.params, 'core': a.core})
 s.settimeout(30)
 reply = b''
 while not reply.endswith(b'\n'):

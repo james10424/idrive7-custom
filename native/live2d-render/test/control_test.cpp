@@ -30,7 +30,7 @@ int main()
                      &o, &err));
     CHECK(o.model == "/m/a.model3.json" && o.w == 248 && o.h == 280 && o.fps == 15 && o.x == 356 && o.y == 100 && o.z == 3);
     CHECK(std::fabs(o.cy - 1.31f) < 1e-6 && std::fabs(o.height - 0.82f) < 1e-6 && o.cx == 0);
-    CHECK(o.hide.size() == 2 && o.hide[1] == "Part50" && !o.visible && o.target == "hud" && o.masks == 2);
+    CHECK(o.hide.size() == 2 && o.hide[1] == "Part50" && !o.visible && o.target == "hud" && o.masks == 2 && o.core == 1);
 
     const char *bad[] = {
         "{\"model\":\"a.model3.json\",\"w\":248,\"h\":280,\"frame\":\"0 0 1\"}",   /* not absolute */

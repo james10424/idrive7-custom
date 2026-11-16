@@ -44,6 +44,14 @@ int l2d_part_index(const l2d_model *m, const char *id);   /* -1: none */
 void l2d_update(l2d_model *m, const float *values, const int *part_index, const float *part_opacity, int parts,
                 float dt, double *physics_ms, double *core_ms);
 
+/* Optional (a glue without it draws every frame from Core): for running Core
+ * on fewer frames than are drawn. keep: the model was just updated; its
+ * vertices become the newest pose, the last newest the one before. Then the
+ * vertices the next l2d_draw uses become t of the way from the pose before
+ * to the newest (t 1: the newest exactly, as it is with no pose before).
+ * The model's other state (opacities, draw order) is the newest's. */
+void l2d_blend(l2d_model *m, int keep, float t);
+
 /* Draws into the bound framebuffer (cleared by the caller), the model's
  * coordinates through mvp (column-major 4x4). */
 void l2d_draw(l2d_model *m, const float mvp[16]);

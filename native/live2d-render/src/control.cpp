@@ -59,6 +59,10 @@ bool parse_open(const cr::Json &m, OpenRequest *o, std::string *err)
         if (v < 1 || v > 4) { *err = "masks: 1 to 4"; return false; }
         o->masks = (unsigned)v;
     }
+    if (num(m, "core", &v)) {
+        if (v < 1 || v > 4 || std::fmod(v, 1) != 0) { *err = "core: 1 to 4"; return false; }
+        o->core = (unsigned)v;
+    }
     str("target", &o->target);
     str("class", &o->klass);
     if (num(m, "x", &v)) o->x = (int)v;

@@ -77,6 +77,7 @@ struct Glue {
     int (*part_index)(const l2d_model *, const char *);
     void (*update)(l2d_model *, const float *, const int *, const float *, int, float, double *, double *);
     void (*draw)(l2d_model *, const float *);
+    void (*blend)(l2d_model *, int, float) = nullptr;   /* optional: an older glue hasn't it */
 
     bool load(const std::string &path, std::string *err)
     {
@@ -103,6 +104,7 @@ struct Glue {
         update = (void (*)(l2d_model *, const float *, const int *, const float *, int, float, double *, double *))sym(
             "l2d_update");
         draw = (void (*)(l2d_model *, const float *))sym("l2d_draw");
+        blend = (void (*)(l2d_model *, int, float))dlsym(h, "l2d_blend");
         if (!ok || api() != L2D_API) {
             *err = ok ? "the Cubism glue library is for another live2d-render (rebuild it: make glue)"
                       : "the Cubism glue library lacks a function (rebuild it: make glue)";
@@ -158,6 +160,7 @@ private:
     int64_t status_asked_ = 0, status_answered_ = 0, opened_at_ = 0;
     int64_t next_ = 0;
     double last_update_ = 0;
+    unsigned core_phase_ = 0;   /* frames since Core last ran (core > 1) */
     uint64_t frame_id_ = 1;
     std::vector<uint8_t> atlas_;
     /* timing over the last stats window */
@@ -312,6 +315,7 @@ void Service::open_model(const cr::Json &m)
     display_known_ = false;   /* asked again: the KOMBI may have restarted since the last model */
     display_held_ = false;
     last_update_ = 0;
+    core_phase_ = 0;
     stats_at_ = next_;
     frames_ = ticks_ = 0;
     s_update_ = s_draw_ = s_read_ = s_physics_ = s_core_ = 0;
@@ -447,11 +451,22 @@ bool Service::collect(double now)
 void Service::draw_frame()
 {
     const double a0 = now_fms();
-    const float dt = last_update_ > 0 ? (float)((a0 - last_update_) / 1000.0) : 1.0f / req_.fps;
-    last_update_ = a0;
+    /* Core on every core-th frame (the open's core, when the glue can blend): its pose, then the frames up to the
+     * next show the way from the pose before to it, the last of them it exactly. A frame later than Core every
+     * frame, by core - 1 frames. After a gap (held, hidden) the new pose shows at once. */
+    const unsigned every = glue_.blend ? req_.core : 1;
+    const double period = 1000.0 / (req_.fps ? req_.fps : 15);
+    const bool gap = last_update_ > 0 && a0 - last_update_ > 3.0 * period * every;
+    if (gap) core_phase_ = 0;
     double ph = 0, co = 0;
-    glue_.update(model_, params_.values().data(), hide_idx_.data(), hide_op_.data(), (int)hide_idx_.size(),
-                 dt > 0.2f ? 0.2f : dt, &ph, &co);
+    if (core_phase_ == 0) {
+        const float dt = last_update_ > 0 ? (float)((a0 - last_update_) / 1000.0) : 1.0f / req_.fps;
+        last_update_ = a0;
+        glue_.update(model_, params_.values().data(), hide_idx_.data(), hide_op_.data(), (int)hide_idx_.size(),
+                     dt > 0.2f ? 0.2f : dt, &ph, &co);
+    }
+    if (every > 1) glue_.blend(model_, core_phase_ == 0, gap ? 1.0f : (float)(core_phase_ + 1) / every);
+    core_phase_ = (core_phase_ + 1) % every;
     const double a1 = now_fms();
     if (gpu_->atlas_pending() && !collect(a1)) return;
     const double a2 = now_fms();

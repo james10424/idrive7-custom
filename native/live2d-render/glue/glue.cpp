@@ -129,6 +129,8 @@ struct l2d_model : public CubismUserModel {
     std::vector<std::string> ids;
     std::vector<CubismIdHandle> handles;
     std::vector<float> defaults;
+    std::vector<float> posePrev, poseNew;   /* l2d_blend: every drawable's vertices, the pose before and the newest */
+    bool havePrev = false;
 
     ~l2d_model()
     {
@@ -237,6 +239,41 @@ void l2d_update(l2d_model *m, const float *values, const int *part_index, const 
     model->Update();
     if (physics_ms) *physics_ms = p1 - p0;
     if (core_ms) *core_ms = now_ms() - p1;
+}
+
+void l2d_blend(l2d_model *m, int keep, float t)
+{
+    CubismModel *model = m->GetModel();
+    const int n = model->GetDrawableCount();
+    if (keep) {
+        size_t total = 0;
+        for (int i = 0; i < n; i++) total += (size_t)model->GetDrawableVertexCount(i) * 2;
+        m->posePrev.swap(m->poseNew);
+        m->havePrev = m->posePrev.size() == total;
+        m->poseNew.resize(total);
+        size_t at = 0;
+        for (int i = 0; i < n; i++) {
+            const size_t c = (size_t)model->GetDrawableVertexCount(i) * 2;
+            if (c) memcpy(&m->poseNew[at], model->GetDrawableVertices(i), c * sizeof(float));
+            at += c;
+        }
+    }
+    if (m->poseNew.empty()) return;
+    /* the vertices Core wrote, overwritten until its next update (it writes them all again; nothing reads them back):
+     * everything after reads them there, the masks' bounds as the drawing */
+    const bool exact = t >= 1.0f || !m->havePrev;
+    size_t at = 0;
+    for (int i = 0; i < n; i++) {
+        const size_t c = (size_t)model->GetDrawableVertexCount(i) * 2;
+        float *v = const_cast<float *>(reinterpret_cast<const float *>(model->GetDrawableVertices(i)));
+        if (exact) {
+            if (!keep && c) memcpy(v, &m->poseNew[at], c * sizeof(float));   /* after keep, Core's are the newest */
+        } else {
+            const float *a = &m->posePrev[at], *b = &m->poseNew[at];
+            for (size_t k = 0; k < c; k++) v[k] = a[k] + (b[k] - a[k]) * t;
+        }
+        at += c;
+    }
 }
 
 void l2d_draw(l2d_model *m, const float mvp[16])

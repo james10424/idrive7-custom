@@ -54,7 +54,7 @@ config by tools/live2d_bake/live_pose.js), or from a bake config in the app's da
 (miku-live/config.json, scripts/deploy.sh --miku-live-config); "model" is the .model3.json on the car (an absolute
 path, its textures shrunk to 1024 px: scripts/deploy.sh --miku-live), "params" fixed values ("Id=value ..."),
 "hide" parts left out (else the pose file's), "frame" [cx, cy, height] in model units (else its close.centre and
-close.height), "fps" (20). Without live2d-render or her model nothing is drawn and the status row says why`;
+close.height), "fps" (20), "core" (2: Cubism Core every other frame, the frames between blended; 1 every frame). Without live2d-render or her model nothing is drawn and the status row says why`;
 
 // as the baked close-up's (../miku/index.js), so she moves the same
 const LIVE_MS = 50; // her update rate: live2d-render draws at 20 fps
@@ -214,6 +214,7 @@ function openMessage(hud, state) {
     w: Math.floor(w.w / 4) * 4,
     h: Math.floor(w.h / 2) * 2,
     fps: w.fps || 20,
+    core: w.core || 2,
     target: hud.target,
     x: w.x,
     y: w.y,

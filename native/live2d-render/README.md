@@ -143,7 +143,7 @@ App to live2d-render:
 
 | `t` | Fields |
 | --- | --- |
-| `open` | `model` (absolute path), `w`, `h` (w a multiple of 4, h even), `frame` ("cx cy height": the box in model units, y up, that fills the picture), and optionally `fps` (15), `masks` (clipping-mask textures, 2; one holds 36 masks), `target` ("hud"), `x`, `y`, `z`, `class`, `visible`, `hide` ("PartA,PartB": parts drawn transparent), `v` (the first values, as `p`'s) |
+| `open` | `model` (absolute path), `w`, `h` (w a multiple of 4, h even), `frame` ("cx cy height": the box in model units, y up, that fills the picture), and optionally `fps` (15), `masks` (clipping-mask textures, 2; one holds 36 masks), `core` (1: Cubism Core on every frame; 2 to 4: on every core-th frame, the frames between it blended from the last two poses, a glue with `l2d_blend` needed; core - 1 frames later), `target` ("hud"), `x`, `y`, `z`, `class`, `visible`, `hide` ("PartA,PartB": parts drawn transparent), `v` (the first values, as `p`'s) |
 | `p` | `v`: "Id=value Id=value ..." (space or comma separated); `reset` 1 sets every parameter back to its default first. Values not sent keep their last |
 | `show`, `hide` | the layer shown or hidden; hidden, nothing is drawn |
 | `move` | `x`, `y`, `z`: the layer, whole pixels |
