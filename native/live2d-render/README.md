@@ -53,7 +53,8 @@ program with the same drawing code):
 | Two frames in flight (0.1.4, on the car Nov 16 2026: draw is the CPU's part only) | 7.3 | 8.7 | 0.7 | 25% |
 
 Batched draws (the glue, Nov 16 2026): her 297 drawn drawables in 166 draws
-instead of 297, the same pixels; not yet measured on the car.
+instead of 297, the same pixels; on the car (171 draws there) draw 5.7 ms
+from 7.4, 20% of a frame.
 
 The drawing's cost is the driver's work per draw call on the Atom, not
 pixels: mask textures of 128 px instead of 256 changed nothing, and the
