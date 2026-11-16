@@ -50,6 +50,10 @@ program with the same drawing code):
 | Stock Cubism renderer, 4:2:0 on the CPU | 10.8 | 19.5 (masks 6.4, model 14.3) | 1.9 + 3.6 | 54% |
 | 4:2:0 on the GPU | 10.8 | 19.5 | 1.2 + 0.65 | 50% |
 | Patched renderer (one vertex upload a frame, GL state only when it changes) | 10.5 | 12.8 (masks 5.2, model 7.6) | 1.9 | 39% |
+| Two frames in flight (0.1.4, on the car Nov 16 2026: draw is the CPU's part only) | 7.3 | 8.7 | 0.7 | 25% |
+
+Batched draws (the glue, Nov 16 2026): her 297 drawn drawables in 166 draws
+instead of 297, the same pixels; not yet measured on the car.
 
 The drawing's cost is the driver's work per draw call on the Atom, not
 pixels: mask textures of 128 px instead of 256 changed nothing, and the
@@ -106,14 +110,19 @@ library, the Cubism glue (`glue/`), built from your own copy of
 and copied to the head unit by hand; until it is there, live2d-render answers
 every app with "no Cubism glue library". The glue holds Live2D's Framework,
 with its OpenGL ES renderer patched for the head unit (`glue/apply_fast.py`:
-one vertex upload a frame instead of one a draw, and GL state sent only when it
-changes, which halved the drawing on the unit's Atom), and Live2D's closed Core
+one vertex upload a frame instead of one a draw, GL state sent only when it
+changes, which halved the drawing on the unit's Atom, and drawables drawn one
+after another with the same state sent as one draw), and Live2D's closed Core
 beside it. Use of the SDK is under Live2D's own licence terms.
 
 ```sh
 make glue SDK=~/Downloads/CubismSdkForNative-5-r.5     # build/sdk, in Docker
 make deploy-sdk CAR=root@$CAR_IP                       # to /var/opt/live2d-render/sdk
 ```
+
+For checking the patch: `CUBISM_STOCK=1` draws with Cubism's own renderer,
+`CUBISM_NOBATCH=1` without batching, and `CUBISM_BATCH_CHECK=1` draws every
+frame both unbatched and batched and logs how many bytes differ (0 expected).
 
 Models live wherever the app says (an absolute path to the `.model3.json`, with
 its moc, textures and physics beside it). Textures are loaded as they are, so

@@ -2,6 +2,11 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 16 2026
+
+- **The Cubism glue batches her draws.** Drawables drawn one after another with the same GL state now go to the GPU as one draw: each draw waits until a real state change ends its run, and the index buffer holds the indices again in the order they were drawn last frame (laid out again when that order changes), so a run is one range. Switching texture units no longer counts as a change (it ended a run at every masked drawable). Her 297 drawn drawables a frame take 166 draws instead of 297, masks included; what still ends runs is real state (102 texture switches among her 17 textures, 35 shader switches, 17 clip matrices). The same pixels: every frame drawn both ways off the car, 0 bytes differ (`CUBISM_BATCH_CHECK=1`). On the car the 0.1.4 draw was 8.7 ms of the driver's work queuing draws; not yet measured with this. The glue goes to the car by hand (`make glue`, then `make deploy-sdk`); Live2D Render itself is unchanged.
+- **Live2D Render 0.1.4 measured on the car:** 24 to 26% of a 15 fps frame, from 35 to 40% (draw 13 to 8.7 ms, the readback 2 to 0.7 ms).
+
 ## Nov 15 2026
 
 - **Live2D Render 0.1.4: two frames in flight.** On the car the CPU waited about 13 ms a frame for the GPU to finish drawing her (`glFinish`), out of 25 ms of work (38 to 40% of a 15 fps frame). The frame is now read into a GPU buffer behind a fence and collected on the next tick, after Cubism has worked out the next pose, so the CPU no longer waits; frames reach the cluster one frame (67 ms) later. Its timing line now reads `draw` (handing the frame to the GPU) and `read` (collecting the last one) instead of `draw` and `4:2:0`. Checked off the car on Mesa's software renderer: 90 frames, every one's 4:2:0 byte for byte the CPU's (there the GPU is the CPU, so the time doesn't drop). Not tried on the car.

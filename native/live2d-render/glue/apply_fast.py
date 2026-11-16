@@ -48,6 +48,9 @@ static bool csmFastBuild(const Live2D::Cubism::Framework::CubismModel &model) {
             if (isz == 4) ((uint32_t *)ib.data())[at] = v; else ((uint16_t *)ib.data())[at] = (uint16_t)v;
         }
     }
+    g.ibDrawable = ib;
+    g.seq.clear(); g.laidSeq.clear(); g.laidOff.clear();
+    g.batch = getenv("CUBISM_NOBATCH") == NULL;
     g.staging.resize((size_t)verts * 2);
     glGenVertexArrays(1, &g.vao);
     glBindVertexArray(g.vao);
@@ -57,7 +60,7 @@ static bool csmFastBuild(const Live2D::Cubism::Framework::CubismModel &model) {
     glBindBuffer(GL_ARRAY_BUFFER, g.vboUv);
     glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(uv.size() * 4), uv.data(), GL_STATIC_DRAW);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g.ibo);   /* part of the VAO */
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)ib.size(), ib.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr)ib.size(), ib.data(), GL_DYNAMIC_DRAW);
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
     if (glGetError() != GL_NO_ERROR) { fprintf(stderr, "fast path: buffers failed, stock drawing\\n"); return false; }
@@ -107,10 +110,17 @@ rep('''    BeforeDrawModelRenderTarget();
 rep('''    PostDraw();
 
     AfterDrawModelRenderTarget();
-}''', '''    PostDraw();
+}''', '''    csmfast::Flush();   /* the last run (nothing waits when the fast path is off) */
+    PostDraw();
 
     if (csmfast::g.on)
     {
+        static int frames = 0;
+        if (++frames == 30)
+            fprintf(stderr, "fast path: %ld drawables in %ld draws a frame (%s), laid out %ld times in 30 frames\\n",
+                    csmfast::g.drawables / 30, csmfast::g.draws / 30, csmfast::g.batch ? "batched" : "CUBISM_NOBATCH",
+                    csmfast::g.relaid);
+        csmfast::EndFrame();
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glUseProgram(0);
@@ -134,15 +144,16 @@ rep('''        return; // モデルが参照するテクスチャがバインド
             CubismShader_OpenGLES2::GetInstance()->SetupShaderProgramForMask(this, model, index);
         else
             CubismShader_OpenGLES2::GetInstance()->SetupShaderProgramForDrawable(this, model, index);
-        const int base = g.vtxBase[index], cnt = g.vtxCount[index];
-        if (g.idxCount[index] > 0 && cnt > 0)
-            glDrawRangeElements(GL_TRIANGLES, (GLuint)base, (GLuint)(base + cnt - 1), g.idxCount[index], g.indexType,
-                                reinterpret_cast<const void *>(g.idxOff[index]));
+        csmfast::Draw(index, true);
         SetClippingContextBufferForDrawable(NULL);
         SetClippingContextBufferForMask(NULL);
         return;
     }
 ''')
+# masks: a run waiting when the mask code switches framebuffer would land in the wrong one
+s = s.replace('_currentMaskBuffer->EndDraw();', 'csmfast::Flush(); _currentMaskBuffer->EndDraw();')
+if s.count('csmfast::Flush(); _currentMaskBuffer->EndDraw();') != 2:
+    sys.exit('mask EndDraw anchors changed')
 open('CubismRenderer_OpenGLES2.cpp', 'w', encoding='utf-8').write(s)
 
 # the shader file: the per-draw GL calls go through the cache (it passes them through when the fast path is off)
