@@ -95,7 +95,8 @@ const BREATH_HZ = 0.25; // and breathing (the idle loop breathes when she's stop
 // (live2d-render's "offset"), as if riding along: [amplitude px, base Hz], the same mix of three waves with random
 // phases, faded out as her idle comes in
 const BOB = [3, 0.21];
-const BOB_NOD = 5; // and her head nods with it: down this many degrees (ParamAngleY) at the bob's full dip
+const BOB_NOD = 10; // and her head nods with it: down this many degrees (ParamAngleY) at the bob's full dip
+const BOB_BODY = 5; // and her body bends forward with it (ParamBodyAngleY), degrees at the full dip
 const BOB_SEND_PX = 0.1; // an offset moving less than this isn't sent
 // Holding a turn, she looks along it GLANCE_AWAY_MS, then glances back at you: her eyes swing to the side opposite
 // her turned head (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all,
@@ -307,6 +308,7 @@ function drive(hud, state, now) {
   state.bobY = bob(state.bobPhase, now / 1000, 1 - idleShown);
   const extra = wander(state.wanderPhase, now / 1000, 1 - y);
   extra.ParamAngleY = (extra.ParamAngleY || 0) - (BOB_NOD * state.bobY) / BOB[0];   // her head dips as she does
+  extra.ParamBodyAngleY = (extra.ParamBodyAngleY || 0) - (BOB_BODY * state.bobY) / BOB[0];   // and her body bends
   return {
     extra,
     lean: Math.sign(state.lean) * (1 - Math.exp(-LEAN_K * Math.abs(state.lean))) / (1 - Math.exp(-LEAN_K)),
