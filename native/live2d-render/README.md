@@ -146,7 +146,7 @@ live2d-render to the app:
 | `error` | `op`, `reason`: an `open` refused (the reason says why: no SDK, the crash guard, a model that won't load), or a message it couldn't read |
 | `unknown` | `ids` a `p` named that the model hasn't (each once) |
 | `layer` | `state`, `reason`: the video layer's, from cluster-render |
-| `stats` | every 5 s while drawing: `fps`, `update`, `draw`, `read` (ms a frame), `busy` (% of the frame's time) |
+| `stats` | every 5 s while drawing: `fps`, `update`, `draw` (handing the frame to the GPU), `read` (collecting the last one) (ms a frame), `busy` (% of the frame's time, the CPU's) |
 
 ## Waiting for the KOMBI
 

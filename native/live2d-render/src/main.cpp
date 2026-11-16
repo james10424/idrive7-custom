@@ -162,7 +162,8 @@ private:
     std::vector<uint8_t> atlas_;
     /* timing over the last stats window */
     int64_t stats_at_ = 0;
-    int frames_ = 0;
+    int frames_ = 0, ticks_ = 0;   /* frames sent, frames drawn */
+    double pending_at_ = 0;        /* when the frame the GPU has was handed to it */
     double s_update_ = 0, s_draw_ = 0, s_read_ = 0, s_physics_ = 0, s_core_ = 0;
 
     void send(const std::string &json);
@@ -172,6 +173,7 @@ private:
     void open_model(const cr::Json &m);
     void close_model();
     void draw_frame();
+    bool collect(double now);
     void stats(int64_t now);
     bool display_ready(int64_t now);
 };
@@ -208,6 +210,7 @@ void Service::close_model()
 {
     if (cr_ && ref_) cr_->drop(ref_);
     ref_ = 0;
+    if (gpu_) gpu_->atlas_drop();
     if (model_) glue_.close(model_);
     model_ = nullptr;
     guard_.end();
@@ -310,7 +313,7 @@ void Service::open_model(const cr::Json &m)
     display_held_ = false;
     last_update_ = 0;
     stats_at_ = next_;
-    frames_ = 0;
+    frames_ = ticks_ = 0;
     s_update_ = s_draw_ = s_read_ = s_physics_ = s_core_ = 0;
     const double ms = now_fms() - t0;
     fprintf(stderr, "live2d-render: opened %s (%d parameters) in %.0f ms\n", r.model.c_str(), (int)ids.size(), ms);
@@ -395,30 +398,22 @@ void Service::handle(const std::string &line)
     reply_error("message", "unknown t \"" + t + "\"");
 }
 
-void Service::draw_frame()
+/* The frame the GPU drew last tick: read, checked, sent. Dropped when it is old (she was held or hidden since). */
+bool Service::collect(double now)
 {
-    const double a0 = now_fms();
-    const float dt = last_update_ > 0 ? (float)((a0 - last_update_) / 1000.0) : 1.0f / req_.fps;
-    last_update_ = a0;
-    double ph = 0, co = 0;
-    glue_.update(model_, params_.values().data(), hide_idx_.data(), hide_op_.data(), (int)hide_idx_.size(),
-                 dt > 0.2f ? 0.2f : dt, &ph, &co);
-    const double a1 = now_fms();
-    gpu_->begin();
-    float mvp[16];
-    l2r::offset_mvp(mvp_, offset_x_, offset_y_, req_.w, req_.h, mvp);
-    glue_.draw(model_, mvp);
-    glFinish();
-    const double a2 = now_fms();
+    const bool stale = now - pending_at_ > 3000.0 / (req_.fps ? req_.fps : 15);
     std::string err;
-    if (!gpu_->atlas(&atlas_, &err)) {
+    if (stale) {
+        gpu_->atlas_drop();
+        return true;
+    }
+    if (!gpu_->atlas_done(&atlas_, &err)) {
         reply_error("draw", err + ": stopped drawing");
         close_model();
-        return;
+        return false;
     }
-    const double a3 = now_fms();
     if (opt_.check) {
-        /* the GPU's atlas against the CPU's, from the same picture */
+        /* the GPU's atlas against the CPU's, from the same picture (not drawn over yet) */
         std::vector<uint8_t> rgba, ref(atlas_.size());
         gpu_->picture(&rgba);
         l2r::yuv420_reference(rgba.data(), req_.w, req_.h, ref.data());
@@ -437,16 +432,45 @@ void Service::draw_frame()
         size_t done = 0;
         while (done < atlas_.size()) {
             ssize_t k = write(1, atlas_.data() + done, atlas_.size() - done);
-            if (k <= 0) { g_stop = 1; return; }
+            if (k <= 0) { g_stop = 1; return false; }
             done += (size_t)k;
         }
     } else if (cr_ && ref_) {
         cr_->frame(ref_, &atlas_, frame_id_++);
     }
     frames_++;
+    return true;
+}
+
+/* Two frames in flight: this tick works out frame N on the CPU, collects N-1 (the GPU drew it meanwhile), then
+ * hands N to the GPU and returns without waiting. Frames reach the cluster one tick later. */
+void Service::draw_frame()
+{
+    const double a0 = now_fms();
+    const float dt = last_update_ > 0 ? (float)((a0 - last_update_) / 1000.0) : 1.0f / req_.fps;
+    last_update_ = a0;
+    double ph = 0, co = 0;
+    glue_.update(model_, params_.values().data(), hide_idx_.data(), hide_op_.data(), (int)hide_idx_.size(),
+                 dt > 0.2f ? 0.2f : dt, &ph, &co);
+    const double a1 = now_fms();
+    if (gpu_->atlas_pending() && !collect(a1)) return;
+    const double a2 = now_fms();
+    gpu_->begin();
+    float mvp[16];
+    l2r::offset_mvp(mvp_, offset_x_, offset_y_, req_.w, req_.h, mvp);
+    glue_.draw(model_, mvp);
+    std::string err;
+    if (!gpu_->atlas_start(&err)) {
+        reply_error("draw", err + ": stopped drawing");
+        close_model();
+        return;
+    }
+    pending_at_ = now_fms();
+    const double a3 = pending_at_;
+    ticks_++;
     s_update_ += a1 - a0;
-    s_draw_ += a2 - a1;
-    s_read_ += a3 - a2;
+    s_read_ += a2 - a1;
+    s_draw_ += a3 - a2;
     s_physics_ += ph;
     s_core_ += co;
 }
@@ -454,9 +478,9 @@ void Service::draw_frame()
 void Service::stats(int64_t now)
 {
     if (!model_ || now - stats_at_ < 5000) return;
-    const double n = frames_ ? frames_ : 1, secs = (now - stats_at_) / 1000.0;
+    const double n = ticks_ ? ticks_ : 1, secs = (now - stats_at_) / 1000.0;
     const double work = (s_update_ + s_draw_ + s_read_) / n, busy = 100.0 * work * req_.fps / 1000.0;
-    fprintf(stderr, "live2d-render: %.1f fps, update %.2f ms (physics %.2f, Core %.2f), draw %.2f ms, 4:2:0 %.2f ms; "
+    fprintf(stderr, "live2d-render: %.1f fps, update %.2f ms (physics %.2f, Core %.2f), draw %.2f ms, read %.2f ms; "
                     "%.0f%% of a %.0f ms frame\n",
             frames_ / secs, s_update_ / n, s_physics_ / n, s_core_ / n, s_draw_ / n, s_read_ / n, busy,
             1000.0 / req_.fps);
@@ -467,7 +491,7 @@ void Service::stats(int64_t now)
                           {"read", fmt("%.2f", s_read_ / n)},
                           {"busy", fmt("%.0f", busy)}}));
     stats_at_ = now;
-    frames_ = 0;
+    frames_ = ticks_ = 0;
     s_update_ = s_draw_ = s_read_ = s_physics_ = s_core_ = 0;
 }
 

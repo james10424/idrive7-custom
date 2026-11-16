@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <cstring>
 
 namespace l2r {
 
@@ -143,6 +144,9 @@ std::string Gpu::renderer() const
 
 void Gpu::free_targets()
 {
+    atlas_drop();
+    if (pbo_) glDeleteBuffers(1, &pbo_);
+    pbo_ = 0;
     GLuint t[] = {tex_, ytex_, uvtex_}, f[] = {fbo_, yfbo_, uvfbo_};
     glDeleteTextures(3, t);
     glDeleteFramebuffers(3, f);
@@ -161,6 +165,10 @@ bool Gpu::size(unsigned w, unsigned h, std::string *err)
         return false;
     }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glGenBuffers(1, &pbo_);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
+    glBufferData(GL_PIXEL_PACK_BUFFER, (GLsizeiptr)w * h * 3 / 2, nullptr, GL_STREAM_READ);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
     w_ = w;
     h_ = h;
     return true;
@@ -176,9 +184,9 @@ void Gpu::begin()
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
-bool Gpu::atlas(std::vector<uint8_t> *out, std::string *err)
+bool Gpu::atlas_start(std::string *err)
 {
-    out->resize((size_t)w_ * h_ * 3 / 2);
+    atlas_drop();
     /* our own state after the model's drawing */
     glDisable(GL_BLEND);
     glDisable(GL_SCISSOR_TEST);
@@ -202,20 +210,58 @@ bool Gpu::atlas(std::vector<uint8_t> *out, std::string *err)
     glUniform1i(u_uv_, 1);
     glDrawArrays(GL_TRIANGLES, 0, 3);
     glBindVertexArray(0);
+    /* into the buffer: the reads return at once, the GPU fills it after the drawing */
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
     glBindFramebuffer(GL_FRAMEBUFFER, yfbo_);
-    glReadPixels(0, 0, w_ / 4, h_, GL_RGBA, GL_UNSIGNED_BYTE, out->data());
+    glReadPixels(0, 0, w_ / 4, h_, GL_RGBA, GL_UNSIGNED_BYTE, (void *)0);
     glBindFramebuffer(GL_FRAMEBUFFER, uvfbo_);
-    glReadPixels(0, 0, w_ / 4, h_ / 2, GL_RGBA, GL_UNSIGNED_BYTE, out->data() + (size_t)w_ * h_);
+    glReadPixels(0, 0, w_ / 4, h_ / 2, GL_RGBA, GL_UNSIGNED_BYTE, (void *)((size_t)w_ * h_));
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    fence_ = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
+    glFlush();   /* the GPU starts now, not at the next call */
     GLenum e = glGetError();
-    if (e != GL_NO_ERROR) {
+    if (e != GL_NO_ERROR || !fence_) {
         char b[48];
         snprintf(b, sizeof b, "OpenGL error 0x%x", e);
+        *err = b;
+        atlas_drop();
+        return false;
+    }
+    return true;
+}
+
+bool Gpu::atlas_done(std::vector<uint8_t> *out, std::string *err)
+{
+    if (!fence_) { *err = "no frame started"; return false; }
+    GLenum r = glClientWaitSync(fence_, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ull);
+    atlas_drop();
+    if (r != GL_ALREADY_SIGNALED && r != GL_CONDITION_SATISFIED) {
+        *err = r == GL_TIMEOUT_EXPIRED ? "the GPU took over a second" : "waiting for the GPU failed";
+        return false;
+    }
+    const size_t n = (size_t)w_ * h_ * 3 / 2;
+    out->resize(n);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, pbo_);
+    const void *p = glMapBufferRange(GL_PIXEL_PACK_BUFFER, 0, (GLsizeiptr)n, GL_MAP_READ_BIT);
+    if (p) memcpy(out->data(), p, n);
+    if (p) glUnmapBuffer(GL_PIXEL_PACK_BUFFER);
+    glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+    GLenum e = glGetError();
+    if (!p || e != GL_NO_ERROR) {
+        char b[48];
+        snprintf(b, sizeof b, "reading the frame: OpenGL error 0x%x", e);
         *err = b;
         return false;
     }
     return true;
+}
+
+void Gpu::atlas_drop()
+{
+    if (fence_) glDeleteSync(fence_);
+    fence_ = nullptr;
 }
 
 void Gpu::picture(std::vector<uint8_t> *rgba)

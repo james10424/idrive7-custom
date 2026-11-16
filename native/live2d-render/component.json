@@ -1,7 +1,7 @@
 {
   "id": "live2d-render",
   "kind": "tool",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "license": "MIT",
   "title": "Live2D Render",
   "description": "Draws a Live2D model live on the head unit's GPU for an app, shown as a cluster-render video layer. Needs Live2D's Cubism SDK copied to the head unit by hand",
