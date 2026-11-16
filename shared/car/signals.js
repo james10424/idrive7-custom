@@ -42,6 +42,24 @@ const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the bin
 // the journal once a second: "slope probe <km/h> km/h <n>: +<ms since the last> <lon> <tr> <gLong>" (counts from level)
 const SLOPE_PROBE = true;
 const SLOPE_PROBE_MS = 1000;
+// Door probe (temporary, Nov 16 2026): does the car send which door, the trunk or the hood is open? With the slope
+// (config.attitude, the HUD), DoorsWindowsRoofMirrors CentralLockingSystemAndPanelStatus2 is logged on every change.
+const DOOR_PROBE = true;
+/** @type {[string, string][]} its members as logged: [short name, member] */
+const DOOR_FIELDS = [
+  ["driver", "statusDoorSwitchDRD"],
+  ["passenger", "statusDoorSwitchPSD"],
+  ["rearDriver", "statusDoorSwitchDRDR"],
+  ["rearPassenger", "statusDoorSwitchPSDR"],
+  ["trunk", "statusContactBootLid"],
+  ["trunk2", "statusContactBootLid2"],
+  ["hood", "statusContactBonnet"],
+  ["softClose", "statusContactSoftCloseAutomatic"],
+  ["lock", "statusCentralLockingSystem"],
+  ["lockCtl", "controlCentralLockingSystem"],
+  ["lockButton", "statusPushButtonCentralLockingSystem"],
+  ["hotel", "statusHotelMode"],
+];
 const RANGE_NONE = 4095; // KombiIF range: none
 const MILEAGE_NONE = 0xffffff; // a 24-bit mileage: none
 const CONS_NONE = 65535; // a consumption raw: none
@@ -840,6 +858,27 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       { currentLocation: (msg) => this._guard("heading", () => this._onHeading(msg)) },
       "heading",
     );
+    if (DOOR_PROBE)
+      watch(
+        "de.bmw.body.DoorsWindowsRoofMirrors",
+        "1",
+        { CentralLockingSystemAndPanelStatus2: (msg) => this._guard("doors", () => this._probeDoors(msg)) },
+        "doors",
+      );
+  },
+
+  /**
+   * The door probe (DOOR_PROBE): each member as the binding hands it over (an enum's name or wire number), logged
+   * when any changes.
+   * @param {*} msg
+   * @returns {void}
+   */
+  _probeDoors(msg) {
+    const line = DOOR_FIELDS.map((f) => f[0] + " " + (msg ? msg[f[1]] : undefined)).join(", ");
+    if (line === this.doorLine) return;
+    this.doorLine = line;
+    const extra = Object.keys(msg || {}).filter((k) => k !== "dummy" && !DOOR_FIELDS.some((f) => f[1] === k));
+    this.log.info("door probe: " + line + (extra.length ? " (also " + extra.join(" ") + ")" : ""));
   },
 
   /**
