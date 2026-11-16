@@ -100,6 +100,7 @@
       <label class="chk"><input type="checkbox" id="road"> <span id="backdropName">backdrop</span></label>
       <label class="chk" title="BMW's own HUD content, drawn over our layers as the car does: its speed and speed-limit sign bottom-left (x 150..355, y 314..378, measured Nov 5 2026). The limit is a stand-in: the bench has no speed-limit signal."><input type="checkbox" id="bmwhud" checked> BMW's HUD</label>
       <label class="chk" title="What the driver sees: the hood hides the top corners of the cluster, the dash camera hides its top middle, and BMW draws its gear box and belt light over us; on the HUD only a window is visible through the windshield. Measured from car photos, Nov 5 2026 (shared/visible.js)."><input type="checkbox" id="carview" checked> car view</label>
+      <label class="chk" title="The HUD shows only its visible window (the part the driver sees through the windshield), scaled up to fill the width; off: the whole 800x480 target."><input type="checkbox" id="zoomWin" checked> visible window only</label>
       <label class="chk" title="Draw the displays (at most 30 times a second, as cluster-render; a screen only when something on it changed, an effect only when its inputs did). Off: the picture holds still and the page uses next to no CPU, and live2d-render (Miku Live2D, in Docker) is paused; the apps, the renderer and the layers table keep running."><input type="checkbox" id="redraw" checked> redraw</label>
       <button id="bakeBackdrop" title="Backdrop bake mode only (the bench started with CLUSTER_BACKDROP_BAKE=1, launch config bench-backdrop): captures the cluster's display (outlines, backdrop and car view off) and writes it as the layout's ETC2 backdrop for the current Units setting, apps/&lt;app&gt;/hud/backdrops/ (engine/backdrop.js). Bake once per Units setting.">bake backdrop</button>
       <span id="fps"></span>
@@ -490,8 +491,16 @@
         pane.appendChild(viewCanvas);
         box.appendChild(pane);
       } else box.appendChild(viewCanvas);
-      return { app: app.id, target: app.view, canvas: viewCanvas, ctx: viewCanvas.getContext('2d'), VW: w, VH: h };
+      // the HUD's visible window, cut out of the whole target and shown in its place (zoomWin)
+      let crop = null;
+      if (app.view === 'hud' && !document.body.classList.contains('only')) {
+        crop = document.createElement('canvas');
+        crop.className = 'view';
+        viewCanvas.after(crop);
+      }
+      return { app: app.id, target: app.view, canvas: viewCanvas, ctx: viewCanvas.getContext('2d'), VW: w, VH: h, crop };
     });
+    showZoom();
     primaryApp = list.length ? list[0].id : null;
     document.getElementById('target').textContent = 'target: ' + views.map((pane) => pane.target + ' ' + pane.VW + ' x ' + pane.VH).join(', ');
     const hasPanel = views.some((pane) => pane.target === 'panel'), hasHud = views.some((pane) => pane.target === 'hud');
@@ -646,6 +655,11 @@
         });
       }
       if (document.getElementById('carview').checked) drawCarView();
+      if (pane.crop && zoomOn()) {
+        const win = geo.HUD_WINDOW;
+        if (pane.crop.width !== win.w || pane.crop.height !== win.h) { pane.crop.width = win.w; pane.crop.height = win.h; }
+        pane.crop.getContext('2d').drawImage(canvas, win.x, win.y, win.w, win.h, 0, 0, win.w, win.h);
+      }
       if (/[?&]dbg=1/.test(location.search)) { ctx.fillStyle = '#ff0'; ctx.font = '20px monospace'; ctx.fillText('msgs ' + dbgN + ' last ' + dbgLast + ' images ' + images.size + ' px ' + dbgPx + ' reads ' + dbgReads + ' buf ' + dbgBuf + ' err ' + dbgErr, 20, VH - 20); }
       });
       if (primaryApp) lastValues = valuesByApp[primaryApp] || lastValues;
@@ -655,6 +669,21 @@
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  /** The visible window only (a known window and not ?only=1), its choice remembered in this browser. */
+  function zoomOn() { return !!geo && document.getElementById('zoomWin').checked; }
+  function showZoom() {
+    views.forEach((pane) => {
+      if (!pane.crop) return;
+      pane.canvas.style.display = zoomOn() ? 'none' : '';
+      pane.crop.style.display = zoomOn() ? '' : 'none';
+    });
+  }
+  try { if (localStorage.getItem('benchZoomWin') === '0') document.getElementById('zoomWin').checked = false; } catch (e) { /* no storage */ }
+  document.getElementById('zoomWin').addEventListener('change', (e) => {
+    try { localStorage.setItem('benchZoomWin', e.target.checked ? '1' : '0'); } catch (err) { /* no storage */ }
+    showZoom();
+    markDirty();
+  });
   ['outlines', 'road', 'carview', 'bmwhud', 'redraw'].forEach((id) => document.getElementById(id).addEventListener('change', () => markDirty()));
   // redraw off also pauses live2d-render's container (the bench's heaviest process while Miku Live2D shows)
   document.getElementById('redraw').addEventListener('change', (e) => fetch('/live2d', { method: 'POST', body: JSON.stringify({ paused: !e.target.checked }) }));
@@ -760,6 +789,7 @@
     if (msg.t === 'log') addLog(msg);
     else if (msg.t === 'hello') {
       geo = msg.geometry || geo;
+      showZoom();
       pixelCap = msg.pixelCap === undefined ? pixelCap : msg.pixelCap;
       budgetLimits = msg.shaderBudget || budgetLimits;
       if (document.activeElement !== capEl) capEl.value = msg.cap || 0;
