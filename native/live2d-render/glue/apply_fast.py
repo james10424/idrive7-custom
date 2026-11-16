@@ -51,6 +51,7 @@ static bool csmFastBuild(const Live2D::Cubism::Framework::CubismModel &model) {
     g.ibDrawable = ib;
     g.seq.clear(); g.laidSeq.clear(); g.laidOff.clear();
     g.batch = getenv("CUBISM_NOBATCH") == NULL;
+    g.skipOut = getenv("CUBISM_NOCULL") == NULL;
     g.staging.resize((size_t)verts * 2);
     glGenVertexArrays(1, &g.vao);
     glBindVertexArray(g.vao);
@@ -101,6 +102,9 @@ rep('''    BeforeDrawModelRenderTarget();
             g.newFrame();
             const double u0 = csmfast::Now();
             csmFastUpload(*GetModel());
+            const double c0 = csmfast::Now();
+            csmfast::Bounds(GetMvpMatrix().GetArray());
+            g.tCull += csmfast::Now() - c0;
             g.tUpload += csmfast::Now() - u0;
             glBindVertexArray(g.vao);
             glFrontFace(GL_CCW);
@@ -139,6 +143,26 @@ rep('''        return; // モデルが参照するテクスチャがバインド
     if (csmfast::g.on)
     {
         using csmfast::g;
+        bool skip;
+        if (IsGeneratingMask())
+        {
+            CubismClippingContext_OpenGLES2 *cc = GetClippingContextBufferForMask();
+            const csmVector<csmInt32> *list = cc ? cc->_clippedDrawableIndexList : NULL;
+            skip = list && !csmfast::MaskNeeded(index, list->GetSize() ? &(*list)[0] : NULL, (int)list->GetSize());
+            if (skip) g.masksCulled++;
+        }
+        else
+        {
+            skip = g.skipOut && g.out[index];
+            if (skip) g.culled++;
+        }
+        if (skip)
+        {
+            csmfast::Skip(index);
+            SetClippingContextBufferForDrawable(NULL);
+            SetClippingContextBufferForMask(NULL);
+            return;
+        }
         csmfast::Cull(IsCulling());
         if (IsGeneratingMask())
             CubismShader_OpenGLES2::GetInstance()->SetupShaderProgramForMask(this, model, index);

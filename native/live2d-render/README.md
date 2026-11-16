@@ -122,8 +122,10 @@ make deploy-sdk CAR=root@$CAR_IP                       # to /var/opt/live2d-rend
 ```
 
 For checking the patch: `CUBISM_STOCK=1` draws with Cubism's own renderer,
-`CUBISM_NOBATCH=1` without batching, and `CUBISM_BATCH_CHECK=1` draws every
-frame both unbatched and batched and logs how many bytes differ (0 expected).
+`CUBISM_NOBATCH=1` without batching, `CUBISM_NOCULL=1` without skipping what's
+outside the picture, and `CUBISM_BATCH_CHECK=1` draws every frame both ways (every
+drawable one at a time, and as the fast path does) and logs how many bytes differ
+(0 expected). Every 10 s the glue logs where its drawing time goes.
 
 Models live wherever the app says (an absolute path to the `.model3.json`, with
 its moc, textures and physics beside it). Textures are loaded as they are, so

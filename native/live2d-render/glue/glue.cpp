@@ -246,16 +246,17 @@ void l2d_draw(l2d_model *m, const float mvp[16])
     auto *r = m->GetRenderer<Rendering::CubismRenderer_OpenGLES2>();
     r->SetMvpMatrix(&matrix);
     Rendering::CubismOffscreenManager_OpenGLES2::GetInstance()->BeginFrameProcess();
-    static const bool check = getenv("CUBISM_BATCH_CHECK") != nullptr;   /* debugging: batched against one at a time */
+    static const bool check = getenv("CUBISM_BATCH_CHECK") != nullptr;   /* debugging: batched and culled against all, one at a time */
     if (check) {
         GLint vp[4];
         glGetIntegerv(GL_VIEWPORT, vp);
         std::vector<unsigned char> one((size_t)vp[2] * vp[3] * 4), all(one.size());
-        const bool b = csmfast::g.batch;
-        csmfast::g.batch = false;
+        const bool b = csmfast::g.batch, c = csmfast::g.skipOut;
+        csmfast::g.batch = csmfast::g.skipOut = false;   /* the reference: every drawable, one at a time */
         r->DrawModel();
         glReadPixels(vp[0], vp[1], vp[2], vp[3], GL_RGBA, GL_UNSIGNED_BYTE, one.data());
         csmfast::g.batch = b;
+        csmfast::g.skipOut = c;
         glClearColor(0, 0, 0, 0);
         glClear(GL_COLOR_BUFFER_BIT);
         r->DrawModel();

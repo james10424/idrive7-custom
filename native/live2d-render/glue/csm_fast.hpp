@@ -11,6 +11,10 @@
  *     they were drawn last frame (masks included), so a run that repeats last frame's order is one range of it;
  *     when the order changes (a drawable shown or hidden) that part is laid out again. GL draws a call's
  *     triangles in order, so the blending is the same. CUBISM_NOBATCH=1 draws one at a time.
+ *   - drawables wholly outside the picture aren't drawn, nor masks for them: a close-up of a full-body model leaves
+ *     her legs out of frame, drawn and clipped away every frame. Each drawable's bounds (in the picture's clip
+ *     space, with a margin) are taken as its vertices are copied; a mask drawable is skipped when it is outside or
+ *     everything it clips is. CUBISM_NOCULL=1 draws them all.
  * Same GL drawing otherwise, so the same pixels. Only for models without Cubism 5.3 blend modes or offscreens and
  * without high-precision masks; otherwise (or with CUBISM_STOCK=1) the stock path runs.
  */
@@ -38,9 +42,12 @@ struct State {
     std::vector<size_t> laidOff;    /* each of its draws' indices there */
     long relaid = 0;
     /* where the drawing's CPU time goes (ms over the frames since the last log) */
-    double tUpload = 0, tBounds = 0, tMasks = 0, tLoop = 0, tLayout = 0;
+    double tCull = 0, tUpload = 0, tBounds = 0, tMasks = 0, tLoop = 0, tLayout = 0;
     int timedFrames = 0;
     bool batch = true;
+    bool skipOut = true;            /* skip drawables outside the picture (CUBISM_NOCULL=1: off) */
+    std::vector<unsigned char> out; /* this frame: drawable i wholly outside the picture */
+    long culled = 0, masksCulled = 0;
     size_t pendOff = 0;             /* the run waiting to be drawn: its indices */
     int pendCount = 0;
     long draws = 0, drawables = 0;  /* counted for the log */
@@ -71,12 +78,14 @@ inline double Now() {
 inline void LogTiming() {
     if (++g.timedFrames < 150) return;
     const double n = g.timedFrames;
-    fprintf(stderr, "fast path: upload %.2f ms, mask bounds %.2f, masks %.2f, drawables %.2f, layout %.2f; "
-                    "%ld draws a frame, laid out %ld times\n",
-            g.tUpload / n, g.tBounds / n, g.tMasks / n, g.tLoop / n, g.tLayout / n, (long)(g.draws / n), g.relaid);
-    g.tUpload = g.tBounds = g.tMasks = g.tLoop = g.tLayout = 0;
+    fprintf(stderr, "fast path: upload %.2f ms (bounds %.2f), mask bounds %.2f, masks %.2f, drawables %.2f, layout %.2f; "
+                    "%ld draws a frame, laid out %ld times; %ld drawables and %ld mask draws outside the picture "
+                    "skipped a frame\n",
+            g.tUpload / n, g.tCull / n, g.tBounds / n, g.tMasks / n, g.tLoop / n, g.tLayout / n, (long)(g.draws / n),
+            g.relaid, (long)(g.culled / n), (long)(g.masksCulled / n));
+    g.tCull = g.tUpload = g.tBounds = g.tMasks = g.tLoop = g.tLayout = 0;
     g.timedFrames = 0;
-    g.draws = g.drawables = g.relaid = 0;
+    g.draws = g.drawables = g.relaid = g.culled = g.masksCulled = 0;
 }
 
 inline size_t IndexSize() { return g.indexType == GL_UNSIGNED_INT ? 4 : 2; }
@@ -89,6 +98,49 @@ inline void Flush() {
 }
 /* drawable i's triangles: added to the waiting run when they follow it in the index buffer, else they start a
  * new one (batch false: drawn now; nothing else waits) */
+/* which drawables lie wholly outside the picture this frame, from their positions (staging) through the MVP
+ * (column-major, 2D affine as Cubism's); a margin of 5% of the picture keeps edge texels and mask filtering in */
+inline void Bounds(const float *mvp) {
+    const int n = (int)g.vtxCount.size();
+    g.out.assign(n, 0);
+    if (!g.skipOut) return;
+    const float m = 1.10f;   /* clip space is -1..1: 0.10 is 5% of the picture each side */
+    for (int i = 0; i < n; i++) {
+        const int c = g.vtxCount[i];
+        if (c <= 0) continue;
+        const float *v = &g.staging[(size_t)g.vtxBase[i] * 2];
+        float x0 = v[0], x1 = v[0], y0 = v[1], y1 = v[1];
+        for (int k = 1; k < c; k++) {
+            const float x = v[2 * k], y = v[2 * k + 1];
+            x0 = x < x0 ? x : x0; x1 = x > x1 ? x : x1;
+            y0 = y < y0 ? y : y0; y1 = y > y1 ? y : y1;
+        }
+        float cx0 = 1e30f, cx1 = -1e30f, cy0 = 1e30f, cy1 = -1e30f;
+        const float px[4] = {x0, x1, x0, x1}, py[4] = {y0, y0, y1, y1};
+        for (int k = 0; k < 4; k++) {
+            const float X = mvp[0] * px[k] + mvp[4] * py[k] + mvp[12], Y = mvp[1] * px[k] + mvp[5] * py[k] + mvp[13];
+            cx0 = X < cx0 ? X : cx0; cx1 = X > cx1 ? X : cx1;
+            cy0 = Y < cy0 ? Y : cy0; cy1 = Y > cy1 ? Y : cy1;
+        }
+        g.out[i] = cx1 < -m || cx0 > m || cy1 < -m || cy0 > m;
+    }
+}
+/* a mask drawable is needed when it is in the picture and so is something it clips */
+inline bool MaskNeeded(int i, const int *clipped, int nClipped) {
+    if (!g.skipOut) return true;
+    if (g.out[i]) return false;
+    for (int k = 0; k < nClipped; k++)
+        if (clipped[k] >= 0 && clipped[k] < (int)g.out.size() && !g.out[clipped[k]]) return true;
+    return false;
+}
+
+/* drawable i is skipped this frame: kept in the order (so the laid out buffer stays valid as she moves in and
+ * out of the picture), its run ended */
+inline void Skip(int i) {
+    g.seq.push_back(i);
+    Flush();
+}
+
 inline void Draw(int i, bool batch) {
     const int n = g.idxCount[i];
     if (n <= 0 || g.vtxCount[i] <= 0) return;
