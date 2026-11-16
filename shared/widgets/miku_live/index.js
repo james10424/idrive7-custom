@@ -54,10 +54,10 @@ config by tools/live2d_bake/live_pose.js), or from a bake config in the app's da
 (miku-live/config.json, scripts/deploy.sh --miku-live-config); "model" is the .model3.json on the car (an absolute
 path, its textures shrunk to 1024 px: scripts/deploy.sh --miku-live), "params" fixed values ("Id=value ..."),
 "hide" parts left out (else the pose file's), "frame" [cx, cy, height] in model units (else its close.centre and
-close.height), "fps" (15). Without live2d-render or her model nothing is drawn and the status row says why`;
+close.height), "fps" (20). Without live2d-render or her model nothing is drawn and the status row says why`;
 
 // as the baked close-up's (../miku/index.js), so she moves the same
-const LIVE_MS = 66; // her update rate: live2d-render draws at 15 fps
+const LIVE_MS = 50; // her update rate: live2d-render draws at 20 fps
 const LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly
 const LEAN_G = 0.4; // this longitudinal g is a full lean
 const LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
@@ -213,7 +213,7 @@ function openMessage(hud, state) {
     model: String(w.model),
     w: Math.floor(w.w / 4) * 4,
     h: Math.floor(w.h / 2) * 2,
-    fps: w.fps || 15,
+    fps: w.fps || 20,
     target: hud.target,
     x: w.x,
     y: w.y,
