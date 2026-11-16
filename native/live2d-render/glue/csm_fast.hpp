@@ -18,6 +18,8 @@
 #include <GLES3/gl3.h>
 #include <cstring>
 #include <cstdint>
+#include <cstdio>
+#include <time.h>
 #include <unordered_map>
 #include <vector>
 
@@ -35,6 +37,9 @@ struct State {
     std::vector<int> laidSeq;       /* the order the second part is laid out in */
     std::vector<size_t> laidOff;    /* each of its draws' indices there */
     long relaid = 0;
+    /* where the drawing's CPU time goes (ms over the frames since the last log) */
+    double tUpload = 0, tBounds = 0, tMasks = 0, tLoop = 0, tLayout = 0;
+    int timedFrames = 0;
     bool batch = true;
     size_t pendOff = 0;             /* the run waiting to be drawn: its indices */
     int pendCount = 0;
@@ -56,6 +61,23 @@ struct State {
     }
 };
 extern State g;
+
+inline double Now() {
+    timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return t.tv_sec * 1000.0 + t.tv_nsec / 1e6;
+}
+/* every 150 frames (10 s at 15 fps): the drawing's parts, a frame */
+inline void LogTiming() {
+    if (++g.timedFrames < 150) return;
+    const double n = g.timedFrames;
+    fprintf(stderr, "fast path: upload %.2f ms, mask bounds %.2f, masks %.2f, drawables %.2f, layout %.2f; "
+                    "%ld draws a frame, laid out %ld times\n",
+            g.tUpload / n, g.tBounds / n, g.tMasks / n, g.tLoop / n, g.tLayout / n, (long)(g.draws / n), g.relaid);
+    g.tUpload = g.tBounds = g.tMasks = g.tLoop = g.tLayout = 0;
+    g.timedFrames = 0;
+    g.draws = g.drawables = g.relaid = 0;
+}
 
 inline size_t IndexSize() { return g.indexType == GL_UNSIGNED_INT ? 4 : 2; }
 /* draws the waiting run; before any state change goes to GL */

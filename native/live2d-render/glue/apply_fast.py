@@ -99,7 +99,9 @@ rep('''    BeforeDrawModelRenderTarget();
         if (g.on)
         {
             g.newFrame();
+            const double u0 = csmfast::Now();
             csmFastUpload(*GetModel());
+            g.tUpload += csmfast::Now() - u0;
             glBindVertexArray(g.vao);
             glFrontFace(GL_CCW);
         }
@@ -115,12 +117,10 @@ rep('''    PostDraw();
 
     if (csmfast::g.on)
     {
-        static int frames = 0;
-        if (++frames == 30)
-            fprintf(stderr, "fast path: %ld drawables in %ld draws a frame (%s), laid out %ld times in 30 frames\\n",
-                    csmfast::g.drawables / 30, csmfast::g.draws / 30, csmfast::g.batch ? "batched" : "CUBISM_NOBATCH",
-                    csmfast::g.relaid);
+        const double l0 = csmfast::Now();
         csmfast::EndFrame();
+        csmfast::g.tLayout += csmfast::Now() - l0;
+        csmfast::LogTiming();
         glBindVertexArray(0);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glUseProgram(0);
@@ -154,6 +154,53 @@ rep('''        return; // モデルが参照するテクスチャがバインド
 s = s.replace('_currentMaskBuffer->EndDraw();', 'csmfast::Flush(); _currentMaskBuffer->EndDraw();')
 if s.count('csmfast::Flush(); _currentMaskBuffer->EndDraw();') != 2:
     sys.exit('mask EndDraw anchors changed')
+def rep_once(a, b):
+    global s
+    if s.count(a) != 1:
+        sys.exit('anchor found %d times: %r' % (s.count(a), a[:80]))
+    s = s.replace(a, b)
+# timing: the drawables' loop, the masks, and the masks' bounds
+rep_once('''    DrawObjectLoop(lastFBO, lastViewport);
+''', '''    const double d0 = csmfast::Now();
+    DrawObjectLoop(lastFBO, lastViewport);
+    csmfast::Flush();
+    csmfast::g.tLoop += csmfast::Now() - d0;
+''')
+rep_once('''            _drawableClippingManager->SetupClippingContext(*GetModel(), this, lastFBO, lastViewport, DrawableObjectType_Drawable);''',
+'''            const double m0 = csmfast::Now(), b0 = csmfast::g.tBounds;
+            _drawableClippingManager->SetupClippingContext(*GetModel(), this, lastFBO, lastViewport, DrawableObjectType_Drawable);
+            csmfast::g.tMasks += csmfast::Now() - m0 - (csmfast::g.tBounds - b0);''')
+rep_once('''    csmInt32 usingClipCount = 0;
+    for (csmUint32 clipIndex = 0; clipIndex < _clippingContextListForMask.GetSize(); clipIndex++)
+    {
+        // １つのクリッピングマスクに関して
+        CubismClippingContext_OpenGLES2* cc = _clippingContextListForMask[clipIndex];
+
+        // このクリップを利用する描画オブジェクト群全体を囲む矩形を計算
+        CalcClippedTotalBounds(model, cc, drawableObjectType);
+
+        if (cc->_isUsing)
+        {
+            usingClipCount++; //使用中としてカウント
+        }
+    }
+''', '''    csmInt32 usingClipCount = 0;
+    const double cb0 = csmfast::Now();
+    for (csmUint32 clipIndex = 0; clipIndex < _clippingContextListForMask.GetSize(); clipIndex++)
+    {
+        // １つのクリッピングマスクに関して
+        CubismClippingContext_OpenGLES2* cc = _clippingContextListForMask[clipIndex];
+
+        // このクリップを利用する描画オブジェクト群全体を囲む矩形を計算
+        CalcClippedTotalBounds(model, cc, drawableObjectType);
+
+        if (cc->_isUsing)
+        {
+            usingClipCount++; //使用中としてカウント
+        }
+    }
+    csmfast::g.tBounds += csmfast::Now() - cb0;
+''')
 open('CubismRenderer_OpenGLES2.cpp', 'w', encoding='utf-8').write(s)
 
 # the shader file: the per-draw GL calls go through the cache (it passes them through when the fast path is off)
