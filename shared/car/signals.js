@@ -38,6 +38,31 @@ const BYTE_NONE = 255; // a byte signal's "none" (fuel, outside temperature, bat
 const SLOPE_LEVEL = 1280; // LaneSlope: the gradient count when level (car/signals.js _onSlope)
 const SLOPE_PCT = 0.1; // and its grade a count, %
 const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the binding may hand enums over as numbers)
+// Bump probe (temporary, Nov 16 2026): can the pitch and roll rates (CDS datenFahrdynamiksensorErweitert) or the
+// vertical g (BasicDataSet) see road bumps? With the slope (config.attitude, the HUD): each one's first message whole,
+// then, moving, every update once a second: "bump probe <what> <km/h> km/h <n>: +<ms since the last> <values>"
+const BUMP_PROBE = true;
+const BUMP_PROBE_MS = 1000;
+/** @type {Array<{ what: string, iface: string, field: string, members: string[] }>} */
+const BUMP_PROBES = [
+  {
+    what: "rates",
+    iface: "de.bmw.infotainment.vehicle.CDS",
+    field: "datenFahrdynamiksensorErweitert",
+    members: [
+      "nickgeschwindigkeitSchwerpunkt",
+      "wankgeschwindigkeitSchwerpunkt",
+      "qualifierNickgeschwindigkeitSchwerpunkt",
+      "qualifierWankgeschwindigkeitSchwerpunkt",
+    ],
+  },
+  {
+    what: "vertical",
+    iface: "de.bmw.infrastructure.analytics.BasicDataSet",
+    field: "basicDataSet",
+    members: ["verticalAccelerationCenterOfGravity", "qualifierVerticalAccelerationCenterOfGravity"],
+  },
+];
 // Door probe (temporary, Nov 16 2026): does the car send which door, the trunk or the hood is open? With the slope
 // (config.attitude, the HUD), DoorsWindowsRoofMirrors CentralLockingSystemAndPanelStatus2 is logged on every change.
 const DOOR_PROBE = true;
@@ -861,6 +886,47 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         { CentralLockingSystemAndPanelStatus2: (msg) => this._guard("doors", () => this._probeDoors(msg)) },
         "doors",
       );
+    if (BUMP_PROBE)
+      BUMP_PROBES.forEach((b) =>
+        watch(b.iface, "1", { [b.field]: (msg) => this._guard("bump " + b.what, () => this._probeBump(b, msg)) }, "bump " + b.what),
+      );
+  },
+
+  /**
+   * The bump probe (BUMP_PROBE): the first message whole, then each update while moving, flushed every BUMP_PROBE_MS.
+   * @param {{ what: string, members: string[] }} b
+   * @param {*} msg
+   * @returns {void}
+   */
+  _probeBump(b, msg) {
+    const all = this.bumpProbe || (this.bumpProbe = {});
+    const now = Date.now(),
+      d = this.car ? this.car.data() : {},
+      speed = isNum(d.speed) ? d.speed : null;
+    let p = all[b.what];
+    if (!p) {
+      p = all[b.what] = { at: now, last: 0, items: /** @type {string[]} */ ([]) };
+      let whole = "";
+      try {
+        whole = JSON.stringify(msg);
+      } catch (e) {
+        whole = String(msg);
+      }
+      this.log.info("bump probe " + b.what + " first: " + whole.slice(0, 1500));
+    }
+    if (speed !== null && speed > 1) {
+      const vals = b.members.map((m) => {
+        const v = msg ? msg[m] : undefined;
+        return isNum(v) ? String(Math.round(v * 1000) / 1000) : String(v);
+      });
+      p.items.push("+" + (p.last ? now - p.last : 0) + " " + vals.join(" "));
+    }
+    p.last = now;
+    if (now - p.at < BUMP_PROBE_MS) return;
+    if (p.items.length)
+      this.log.info("bump probe " + b.what + " " + Math.round(speed || 0) + " km/h " + p.items.length + ": " + p.items.join(", "));
+    p.at = now;
+    p.items = [];
   },
 
   /**
