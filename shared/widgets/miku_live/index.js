@@ -92,6 +92,7 @@ const BREATH_HZ = 0.25; // and breathing (the idle loop breathes when she's stop
 // (live2d-render's "offset"), as if riding along: [amplitude px, base Hz], the same mix of three waves with random
 // phases, faded out as her idle comes in
 const BOB = [3, 0.21];
+const BOB_NOD = 3; // and her head nods with it: down this many degrees (ParamAngleY) at the bob's full dip
 const BOB_SEND_PX = 0.1; // an offset moving less than this isn't sent
 // Holding a turn, she looks along it GLANCE_AWAY_MS, then glances back at you: her eyes swing to the side opposite
 // her turned head (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all,
@@ -269,12 +270,12 @@ function drive(hud, state, now) {
   }
   state.glanceN = glanceN;
   const glanceW = glancing ? glanceWeight(state.holdMs) * Math.min(1, Math.abs(state.point || 0)) : 0;
-  // the expressions: on after standing still STILL_MS, or with an indicator (until her head is back); off past
-  // ZOOM_OUT_KMH
+  // the expressions: on after standing still STILL_MS, or with an indicator; off past ZOOM_OUT_KMH. They go off as
+  // the indicator does, while her head turns back, as they come on with it
   const speed = hud._raw("speed"),
     still = isNum(speed) && speed < STILL_KMH;
   state.stillMs = still ? (state.stillMs || 0) + dt : 0;
-  if (hud._turnSide() || Math.abs(state.point || 0) > TURN_BACK) state.zoomT = 1;
+  if (hud._turnSide()) state.zoomT = 1;
   else if (!isNum(speed) || speed > ZOOM_OUT_KMH) state.zoomT = 0;
   else if (state.stillMs >= STILL_MS) state.zoomT = 1;
   const zoom = isNum(state.zoom) ? state.zoom : 0,
@@ -298,8 +299,10 @@ function drive(hud, state, now) {
   // faded out as her idle loop comes in: it plays only with the expressions on and her head not turned (pose.js)
   const idleShown = y * (1 - Math.min(1, turned * Math.max(1, (state.rig && state.rig.turn && state.rig.turn.steps) || 1)));
   state.bobY = bob(state.bobPhase, now / 1000, 1 - idleShown);
+  const extra = wander(state.wanderPhase, now / 1000, 1 - y);
+  extra.ParamAngleY = (extra.ParamAngleY || 0) - (BOB_NOD * state.bobY) / BOB[0];   // her head dips as she does
   return {
-    extra: wander(state.wanderPhase, now / 1000, 1 - y),
+    extra,
     lean: Math.tanh(state.lean * LEAN_SOFT) / Math.tanh(LEAN_SOFT),
     turn: state.point,
     y,
