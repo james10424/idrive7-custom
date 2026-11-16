@@ -76,7 +76,12 @@
     body:not(.only) #views.multi { flex-direction: row; align-items: flex-start; }
     body:not(.only) #log { grid-column: auto; grid-area: log; height: auto; }
     body:not(.only) aside { grid-area: aside; min-height: 0; overflow-y: auto; gap: 10px; }
+    body.logmin:not(.only) main { grid-template-rows: minmax(0, 1fr) 34px; }
   }
+  /* the log folded to its last line (the stage's "log" box off): the displays get its height */
+  body.logmin #log { height: 34px; overflow: hidden; padding-top: 6px; padding-bottom: 6px; cursor: pointer; }
+  body.logmin #log > div:not(:last-child) { display: none; }
+  body.logmin #log > div:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status { font-size: 13px; padding: 8px 10px; margin: 4px 0 10px; border-radius: 6px; background: rgba(127,127,127,.12); white-space: pre-line; }
 </style>
 </head>
@@ -101,6 +106,7 @@
       <label class="chk" title="BMW's own HUD content, drawn over our layers as the car does: its speed and speed-limit sign bottom-left (x 150..355, y 314..378, measured Nov 5 2026). The limit is a stand-in: the bench has no speed-limit signal."><input type="checkbox" id="bmwhud" checked> BMW's HUD</label>
       <label class="chk" title="What the driver sees: the hood hides the top corners of the cluster, the dash camera hides its top middle, and BMW draws its gear box and belt light over us; on the HUD only a window is visible through the windshield. Measured from car photos, Nov 5 2026 (shared/visible.js)."><input type="checkbox" id="carview" checked> car view</label>
       <label class="chk" title="The HUD shows only its visible window (the part the driver sees through the windshield), scaled up to fill the width; off: the whole 800x480 target."><input type="checkbox" id="zoomWin" checked> visible window only</label>
+      <label class="chk" title="The whole log under the displays; off: folded to its last line (click it to unfold), and the displays get its height."><input type="checkbox" id="logFull" checked> log</label>
       <label class="chk" title="Draw the displays (at most 30 times a second, as cluster-render; a screen only when something on it changed, an effect only when its inputs did). Off: the picture holds still and the page uses next to no CPU, and live2d-render (Miku Live2D, in Docker) is paused; the apps, the renderer and the layers table keep running."><input type="checkbox" id="redraw" checked> redraw</label>
       <button id="bakeBackdrop" title="Backdrop bake mode only (the bench started with CLUSTER_BACKDROP_BAKE=1, launch config bench-backdrop): captures the cluster's display (outlines, backdrop and car view off) and writes it as the layout's ETC2 backdrop for the current Units setting, apps/&lt;app&gt;/hud/backdrops/ (engine/backdrop.js). Bake once per Units setting.">bake backdrop</button>
       <span id="fps"></span>
@@ -658,7 +664,11 @@
       if (pane.crop && zoomOn()) {
         const win = geo.HUD_WINDOW;
         if (pane.crop.width !== win.w || pane.crop.height !== win.h) { pane.crop.width = win.w; pane.crop.height = win.h; }
-        pane.crop.getContext('2d').drawImage(canvas, win.x, win.y, win.w, win.h, 0, 0, win.w, win.h);
+        // cleared first: the target is transparent where nothing is drawn, and drawing it over the last copy
+        // wouldn't erase that (her frames piled up)
+        const cropCtx = pane.crop.getContext('2d');
+        cropCtx.clearRect(0, 0, win.w, win.h);
+        cropCtx.drawImage(canvas, win.x, win.y, win.w, win.h, 0, 0, win.w, win.h);
       }
       if (/[?&]dbg=1/.test(location.search)) { ctx.fillStyle = '#ff0'; ctx.font = '20px monospace'; ctx.fillText('msgs ' + dbgN + ' last ' + dbgLast + ' images ' + images.size + ' px ' + dbgPx + ' reads ' + dbgReads + ' buf ' + dbgBuf + ' err ' + dbgErr, 20, VH - 20); }
       });
@@ -678,6 +688,17 @@
       pane.crop.style.display = zoomOn() ? '' : 'none';
     });
   }
+  /** The log full or folded to its last line, remembered in this browser. */
+  function setLogFull(full) {
+    document.getElementById('logFull').checked = full;
+    document.body.classList.toggle('logmin', !full);
+    try { localStorage.setItem('benchLogFull', full ? '1' : '0'); } catch (e) { /* no storage */ }
+    if (full) logEl.scrollTop = logEl.scrollHeight;
+    markDirty();
+  }
+  try { if (localStorage.getItem('benchLogFull') === '0') setLogFull(false); } catch (e) { /* no storage */ }
+  document.getElementById('logFull').addEventListener('change', (e) => setLogFull(e.target.checked));
+  logEl.addEventListener('click', () => { if (document.body.classList.contains('logmin')) setLogFull(true); });
   try { if (localStorage.getItem('benchZoomWin') === '0') document.getElementById('zoomWin').checked = false; } catch (e) { /* no storage */ }
   document.getElementById('zoomWin').addEventListener('change', (e) => {
     try { localStorage.setItem('benchZoomWin', e.target.checked ? '1' : '0'); } catch (err) { /* no storage */ }
