@@ -38,6 +38,10 @@ const BYTE_NONE = 255; // a byte signal's "none" (fuel, outside temperature, bat
 const SLOPE_LEVEL = 1280; // LaneSlope: the gradient count when level (car/signals.js _onSlope)
 const SLOPE_PCT = 0.1; // and its grade a count, %
 const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the binding may hand enums over as numbers)
+// LaneSlope probe (temporary, Nov 16 2026): is it fast and raw enough to see road bumps? Every update, moving, goes to
+// the journal once a second: "slope probe <km/h> km/h <n>: +<ms since the last> <lon> <tr> <gLong>" (counts from level)
+const SLOPE_PROBE = true;
+const SLOPE_PROBE_MS = 1000;
 const RANGE_NONE = 4095; // KombiIF range: none
 const MILEAGE_NONE = 0xffffff; // a 24-bit mileage: none
 const CONS_NONE = 65535; // a consumption raw: none
@@ -859,6 +863,33 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     // bank: the left side lower is +, as the F-16's bank (a left turn's lateral g banks it left)
     this.slopeRoll = tr !== null && ok(msg.qualifierActualValueTransverseGradientRoadway) ? -deg(tr) : null;
     this.slopeAt = Date.now();
+    if (SLOPE_PROBE) this._probeSlope(lon, tr);
+  },
+
+  /**
+   * The LaneSlope probe (SLOPE_PROBE): one entry an update while moving, flushed to the log each SLOPE_PROBE_MS.
+   * @param {?number} lon
+   * @param {?number} tr
+   * @returns {void}
+   */
+  _probeSlope(lon, tr) {
+    const now = Date.now(),
+      d = this.car ? this.car.data() : {},
+      speed = isNum(d.speed) ? d.speed : null;
+    const p = this.slopeProbe || (this.slopeProbe = { at: 0, last: 0, n: 0, items: /** @type {string[]} */ ([]) });
+    if (speed !== null && speed > 1) {
+      const rel = (/** @type {?number} */ c) => (c === null ? "-" : String(c - SLOPE_LEVEL));
+      const g = isNum(d.gLong) ? (Math.round(d.gLong * 1000) / 1000).toFixed(3) : "-";
+      p.items.push("+" + (p.last ? now - p.last : 0) + " " + rel(lon) + " " + rel(tr) + " " + g);
+      p.n++;
+    }
+    p.last = now;
+    if (now - p.at < SLOPE_PROBE_MS) return;
+    if (p.items.length)
+      this.log.info("slope probe " + Math.round(speed || 0) + " km/h " + p.n + ": " + p.items.join(", "));
+    p.at = now;
+    p.n = 0;
+    p.items = [];
   },
 
   /**
