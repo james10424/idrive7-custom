@@ -503,42 +503,6 @@ export namespace de.bmw.infotainment.hmi.hmimediastatetypes.HmiMediaStateTypes {
 }
 
 export namespace de.bmw.infotainment.misctypes.MiscTypes {
-  interface BasicDataSetWrapper {
-    lateralAccelerationCentreOfGravity?: number;
-    qualifierLateralAccelerationCentreOfGravity?: de.bmw.infotainment.misctypes.MiscTypes.QualifierLateralAccelerationCentreOfGravity;
-    longitudinalAccelerationCentreOfGravity?: number;
-    qualifierLongitudinalAccelerationCentreOfGravity?: de.bmw.infotainment.misctypes.MiscTypes.QualifierLongitudinalAccelerationSchwerpunkt2;
-    verticalAccelerationCenterOfGravity?: number;
-    qualifierVerticalAccelerationCenterOfGravity?: de.bmw.infotainment.misctypes.MiscTypes.QualifierVerticalAccelerationCentreOfGravity;
-    groundUnevenessRightBackend?: number;
-    operationHornButton?: de.bmw.infotainment.misctypes.MiscTypes.OperationPushButtonHorn;
-    rpmEmETractSys1ActualValue?: number;
-    torquerpmEmETractSys1ActualValue?: number;
-    qualifierRpmEmETractSys1ActualValue?: de.bmw.infotainment.misctypes.MiscTypes.QualifierEMMotorActualValue;
-    rpmEmETractSys2ActualValue?: number;
-    torqueEmETractSys2ActualValue?: number;
-    qualifierRpmEmETractSys2ActualValue?: de.bmw.infotainment.misctypes.MiscTypes.QualifierEMMotorActualValue;
-    mueEstimatedTyresStreet?: number;
-    mueEstimatedTyresStreetErrorAmplitude?: number;
-    valueAirPressureMotor?: number;
-    valueTemperatureTransmissionOil?: number;
-    valueTemperatureDcDcConverter?: number;
-    operationGearSelectorSwitch?: de.bmw.infotainment.misctypes.MiscTypes.OperationGearSelectionSwitch;
-    qualifierValueDistributionLongitudinalTorqueRearAxisFrontAxis?: de.bmw.infotainment.misctypes.MiscTypes.QualifierActualValueRepartitionLongitudinalTorqueFrontAxleBackAxle;
-    valueDistributionLongitudinalTorqueRearAxisFrontAxis?: number;
-    fillingLevelScrActiveTank?: number;
-    statusAutonomousDriving?: number;
-    valueTemperatureScrCatalyticConverter?: number;
-    valueTemperatureFuel?: number;
-    statusEngineSpeed?: number;
-    qualifierStatusEngineSpeed?: de.bmw.infotainment.misctypes.MiscTypes.QualifierActualValueRPMMotorCrankshaft;
-    statusVoltageIntelligentBoardnetSensor?: number;
-    valueFuelTankRelativePressure?: number;
-    statusCombustionEngine?: de.bmw.infotainment.misctypes.MiscTypes.StatusCombustionEngineDrive;
-    statusAnnouncementMSAEngine?: de.bmw.infotainment.misctypes.MiscTypes.StatusAnnouncementMSAEngineStop;
-    dataFogUpWindowFront?: number;
-  }
-
   interface DataDisplayGearboxWrapper {
     displayProgramGearbox?: de.bmw.infotainment.misctypes.MiscTypes.DisplayProgramGearbox;
     displayDriveLogicGearbox?: de.bmw.infotainment.misctypes.MiscTypes.DisplayDriveLogicGearbox;
@@ -549,36 +513,6 @@ export namespace de.bmw.infotainment.misctypes.MiscTypes {
 
   /** DUNKELSCHALTUNG 0, S_MINUS_PROGRAMM 1, M_MINUS_PROGRAMM 2, L_MINUS_PROGRAMM 3, C_MINUS_PROGRAMM 4, B_PROGRAMM 5, SIGNAL_UNGUELTIG 7 */
   type DisplayProgramGearbox = "DUNKELSCHALTUNG" | "S_MINUS_PROGRAMM" | "M_MINUS_PROGRAMM" | "L_MINUS_PROGRAMM" | "C_MINUS_PROGRAMM" | "B_PROGRAMM" | "SIGNAL_UNGUELTIG" | number;
-
-  /** NA 0, R 1, N 2, D 3, M_MINUS 4, M_PLUS 5, M_S 6, M 7, L 8, INIT 14, SIGNAL_UNGUELTIG 15 */
-  type OperationGearSelectionSwitch = "NA" | "R" | "N" | "D" | "M_MINUS" | "M_PLUS" | "M_S" | "M" | "L" | "INIT" | "SIGNAL_UNGUELTIG" | number;
-
-  /** KEINE_AKTION 0, HORN_MINUS_TASTER_GEDRUECKT 1, SIGNAL_UNGUELTIG 3 */
-  type OperationPushButtonHorn = "KEINE_AKTION" | "HORN_MINUS_TASTER_GEDRUECKT" | "SIGNAL_UNGUELTIG" | number;
-
-  /** SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT 1, SIGNALWERT_IST_GUELTIG_NOCKENWELLENNOTLAUF 2, FEHLER 6, INITIALISIERUNG 8, RESERVIERT 14, SIGNAL_UNBEFUELLT 15 */
-  type QualifierActualValueRPMMotorCrankshaft = "SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT" | "SIGNALWERT_IST_GUELTIG_NOCKENWELLENNOTLAUF" | "FEHLER" | "INITIALISIERUNG" | "RESERVIERT" | "SIGNAL_UNBEFUELLT" | number;
-
-  /** SIGNALWERT_IST_GUELTIG 2, SIGNALWERT_IST_UNGUELTIG 6, INITIALISIERUNG 8, SIGNALWERT_IST_GUELTIG__REKALIBRIERUNGSBEDARF 10, ABGLEICHWERT_IST_IM_NUTZSIGNAL_GESETZT___ZUSTAND_S_STATUS_TEMPORAER 12, SIGNAL_UNGUELTIG 15 */
-  type QualifierActualValueRepartitionLongitudinalTorqueFrontAxleBackAxle = "SIGNALWERT_IST_GUELTIG" | "SIGNALWERT_IST_UNGUELTIG" | "INITIALISIERUNG" | "SIGNALWERT_IST_GUELTIG__REKALIBRIERUNGSBEDARF" | "ABGLEICHWERT_IST_IM_NUTZSIGNAL_GESETZT___ZUSTAND_S_STATUS_TEMPORAER" | "SIGNAL_UNGUELTIG" | number;
-
-  /** WERT_GUELTIG_HOECHSTE_QUALITAET 1, WERT_GUELTIG_EINFACHE_QUALITAET 2, WERT_GUELTIG_EINGESCHRAENKT 3, WERT_GUELTIG_ERSATZWERT 4, WERT_NICHT_VERFUEGBAR_FEHLER 6, WERT_GUELTIG_MITTLERE_QUALITAET 9, WERT_NICHT_VERFUEGBAR 14, SIGNAL_UNBEFUELLT 15 */
-  type QualifierEMMotorActualValue = "WERT_GUELTIG_HOECHSTE_QUALITAET" | "WERT_GUELTIG_EINFACHE_QUALITAET" | "WERT_GUELTIG_EINGESCHRAENKT" | "WERT_GUELTIG_ERSATZWERT" | "WERT_NICHT_VERFUEGBAR_FEHLER" | "WERT_GUELTIG_MITTLERE_QUALITAET" | "WERT_NICHT_VERFUEGBAR" | "SIGNAL_UNBEFUELLT" | number;
-
-  /** SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT 1, SIGNALWERT_IST_GUELTIG 2, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT 3, RESERVED 4, SIGNALWERT_IST_UNGUELTIG 6, RESERVED_1 7, INITIALISIERUNG 8, SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT__ZUSTAND_S_STATUS_TEMPORAER 9, SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER 10, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER 11, ERSATZWERT_IST_IM_NUTZSIGNAL_GESETZT__ZUSTAND_S_STATUS_TEMPORAER 12, SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER 14, SIGNAL_UNGUELTIG 15 */
-  type QualifierLateralAccelerationCentreOfGravity = "SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT_UND_PLAUSIBILISIERT" | "SIGNALWERT_IST_GUELTIG" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT" | "RESERVED" | "SIGNALWERT_IST_UNGUELTIG" | "RESERVED_1" | "INITIALISIERUNG" | "SIGNALWERT_IST_GUELTIG_UND_ABGESICHERT__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER" | "ERSATZWERT_IST_IM_NUTZSIGNAL_GESETZT__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNAL_UNGUELTIG" | number;
-
-  /** RESERVED 1, SIGNALWERT_IST_GUELTIG 2, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT 3, RESERVED_1 4, SIGNALWERT_IST_UNGUELTIG 6, RESERVED_2 7, INITIALISIERUNG 8, RESERVED_3 9, SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER 10, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER 11, ERSATZWERT_IST_IM_NUTZSIGNAL_GESETZT__ZUSTAND_S_STATUS_TEMPORAER 12, SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER 14, SIGNAL_UNGUELTIG 15 */
-  type QualifierLongitudinalAccelerationSchwerpunkt2 = "RESERVED" | "SIGNALWERT_IST_GUELTIG" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT" | "RESERVED_1" | "SIGNALWERT_IST_UNGUELTIG" | "RESERVED_2" | "INITIALISIERUNG" | "RESERVED_3" | "SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER" | "ERSATZWERT_IST_IM_NUTZSIGNAL_GESETZT__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNAL_UNGUELTIG" | number;
-
-  /** RESERVED 1, SIGNALWERT_IST_GUELTIG 2, SIGNALWERT_IST_NICHT_VERTRAUENSWUERDIG 3, RESERVED_1 4, SIGNALWERT_IST_UNGUELTIG 6, SENSOR_NICHT_VORHANDEN 7, INITIALISIERUNG 8, RESERVED_2 9, SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER 10, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER 11, ABGLEICHWERT_IST_IM_NUTZSIGNAL_GESETZT___ZUSTAND_S_STATUS_TEMPORAER 12, SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER 14, SIGNAL_UNGUETLIG 15 */
-  type QualifierVerticalAccelerationCentreOfGravity = "RESERVED" | "SIGNALWERT_IST_GUELTIG" | "SIGNALWERT_IST_NICHT_VERTRAUENSWUERDIG" | "RESERVED_1" | "SIGNALWERT_IST_UNGUELTIG" | "SENSOR_NICHT_VORHANDEN" | "INITIALISIERUNG" | "RESERVED_2" | "SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER" | "ABGLEICHWERT_IST_IM_NUTZSIGNAL_GESETZT___ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNAL_UNGUETLIG" | number;
-
-  /** KEIN_ANKUENDIGUNG 0, ANKUENDIGUNG_MSA_MINUS_MOTORSTOPP 1, SIGNAL_UNGUELTIG 3 */
-  type StatusAnnouncementMSAEngineStop = "KEIN_ANKUENDIGUNG" | "ANKUENDIGUNG_MSA_MINUS_MOTORSTOPP" | "SIGNAL_UNGUELTIG" | number;
-
-  /** MOTOR_STEHT 0, MOTOR_STARTET 1, MOTOR_LAEUFT 2, MOTOR_IM_AUSLAUF 3, FUNKTIONSSCHNITTSTELLE_IST_NICHT_VERFUEGBAR 13, RESERVIERT 14, SIGNAL_UNBEFUELLT 15 */
-  type StatusCombustionEngineDrive = "MOTOR_STEHT" | "MOTOR_STARTET" | "MOTOR_LAEUFT" | "MOTOR_IM_AUSLAUF" | "FUNKTIONSSCHNITTSTELLE_IST_NICHT_VERFUEGBAR" | "RESERVIERT" | "SIGNAL_UNBEFUELLT" | number;
 }
 
 export namespace de.bmw.infotainment.navigation.CommonTypes {
@@ -769,13 +703,6 @@ export namespace de.bmw.infotainment.vehicletypes.VehicleTypes {
     speedVehicleCentreOfGravity?: number;
   }
 
-  interface DatenFahrdynamiksensorErweitertWrapper {
-    wankgeschwindigkeitSchwerpunkt?: number;
-    nickgeschwindigkeitSchwerpunkt?: number;
-    qualifierWankgeschwindigkeitSchwerpunkt?: de.bmw.infotainment.vehicletypes.VehicleTypes.QualifierRollVelocityCentreOfGravity;
-    qualifierNickgeschwindigkeitSchwerpunkt?: de.bmw.infotainment.vehicletypes.VehicleTypes.QualifierPitchVelocityCentreOfGravity;
-  }
-
   interface EngineTemperatureWrapper {
     temperatureEngineDrive?: number;
     temperatureEngineOilDrive?: number;
@@ -800,12 +727,6 @@ export namespace de.bmw.infotainment.vehicletypes.VehicleTypes {
 
   /** DEFAULT 0, REIHENFOLGE__TAG_P_MONAT_P_JAHR 1, REIHENFOLGE__MONAT_S_TAG_S_JAHR 2, REIHENFOLGE__TAG_S_MONAT_S_JAHR 3, REIHENFOLGE__TAG_MINUS_MONAT_MINUS_JAHR 4, REIHENFOLGE__JAHR_P_MONAT_P_TAG 5, REIHENFOLGE__JAHR_S_MONAT_S_TAG 6, REIHENFOLGE__JAHR_MINUS_MONAT_MINUS_TAG 7, SIGNAL_UNGUELTIG 31 */
   type OperationUnitOfMeasurementDateExtended = "DEFAULT" | "REIHENFOLGE__TAG_P_MONAT_P_JAHR" | "REIHENFOLGE__MONAT_S_TAG_S_JAHR" | "REIHENFOLGE__TAG_S_MONAT_S_JAHR" | "REIHENFOLGE__TAG_MINUS_MONAT_MINUS_JAHR" | "REIHENFOLGE__JAHR_P_MONAT_P_TAG" | "REIHENFOLGE__JAHR_S_MONAT_S_TAG" | "REIHENFOLGE__JAHR_MINUS_MONAT_MINUS_TAG" | "SIGNAL_UNGUELTIG" | number;
-
-  /** RESERVED 1, SIGNALWERT_IST_GUELTIG 2, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT 3, RESERVED_1 4, SIGNALWERT_IST_UNGUELTIG 6, SENSOR_NICHT_VORHANDEN 7, INITIALISIERUNG 8, RESERVED_2 9, SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER 10, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER 11, ERSATZWERT_IST_IM_NUTZSIGNAL_GESETZT__ZUSTAND_S_STATUS_TEMPORAER 12, SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER 14, SIGNAL_UNGUELTIG 15 */
-  type QualifierPitchVelocityCentreOfGravity = "RESERVED" | "SIGNALWERT_IST_GUELTIG" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT" | "RESERVED_1" | "SIGNALWERT_IST_UNGUELTIG" | "SENSOR_NICHT_VORHANDEN" | "INITIALISIERUNG" | "RESERVED_2" | "SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER" | "ERSATZWERT_IST_IM_NUTZSIGNAL_GESETZT__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNAL_UNGUELTIG" | number;
-
-  /** RESERVED 1, SIGNALWERT_IST_GUELTIG 2, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT 3, RESERVED_1 4, SIGNALWERT_IST_UNGUELTIG 6, SENSOR_NICHT_VORHANDEN 7, INITIALISIERUNG 8, RESERVED_2 9, SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER 10, SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER 11, ERSATZWERT_IST_IM_NUTZSIGNAL_GESETZT__ZUSTAND_S_STATUS_TEMPORAER 12, SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER 14, SIGNAL_UNGUELTIG 15 */
-  type QualifierRollVelocityCentreOfGravity = "RESERVED" | "SIGNALWERT_IST_GUELTIG" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT" | "RESERVED_1" | "SIGNALWERT_IST_UNGUELTIG" | "SENSOR_NICHT_VORHANDEN" | "INITIALISIERUNG" | "RESERVED_2" | "SIGNALWERT_IST_GUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALQUALITAET_BZW_P__UEBERWACHUNG_EINGESCHRAENKT__ZUSTAND_S_STATUS_TEMPORAER" | "ERSATZWERT_IST_IM_NUTZSIGNAL_GESETZT__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNALWERT_IST_UNGUELTIG__ZUSTAND_S_STATUS_TEMPORAER" | "SIGNAL_UNGUELTIG" | number;
 
   /** KEINE_ZYLINDER_VORHANDEN 0, _3_ZYLINDER 3, _4_ZYLINDER 4, _5_ZYLINDER 5, _6_ZYLINDER 6, _8_ZYLINDER 8, _10_ZYLINDER 10, _12_ZYLINDER 12, SIGNAL_UNGUELTIG 15 */
   type QuantityCylinder = "KEINE_ZYLINDER_VORHANDEN" | "_3_ZYLINDER" | "_4_ZYLINDER" | "_5_ZYLINDER" | "_6_ZYLINDER" | "_8_ZYLINDER" | "_10_ZYLINDER" | "_12_ZYLINDER" | "SIGNAL_UNGUELTIG" | number;
@@ -1085,7 +1006,6 @@ export interface Fields {
     currentConsumption: de.bmw.infotainment.resetlogictypes.ResetLogicTypes.CurrentConsumptions;
   };
   "de.bmw.infotainment.vehicle.CDS": {
-    datenFahrdynamiksensorErweitert: de.bmw.infotainment.vehicletypes.VehicleTypes.DatenFahrdynamiksensorErweitertWrapper;
     statusBattery2: de.bmw.infotainment.vehicletypes.VehicleTypes.StatusBattery2Wrapper;
     statusEngineSpeed2: de.bmw.infotainment.vehicletypes.VehicleTypes.StatusEngineSpeed2Wrapper;
     statusEngineTemperature: de.bmw.infotainment.vehicletypes.VehicleTypes.EngineTemperatureWrapper;
@@ -1119,9 +1039,6 @@ export interface Fields {
   "de.bmw.infrastructure.VehicleInformation": {
     DataPowerTrain2: de.bmw.infrastructuretypes.InfrastructureTypes.DataPowerTrain2Wrapper;
     statusGearboxDrive: de.bmw.infrastructuretypes.InfrastructureTypes.StatusGearboxDriveWrapper;
-  };
-  "de.bmw.infrastructure.analytics.BasicDataSet": {
-    basicDataSet: de.bmw.infotainment.misctypes.MiscTypes.BasicDataSetWrapper;
   };
   "de.bmw.powertrain.AcceleratorPedal": {
     AngleAcceleratorPedal: de.bmw.powertraintypes.PowertrainTypes.AngleAcceleratorPedalWrapper;

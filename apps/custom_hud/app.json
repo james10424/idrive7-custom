@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.54",
+  "version": "0.1.55",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -27,8 +27,7 @@
     },
     "de.bmw.infotainment.vehicle.CDS": {
       "statusEngineSpeed2": "rs",
-      "statusEngineTemperature": "rs",
-      "datenFahrdynamiksensorErweitert": "rs"
+      "statusEngineTemperature": "rs"
     },
     "de.bmw.infotainment.vehicle.CDS2": {
       "statusLongitudinalAccelerationMassCenter": "rs",
@@ -80,10 +79,6 @@
     "de.bmw.body.DoorsWindowsRoofMirrors": {
       "CentralLockingSystemAndPanelStatus2": "s",
       "_optional": "the door probe (car/signals.js DOOR_PROBE): which doors, the trunk and the hood are open"
-    },
-    "de.bmw.infrastructure.analytics.BasicDataSet": {
-      "basicDataSet": "s",
-      "_optional": "the bump probe (car/signals.js BUMP_PROBE): vertical g"
     },
     "de.bmw.infotainment.navigation.positioning.Positioning": {
       "_instances": "Main_Instance",
