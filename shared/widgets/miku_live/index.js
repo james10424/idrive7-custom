@@ -60,7 +60,10 @@ close.height), "fps" (20), "core" (2: Cubism Core every other frame, the frames 
 const LIVE_MS = 50; // her update rate: live2d-render draws at 20 fps
 const LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly
 const LEAN_G = 0.4; // this longitudinal g is a full lean
-const LEAN_SOFT = 1.15; // the lean's soft limit (tanh gain)
+const LEAN_DEAD_G = 0.02;
+const LEAN_K = 4; // her lean eases out: 1 - e^(-k x) of a full lean at x of LEAN_G (0.1 g: 64%, 0.2 g: 88%), so
+// everyday pulls lean her well and hard ones add little
+const LEAN_SOFT = 1.15; // the faces' scale, as the lean's before (tanh gain): they still come on at the same g
 const POINT_K = 70; // the head turn's spring (1/s^2): about 1.3 Hz
 const POINT_C = 16.7; // critically damped
 const POINT_STEP_S = 0.01;
@@ -92,7 +95,7 @@ const BREATH_HZ = 0.25; // and breathing (the idle loop breathes when she's stop
 // (live2d-render's "offset"), as if riding along: [amplitude px, base Hz], the same mix of three waves with random
 // phases, faded out as her idle comes in
 const BOB = [3, 0.21];
-const BOB_NOD = 3; // and her head nods with it: down this many degrees (ParamAngleY) at the bob's full dip
+const BOB_NOD = 5; // and her head nods with it: down this many degrees (ParamAngleY) at the bob's full dip
 const BOB_SEND_PX = 0.1; // an offset moving less than this isn't sent
 // Holding a turn, she looks along it GLANCE_AWAY_MS, then glances back at you: her eyes swing to the side opposite
 // her turned head (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all,
@@ -241,7 +244,10 @@ function drive(hud, state, now) {
   // the lean, the turn, the idle and the expressions are each blended on their own (pose.js adds them), so unlike
   // the baked close-up, which showed one baked frame at a time, she leans whenever the g pulls (expressions on or
   // not) and turns toward the indicator from wherever she is: leaning, mid-way into the expressions, idling
-  const leanTarget = isNum(data.gLong) ? Math.max(-LEAN_G, Math.min(LEAN_G, data.gLong)) / LEAN_G : 0;
+  // the g's noise taken off (parked it reads +-0.01..0.02 g; nothing under LEAN_DEAD_G, no jump past it), as the
+  // steep start of her lean would sway her with it
+  const gl = isNum(data.gLong) ? Math.sign(data.gLong) * Math.max(0, Math.abs(data.gLong) - LEAN_DEAD_G) : 0;
+  const leanTarget = Math.max(-LEAN_G, Math.min(LEAN_G, gl)) / LEAN_G;
   state.lean = isNum(state.lean) ? state.lean + (leanTarget - state.lean) * (1 - Math.exp(-dt / LEAN_TAU_MS)) : leanTarget;
   const turnSide = hud._turnSide();
   // she blinks as her head starts to turn, away or back, as in the turn recording
@@ -303,7 +309,8 @@ function drive(hud, state, now) {
   extra.ParamAngleY = (extra.ParamAngleY || 0) - (BOB_NOD * state.bobY) / BOB[0];   // her head dips as she does
   return {
     extra,
-    lean: Math.tanh(state.lean * LEAN_SOFT) / Math.tanh(LEAN_SOFT),
+    lean: Math.sign(state.lean) * (1 - Math.exp(-LEAN_K * Math.abs(state.lean))) / (1 - Math.exp(-LEAN_K)),
+    faceLean: Math.tanh(state.lean * LEAN_SOFT) / Math.tanh(LEAN_SOFT),
     turn: state.point,
     y,
     idleT: (state.idleMs || 0) / 1000,

@@ -36,6 +36,7 @@
 /**
  * @typedef {object} Drive
  * @property {number} lean -1 (braking) .. 1 (pulling away)
+ * @property {number} [faceLean] the same for the lean's faces, when they go by another scale (else lean)
  * @property {number} turn -1 .. 1, toward the indicator
  * @property {number} y the expressions coming on, 0 .. 1 (eased)
  * @property {number} idleT seconds into the idle loop
@@ -225,9 +226,10 @@ function compose(rig, d) {
   }
   // leaning hard, that way's face eases in (an S curve from leanFace.from of a full lean to a full lean): pulling
   // away the happy face, braking the braking face
-  const face = rig.leanFace && (d.lean > 0 ? rig.leanFace.right : rig.leanFace.left);
-  if (face && rig.leanFace && Math.abs(d.lean) > rig.leanFace.from) {
-    const x = Math.min(1, (Math.abs(d.lean) - rig.leanFace.from) / (1 - rig.leanFace.from)),
+  const fl = typeof d.faceLean === "number" ? d.faceLean : d.lean;
+  const face = rig.leanFace && (fl > 0 ? rig.leanFace.right : rig.leanFace.left);
+  if (face && rig.leanFace && Math.abs(fl) > rig.leanFace.from) {
+    const x = Math.min(1, (Math.abs(fl) - rig.leanFace.from) / (1 - rig.leanFace.from)),
       w = x * x * (3 - 2 * x);
     Object.keys(face).forEach((id) => {
       if (id in v) v[id] += (face[id] - v[id]) * w;
