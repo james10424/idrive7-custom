@@ -391,6 +391,10 @@ export namespace de.bmw.infotainment.drivingexcitementtypes.DrivingExcitementTyp
   /** MMI_MINUS_TAFEL_NICHT_ANZEIGEN 0, MMI_MINUS_TAFEL_ANZEIGEN 1, INITIALISIERUNG 2, SIGNAL_UNGUELTIG 3 */
   type RequestSwitchDrivingExperienceMMIDisplay = "MMI_MINUS_TAFEL_NICHT_ANZEIGEN" | "MMI_MINUS_TAFEL_ANZEIGEN" | "INITIALISIERUNG" | "SIGNAL_UNGUELTIG" | number;
 
+  interface StatusChargeOfBatteryHybridWrapper {
+    displayChargingConditionHighVoltageStorage?: number;
+  }
+
   interface StatusFESVehicleDynamicSwitchHMIWrapper {
     actualValueModeDrivingExperience?: de.bmw.infotainment.drivingexcitementtypes.DrivingExcitementTypes.ActualValueModeDrivingExperience2;
     requestSwitchDrivingExperienceMMIDisplay?: de.bmw.infotainment.drivingexcitementtypes.DrivingExcitementTypes.RequestSwitchDrivingExperienceMMIDisplay;
@@ -840,6 +844,11 @@ export namespace de.bmw.infotainmenttypes.InfotainmentTypes {
   /** MONTAG 1, DIENSTAG 2, MITTWOCH 3, DONNERSTAG 4, FREITAG 5, SAMSTAG 6, SONNTAG 7, SIGNAL_UNGUELTIG 15 */
   type DisplayDateWeekDay = "MONTAG" | "DIENSTAG" | "MITTWOCH" | "DONNERSTAG" | "FREITAG" | "SAMSTAG" | "SONNTAG" | "SIGNAL_UNGUELTIG" | number;
 
+  interface DisplayRangeElectricVehicleWrapper {
+    displayRangeElectricVehicle?: number;
+    displayRangeMaximum?: number;
+  }
+
   interface RangeTankStatusWrapper {
     fluidLevelFuelTank?: number;
     fluidLevelFuelTankLeftHand?: number;
@@ -970,11 +979,15 @@ export interface Fields {
     GapVehicleDrivingAhead: de.bmw.dasstypes.DASSTypes.GapVehicleDrivingAheadWrapper;
   };
   "de.bmw.infotainment.KombiIF": {
+    displayRangeElectricVehicle: de.bmw.infotainmenttypes.InfotainmentTypes.DisplayRangeElectricVehicleWrapper;
     statusRangeTankStatus: de.bmw.infotainmenttypes.InfotainmentTypes.RangeTankStatusWrapper;
     statusShowTimeDate: de.bmw.infotainmenttypes.InfotainmentTypes.ShowTimeDateWrapper;
   };
   "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
     functionalLibraryData: de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes.FunctionalLibraryData;
+  };
+  "de.bmw.infotainment.drivingexcitement.Efficiencytainment2": {
+    statusChargeOfBatteryHybrid: de.bmw.infotainment.drivingexcitementtypes.DrivingExcitementTypes.StatusChargeOfBatteryHybridWrapper;
   };
   "de.bmw.infotainment.drivingexcitement.FES": {
     statusActualValueTorque2: de.bmw.infotainment.drivingexcitementtypes.DrivingExcitementTypes.ActualValueTorque2Wrapper;

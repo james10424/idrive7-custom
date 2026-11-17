@@ -3,7 +3,8 @@
  * Small line icons, drawn here (no image files): straight RGBA for an image layer, w x h, in one colour.
  * Each icon is a distance function in a 0..1 box; coverage is anti-aliased over one pixel.
  *   gauge (engine), shock (chassis), wheel (steering), cog (gearbox), stack (the gear's shift program
- *   lines), therm (coolant), oilcan (oil), fuel (pump), tyre (a wheel seen from the side: ring, hub, tread notches).
+ *   lines), therm (coolant), oilcan (oil), fuel (pump), tyre (a wheel seen from the side: ring, hub, tread notches),
+ *   battery (a hybrid's high-voltage battery: a cell outlined, its terminal, a plus).
  */
 /**
  * Distance from (px, py) to the segment a..b.
@@ -157,6 +158,17 @@ const ICONS = {
       disc(x, y, 0.92, 0.66, 0.05),
       seg(x, y, 0.3, 0.46, 0.3, 0.34) - 0.035,
       seg(x, y, 0.22, 0.34, 0.38, 0.34) - 0.04,
+    ),
+  battery: (x, y) =>
+    Math.min(
+      // the cell's outline (a rectangle's four sides), its terminal on the right, a plus inside
+      seg(x, y, 0.1, 0.32, 0.82, 0.32) - 0.04,
+      seg(x, y, 0.1, 0.72, 0.82, 0.72) - 0.04,
+      seg(x, y, 0.1, 0.32, 0.1, 0.72) - 0.04,
+      seg(x, y, 0.82, 0.32, 0.82, 0.72) - 0.04,
+      seg(x, y, 0.9, 0.44, 0.9, 0.6) - 0.05,
+      seg(x, y, 0.36, 0.52, 0.56, 0.52) - 0.035,
+      seg(x, y, 0.46, 0.42, 0.46, 0.62) - 0.035,
     ),
 };
 

@@ -45,8 +45,8 @@ CLUSTER_FONTS = [
     ('s_scale', 'Michroma-Regular.ttf', 27, DIGITS, 1),
     ('s_speed', 'Michroma-Regular.ttf', 74, DIGITS + '-', 3),
     ('s_gear', 'Michroma-Regular.ttf', 70, DIGITS + 'PRNDSM-', 3),
-    ('s_val', 'Michroma-Regular.ttf', 26, DIGITS + ':+-.', 1),
-    ('s_unit', 'Barlow-Medium.ttf', 24, LOWER + UPPER + DIGITS + '°/-. '),
+    ('s_val', 'Michroma-Regular.ttf', 26, DIGITS + ':+-. ', 1),
+    ('s_unit', 'Barlow-Medium.ttf', 24, LOWER + UPPER + DIGITS + '°/-.% '),
     ('s_gl', 'Michroma-Regular.ttf', 21, DIGITS + '/', 1),
     # Grand National (1987 Buick Grand National dash): tall condensed white numbers, small print, and the orange VFD's seven segments
     ('r_num', 'BarlowCondensed-SemiBold.ttf', 50, DIGITS),

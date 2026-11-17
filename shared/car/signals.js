@@ -39,6 +39,7 @@ const SLOPE_LEVEL = 1280; // LaneSlope: the gradient count when level (car/signa
 const SLOPE_PCT = 0.1; // and its grade a count, %
 const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the binding may hand enums over as numbers)
 const RANGE_NONE = 4095; // KombiIF range: none
+const HV_SOC_MAX = 100; // a hybrid's battery %: past this, none (255)
 const MILEAGE_NONE = 0xffffff; // a 24-bit mileage: none
 const CONS_NONE = 65535; // a consumption raw: none
 const CONS_MAX_DIGITS = 3; // averageConsumption's decimal digits at most
@@ -107,6 +108,8 @@ const TZ_MIN_H = -12,
  * @property {?boolean} [parkBrakeVsm] the same from VehicleStabilizationManagement
  * @property {?string} autoHold Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
  * @property {?boolean} wheelHeat the heated steering wheel on, null until the car says
+ * @property {?number} hvSoc a plug-in hybrid's battery, % (config.hybrid), null without one
+ * @property {?number} eRangeKm its electric range, km, null without one
  * @property {?Record<string, ?boolean>} doors open by fl fr rl rr hood trunk (config.lamps), null until the car says
  * @property {string} doorsLine the last doors logged
  * @property {?number} volt12 V, the 12 V system from the engine unit
@@ -190,6 +193,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.parkBrakeCds = null; // the same from CDS statusHandBrake (a fallback)
     this.autoHold = null; // Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
     this.wheelHeat = null; // the heated steering wheel on (true / false), null until the car says
+    this.hvSoc = null; // a plug-in hybrid's battery, % (config.hybrid), null without one
+    this.eRangeKm = null; // and its electric range, km
     /** @type {?Record<string, ?boolean>} */
     this.doors = null; // open (true / false / null unknown) by fl fr rl rr hood trunk, null until the car says
     this.doorsLine = "";
@@ -249,6 +254,24 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             this.odoKm = km;
             this.odoAcc = 0;
           }
+        },
+        // a plug-in hybrid's electric range (app.json config.hybrid), taken as km (4095 = none, as the fuel range;
+        // unconfirmed on a car: the raw values are logged on change)
+        displayRangeElectricVehicle: (msg) => {
+          const raw = msg && msg.displayRangeElectricVehicle;
+          const km = isNum(raw) && raw >= 0 && raw < RANGE_NONE ? raw : null;
+          if (km !== this.eRangeKm) this.log.info("eDrive range raw " + JSON.stringify(msg));
+          this.eRangeKm = km;
+        },
+      },
+      // a plug-in hybrid's battery as the HMI shows it (config.hybrid), taken as % (255 = none; unconfirmed on a car:
+      // the raw value is logged on change)
+      "de.bmw.infotainment.drivingexcitement.Efficiencytainment2": {
+        statusChargeOfBatteryHybrid: (msg) => {
+          const raw = msg && msg.displayChargingConditionHighVoltageStorage;
+          const pct = isNum(raw) && raw >= 0 && raw <= HV_SOC_MAX ? raw : null;
+          if (pct !== this.hvSoc) this.log.info("hybrid battery raw " + JSON.stringify(msg));
+          this.hvSoc = pct;
         },
       },
       // the trip computer for the period picked on the center screen (this trip, since refuelling, individual, long term):
@@ -634,6 +657,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     };
     // the HUD modes' signal only with them; the car ahead with them or app.json config.carAhead (the cluster's Sport)
     // (the runtime spec has no "signals": the interface must also be in app.json "signals")
+    // a plug-in hybrid's battery and electric range: config.hybrid (the app lists both in its "signals")
+    if (this.config.hybrid !== true) {
+      delete extra["de.bmw.infotainment.drivingexcitement.Efficiencytainment2"];
+      delete extra["de.bmw.infotainment.KombiIF"].displayRangeElectricVehicle;
+    }
     if (!this._modesOn() && this.config.lamps !== true)
       delete extra["de.bmw.infotainment.displaydataserver.DisplayDataServer"];
     if (this.config.lamps !== true) {

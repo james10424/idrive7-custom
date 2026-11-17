@@ -18,6 +18,8 @@
  * else the gap's rate of change, smoothed. {{accSet}} the set speed BMW's HUD shows (DisplayDataServer cruiseCtrlSpeedHUD).
  * Grand National: {{mph}} (mph whatever the units, unused by the layout), {{odometer}} (6 digits, km / mi; MileageSupreme), {{range4}} (4 digits), {{range3}} (up to 999, no leading zeros), {{u:distUc}} (MI, KM), {{u:consUc}} (L/100KM, MPG), {{ambientN}} (outside, no + sign),
  * {{lampBrake}} (PARK BRAKE / AUTO HOLD) {{lampTurnL}} {{lampTurnR}} {{lampCruise}} {{lampHeat}} (the lamp's text while lit, else empty; config.lamps).
+ * {{hvSoc}} {{eRange}} {{rangeHybrid}} ("420 + 35") {{rangeFuelOnly}} {{noHv}} {{oilOrHvUnit}} {{oilOrHv:<deg C>}} (a plug-in
+ * hybrid's battery % and electric range, config.hybrid; "--" without; the oil labels as 100 / 50 / 0 % with a battery).
  * {{doorFL}} {{doorFR}} {{doorRL}} {{doorRR}} {{doorHood}} {{doorTrunk}} (FRONT LEFT ... TRUNK while that one is open, else
  * empty) {{doorAny}} (DOOR while any of the six is open; config.lamps).
  * The route while guiding (Guidance finalDestinationInfo / travelledDistance, apps with "navLayout"; "--" else): {{navLeft}} the
@@ -61,6 +63,8 @@ const RANGE4_DIGITS = 4; // {{range4}}
 const GAUGE_F_STEP = 10; // {{temp:<deg C>}}: °F labels round to this
 const BOOST_TICK_BAR = 0.5; // {{boostTick:m<k>}}: bar per slot
 const BOOST_TICK_PSI = 5; // {{boostTick:u<k>}}: psi per slot
+/** @type {Record<string, string>} the oil gauge's labels (oilOrHv:<°C>) as the battery's: top, middle, bottom */
+const OIL_TO_HV = { 150: "100", 110: "50", 50: "0" };
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /** Local time: config.utcOffsetMinutes when set, else the car's time zone once the cluster's clock has been seen, else
@@ -278,6 +282,27 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         return usUnits ? "PSI" : "BAR";
       case "u:temp":
         return usUnits ? "°F" : "°C";
+      // a plug-in hybrid (config.hybrid): its battery %, its electric range, the range as "fuel + electric", and the
+      // oil gauge's labels as the battery's while the car sends a battery (Sport)
+      case "hvSoc":
+        return isNum(this.hvSoc) ? String(Math.round(this.hvSoc)) : "--";
+      case "eRange":
+        return isNum(this.eRangeKm)
+          ? String(Math.round(usUnits ? this.eRangeKm * MI_PER_KM : this.eRangeKm))
+          : "--";
+      case "rangeHybrid": {
+        if (!isNum(this.eRangeKm)) return "--";
+        const fuelRange = this._raw("range");
+        const fuelText = isNum(fuelRange) ? String(Math.round(usUnits ? fuelRange * MI_PER_KM : fuelRange)) : "--";
+        return fuelText + " + " + this._token("eRange");
+      }
+      case "rangeFuelOnly":
+        return isNum(this.eRangeKm) ? "--" : "1";
+      case "noHv":
+        return isNum(this.hvSoc) ? "--" : "1";
+      // not a "u:" token: those are painted once (text/index.js STATIC_TOKEN), and this one follows the car
+      case "oilOrHvUnit":
+        return isNum(this.hvSoc) ? "%" : usUnits ? "°F" : "°C";
       // the fuel gauge's marks: the tank (config.tankLitres) full and half, in litres or US gallons, whole numbers
       case "fuelFull":
       case "fuelHalf": {
@@ -426,6 +451,12 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             SPEED_SCALE[usUnits ? "us" : "metric"][Number(tok.slice(4))];
           return label === undefined ? "" : String(label);
         } // speed scale labels
+        if (tok.indexOf("oilOrHv:") === 0) {
+          // the oil gauge's labels (oilOrHv:150 / 110 / 50), or the battery's (100 / 50 / 0) while the car sends one
+          const celsius = tok.slice(8);
+          if (isNum(this.hvSoc)) return OIL_TO_HV[celsius] || "";
+          return this._token("temp:" + celsius);
+        }
         if (tok.indexOf("temp:") === 0) {
           const celsius = Number(tok.slice(5));
           return isNum(celsius)

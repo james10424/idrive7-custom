@@ -63,7 +63,7 @@ const ROUTE_STEPS = 400; // the route strip is resent in steps of 1/400
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
-const DOCS = `effect layer; the whole Sport theme (sdash/shader.js): "geo" [yTop, yBend, yBottom, xBend] and "k" [above, below, round] for the left bracket's outer line (the right one is mirrored), "band" width, "inner" (the inner line's distance from the outer one), "scale" [y of 0, y of the top mark], "ticks" [speed, rpm], "rpmMax" (speed follows SPEED_SCALE), "fuelSeg" / "oilSeg" [fullX, fullY, emptyX, emptyY], "strip" [left end x, y, h, slant], "topEnd" x; the middle is black, and the map window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right (BMW draws bits of its own Sport view there), and "holeMask" [x, y, w, h] in target px: a rectangle in it kept black (BMW's speed-limit sign at the window's left edge); "holeFade" [x, y, w, h, feather (30), darkness (0.85)]: a rectangle darkened in it, fading out over feather px (behind the gear, so the map doesn't run through it); "stripSignals" [left, right] turns the strip into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r] ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown "gapGauge" { box: [x, y, w, h], max (150 m) }: the car ahead as an upright box filled from the bottom up to the gap, red while closing faster than config.acc.closingKmh (10 km/h); "routeStrip": true makes the strip the route's progress while guiding (travelled / (travelled + left), filled from the right end leftwards); "vbars" [{ box: [x, y, w, h], signal, range: [lo, hi], color }] (up to 2): more upright boxes like it (boost, battery)`;
+const DOCS = `effect layer; the whole Sport theme (sdash/shader.js): "geo" [yTop, yBend, yBottom, xBend] and "k" [above, below, round] for the left bracket's outer line (the right one is mirrored), "band" width, "inner" (the inner line's distance from the outer one), "scale" [y of 0, y of the top mark], "ticks" [speed, rpm], "rpmMax" (speed follows SPEED_SCALE), "fuelSeg" / "oilSeg" [fullX, fullY, emptyX, emptyY] (the oil bar shows a plug-in hybrid's battery 0..100 % instead while the car sends one, its rail red at the empty end), "strip" [left end x, y, h, slant], "topEnd" x; the middle is black, and the map window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right (BMW draws bits of its own Sport view there), and "holeMask" [x, y, w, h] in target px: a rectangle in it kept black (BMW's speed-limit sign at the window's left edge); "holeFade" [x, y, w, h, feather (30), darkness (0.85)]: a rectangle darkened in it, fading out over feather px (behind the gear, so the map doesn't run through it); "stripSignals" [left, right] turns the strip into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r] ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown "gapGauge" { box: [x, y, w, h], max (150 m) }: the car ahead as an upright box filled from the bottom up to the gap, red while closing faster than config.acc.closingKmh (10 km/h); "routeStrip": true makes the strip the route's progress while guiding (travelled / (travelled + left), filled from the right end leftwards); "vbars" [{ box: [x, y, w, h], signal, range: [lo, hi], color }] (up to 2): more upright boxes like it (boost, battery)`;
 
 module.exports = {
   type: "sdash",
@@ -196,7 +196,9 @@ module.exports = {
     const speed = hud._raw("speed"),
       rpm = hud._raw("rpm"),
       fuel = hud._raw("fuel"),
-      oil = hud._raw("oil");
+      oil = hud._raw("oil"),
+      // a plug-in hybrid's battery (config.hybrid) takes the oil bar's place while the car sends one
+      hvSoc = hud.hvSoc;
     /** @type {(value: number) => number} */
     const quantize = (value) =>
       Math.round(Math.min(1, Math.max(0, value)) * NEEDLE_STEPS) / NEEDLE_STEPS;
@@ -211,9 +213,11 @@ module.exports = {
       ),
       quantize(isNum(rpm) ? rpm / (widget.rpmMax || DEFAULT_RPM_MAX) : 0),
       quantize(isNum(fuel) ? fuel : 0),
-      // oil: 50..150 C with 110 (the B58's running temperature) at the bar's middle, each half linear
+      // oil: 50..150 C with 110 (the B58's running temperature) at the bar's middle, each half linear; or the battery 0..100 %
       quantize(
-        isNum(oil)
+        isNum(hvSoc)
+          ? hvSoc / 100
+          : isNum(oil)
           ? oil <= OIL_MID_C
             ? (0.5 * (oil - OIL_MIN_C)) / (OIL_MID_C - OIL_MIN_C)
             : 0.5 + (0.5 * (oil - OIL_MID_C)) / (OIL_MAX_C - OIL_MID_C)
@@ -273,7 +277,8 @@ module.exports = {
       (widget.gapGauge ? "|" + gapFrac + (gHot ? "c" : "") : "") +
       (vbv ? "|" + vbv.join("|") : "") +
       "|" +
-      route;
+      route +
+      (isNum(hvSoc) ? "|hv" : "");
     if (!force && key === state.last) return;
     state.last = key;
     if (widget.gapGauge)
@@ -290,5 +295,6 @@ module.exports = {
     state.c.uniform(state.ref, "u_rpm", [vals[1]]);
     state.c.uniform(state.ref, "u_fuel", [vals[2]]);
     state.c.uniform(state.ref, "u_oil", [vals[3]]);
+    state.c.uniform(state.ref, "u_oilZones", [isNum(hvSoc) ? 2 : 1]);
   },
 };

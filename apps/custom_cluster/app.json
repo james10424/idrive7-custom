@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Grand National dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.63",
+  "version": "0.1.64",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -58,7 +58,12 @@
     },
     "de.bmw.infotainment.KombiIF": {
       "statusRangeTankStatus": "rs",
-      "statusShowTimeDate": "rs"
+      "statusShowTimeDate": "rs",
+      "displayRangeElectricVehicle": "rs"
+    },
+    "de.bmw.infotainment.drivingexcitement.Efficiencytainment2": {
+      "statusChargeOfBatteryHybrid": "rs",
+      "_optional": "a plug-in hybrid's battery for Sport's battery bar (config.hybrid)"
     },
     "de.bmw.infotainment.navigation.guiding.Guidance": {
       "_instances": "Main_Instance",
@@ -250,7 +255,7 @@
       "lon": -80.8431
     },
     "utcOffsetMinutes": null,
-    "_comment": "target panel: the whole 1920x720 instrument cluster, drawn over BMW's gauges. socketPath: cluster-render's documented default. location and utcOffsetMinutes: as in Custom HUD (the clock box). tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a 2020 G20 M340i holds 59 L / 15.6 gal). engine: the peak crank torque (Nm) and power (kW) the {{torquePct}} and {{powerPct}} tokens count from (an M40i: 500 Nm, 285 kW / 382 hp). lamps: the Grand National theme's lamps (the brake lights, BMW's ACC display).",
+    "_comment": "target panel: the whole 1920x720 instrument cluster, drawn over BMW's gauges. socketPath: cluster-render's documented default. location and utcOffsetMinutes: as in Custom HUD (the clock box). tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a 2020 G20 M340i holds 59 L / 15.6 gal). engine: the peak crank torque (Nm) and power (kW) the {{torquePct}} and {{powerPct}} tokens count from (an M40i: 500 Nm, 285 kW / 382 hp). lamps: the Grand National theme's lamps (the brake lights, BMW's ACC display). hybrid: a plug-in hybrid's battery and electric range for Sport (nothing changes on a car that doesn't send them).",
     "dme": {
       "comment": "Boost from the engine unit (DME, ecu 18) over read-only UDS 0x22, only while the sport display sends no boost and a boost readout is shown. Absolute kPa, the outside air pressure (baro) is subtracted. Candidates tried in order, the first plausible one wins. From cauliflowermossgrape's car_vitals (MIT).",
       "ecu": 18,
@@ -381,6 +386,7 @@
     "carAhead": true,
     "pedals": true,
     "lamps": true,
+    "hybrid": true,
     "pedal": {
       "comment": "The throttle bar. source obd: OBD PID 0x49 (accelerator pedal position D) from the engine unit, every 250 ms while shown; obdRange [at rest, flat out] in its own % maps to 0..100 (an X3 M40i reads 14.5 at rest, 82 flat out and 91 in kickdown, Nov 7 2026: the app logs 'accelerator pedal (OBD) ... %' on change, set the two from a release and a full press). Without source obd: the AcceleratorPedal message's actualValueAngleAcceleratorPedal * factor + offset, which on an X3 jumped about (misdecoded). kickdown: the OBD reading at or past which the bar's last segment turns red (between flat out, 82, and kickdown, 91).",
       "source": "obd",

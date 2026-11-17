@@ -30,6 +30,7 @@ uniform float u_redFrom;  // 0..1 (the redline)
 uniform float u_orange;   // 0..1, yellow marks from here to the redline
 uniform float u_fuel;     // 0..1
 uniform float u_oil;      // 0..1
+uniform float u_oilZones; // the oil bar's rail: 1 the oil's (blue cold end, red hot end), 2 a hybrid battery's (red low end)
 uniform vec4 u_fuelSeg;   // full end x, y, empty end x, y
 uniform vec4 u_oilSeg;
 uniform vec4 u_hole;      // map window x, y, w, h, already inset (w 0 = none)
@@ -148,9 +149,10 @@ vec4 bracket(vec2 q, float val, float redFrom, float orange, float ticks, vec3 l
 // a slanted level bar from the empty end b to the full end a, as BMW's own Sport view draws fuel and oil (car photo,
 // Nov 8 2026): flat (horizontal) ends, four segments split by dark lines, lit white from the empty end up to the
 // value, the rest grey, and a thin rail beside it on the side away from its labels (rail -1: left of a bar leaning
-// left, as fuel; +1: right, as oil). zones > 0.5: the rail's last quarter-segment at the cold end is blue and at the
-// hot end red, as BMW's oil gauge.
-vec4 bar(vec2 p, vec4 s, float val, float zones, float rail, vec4 c) {
+// left, as fuel; +1: right, as oil). zones 1: the rail's last quarter-segment at the cold end is blue and at the
+// hot end red, as BMW's oil gauge; 2: only the empty end red (a hybrid's battery). liveRail: the rail is drawn with the
+// live parts (it changes: the oil bar's turns into the battery's), not baked.
+vec4 bar(vec2 p, vec4 s, float val, float zones, float rail, bool liveRail, vec4 c) {
     vec2 a = s.xy, b = s.zw;
     float yt = min(a.y, b.y), yb = max(a.y, b.y);
     if (p.y < yt - 4.0 || p.y > yb + 4.0) return c;
@@ -175,15 +177,24 @@ vec4 bar(vec2 p, vec4 s, float val, float zones, float rail, vec4 c) {
     c = over(vec4(col, (on ? 1.0 : 0.92) * body), c);
     c = over(vec4(0.0, 0.0, 0.0, 0.85 * body * div * step(0.02, h) * step(h, 0.98)), c);
 #endif
-#ifndef SDASH_LIVE
-    // the rail (baked)
-    float rs = side - rail * 15.0;
-    float r = cov(abs(rs) - 1.3) * ends;
-    vec3 rc = vec3(0.9, 0.92, 0.96);
-    if (zones > 0.5 && h < 0.12) rc = vec3(0.25, 0.5, 1.0);
-    if (zones > 0.5 && h > 0.9) rc = vec3(1.0, 0.2, 0.22);
-    c = over(vec4(rc, 0.95 * r), c);
+    // the rail: baked, or with the live parts (liveRail); both in the single pass
+#ifdef SDASH_BAKE
+    if (!liveRail) {
+#else
+#ifdef SDASH_LIVE
+    if (liveRail) {
+#else
+    {
 #endif
+#endif
+        float rs = side - rail * 15.0;
+        float r = cov(abs(rs) - 1.3) * ends;
+        vec3 rc = vec3(0.9, 0.92, 0.96);
+        // zones 1: blue cold end, red hot end; 2: red empty end
+        if (zones > 0.5 && h < 0.12) rc = mix(vec3(0.25, 0.5, 1.0), vec3(1.0, 0.2, 0.22), step(1.5, zones));
+        if (zones > 0.5 && zones < 1.5 && h > 0.9) rc = vec3(1.0, 0.2, 0.22);
+        c = over(vec4(rc, 0.95 * r), c);
+    }
     return c;
 }
 
@@ -328,8 +339,8 @@ void main() {
         if (right) c = redline(q, d, c);
     }
 #endif
-    c = bar(p, u_fuelSeg, u_fuel, 0.0, -1.0, c);
-    c = bar(p, u_oilSeg, u_oil, 1.0, 1.0, c);
+    c = bar(p, u_fuelSeg, u_fuel, 0.0, -1.0, false, c);
+    c = bar(p, u_oilSeg, u_oil, u_oilZones, 1.0, true, c);
 #ifndef SDASH_LIVE
     // the bottom line between the brackets
     if (abs(p.y - u_geo.z) < 3.0 && abs(p.x - u_size.x * 0.5) < u_size.x * 0.5 - outerX(u_geo.z))

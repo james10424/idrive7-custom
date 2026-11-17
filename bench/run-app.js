@@ -674,6 +674,18 @@ const CAR_SW = {
       "heatingState",
       { functionalityCoded: true, availability: true, heating: value === "on" },
     ),
+  // a plug-in hybrid's battery (%, 255 none) and electric range (km, 4095 none), as the catalog gives them
+  hybrid: (value) => {
+    const soc = value === "high" ? 80 : value === "low" ? 8 : 255,
+      range = value === "high" ? 35 : value === "low" ? 3 : 4095;
+    stub.feed("de.bmw.infotainment.drivingexcitement.Efficiencytainment2", "statusChargeOfBatteryHybrid", {
+      displayChargingConditionHighVoltageStorage: soc,
+    });
+    stub.feed("de.bmw.infotainment.KombiIF", "displayRangeElectricVehicle", {
+      displayRangeElectricVehicle: range,
+      displayRangeMaximum: 4095,
+    });
+  },
   // the doors as the car sends them (enum names; car, Nov 16 2026): one open, all, or all shut
   doors: (value) => {
     /** @type {(k: string, open: string, shut: string) => string} */
