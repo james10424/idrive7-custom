@@ -54,10 +54,10 @@ config by tools/live2d_bake/live_pose.js), or from a bake config in the app's da
 (miku-live/config.json, scripts/deploy.sh --miku-live-config); "model" is the .model3.json on the car (an absolute
 path, its textures shrunk to 1024 px: scripts/deploy.sh --miku-live), "params" fixed values ("Id=value ..."),
 "hide" parts left out (else the pose file's), "frame" [cx, cy, height] in model units (else its close.centre and
-close.height), "fps" (20), "core" (2: Cubism Core every other frame, the frames between blended; 1 every frame). Without live2d-render or her model nothing is drawn and the status row says why`;
+close.height), "fps" (else the Miku Live2D frame rate setting, 20), "core" (2: Cubism Core every other frame, the frames between blended; 1 every frame). Without live2d-render or her model nothing is drawn and the status row says why`;
 
 // as the baked close-up's (../miku/index.js), so she moves the same
-const LIVE_MS = 50; // her update rate: live2d-render draws at 20 fps
+const LIVE_FPS = 20; // her frame rate unless the layout's "fps" or the liveFps setting says otherwise
 const LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly
 const LEAN_G = 0.4; // this longitudinal g is a full lean
 const LEAN_DEAD_G = 0.02;
@@ -203,6 +203,17 @@ function problem(hud, text) {
 }
 
 /**
+ * Her frame rate: the layout's "fps", else the liveFps setting (10, 15, 20, 24 or 30; a change reopens her), else 20.
+ * @param {HudApp} hud
+ * @param {Widget} w
+ * @returns {number}
+ */
+function fpsOf(hud, w) {
+  const fps = Number(w.fps || hud.setting("liveFps") || LIVE_FPS);
+  return Math.max(1, Math.min(30, isFinite(fps) ? Math.round(fps) : LIVE_FPS));
+}
+
+/**
  * live2d-render's open: the model, where her picture goes, how it is framed, her first values.
  * @param {HudApp} hud
  * @param {WidgetState & MikuLiveState} state
@@ -218,7 +229,7 @@ function openMessage(hud, state) {
     model: String(w.model),
     w: Math.floor(w.w / 4) * 4,
     h: Math.floor(w.h / 2) * 2,
-    fps: w.fps || 20,
+    fps: fpsOf(hud, w),
     core: w.core || 2,
     target: hud.target,
     x: w.x,
@@ -399,7 +410,8 @@ module.exports = {
           if (hud._freshData) hud._freshData();
           hud._update(state, Date.now(), false);
         }),
-      LIVE_MS,
+      // her pose goes out once a frame
+      Math.round(1000 / fpsOf(hud, widget)),
     );
   },
   /**
