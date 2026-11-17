@@ -645,8 +645,9 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    /* the lowest CPU priority: BMW's own HMI always comes first */
-    setpriority(PRIO_PROCESS, 0, 19);
+    /* a low CPU priority, nice 10: BMW's own HMI wins most contests for a core, but a burst elsewhere (the Store
+       starting) no longer starves her frames as nice 19 did (about 1.5% of a contested core; nice 10 about 10%) */
+    setpriority(PRIO_PROCESS, 0, 10);
     struct sigaction sa;
     memset(&sa, 0, sizeof sa);
     sa.sa_handler = [](int) { g_stop = 1; };

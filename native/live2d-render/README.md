@@ -8,7 +8,8 @@ clothes) on top. It knows nothing about any particular model: what the model
 does is the app's (Custom HUD's "Miku Live2D" layout, for one).
 
 iDrive 7 only. It is the one process here that drives the GPU itself, at CPU
-priority 19, so BMW's HMI always comes first. On a 2020 G20's head unit,
+priority (nice) 10, so BMW's HMI wins most contests for a core (0.1.5 and
+before: 19, which let a burst such as the Store starting stall her frames). On a 2020 G20's head unit,
 RetrynowMiku's close-up at 15 fps takes about 39% of each frame's time and
 29% of one CPU core ([Performance on the car](#performance-on-the-car)).
 

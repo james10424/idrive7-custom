@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 17 2026
+
+- **Live2D Render 0.1.6: CPU priority nice 10, from 19.** At nice 19 she got about 1.5% of a core whenever something at normal priority wanted the same one, so a burst such as the Store starting stalled her frames. At nice 10 she gets about 10% in that contest: BMW's HMI still wins most of the time. Checked on the bench (the process runs at nice 10, she draws). Not yet tried on the car.
+
 ## Nov 16 2026
 
 - **Custom Cluster 0.1.63: the Grand National theme shows open doors.** Under the centre panel, on its middle line, red lamps as PARK BRAKE's, drawn only while that one is open: HOOD on top, FRONT LEFT and FRONT RIGHT, REAR LEFT and REAR RIGHT either side, TRUNK at the bottom, and DOOR between the side ones in the VFD orange (as GEAR) while any of the six is open. From `DoorsWindowsRoofMirrors` `CentralLockingSystemAndPanelStatus2` (the door probe's drive, Nov 16 2026: all six seen, each change within ~100 ms; the driver's side is the car's left), optional in app.json so a car without it still installs. The lamps are in the rdash shader's live pass (`doorBox`, `doorGap`; 3005 tokens, from 2264; kept out of the needle layer's), their names a text sheet (`{{doorFL}}` ... `{{doorTrunk}}`, `{{doorAny}}`). The demo drive opens each in turn; the bench's Vehicle signals has a Doors switch. Backdrops re-baked (the layout's key; the images are unchanged). Checked on the bench: all open, one, all shut. **Custom HUD 0.1.56** drops the door probe.
