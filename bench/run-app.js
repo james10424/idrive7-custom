@@ -685,15 +685,21 @@ const CAR_SW = {
     ),
   // a plug-in hybrid's battery (%, 255 none) and electric range (the car's distance unit, km here; 4095 none), as the
   // catalog gives them; "charging": the battery only from Vehicle lastStateCallCharging, as a US car sent it
+  // "lsc": only from the charging service (LSCDataSink); "energy": only lastStateCallCharging's energy now / full
   hybrid: (value) => {
     const soc = value === "high" ? 80 : value === "low" ? 8 : 255,
-      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : 4095;
+      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : value === "lsc" ? 26 : value === "energy" ? 20 : 4095;
     stub.feed("de.bmw.infotainment.drivingexcitement.Efficiencytainment2", "statusChargeOfBatteryHybrid", {
       displayChargingConditionHighVoltageStorage: soc,
+    });
+    stub.feed("de.bmw.infotainment.lsc.LSCDataSink", "displayConditionHybrid", {
+      displayChargingconditionHighvoltageStorage: value === "lsc" ? 62 : 255,
     });
     stub.feed("de.bmw.infotainment.vehicle.Vehicle", "lastStateCallCharging", {
       displayActValueSoc: value === "charging" ? 100 : 255,
       hvbActValueSoc: value === "charging" ? 97 : 255,
+      energyContentActValueHvb: value === "energy" ? 72 : 511,
+      energyContentMaxHvb: value === "energy" ? 120 : 511,
     });
     stub.feed("de.bmw.infotainment.KombiIF", "displayRangeElectricVehicle", {
       displayRangeElectricVehicle: range,

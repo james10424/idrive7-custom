@@ -47,6 +47,9 @@ const SLOPE_PCT = 0.1; // and its grade a count, %
 const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the binding may hand enums over as numbers)
 const RANGE_NONE = 4095; // KombiIF range: none
 const HV_SOC_MAX = 100; // a hybrid's battery %: past this, none (255)
+const HV_ENERGY_NONE = 511; // lastStateCallCharging's energy fields: none
+/** @type {(v: *) => ?number} a battery % as sent, null when none (255) */
+const pct100 = (v) => (isNum(v) && v >= 0 && v <= HV_SOC_MAX ? v : null);
 const MILEAGE_NONE = 0xffffff; // a 24-bit mileage: none
 const CONS_NONE = 65535; // a consumption raw: none
 const CONS_MAX_DIGITS = 3; // averageConsumption's decimal digits at most
@@ -200,10 +203,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.parkBrakeCds = null; // the same from CDS statusHandBrake (a fallback)
     this.autoHold = null; // Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
     this.wheelHeat = null; // the heated steering wheel on (true / false), null until the car says
-    this.hvSoc = null; // a plug-in hybrid's battery, % (config.hybrid), null without one: hvSocEff, else hvSocCharging
-    this.hvSocEff = null; // the battery from Efficiencytainment2, %
+    this.hvSoc = null; // a plug-in hybrid's battery, % (config.hybrid), null without one: the first of hvSocSrc (_hvSocPick)
+    /** @type {Record<string, ?number>} the battery by source, %, in the order tried */
+    this.hvSocSrc = { eff: null, lsc: null, charging: null, energy: null };
+    this.hvSocFrom = null; // the source hvSoc came from, logged when it changes
+    /** @type {Record<string, string>} each battery message as last logged */
+    this.hvRawLogged = {};
     this.eRangeRaw = null; // and its electric range, in the car's distance unit (carUnits.dist)
-    this.hvSocCharging = null; // the battery from Vehicle lastStateCallCharging, %: hvSoc's fallback
     /** @type {?Record<string, ?boolean>} */
     this.doors = null; // open (true / false / null unknown) by fl fr rl rr hood trunk, null until the car says
     this.doorsLine = "";
@@ -278,15 +284,21 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           this.eRangeRaw = v;
         },
       },
-      // a plug-in hybrid's battery as the HMI shows it (config.hybrid), taken as % (255 = none; unconfirmed on a car:
-      // the raw value is logged on change)
+      // a plug-in hybrid's battery as the HMI shows it (config.hybrid), taken as % (255 = none; a US plug-in hybrid
+      // showed none, Nov 18 2026: the fallbacks in _hvSocPick)
       "de.bmw.infotainment.drivingexcitement.Efficiencytainment2": {
         statusChargeOfBatteryHybrid: (msg) => {
-          const raw = msg && msg.displayChargingConditionHighVoltageStorage;
-          const pct = isNum(raw) && raw >= 0 && raw <= HV_SOC_MAX ? raw : null;
-          if (pct !== this.hvSocEff) this.log.info("hybrid battery raw " + JSON.stringify(msg));
-          this.hvSocEff = pct;
-          this.hvSoc = pct !== null ? pct : this.hvSocCharging;
+          this._hvRaw("Efficiencytainment2 statusChargeOfBatteryHybrid", msg);
+          this.hvSocSrc.eff = pct100(msg && msg.displayChargingConditionHighVoltageStorage);
+          this._hvSocPick();
+        },
+      },
+      // the same field from the charging service (config.hybrid; notify only, so "s"; unconfirmed on a car)
+      "de.bmw.infotainment.lsc.LSCDataSink": {
+        displayConditionHybrid: (msg) => {
+          this._hvRaw("LSCDataSink displayConditionHybrid", msg);
+          this.hvSocSrc.lsc = pct100(msg && msg.displayChargingconditionHighvoltageStorage);
+          this._hvSocPick();
         },
       },
       // the trip computer for the period picked on the center screen (this trip, since refuelling, individual, long term):
@@ -377,17 +389,26 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           this._unitsMaybeChanged();
         },
         // a plug-in hybrid's battery as the car last reported it for charging (config.hybrid): the % BMW's app
-        // shows, the fallback while Efficiencytainment2 sends none (a US plug-in hybrid showed none from it, Nov 18
-        // 2026; 255 none; the raw values are logged on change)
+        // shows (displayActValueSoc, else hvbActValueSoc; 255 none), else the energy in it over its full energy
+        // (energyContentActValueHvb / energyContentMaxHvb, 511 none); unconfirmed on a car
         lastStateCallCharging: (msg) => {
-          const shown = msg && msg.displayActValueSoc,
-            actual = msg && msg.hvbActValueSoc;
-          const pick = (/** @type {any} */ v) => (isNum(v) && v >= 0 && v <= HV_SOC_MAX ? v : null);
-          const pct = pick(shown) !== null ? pick(shown) : pick(actual);
-          if (pct !== this.hvSocCharging)
-            this.log.info("hybrid battery (charging state) raw " + JSON.stringify({ displayActValueSoc: shown, hvbActValueSoc: actual }));
-          this.hvSocCharging = pct;
-          this.hvSoc = this.hvSocEff !== null ? this.hvSocEff : pct;
+          const m = msg || {};
+          this._hvRaw("Vehicle lastStateCallCharging", {
+            displayActValueSoc: m.displayActValueSoc,
+            hvbActValueSoc: m.hvbActValueSoc,
+            energyContentActValueHvb: m.energyContentActValueHvb,
+            energyContentMaxHvb: m.energyContentMaxHvb,
+            batterySize: m.batterySize,
+          });
+          const shown = pct100(m.displayActValueSoc);
+          this.hvSocSrc.charging = shown !== null ? shown : pct100(m.hvbActValueSoc);
+          const now = m.energyContentActValueHvb,
+            full = m.energyContentMaxHvb;
+          this.hvSocSrc.energy =
+            isNum(now) && isNum(full) && full > 0 && full < HV_ENERGY_NONE && now >= 0 && now <= full
+              ? Math.round((now / full) * HV_SOC_MAX)
+              : null;
+          this._hvSocPick();
         },
       },
       // S / M next to the gear: the gearbox status carries no programme on some cars, the M drive display does
@@ -695,6 +716,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     // a plug-in hybrid's battery and electric range: config.hybrid (the app lists both in its "signals")
     if (this.config.hybrid !== true) {
       delete extra["de.bmw.infotainment.drivingexcitement.Efficiencytainment2"];
+      delete extra["de.bmw.infotainment.lsc.LSCDataSink"];
       delete extra["de.bmw.infotainment.KombiIF"].displayRangeElectricVehicle;
       delete extra["de.bmw.infotainment.vehicle.Vehicle"].lastStateCallCharging;
     }
@@ -749,6 +771,31 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       }),
       this.log,
     );
+  },
+
+  /**
+   * A plug-in hybrid battery message, logged whenever it changes (empty ones too, so a car's log shows which it sends).
+   * @param {string} name
+   * @param {*} msg
+   * @returns {void}
+   */
+  _hvRaw(name, msg) {
+    const line = JSON.stringify(msg);
+    if (this.hvRawLogged[name] === line) return;
+    this.hvRawLogged[name] = line;
+    this.log.info("hybrid battery raw: " + name + " " + line);
+  },
+
+  /**
+   * hvSoc: the first source with a value (Efficiencytainment2, LSCDataSink, lastStateCallCharging's %, then its energy).
+   * @returns {void}
+   */
+  _hvSocPick() {
+    const src = this.hvSocSrc;
+    const from = ["eff", "lsc", "charging", "energy"].filter((k) => src[k] !== null)[0] || null;
+    this.hvSoc = from ? src[from] : null;
+    if (from !== this.hvSocFrom) this.log.info("hybrid battery from " + (from || "none") + ": " + JSON.stringify(src));
+    this.hvSocFrom = from;
   },
 
   /**

@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Grand National dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.67",
+  "version": "0.1.68",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -65,6 +65,10 @@
     "de.bmw.infotainment.drivingexcitement.Efficiencytainment2": {
       "statusChargeOfBatteryHybrid": "rs",
       "_optional": "a plug-in hybrid's battery for Sport's battery bar (config.hybrid)"
+    },
+    "de.bmw.infotainment.lsc.LSCDataSink": {
+      "displayConditionHybrid": "s",
+      "_optional": "a plug-in hybrid's battery from the charging service, Sport's battery bar's fallback (config.hybrid)"
     },
     "de.bmw.infotainment.navigation.guiding.Guidance": {
       "_instances": "Main_Instance",
