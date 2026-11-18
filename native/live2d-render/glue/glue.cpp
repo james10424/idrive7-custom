@@ -10,6 +10,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -144,6 +146,120 @@ struct l2d_model : public CubismUserModel {
         delete setting;
     }
 
+    /* Her textures, packed into atlas pages (CUBISM_NO_ATLAS=1: one texture each, as before). A page holds as
+     * many as fit in about 4096 px a side, most used (by drawables) first, so each texture switch between
+     * drawables on the same page no longer ends a draw call's run (about 32 of 121 a frame for RetrynowMiku's 17
+     * at 1024 px). Each tile has a 2 px border of its edge texels repeated, so bilinear filtering at its edge
+     * never reaches its neighbour. The UVs are remapped once, in Core's own arrays (static after the moc loads),
+     * so every path that draws or masks reads them. */
+    bool load_textures(const std::string &dir)
+    {
+        const int n = setting->GetTextureCount();
+        static const bool noAtlas = getenv("CUBISM_NO_ATLAS") != nullptr;
+        const int PAD = noAtlas ? 0 : 2;
+        GLint maxTex = 4096;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTex);
+        const int limit = std::min<int>(maxTex, 4096 + 8 * PAD);   /* four 1024 px tiles with their borders */
+        struct Tile { int w = 0, h = 0, uses = 0, page = -1, x = 0, y = 0; };
+        std::vector<Tile> tiles(n);
+        CubismModel *model = _model;
+        for (int d = 0; d < model->GetDrawableCount(); d++) {
+            const int t = model->GetDrawableTextureIndex(d);
+            if (t >= 0 && t < n) tiles[t].uses++;
+        }
+        for (int i = 0; i < n; i++) {
+            const std::string tp = dir + setting->GetTextureFileName(i);
+            int ch;
+            if (!stbi_info(tp.c_str(), &tiles[i].w, &tiles[i].h, &ch)) { g_error = "cannot read " + tp; return false; }
+        }
+        /* shelves, most used first: rows left to right, a new row when one is full, a new page when it is */
+        std::vector<int> order(n);
+        for (int i = 0; i < n; i++) order[i] = i;
+        std::stable_sort(order.begin(), order.end(), [&](int a, int b) { return tiles[a].uses > tiles[b].uses; });
+        struct Page { int w = 0, h = 0; };
+        std::vector<Page> pages;
+        int x = 0, y = 0, rowH = 0;
+        for (int i : order) {
+            Tile &t = tiles[i];
+            const int sw = t.w + 2 * PAD, sh = t.h + 2 * PAD;
+            const bool alone = noAtlas || sw > limit || sh > limit;
+            if (!alone && !pages.empty() && x + sw > limit) { x = 0; y += rowH; rowH = 0; }
+            if (alone || pages.empty() || y + sh > limit) {
+                pages.push_back(Page());
+                x = y = rowH = 0;
+            }
+            t.page = (int)pages.size() - 1;
+            t.x = x + PAD;
+            t.y = y + PAD;
+            Page &pg = pages.back();
+            pg.w = std::max(pg.w, x + sw);
+            pg.h = std::max(pg.h, y + sh);
+            rowH = std::max(rowH, sh);
+            x += sw;
+            if (alone) y = limit + 1;   /* nothing else goes on its page: the next starts a new one */
+        }
+        textures.assign(pages.size(), 0);
+        glGenTextures((GLsizei)pages.size(), textures.data());
+        for (size_t p = 0; p < pages.size(); p++) {
+            glBindTexture(GL_TEXTURE_2D, textures[p]);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, pages[p].w, pages[p].h, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+            /* No mipmaps: a model's drawings sit tightly packed in its textures, and their smaller levels blend
+             * each drawing with its neighbours. With RetrynowMiku's textures shrunk to 1024 px her small mouth
+             * then showed the other mouth shapes beside it, like a moustache; plain bilinear draws it clean (and
+             * saves a third of the texture memory). Set once: the patched renderer no longer sets them every
+             * draw (csm_fast.hpp). */
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, noAtlas ? GL_REPEAT : GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, noAtlas ? GL_REPEAT : GL_CLAMP_TO_EDGE);
+            textureBytes += (long long)pages[p].w * pages[p].h * 4;
+        }
+        std::vector<unsigned char> padded;
+        for (int i = 0; i < n; i++) {
+            const Tile &t = tiles[i];
+            const std::string tp = dir + setting->GetTextureFileName(i);
+            int tw, th, ch;
+            unsigned char *px = stbi_load(tp.c_str(), &tw, &th, &ch, 4);
+            if (!px || tw != t.w || th != t.h) { if (px) stbi_image_free(px); g_error = "cannot decode " + tp; return false; }
+            const int pw = tw + 2 * PAD, ph = th + 2 * PAD;
+            padded.resize((size_t)pw * ph * 4);
+            for (int yy = 0; yy < ph; yy++) {
+                const int sy = std::min(std::max(yy - PAD, 0), th - 1);
+                unsigned char *row = &padded[(size_t)yy * pw * 4];
+                const unsigned char *src = px + (size_t)sy * tw * 4;
+                for (int xx = 0; xx < PAD; xx++) memcpy(row + xx * 4, src, 4);
+                memcpy(row + PAD * 4, src, (size_t)tw * 4);
+                for (int xx = PAD + tw; xx < pw; xx++) memcpy(row + xx * 4, src + (size_t)(tw - 1) * 4, 4);
+            }
+            stbi_image_free(px);
+            glBindTexture(GL_TEXTURE_2D, textures[t.page]);
+            glTexSubImage2D(GL_TEXTURE_2D, 0, t.x - PAD, t.y - PAD, pw, ph, GL_RGBA, GL_UNSIGNED_BYTE, padded.data());
+            GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->BindTexture(i, textures[t.page]);
+        }
+        if (!noAtlas) {
+            /* the shaders sample (u, 1 - v) with the image's first row at 0: u' = (x + u w) / W and
+             * 1 - v' = (y + (1 - v) h) / H, so v' = 1 - (y + (1 - v) h) / H */
+            std::set<const void *> done;
+            for (int d = 0; d < model->GetDrawableCount(); d++) {
+                const int ti = model->GetDrawableTextureIndex(d);
+                const Live2D::Cubism::Core::csmVector2 *uv = model->GetDrawableVertexUvs(d);
+                if (ti < 0 || ti >= n || !uv || !done.insert(uv).second) continue;
+                const Tile &t = tiles[ti];
+                const float W = (float)pages[t.page].w, H = (float)pages[t.page].h;
+                auto *v = const_cast<Live2D::Cubism::Core::csmVector2 *>(uv);
+                for (int k = 0; k < model->GetDrawableVertexCount(d); k++) {
+                    v[k].X = (t.x + v[k].X * t.w) / W;
+                    v[k].Y = 1.0f - (t.y + (1.0f - v[k].Y) * t.h) / H;
+                }
+            }
+        }
+        std::string sizes;
+        for (const Page &pg : pages) sizes += (sizes.empty() ? "" : ", ") + std::to_string(pg.w) + "x" + std::to_string(pg.h);
+        fprintf(stderr, "glue: %d textures in %d page%s (%s), %.1f MiB\n", n, (int)pages.size(),
+                pages.size() == 1 ? "" : "s", sizes.c_str(), textureBytes / (1024.0 * 1024.0));
+        return true;
+    }
+
     bool load(const std::string &json, unsigned w, unsigned h, unsigned masks)
     {
         const std::string dir = json.substr(0, json.find_last_of('/') + 1);
@@ -164,29 +280,7 @@ struct l2d_model : public CubismUserModel {
         CreateRenderer(w, h, maskTextures);
         if (const char *ms = getenv("CUBISM_MASK_SIZE"))   /* debugging: the mask textures' size (Cubism's 256) */
             GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->SetDrawableClippingMaskBufferSize((float)atof(ms), (float)atof(ms));
-        for (int i = 0; i < setting->GetTextureCount(); i++) {
-            const std::string tp = dir + setting->GetTextureFileName(i);
-            int tw, th, ch;
-            unsigned char *px = stbi_load(tp.c_str(), &tw, &th, &ch, 4);
-            if (!px) { g_error = "cannot decode " + tp; return false; }
-            GLuint tex;
-            glGenTextures(1, &tex);
-            glBindTexture(GL_TEXTURE_2D, tex);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
-            stbi_image_free(px);
-            textureBytes += (long long)tw * th * 4;
-            /* No mipmaps: a model's drawings sit tightly packed in its textures, and their smaller levels blend
-             * each drawing with its neighbours. With RetrynowMiku's textures shrunk to 1024 px her small mouth
-             * then showed the other mouth shapes beside it, like a moustache; plain bilinear draws it clean (and
-             * saves a third of the texture memory). Set once: the patched renderer no longer sets them every
-             * draw (csm_fast.hpp). */
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            textures.push_back(tex);
-            GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->BindTexture(i, tex);
-        }
+        if (!load_textures(dir)) return false;
         GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->IsPremultipliedAlpha(false);
         if (glGetError() != GL_NO_ERROR) { g_error = "OpenGL error loading the textures"; return false; }
         isMask.assign(_model->GetDrawableCount(), 0);
