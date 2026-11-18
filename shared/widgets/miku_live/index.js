@@ -54,10 +54,11 @@ config by tools/live2d_bake/live_pose.js), or from a bake config in the app's da
 (miku-live/config.json, scripts/deploy.sh --miku-live-config); "model" is the .model3.json on the car (an absolute
 path, its textures shrunk to 1024 px: scripts/deploy.sh --miku-live), "params" fixed values ("Id=value ..."),
 "hide" parts left out (else the pose file's), "frame" [cx, cy, height] in model units (else its close.centre and
-close.height), "fps" (else the Miku Live2D frame rate setting, 20), "core" (2: Cubism Core every other frame, the frames between blended; 1 every frame). Without live2d-render or her model nothing is drawn and the status row says why`;
+close.height), "fps" (else the Miku Live2D frame rate setting, 20), "core" (else the Miku Live2D Cubism updates setting, 3: Cubism Core every third frame, the frames between blended; 2 every other; 1 every frame). Without live2d-render or her model nothing is drawn and the status row says why`;
 
 // as the baked close-up's (../miku/index.js), so she moves the same
 const LIVE_FPS = 20; // her frame rate unless the layout's "fps" or the liveFps setting says otherwise
+const LIVE_CORE = 3; // Cubism Core every 3rd frame, the frames between blended, unless the layout's "core" or the liveCore setting says otherwise
 const LEAN_TAU_MS = 250; // her lean eases toward the g this smoothly
 const LEAN_G = 0.4; // this longitudinal g is a full lean
 const LEAN_DEAD_G = 0.02;
@@ -214,6 +215,18 @@ function fpsOf(hud, w) {
 }
 
 /**
+ * How often Cubism Core runs: the layout's "core", else the liveCore setting (1 every frame, 2 every other, 3 every
+ * third; the frames between blend her vertices; a change reopens her), else 3.
+ * @param {HudApp} hud
+ * @param {Widget} w
+ * @returns {number}
+ */
+function coreOf(hud, w) {
+  const core = Number(w.core || hud.setting("liveCore") || LIVE_CORE);
+  return Math.max(1, Math.min(3, isFinite(core) ? Math.round(core) : LIVE_CORE));
+}
+
+/**
  * live2d-render's open: the model, where her picture goes, how it is framed, her first values.
  * @param {HudApp} hud
  * @param {WidgetState & MikuLiveState} state
@@ -230,7 +243,7 @@ function openMessage(hud, state) {
     w: Math.floor(w.w / 4) * 4,
     h: Math.floor(w.h / 2) * 2,
     fps: fpsOf(hud, w),
-    core: w.core || 2,
+    core: coreOf(hud, w),
     target: hud.target,
     x: w.x,
     y: w.y,

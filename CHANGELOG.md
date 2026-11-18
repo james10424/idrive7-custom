@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 18 2026
+
+- **Custom HUD 0.1.58: a Miku Live2D Cubism update setting, every 3rd frame by default.** On the center screen: every frame, every 2nd frame (as since 0.1.49) or every 3rd frame (the new default). The frames between show her vertices blended from the pose before to the newest, so every 3rd frame runs Core about 7 times a second at 20 fps and draws her up to two frames (100 ms) later. A change reopens her model. A layout's own "core" still wins. Off the car (Mesa's software renderer, 20 fps), Core took 1.39, 0.72 and 0.47 ms a frame for the three, and a fast blink still closed fully, one frame later than at every 2nd frame. On the car every 3rd frame should take Core from about 4.3 ms a frame to about 3. Not yet tried on the car.
+
 ## Nov 17 2026
 
 - **Custom HUD 0.1.57: a Miku Live2D frame rate setting.** On the center screen: 10, 15, 20 (the default), 24 or 30 fps. Her pose goes out once a frame at that rate. A change reopens her model (a short pause; on the bench 0.6 s, on the car a few seconds). About 12 ms of the head unit's CPU a frame: 10 fps about 12% of a core, 20 about 24%, 30 about 36%. A layout's own "fps" still wins. Checked on the bench: 30 and 10 fps took effect.

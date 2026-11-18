@@ -2,7 +2,7 @@
   "id": "custom_hud",
   "title": "Custom HUD",
   "description": "Speed, gear, shift bar, boost, oil and coolant on the windshield HUD, in Classic, M or Night themes",
-  "version": "0.1.57",
+  "version": "0.1.58",
   "vendor": "custom",
   "loggingId": "OCH1",
   "iconGlyph": "HUD",
@@ -148,6 +148,26 @@
       "unit": "fps",
       "default": 20,
       "steps": [10, 15, 20, 24, 30]
+    },
+    {
+      "key": "liveCore",
+      "label": "Miku Live2D Cubism updates (frames between are blended)",
+      "type": "choice",
+      "default": "3",
+      "options": [
+        [
+          "1",
+          "Every frame"
+        ],
+        [
+          "2",
+          "Every 2nd frame"
+        ],
+        [
+          "3",
+          "Every 3rd frame"
+        ]
+      ]
     },
     {
       "key": "makeRoom",
