@@ -22,6 +22,7 @@ const {
   PARK_BRAKE,
   PEDAL_MS,
   PEDAL_OK,
+  DIST_UNITS,
   PRESS_UNITS,
   PROGRAMS,
   TEMP_UNITS,
@@ -109,7 +110,7 @@ const TZ_MIN_H = -12,
  * @property {?string} autoHold Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
  * @property {?boolean} wheelHeat the heated steering wheel on, null until the car says
  * @property {?number} hvSoc a plug-in hybrid's battery, % (config.hybrid), null without one
- * @property {?number} eRangeKm its electric range, km, null without one
+ * @property {?number} eRangeRaw its electric range as sent: in the car's distance unit (carUnits.dist), null without one
  * @property {?Record<string, ?boolean>} doors open by fl fr rl rr hood trunk (config.lamps), null until the car says
  * @property {string} doorsLine the last doors logged
  * @property {?number} volt12 V, the 12 V system from the engine unit
@@ -193,8 +194,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.parkBrakeCds = null; // the same from CDS statusHandBrake (a fallback)
     this.autoHold = null; // Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
     this.wheelHeat = null; // the heated steering wheel on (true / false), null until the car says
-    this.hvSoc = null; // a plug-in hybrid's battery, % (config.hybrid), null without one
-    this.eRangeKm = null; // and its electric range, km
+    this.hvSoc = null; // a plug-in hybrid's battery, % (config.hybrid), null without one: hvSocEff, else hvSocCharging
+    this.hvSocEff = null; // the battery from Efficiencytainment2, %
+    this.eRangeRaw = null; // and its electric range, in the car's distance unit (carUnits.dist)
+    this.hvSocCharging = null; // the battery from Vehicle lastStateCallCharging, %: hvSoc's fallback
     /** @type {?Record<string, ?boolean>} */
     this.doors = null; // open (true / false / null unknown) by fl fr rl rr hood trunk, null until the car says
     this.doorsLine = "";
@@ -214,7 +217,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.aheadLogged = {};
     this.accSetRaw = null; // cruiseCtrlSpeedHUD as sent
     this.aheadLogAt = {};
-    this.carUnits = { press: null, temp: null, psiSeen: false }; // the car's display units, for the TPMS values
+    this.carUnits = { press: null, temp: null, dist: null, psiSeen: false }; // the car's display units (TPMS, eDrive range)
     this.program = null; // 'S' / 'M' from the MDrive gearbox display, else null (D)
     this.fuelL = null;
     this.rangeKm = null;
@@ -259,9 +262,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         // unconfirmed on a car: the raw values are logged on change)
         displayRangeElectricVehicle: (msg) => {
           const raw = msg && msg.displayRangeElectricVehicle;
-          const km = isNum(raw) && raw >= 0 && raw < RANGE_NONE ? raw : null;
-          if (km !== this.eRangeKm) this.log.info("eDrive range raw " + JSON.stringify(msg));
-          this.eRangeKm = km;
+          const v = isNum(raw) && raw >= 0 && raw < RANGE_NONE ? raw : null;
+          if (v !== this.eRangeRaw) this.log.info("eDrive range raw " + JSON.stringify(msg));
+          this.eRangeRaw = v;
         },
       },
       // a plug-in hybrid's battery as the HMI shows it (config.hybrid), taken as % (255 = none; unconfirmed on a car:
@@ -270,8 +273,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         statusChargeOfBatteryHybrid: (msg) => {
           const raw = msg && msg.displayChargingConditionHighVoltageStorage;
           const pct = isNum(raw) && raw >= 0 && raw <= HV_SOC_MAX ? raw : null;
-          if (pct !== this.hvSoc) this.log.info("hybrid battery raw " + JSON.stringify(msg));
-          this.hvSoc = pct;
+          if (pct !== this.hvSocEff) this.log.info("hybrid battery raw " + JSON.stringify(msg));
+          this.hvSocEff = pct;
+          this.hvSoc = pct !== null ? pct : this.hvSocCharging;
         },
       },
       // the trip computer for the period picked on the center screen (this trip, since refuelling, individual, long term):
@@ -346,16 +350,33 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
               TEMP_UNITS,
               msg && msg.unitOfMeasurementTemperature,
             );
-          if (press === this.carUnits.press && temp === this.carUnits.temp)
+          const dist = unitName(DIST_UNITS, msg && msg.unitOfMeasurementSpeedometerDigital);
+          if (press === this.carUnits.press && temp === this.carUnits.temp && dist === this.carUnits.dist)
             return;
           this.carUnits.press = press;
           this.carUnits.temp = temp;
+          this.carUnits.dist = dist;
           this.log.info(
             "car units: pressure " +
               (press || "?") +
               ", temperature " +
-              (temp || "?"),
+              (temp || "?") +
+              ", distance " +
+              (dist || "?"),
           );
+        },
+        // a plug-in hybrid's battery as the car last reported it for charging (config.hybrid): the % BMW's app
+        // shows, the fallback while Efficiencytainment2 sends none (a US plug-in hybrid showed none from it, Nov 18
+        // 2026; 255 none; the raw values are logged on change)
+        lastStateCallCharging: (msg) => {
+          const shown = msg && msg.displayActValueSoc,
+            actual = msg && msg.hvbActValueSoc;
+          const pick = (/** @type {any} */ v) => (isNum(v) && v >= 0 && v <= HV_SOC_MAX ? v : null);
+          const pct = pick(shown) !== null ? pick(shown) : pick(actual);
+          if (pct !== this.hvSocCharging)
+            this.log.info("hybrid battery (charging state) raw " + JSON.stringify({ displayActValueSoc: shown, hvbActValueSoc: actual }));
+          this.hvSocCharging = pct;
+          this.hvSoc = this.hvSocEff !== null ? this.hvSocEff : pct;
         },
       },
       // S / M next to the gear: the gearbox status carries no programme on some cars, the M drive display does
@@ -661,6 +682,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (this.config.hybrid !== true) {
       delete extra["de.bmw.infotainment.drivingexcitement.Efficiencytainment2"];
       delete extra["de.bmw.infotainment.KombiIF"].displayRangeElectricVehicle;
+      delete extra["de.bmw.infotainment.vehicle.Vehicle"].lastStateCallCharging;
     }
     if (!this._modesOn() && this.config.lamps !== true)
       delete extra["de.bmw.infotainment.displaydataserver.DisplayDataServer"];

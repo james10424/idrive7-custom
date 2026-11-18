@@ -94,6 +94,18 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
+   * A plug-in hybrid's electric range in km, null without one: KombiIF sends it in the car's distance unit (the
+   * speedometer's), else (the units not heard yet) taken as the units setting's.
+   * @returns {?number}
+   */
+  _eRangeKm() {
+    if (!isNum(this.eRangeRaw)) return null;
+    const dist = this.carUnits && this.carUnits.dist;
+    const miles = dist ? dist === "MEILEN" : this.setting("units") === "us";
+    return miles ? this.eRangeRaw / MI_PER_KM : this.eRangeRaw;
+  },
+
+  /**
    * {{tok}} as display text (the tokens are in the header).
    * @param {string} tok
    * @returns {string}
@@ -286,18 +298,22 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       // oil gauge's labels as the battery's while the car sends a battery (Sport)
       case "hvSoc":
         return isNum(this.hvSoc) ? String(Math.round(this.hvSoc)) : "--";
-      case "eRange":
-        return isNum(this.eRangeKm)
-          ? String(Math.round(usUnits ? this.eRangeKm * MI_PER_KM : this.eRangeKm))
-          : "--";
+      case "eRange": {
+        const eKm = this._eRangeKm();
+        return isNum(eKm) ? String(Math.round(usUnits ? eKm * MI_PER_KM : eKm)) : "--";
+      }
+      // "fuel + electric": KombiIF's range is the combined one on a plug-in hybrid (a US car showed 330 mi, BMW's app
+      // 309 combustion + 21 electric = 330 combined, Nov 18 2026), so the fuel part is it less the electric range
       case "rangeHybrid": {
-        if (!isNum(this.eRangeKm)) return "--";
-        const fuelRange = this._raw("range");
-        const fuelText = isNum(fuelRange) ? String(Math.round(usUnits ? fuelRange * MI_PER_KM : fuelRange)) : "--";
+        const eKm = this._eRangeKm();
+        if (!isNum(eKm)) return "--";
+        const total = this._raw("range");
+        const fuel = isNum(total) ? Math.max(0, total - eKm) : null;
+        const fuelText = isNum(fuel) ? String(Math.round(usUnits ? fuel * MI_PER_KM : fuel)) : "--";
         return fuelText + " + " + this._token("eRange");
       }
       case "rangeFuelOnly":
-        return isNum(this.eRangeKm) ? "--" : "1";
+        return isNum(this.eRangeRaw) ? "--" : "1";
       case "noHv":
         return isNum(this.hvSoc) ? "--" : "1";
       // not a "u:" token: those are painted once (text/index.js STATIC_TOKEN), and this one follows the car

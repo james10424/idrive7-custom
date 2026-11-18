@@ -57,7 +57,10 @@ const BOOST_SCALE = { factor: 0.01, offset: 0, invalid: 255 }; // see header com
 const TYRE_CORNERS = ["FL", "FR", "RL", "RR"];
 // the car's display units (Vehicle statusNewCurrentUnitsStatusExt, as BMW's own x_call reads them; car_vitals, MIT)
 const PRESS_UNITS = { 1: "BAR", 2: "KPA", 3: "PSI" },
-  TEMP_UNITS = { 1: "C", 2: "F" };
+  TEMP_UNITS = { 1: "C", 2: "F" },
+  // the speedometer's: the car's distance unit (KombiIF displayRangeElectricVehicle comes in it: a US plug-in hybrid
+  // sent 21 for the 21 mi BMW's app showed, Nov 18 2026)
+  DIST_UNITS = { 1: "KILOMETER", 2: "MEILEN" };
 /** @type {Record<string, number>} */
 const PRESS_TO_BAR = { BAR: 1, KPA: 0.01, PSI: 1 / PSI_PER_BAR };
 /**
@@ -311,6 +314,7 @@ module.exports = {
   TYRE_CORNERS,
   PRESS_UNITS,
   TEMP_UNITS,
+  DIST_UNITS,
   PRESS_TO_BAR,
   unitName,
   PROGRAMS,

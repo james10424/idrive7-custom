@@ -254,7 +254,8 @@ const AMBIENT_C_PER_BIT = 0.5,
   AMBIENT_OFFSET_C = 40;
 // statusNewCurrentUnitsStatusExt wire numbers (PRESS_UNITS, TEMP_UNITS in shared/car/consts.js)
 const UNIT_BAR = 1,
-  UNIT_C = 1;
+  UNIT_C = 1,
+  UNIT_KM = 1;
 // TPMS: pressure in 0.1 bar, temperature raw - 40 C; the rear pair a notch higher
 const TYRE_RAW_PER_BAR = 10,
   TYRE_OFFSET_C = 40;
@@ -575,6 +576,7 @@ setInterval(() => {
     {
       unitOfMeasurementAirPressure: UNIT_BAR,
       unitOfMeasurementTemperature: UNIT_C,
+      unitOfMeasurementSpeedometerDigital: UNIT_KM,
     },
   );
   stub.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
@@ -674,12 +676,17 @@ const CAR_SW = {
       "heatingState",
       { functionalityCoded: true, availability: true, heating: value === "on" },
     ),
-  // a plug-in hybrid's battery (%, 255 none) and electric range (km, 4095 none), as the catalog gives them
+  // a plug-in hybrid's battery (%, 255 none) and electric range (the car's distance unit, km here; 4095 none), as the
+  // catalog gives them; "charging": the battery only from Vehicle lastStateCallCharging, as a US car sent it
   hybrid: (value) => {
     const soc = value === "high" ? 80 : value === "low" ? 8 : 255,
-      range = value === "high" ? 35 : value === "low" ? 3 : 4095;
+      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : 4095;
     stub.feed("de.bmw.infotainment.drivingexcitement.Efficiencytainment2", "statusChargeOfBatteryHybrid", {
       displayChargingConditionHighVoltageStorage: soc,
+    });
+    stub.feed("de.bmw.infotainment.vehicle.Vehicle", "lastStateCallCharging", {
+      displayActValueSoc: value === "charging" ? 100 : 255,
+      hvbActValueSoc: value === "charging" ? 97 : 255,
     });
     stub.feed("de.bmw.infotainment.KombiIF", "displayRangeElectricVehicle", {
       displayRangeElectricVehicle: range,

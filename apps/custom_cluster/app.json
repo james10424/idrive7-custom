@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Grand National dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.64",
+  "version": "0.1.65",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -74,7 +74,8 @@
     },
     "de.bmw.infotainment.vehicle.Vehicle": {
       "statusNewCurrentUnitsStatusExt": "rs",
-      "_optional": "the car's pressure and temperature units, for the tyre block"
+      "lastStateCallCharging": "s",
+      "_optional": "the car's pressure, temperature and distance units (the tyre block, a plug-in hybrid's electric range); a plug-in hybrid's battery as last reported for charging (Sport)"
     },
     "de.bmw.infotainment.misc.MDrive": {
       "dataDisplayGearbox": "s",
