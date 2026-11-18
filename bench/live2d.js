@@ -51,6 +51,7 @@ function controller(renderPort, hostPort, log) {
   const addr = "127.0.0.1:" + hostPort;
   /** @type {?import("child_process").ChildProcess} */
   let logs = null;
+  let gpu = ""; // its last "GPU memory" line (at an open): "71.2 MiB (textures 68.0, ...)"
   let paused = false;
   /** @returns {string} "running", "paused", "exited", ... or "stopped" when there is no container */
   const status = () => {
@@ -65,7 +66,11 @@ function controller(renderPort, hostPort, log) {
       String(chunk)
         .split("\n")
         .filter((l) => l.trim() && !/^libEGL warning/.test(l))
-        .forEach((l) => log("info", "live2d-render: " + l.replace(/^live2d-render: /, "")));
+        .forEach((l) => {
+          const m = /GPU memory (.*)$/.exec(l);
+          if (m) gpu = m[1];
+          log("info", "live2d-render: " + l.replace(/^live2d-render: /, ""));
+        });
     if (logs.stdout) logs.stdout.on("data", lines);
     if (logs.stderr) logs.stderr.on("data", lines);
   };
@@ -79,11 +84,11 @@ function controller(renderPort, hostPort, log) {
     addr,
     /**
      * Its state for the page: running, paused, stopped (and why it can't run, when it can't).
-     * @returns {{ state: string, why: string }}
+     * @returns {{ state: string, why: string, gpu: string }}
      */
     state() {
       const why = whyNot();
-      return { state: why === "Docker isn't running" ? "stopped" : status(), why };
+      return { state: why === "Docker isn't running" ? "stopped" : status(), why, gpu };
     },
     /**
      * Starts it, or starts it afresh (a container already there goes first: a stuck one is a fresh process).

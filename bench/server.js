@@ -151,12 +151,24 @@ const PIXEL_BYTES =
   (process.env.BENCH_PIXEL_MIB === undefined
     ? DEFAULT_PIXEL_MIB
     : Math.max(0, Number(process.env.BENCH_PIXEL_MIB) || 0)) * MIB;
-// the service's accounting: an image or asset costs its bytes twice (compositor.cpp: the pixels and a rectangle scratch)
+// the service's accounting: an image or asset costs its bytes twice (compositor.cpp: the pixels and a rectangle scratch),
+// a video its 4:2:0 atlas as RGBA once (compositor.cpp add_video: w x (h + h/2) x 4; a composite buffer, when one is
+// needed, isn't counted here)
+/**
+ * A video layer's charge, as cluster-render's add_video.
+ * @param {number} w
+ * @param {number} h
+ * @returns {number}
+ */
+function videoBytes(w, h) {
+  return w * (h + Math.floor(h / 2)) * 4;
+}
 /** @returns {number} */
 function pixelBytes() {
   let bytes = 0;
   layers.forEach((layer) => {
-    if (layer.image)
+    if (layer.kind === "video") bytes += videoBytes(layer.iw, layer.ih);
+    else if (layer.image)
       // an etc2rgba asset is charged its bytes once (cluster-render keeps no rectangle scratch for it), others twice
       bytes += layer.iw * layer.ih * (layer.memBpp || layer.bpp || 4) * (layer.format === "etc2rgba" ? 1 : PIXEL_COPIES);
   });
@@ -617,6 +629,8 @@ const renderServer = net.createServer((sock) => {
         ) {
           return refuse("layer", msg.ref, "the service's pixel memory is full");
         }
+        if (msg.kind === "video" && PIXEL_BYTES && pixelBytes() + videoBytes(msg.vw || 1088, msg.vh || 480) > PIXEL_BYTES)
+          return refuse("layer", msg.ref, "the service's pixel memory is full");
         /** @type {BenchLayer} */
         const newLayer = {
           key,

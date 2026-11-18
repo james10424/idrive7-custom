@@ -56,6 +56,10 @@ void l2d_blend(l2d_model *m, int keep, float t);
  * coordinates through mvp (column-major 4x4). */
 void l2d_draw(l2d_model *m, const float mvp[16]);
 
+/* Optional (an older glue lacks it): her GPU memory in bytes, out[0] the model's textures, out[1] the mask
+ * buffers, out[2] the vertex and index buffers. */
+void l2d_gpu_bytes(const l2d_model *m, long long out[3]);
+
 #ifdef __cplusplus
 }
 #endif

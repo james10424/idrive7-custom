@@ -79,6 +79,7 @@ struct Glue {
     void (*update)(l2d_model *, const float *, const int *, const float *, int, float, double *, double *);
     void (*draw)(l2d_model *, const float *);
     void (*blend)(l2d_model *, int, float) = nullptr;   /* optional: an older glue hasn't it */
+    void (*gpu_bytes)(const l2d_model *, long long *) = nullptr;   /* optional too */
 
     bool load(const std::string &path, std::string *err)
     {
@@ -106,6 +107,7 @@ struct Glue {
             "l2d_update");
         draw = (void (*)(l2d_model *, const float *))sym("l2d_draw");
         blend = (void (*)(l2d_model *, int, float))dlsym(h, "l2d_blend");
+        gpu_bytes = (void (*)(const l2d_model *, long long *))dlsym(h, "l2d_gpu_bytes");
         if (!ok || api() != L2D_API) {
             *err = ok ? "the Cubism glue library is for another live2d-render (rebuild it: make glue)"
                       : "the Cubism glue library lacks a function (rebuild it: make glue)";
@@ -326,6 +328,18 @@ void Service::open_model(const cr::Json &m)
                                                            {"params", fmt("%.0f", (double)ids.size())},
                                                            {"ms", fmt("%.0f", ms)},
                                                            {"gl", cr::json_quote(gpu_->renderer())}};
+    {
+        /* her GPU memory: the model's (the glue's count) and the picture's (its RGBA target, the 4:2:0 planes'
+         * targets, w/4 x h and w/4 x h/2 RGBA, and the read buffer, w x h x 1.5) */
+        long long g[3] = {0, 0, 0};
+        if (glue_.gpu_bytes) glue_.gpu_bytes(model_, g);
+        const long long picture = (long long)r.w * r.h * 7;
+        const double mib = 1024.0 * 1024.0;
+        fprintf(stderr, "live2d-render: GPU memory %.1f MiB (textures %.1f, masks %.1f, buffers %.1f, picture %.1f)%s\n",
+                (g[0] + g[1] + g[2] + picture) / mib, g[0] / mib, g[1] / mib, g[2] / mib, picture / mib,
+                glue_.gpu_bytes ? "" : "; the glue doesn't count the model's (make glue)");
+        kv.push_back({"gpu_bytes", fmt("%.0f", (double)(g[0] + g[1] + g[2] + picture))});
+    }
     {
         /* every parameter's default, for the app's rest pose */
         std::string list;

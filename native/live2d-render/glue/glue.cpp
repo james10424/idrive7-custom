@@ -126,6 +126,8 @@ struct l2d_model : public CubismUserModel {
     CubismPhysics *physics() { return _physics; }
     CubismModelSettingJson *setting = nullptr;
     std::vector<GLuint> textures;
+    long long textureBytes = 0;   /* the textures' GPU memory (RGBA, no mipmaps) */
+    unsigned maskTextures = 1;
     std::vector<std::string> ids;
     std::vector<CubismIdHandle> handles;
     std::vector<float> defaults;
@@ -158,7 +160,8 @@ struct l2d_model : public CubismUserModel {
             std::vector<csmByte> ph;
             if (read_file(dir + setting->GetPhysicsFileName(), &ph)) LoadPhysics(ph.data(), (csmSizeInt)ph.size());
         }
-        CreateRenderer(w, h, masks ? masks : 1);
+        maskTextures = masks ? masks : 1;
+        CreateRenderer(w, h, maskTextures);
         if (const char *ms = getenv("CUBISM_MASK_SIZE"))   /* debugging: the mask textures' size (Cubism's 256) */
             GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->SetDrawableClippingMaskBufferSize((float)atof(ms), (float)atof(ms));
         for (int i = 0; i < setting->GetTextureCount(); i++) {
@@ -171,6 +174,7 @@ struct l2d_model : public CubismUserModel {
             glBindTexture(GL_TEXTURE_2D, tex);
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tw, th, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
             stbi_image_free(px);
+            textureBytes += (long long)tw * th * 4;
             /* No mipmaps: a model's drawings sit tightly packed in its textures, and their smaller levels blend
              * each drawing with its neighbours. With RetrynowMiku's textures shrunk to 1024 px her small mouth
              * then showed the other mouth shapes beside it, like a moustache; plain bilinear draws it clean (and
@@ -220,6 +224,23 @@ l2d_model *l2d_open(const char *model3_json, unsigned w, unsigned h, unsigned ma
 }
 
 void l2d_close(l2d_model *m) { delete m; }
+
+/* Her GPU memory in bytes, as allocated: out[0] the model's textures, out[1] the mask buffers, out[2] the vertex and
+ * index buffers (the fast path's: positions and UVs, the indices twice). Optional for live2d-render. */
+void l2d_gpu_bytes(const l2d_model *mc, long long out[3])
+{
+    l2d_model *m = const_cast<l2d_model *>(mc);
+    out[0] = m->textureBytes;
+    const CubismVector2 ms = m->GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->GetDrawableClippingMaskBufferSize();
+    out[1] = (long long)ms.X * (long long)ms.Y * 4 * m->maskTextures;
+    CubismModel *model = m->GetModel();
+    long long verts = 0, idx = 0;
+    for (int i = 0; i < model->GetDrawableCount(); i++) {
+        verts += model->GetDrawableVertexCount(i);
+        idx += model->GetDrawableVertexIndexCount(i);
+    }
+    out[2] = verts * 8 * 2 + idx * (verts > 65535 ? 4 : 2) * 2;
+}
 
 int l2d_param_count(const l2d_model *m) { return (int)m->ids.size(); }
 const char *l2d_param_id(const l2d_model *m, int i) { return i >= 0 && i < (int)m->ids.size() ? m->ids[i].c_str() : ""; }

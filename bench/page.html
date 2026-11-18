@@ -1066,9 +1066,11 @@
   // live2d-render in Docker: its state every 3 s, and its button (start, or start afresh)
   const l2dState = document.getElementById('l2dState'), l2dStart = document.getElementById('l2dStart');
   const showL2d = (s) => {
-    l2dState.textContent = 'live2d: ' + s.state;
+    // her GPU memory (live2d-render's count at her last open: the model's textures, masks, buffers and her picture)
+    const gpuMib = s.gpu && /^[\d.]+ MiB/.exec(s.gpu);
+    l2dState.textContent = 'live2d: ' + s.state + (gpuMib && s.state === 'running' ? ', GPU ' + gpuMib[0] : '');
     l2dState.style.color = s.state === 'running' ? '' : s.state === 'paused' ? 'var(--warn)' : 'var(--err)';
-    l2dState.title = s.why ? 'live2d-render can\'t run on this bench: ' + s.why : 'live2d-render in Docker (Miku Live2D, on Mesa\'s software renderer): ' + s.state;
+    l2dState.title = s.why ? 'live2d-render can\'t run on this bench: ' + s.why : 'live2d-render in Docker (Miku Live2D, on Mesa\'s software renderer): ' + s.state + (s.gpu ? '; GPU memory ' + s.gpu : '');
     if (!l2dStart.disabled) l2dStart.textContent = s.state === 'stopped' || s.state === 'exited' ? 'Start Live2D Render' : 'Restart Live2D Render';
   };
   const pollL2d = () => fetch('/live2d').then((r) => r.json()).then(showL2d).catch(() => {});
