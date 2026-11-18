@@ -45,6 +45,28 @@ const SWITCHES = [
   "UniformMagicEyes",
 ];
 
+/**
+ * The expression checkboxes in groups, RetrynowMiku's (from rendering each one with and without the others): a group
+ * with `needs` shows nothing until one of those is on, so it sits under them and dims while none is. Expressions not
+ * listed go in "Other".
+ * @type {{ title: string, items: string[], needs?: string[] }[]}
+ */
+const GROUPS = [
+  {
+    title: "Face",
+    items: ["Blush", "Crying", "Dead Eyes", "Fanged Smile", "Gloom", "Pink Paint", "side Blush", "Squinny Eyes", "Star", "Sweat Drop", "Tears", "Wide Mouth"],
+  },
+  { title: "Poses", items: ["Hand on Chest Pose", "Hold Staff (Both Hands)", "Overhead Staff Raise", "Yandere"] },
+  { title: "Poses holding an item", items: ["Hold Staff2", "Item Behind Back", "Item Behind Back2"] },
+  {
+    title: "Held item",
+    needs: ["Hold Staff2", "Item Behind Back", "Item Behind Back2"],
+    items: ["staff (upside down)", "axe", "baseball bat", "crowbar", "hammer", "hoe", "pliers", "saw", "scissors", "shovel", "stun baton", "utility knife", "wrench"],
+  },
+  { title: "Outfit", items: ["School Uniform"] },
+  { title: "With the school uniform", needs: ["School Uniform"], items: ["Uniform Magic Eyes", "Open Arms"] },
+];
+
 const BOX_MARGIN = 0.04; // margin round her idle box, of its height
 const SWITCH_NAMES_SHOWN = 2; // a switch's label names this many of the expressions that turn it on, then "+N"
 const SLIDER_STEPS = 100; // steps across a slider's range
@@ -111,19 +133,51 @@ const SLIDER_STEPS = 100; // steps across a slider's range
     const toggles = /** @type {HTMLElement} */ (
       document.getElementById("toggles")
     );
-    names.forEach((file) => {
-      const row = document.createElement("label"),
-        box = document.createElement("input");
-      box.type = "checkbox";
-      box.addEventListener("change", () => {
-        if (box.checked) on.add(file);
-        else on.delete(file);
-        draw();
+    const byLabel = new Map(names.map((file) => [label(file), file]));
+    const listed = new Set(GROUPS.flatMap((g) => g.items));
+    const other = names.map(label).filter((name) => !listed.has(name));
+    /** @type {{ el: HTMLElement, needs: string[] }[]} */
+    const dependents = [];
+    // a dependent group dims while none of what it needs is on
+    const dimDependents = () =>
+      dependents.forEach(({ el, needs }) =>
+        el.classList.toggle("idle", !needs.some((name) => on.has(/** @type {string} */ (byLabel.get(name))))),
+      );
+    GROUPS.concat(other.length ? [{ title: "Other", items: other }] : []).forEach((group) => {
+      const files = group.items.filter((name) => byLabel.has(name));
+      if (!files.length) return;
+      const section = document.createElement("div"),
+        head = document.createElement("h3"),
+        grid = document.createElement("div");
+      head.textContent = group.title;
+      if (group.needs) {
+        section.className = "needs";
+        const hint = document.createElement("span");
+        hint.textContent = " needs " + group.needs.join(" or ");
+        head.appendChild(hint);
+        dependents.push({ el: section, needs: group.needs });
+      }
+      grid.className = "toggles";
+      files.forEach((name) => {
+        const file = /** @type {string} */ (byLabel.get(name));
+        const row = document.createElement("label"),
+          box = document.createElement("input");
+        box.type = "checkbox";
+        box.addEventListener("change", () => {
+          if (box.checked) on.add(file);
+          else on.delete(file);
+          dimDependents();
+          draw();
+        });
+        row.appendChild(box);
+        row.appendChild(document.createTextNode(name));
+        grid.appendChild(row);
       });
-      row.appendChild(box);
-      row.appendChild(document.createTextNode(label(file)));
-      toggles.appendChild(row);
+      section.appendChild(head);
+      section.appendChild(grid);
+      toggles.appendChild(section);
     });
+    dimDependents();
     const sliders = /** @type {HTMLElement} */ (
       document.getElementById("sliders")
     );
@@ -192,6 +246,7 @@ const SLIDER_STEPS = 100; // steps across a slider's range
       toggles
         .querySelectorAll("input")
         .forEach((el) => /** @type {HTMLInputElement} */ (el.checked = false));
+      dimDependents();
     };
     /** @type {HTMLElement} */ (document.getElementById("clear")).onclick =
       () => {

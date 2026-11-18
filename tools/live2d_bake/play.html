@@ -20,6 +20,11 @@
   .panel { min-width: 0; overflow-y: auto; padding-right: 8px; }
   h2 { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 6px; }
   .toggles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
+  #toggles h3 { font-size: 12px; font-weight: 600; color: #ccc; margin: 10px 0 4px; }
+  #toggles h3 span { font-weight: normal; color: #888; }
+  /* a group that needs another group's toggle sits indented under it, dimmed while none of those is on */
+  #toggles .needs { margin-left: 14px; padding-left: 10px; border-left: 2px solid #444; }
+  #toggles .needs.idle .toggles { opacity: .45; }
   .toggles label { display: flex; gap: 6px; align-items: center; cursor: pointer; padding: 2px 0; }
   .sliders label { display: grid; grid-template-columns: minmax(150px, max-content) 1fr 48px; gap: 8px; align-items: center; padding: 2px 0; }
   .sliders output { color: #9c9; font: 12px ui-monospace, Menlo, monospace; text-align: right; }
@@ -37,7 +42,7 @@
   <div class="panel">
     <div class="row"><button id="reset">Reset all</button><button id="clear">Expressions off</button></div>
     <h2>Expressions</h2>
-    <div class="toggles" id="toggles"></div>
+    <div id="toggles"></div>
     <h2>Face and body (what the HUD bake uses)</h2>
     <div class="sliders" id="sliders"></div>
     <h2>Pose and outfit switches (what the pose expressions set)</h2>
