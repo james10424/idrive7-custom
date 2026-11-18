@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <cstdint>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <algorithm>
@@ -158,7 +159,7 @@ private:
     int64_t display_since_ = kNotUp;
     bool display_known_ = false, display_held_ = false;
     int64_t status_asked_ = 0, status_answered_ = 0, opened_at_ = 0;
-    int64_t next_ = 0;
+    double next_ = 0;   /* when the next frame is due (now_fms); on a grid of 1000 / fps ms, not whole ms */
     double last_update_ = 0;
     unsigned core_phase_ = 0;   /* frames since Core last ran (core > 1) */
     uint64_t frame_id_ = 1;
@@ -309,14 +310,14 @@ void Service::open_model(const cr::Json &m)
         vo.fps = r.fps;
         ref_ = cr_->video(lo_, vo);
     }
-    next_ = now_ms();
-    opened_at_ = next_;
+    next_ = now_fms();
+    opened_at_ = now_ms();
     status_asked_ = 0;
     display_known_ = false;   /* asked again: the KOMBI may have restarted since the last model */
     display_held_ = false;
     last_update_ = 0;
     core_phase_ = 0;
-    stats_at_ = next_;
+    stats_at_ = opened_at_;
     frames_ = ticks_ = 0;
     s_update_ = s_draw_ = s_read_ = s_physics_ = s_core_ = 0;
     const double ms = now_fms() - t0;
@@ -367,7 +368,7 @@ void Service::handle(const std::string &line)
     }
     if (t == "show" || t == "hide") {
         visible_ = t == "show";
-        if (visible_) next_ = now_ms();
+        if (visible_) next_ = now_fms();
         if (cr_ && ref_) {
             lo_.visible = visible_;
             cr_->set(ref_, lo_);
@@ -550,7 +551,10 @@ int Service::run(int listen_fd, bool activated)
         const int64_t now = now_ms();
         const bool drawing = model_ && visible_ && display_ready(now);
         int timeout = 250;
-        if (drawing) timeout = next_ > now ? (int)std::min<int64_t>(next_ - now, 250) : 0;
+        if (drawing) {
+            const double wait = next_ - now_fms();
+            timeout = wait > 0 ? (int)std::min(std::ceil(wait), 250.0) : 0;
+        }
         pollfd fds[3];
         int n = 0;
         fds[n++] = {listen_fd, POLLIN, 0};
@@ -586,13 +590,15 @@ int Service::run(int listen_fd, bool activated)
         }
         if (cr_) cr_->poll(now_ms());
         if (model_ && visible_ && !display_ready(now_ms())) {
-            next_ = now_ms();
-            stats_at_ = next_;   /* no stats while she waits */
-        } else if (model_ && visible_ && now_ms() >= next_) {
+            next_ = now_fms();
+            stats_at_ = now_ms();   /* no stats while she waits */
+        } else if (model_ && visible_ && now_fms() >= next_) {
             draw_frame();
-            const int64_t period = 1000 / (req_.fps ? req_.fps : 15);
+            /* the period in fractions of a ms: whole ms (33 for 30 fps) ran her at 30.3 fps, a frame every 3.3 s
+             * more than cluster-render's 30 a second shows */
+            const double period = 1000.0 / (req_.fps ? req_.fps : 15);
             next_ += period;
-            if (next_ < now_ms()) next_ = now_ms() + period;
+            if (next_ < now_fms()) next_ = now_fms() + period;
         }
         stats(now_ms());
         if (client_ >= 0 || model_) idle_since = now_ms();
