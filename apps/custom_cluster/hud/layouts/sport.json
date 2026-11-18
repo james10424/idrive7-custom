@@ -475,7 +475,7 @@
       "font": "s_unit",
       "color": "sblue",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "rpm_cap",
@@ -489,36 +489,6 @@
       "font": "s_unit",
       "color": "sred",
       "align": "center",
-      "backdrop": true
-    },
-    {
-      "id": "speed",
-      "type": "text",
-      "z": 5,
-      "x": 420,
-      "y": 313,
-      "w": 280,
-      "h": 68,
-      "text": "{{speed}}",
-      "font": "s_speed",
-      "color": "fg",
-      "align": "center",
-      "toggle": "!mapWindow",
-      "own": true
-    },
-    {
-      "id": "speed_unit",
-      "type": "text",
-      "z": 5,
-      "x": 580,
-      "y": 382,
-      "w": 80,
-      "h": 29,
-      "text": "{{u:speedLc}}",
-      "font": "s_unit",
-      "color": "sblue",
-      "align": "center",
-      "toggle": "!mapWindow",
       "backdrop": true
     },
     {
@@ -548,7 +518,7 @@
       "font": "s_gl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "f_half",
@@ -562,7 +532,7 @@
       "font": "s_gl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "fuel_icon",
@@ -795,7 +765,7 @@
       "font": "s_unit",
       "color": "dim",
       "align": "left",
-      "backdrop": true
+      "own": true
     },
     {
       "type": "text",
@@ -823,7 +793,7 @@
       "font": "s_unit",
       "color": "dim",
       "align": "left",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "nav_left",
@@ -1036,7 +1006,7 @@
       "font": "s_unit",
       "color": "dim",
       "align": "left",
-      "backdrop": true
+      "own": true
     }
   ]
 }

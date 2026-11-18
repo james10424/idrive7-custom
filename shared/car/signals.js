@@ -4,6 +4,8 @@
  * read-only UDS, BMW's guidance and media.
  * Methods of HudApp (engine/app.js adds them to its prototype).
  */
+const fs = require("fs");
+const path = require("path");
 const Car = require("../kit/car");
 const ShiftScore = require("../shift_score");
 const {
@@ -23,6 +25,10 @@ const {
   PEDAL_MS,
   PEDAL_OK,
   DIST_UNITS,
+  FUEL_UNITS,
+  HYBRID_ENGINE,
+  MODEL_WIRE,
+  TANK_BY_MODEL,
   PRESS_UNITS,
   PROGRAMS,
   TEMP_UNITS,
@@ -217,7 +223,12 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this.aheadLogged = {};
     this.accSetRaw = null; // cruiseCtrlSpeedHUD as sent
     this.aheadLogAt = {};
-    this.carUnits = { press: null, temp: null, dist: null, psiSeen: false }; // the car's display units (TPMS, eDrive range)
+    // the car's display units (TPMS, eDrive range, the "auto" unit settings)
+    this.carUnits = { press: null, temp: null, dist: null, fuel: null, psiSeen: false };
+    this.tankDetected = this._loadTank(); // L, by the car's model (Vehicle2 statusVehiclePartType), null unknown
+    this.partTypeLine = ""; // the model and engine type as last logged
+    /** @type {string | undefined} the units and tank the last rebuild painted its labels in (values.js _unitsSig) */
+    this.unitsSig = undefined;
     this.program = null; // 'S' / 'M' from the MDrive gearbox display, else null (D)
     this.fuelL = null;
     this.rangeKm = null;
@@ -350,20 +361,20 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
               TEMP_UNITS,
               msg && msg.unitOfMeasurementTemperature,
             );
-          const dist = unitName(DIST_UNITS, msg && msg.unitOfMeasurementSpeedometerDigital);
-          if (press === this.carUnits.press && temp === this.carUnits.temp && dist === this.carUnits.dist)
-            return;
-          this.carUnits.press = press;
-          this.carUnits.temp = temp;
-          this.carUnits.dist = dist;
+          const dist = unitName(DIST_UNITS, msg && msg.unitOfMeasurementSpeedometerDigital),
+            fuel = unitName(FUEL_UNITS, msg && msg.unitOfMeasurementFuel);
+          const u = this.carUnits;
+          if (press === u.press && temp === u.temp && dist === u.dist && fuel === u.fuel) return;
+          u.press = press;
+          u.temp = temp;
+          u.dist = dist;
+          u.fuel = fuel;
           this.log.info(
-            "car units: pressure " +
-              (press || "?") +
-              ", temperature " +
-              (temp || "?") +
-              ", distance " +
-              (dist || "?"),
+            "car units: pressure " + (press || "?") + ", temperature " + (temp || "?") + ", distance " +
+              (dist || "?") + ", fuel " + (fuel || "?"),
           );
+          // the "auto" unit settings follow these: a label painted once (mph, the scales) needs a rebuild
+          this._unitsMaybeChanged();
         },
         // a plug-in hybrid's battery as the car last reported it for charging (config.hybrid): the % BMW's app
         // shows, the fallback while Efficiencytainment2 sends none (a US plug-in hybrid showed none from it, Nov 18
@@ -533,6 +544,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       },
       // the parking brake (the Grand National theme's left lamp): statusParkingBrake 1 / 4 = set or setting, 0 / 2 = released
       "de.bmw.infotainment.vehicle.Vehicle2": {
+        // the car's model and engine type: the tank (the "tank" setting's Auto)
+        statusVehiclePartType: (msg) => this._onPartType(msg),
         statusStandstillFunctions: (msg) => {
           const raw = msg && msg.statusParkingBrake,
             status = enumNum(raw, PARK_BRAKE);
@@ -735,6 +748,53 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       }),
       this.log,
     );
+  },
+
+  /**
+   * The tank last detected (data/vehicle.json), so a start draws the right marks before the car says.
+   * @returns {?number}
+   */
+  _loadTank() {
+    try {
+      const litres = JSON.parse(fs.readFileSync(path.join(this.ctx.dataDir || ".", "vehicle.json"), "utf8")).tankLitres;
+      return isNum(litres) && litres > 0 ? litres : null;
+    } catch (err) {
+      return null;
+    }
+  },
+
+  /**
+   * Vehicle2 statusVehiclePartType: the model (G20 ...) and engine type give the tank (TANK_BY_MODEL), kept in
+   * data/vehicle.json. A model not in the table, or no value, leaves it as it was.
+   * @param {*} msg
+   * @returns {void}
+   */
+  _onPartType(msg) {
+    const rawModel = msg && msg.typeVehicle,
+      rawEngine = msg && msg.typeEngine;
+    const model = typeof rawModel === "string" ? rawModel : MODEL_WIRE[rawModel] || null,
+      hybrid = rawEngine === HYBRID_ENGINE.name || rawEngine === HYBRID_ENGINE.wire;
+    const tanks = model ? TANK_BY_MODEL[model] : null,
+      litres = tanks ? tanks[hybrid ? 1 : 0] : null;
+    const line = JSON.stringify({ typeVehicle: rawModel, typeEngine: rawEngine }) + " -> " + (litres || "?") + " L";
+    if (line !== this.partTypeLine) this.log.info("vehicle type: " + line);
+    this.partTypeLine = line;
+    if (!litres || litres === this.tankDetected) return;
+    this.tankDetected = litres;
+    try {
+      fs.writeFileSync(path.join(this.ctx.dataDir || ".", "vehicle.json"), JSON.stringify({ model, hybrid, tankLitres: litres }));
+    } catch (err) {
+      this.log.warn("vehicle.json: " + (err instanceof Error ? err.message : err));
+    }
+    this._unitsMaybeChanged();
+  },
+
+  /**
+   * Rebuilds when the units or the tank the labels were painted in changed (the car's units or model came in).
+   * @returns {void}
+   */
+  _unitsMaybeChanged() {
+    if (this.unitsSig !== undefined && this._unitsSig() !== this.unitsSig) this._rebuild();
   },
 
   /**

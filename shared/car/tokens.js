@@ -9,7 +9,7 @@
  * {{temp:<deg C>}} (that temperature in the display unit, °F rounded to 10, for gauge labels) {{boostTick:0|m1|m2|u1|u2|u3|end}} (Grand National's boost scale labels: 0 .. 1.5 bar in thirds, or 0 .. 20 psi in quarters; the other unit's slots empty) {{setup:engine|chassis|steering|gearbox}} (what that part is set to in the drive mode now)
  * {{consumption}} {{u:cons}}: average consumption for the period picked on the center screen, in the units setting's unit (mpg or
  * l/100km, converted from the car's own; ResetLogic averageConsumption, scale / 10^digit, else bcDataAll's raw * config.consumption.factor 0.1).
- * {{fuelFull}} {{fuelHalf}} (the tank's full and half marks, config.tankLitres, in L or US gal) {{u:fuel}} (L / gal)
+ * {{fuelFull}} {{fuelHalf}} (the tank's full and half marks, the Fuel tank setting or the car's model's, in L or US gal) {{u:fuel}} (L / gal)
  * {{time}} {{ampm}} {{u:temp}} (°F / °C) {{gLat}} {{gLong}} (g, 2 decimals) {{signal:<car.data() key>}} (raw, 1 decimal).
  * The car ahead (de.bmw.dass.GapVehicleAhead; "--" without a car measured or data older than 3 s): {{accGap}} the gap in m / ft
  * ({{u:gap}}), from GapVehicleDrivingAhead gapVehicleDrivingAhead while its status says a car is measured (an X3 sends only
@@ -41,12 +41,11 @@
  * about 4, 0.3 g 6, 0.6 g 8, 1 g 10), at least 1; 10 without a deceleration reading.
  * Redline (shift_score.js): {{rpm10}} (rpm to 10) {{shiftAt}} {{lastShift}} {{lastGears}} (4 > 5)
  * {{verdict}} {{shiftPrompt}} (SHIFT at the shift point) {{coldNote}} (only while the oil is cold).
- * Units follow the "units" setting: us = mph, °F, psi; metric = km/h, °C, bar.
+ * Units follow the unit settings by kind (values.js _us: speed and distance, temperature, pressure, fuel), each "auto" (the car's own), us or metric; without them the "units" setting.
  *
  * Methods of HudApp (engine/app.js adds them to its prototype).
  */
 const {
-  DEFAULT_TANK_L,
   FT_PER_M,
   L_PER_US_GAL,
   LBFT_PER_NM,
@@ -101,7 +100,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _eRangeKm() {
     if (!isNum(this.eRangeRaw)) return null;
     const dist = this.carUnits && this.carUnits.dist;
-    const miles = dist ? dist === "MEILEN" : this.setting("units") === "us";
+    const miles = dist ? dist === "MEILEN" : this._us("speed");
     return miles ? this.eRangeRaw / MI_PER_KM : this.eRangeRaw;
   },
 
@@ -111,14 +110,14 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {string}
    */
   _token(tok) {
-    const usUnits = this.setting("units") === "us";
+    const usSpeed = this._us("speed"), usTemp = this._us("temp"), usPress = this._us("press"), usFuel = this._us("fuel");
     /** @type {(value: *, digits: number) => string} */
     const fix = (value, digits) =>
       isNum(value) ? value.toFixed(digits) : "--";
     if (tok.indexOf("tyreP:") === 0) {
       const bar = this._tyre("p", tok.slice(6));
       return isNum(bar)
-        ? usUnits
+        ? usPress
           ? fix(bar * PSI_PER_BAR, 0)
           : fix(bar, 1)
         : "--";
@@ -126,12 +125,12 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     if (tok.indexOf("tyreT:") === 0) {
       const celsius = this._tyre("t", tok.slice(6));
       return isNum(celsius)
-        ? String(Math.round(usUnits ? (celsius * 9) / 5 + 32 : celsius))
+        ? String(Math.round(usTemp ? (celsius * 9) / 5 + 32 : celsius))
         : "--";
     }
     switch (tok) {
       case "u:pressure":
-        return usUnits ? "psi" : "bar";
+        return usPress ? "psi" : "bar";
       case "throttle": {
         const throttle = this._throttle();
         return isNum(throttle) ? String(Math.round(throttle)) : "--";
@@ -175,7 +174,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         const km = this._odometer();
         return isNum(km)
           ? (
-              "000000" + Math.floor(usUnits ? km * MI_PER_KM : km)
+              "000000" + Math.floor(usSpeed ? km * MI_PER_KM : km)
             ).slice(-ODOMETER_DIGITS)
           : "------";
       }
@@ -185,7 +184,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           ? String(
               Math.min(
                 RANGE3_MAX,
-                Math.max(0, Math.round(usUnits ? range * MI_PER_KM : range)),
+                Math.max(0, Math.round(usSpeed ? range * MI_PER_KM : range)),
               ),
             )
           : "---";
@@ -194,12 +193,12 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         const range = this._raw("range");
         return isNum(range)
           ? (
-              "0000" + Math.round(usUnits ? range * MI_PER_KM : range)
+              "0000" + Math.round(usSpeed ? range * MI_PER_KM : range)
             ).slice(-RANGE4_DIGITS)
           : "----";
       }
       case "u:distUc":
-        return usUnits ? "MI" : "KM";
+        return usSpeed ? "MI" : "KM";
       // the route (while guiding; "--" else): distance left as BMW formats it, its unit, time left h:mm
       case "navLeft": {
         const route = this.route;
@@ -230,7 +229,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "ambientN": {
         const ambient = this._raw("ambient");
         return isNum(ambient)
-          ? String(Math.round(usUnits ? (ambient * 9) / 5 + 32 : ambient))
+          ? String(Math.round(usTemp ? (ambient * 9) / 5 + 32 : ambient))
           : "--";
       } // no + sign (the seven-segment font has none)
       case "volt12": {
@@ -244,19 +243,19 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "accGap": {
         const gap = this._acc("gap");
         return isNum(gap)
-          ? String(Math.round(usUnits ? gap * FT_PER_M : gap))
+          ? String(Math.round(usSpeed ? gap * FT_PER_M : gap))
           : "--";
       }
       case "u:gap":
-        return usUnits ? "FT" : "M";
+        return usSpeed ? "FT" : "M";
       case "accRel": {
         const rel = this._acc("rel");
         return isNum(rel)
-          ? String(Math.round(usUnits ? rel * MI_PER_KM : rel))
+          ? String(Math.round(usSpeed ? rel * MI_PER_KM : rel))
           : "--";
       } // the HUD fonts have no '+'
       case "u:rel":
-        return usUnits ? "MPH" : "KM/H";
+        return usSpeed ? "MPH" : "KM/H";
       case "accSet": {
         const setSpeed = this._acc("set");
         return isNum(setSpeed) ? String(Math.round(setSpeed)) : "--";
@@ -265,11 +264,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "speed": {
         const speed = this._raw("speed");
         return isNum(speed)
-          ? String(Math.floor(Math.max(0, usUnits ? speed * MI_PER_KM : speed)))
+          ? String(Math.floor(Math.max(0, usSpeed ? speed * MI_PER_KM : speed)))
           : "--";
       }
       case "u:speed":
-        return usUnits ? "MPH" : "KM/H";
+        return usSpeed ? "MPH" : "KM/H";
       case "mph": {
         const speed = this._raw("speed");
         return isNum(speed)
@@ -280,27 +279,27 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       case "coolant": {
         const temp = this._raw(tok);
         return fix(
-          isNum(temp) ? (usUnits ? (temp * 9) / 5 + 32 : temp) : temp,
+          isNum(temp) ? (usTemp ? (temp * 9) / 5 + 32 : temp) : temp,
           0,
         );
       }
       case "boost": {
         const boost = this._raw("boost");
-        return usUnits
+        return usPress
           ? fix(isNum(boost) ? boost * PSI_PER_BAR : boost, 1)
           : fix(boost, 2);
       }
       case "u:boost":
-        return usUnits ? "PSI" : "BAR";
+        return usPress ? "PSI" : "BAR";
       case "u:temp":
-        return usUnits ? "°F" : "°C";
+        return usTemp ? "°F" : "°C";
       // a plug-in hybrid (config.hybrid): its battery %, its electric range, the range as "fuel + electric", and the
       // oil gauge's labels as the battery's while the car sends a battery (Sport)
       case "hvSoc":
         return isNum(this.hvSoc) ? String(Math.round(this.hvSoc)) : "--";
       case "eRange": {
         const eKm = this._eRangeKm();
-        return isNum(eKm) ? String(Math.round(usUnits ? eKm * MI_PER_KM : eKm)) : "--";
+        return isNum(eKm) ? String(Math.round(usSpeed ? eKm * MI_PER_KM : eKm)) : "--";
       }
       // "fuel + electric": KombiIF's range is the combined one on a plug-in hybrid (a US car showed 330 mi, BMW's app
       // 309 combustion + 21 electric = 330 combined, Nov 18 2026), so the fuel part is it less the electric range
@@ -309,7 +308,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         if (!isNum(eKm)) return "--";
         const total = this._raw("range");
         const fuel = isNum(total) ? Math.max(0, total - eKm) : null;
-        const fuelText = isNum(fuel) ? String(Math.round(usUnits ? fuel * MI_PER_KM : fuel)) : "--";
+        const fuelText = isNum(fuel) ? String(Math.round(usSpeed ? fuel * MI_PER_KM : fuel)) : "--";
         return fuelText + " + " + this._token("eRange");
       }
       case "rangeFuelOnly":
@@ -318,40 +317,40 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         return isNum(this.hvSoc) ? "--" : "1";
       // not a "u:" token: those are painted once (text/index.js STATIC_TOKEN), and this one follows the car
       case "oilOrHvUnit":
-        return isNum(this.hvSoc) ? "%" : usUnits ? "°F" : "°C";
-      // the fuel gauge's marks: the tank (config.tankLitres) full and half, in litres or US gallons, whole numbers
+        return isNum(this.hvSoc) ? "%" : usTemp ? "°F" : "°C";
+      // the fuel gauge's marks: the tank (values.js _tankL: the Fuel tank setting, the car's model) full and half, in litres or US gallons, whole numbers
       case "fuelFull":
       case "fuelHalf": {
         const tank =
-          (this.config.tankLitres || DEFAULT_TANK_L) *
-          (usUnits ? 1 / L_PER_US_GAL : 1);
+          this._tankL() *
+          (usFuel ? 1 / L_PER_US_GAL : 1);
         return String(Math.round(tok === "fuelFull" ? tank : tank / 2));
       }
       case "u:fuel":
-        return usUnits ? "gal" : "L";
+        return usFuel ? "gal" : "L";
       case "u:speedLc":
-        return usUnits ? "mph" : "km/h";
+        return usSpeed ? "mph" : "km/h";
       case "u:distLc":
-        return usUnits ? "mi" : "km";
+        return usSpeed ? "mi" : "km";
       case "range": {
         const range = this._raw("range");
         return fix(
-          isNum(range) ? (usUnits ? range * MI_PER_KM : range) : range,
+          isNum(range) ? (usSpeed ? range * MI_PER_KM : range) : range,
           0,
         );
       }
       case "ambient": {
         const ambient = this._raw("ambient");
         if (!isNum(ambient)) return "--";
-        const rounded = Math.round(usUnits ? (ambient * 9) / 5 + 32 : ambient);
+        const rounded = Math.round(usTemp ? (ambient * 9) / 5 + 32 : ambient);
         return (rounded > 0 ? "+" : "") + rounded;
       }
       case "u:torque":
-        return usUnits ? "lb-ft" : "Nm";
+        return usSpeed ? "lb-ft" : "Nm";
       case "torque": {
         const torque = this._raw("torque");
         return fix(
-          isNum(torque) ? (usUnits ? torque * LBFT_PER_NM : torque) : torque,
+          isNum(torque) ? (usSpeed ? torque * LBFT_PER_NM : torque) : torque,
           0,
         );
       }
@@ -361,9 +360,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         return isNum(pct) ? String(Math.min(100, Math.round(pct))) : "--";
       }
       case "boostHi":
-        return usUnits ? "20" : "1.4";
+        return usPress ? "20" : "1.4";
       case "boostMid":
-        return usUnits ? "10" : "0.7";
+        return usPress ? "10" : "0.7";
       case "ampmLc":
         return this._token("ampm").toLowerCase();
       case "gLat":
@@ -464,7 +463,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       default:
         if (tok.indexOf("spd:") === 0) {
           const label =
-            SPEED_SCALE[usUnits ? "us" : "metric"][Number(tok.slice(4))];
+            SPEED_SCALE[usSpeed ? "us" : "metric"][Number(tok.slice(4))];
           return label === undefined ? "" : String(label);
         } // speed scale labels
         if (tok.indexOf("oilOrHv:") === 0) {
@@ -477,7 +476,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           const celsius = Number(tok.slice(5));
           return isNum(celsius)
             ? String(
-                usUnits
+                usTemp
                   ? Math.round(((celsius * 9) / 5 + 32) / GAUGE_F_STEP) * GAUGE_F_STEP
                   : Math.round(celsius),
               )
@@ -487,10 +486,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           // Grand National's boost scale: 0 .. 1.5 bar in thirds, or 0 .. 20 psi in quarters; a slot of the other unit is empty
           const slot = tok.slice(10);
           if (slot === "0") return "0";
-          if (slot === "end") return usUnits ? "20" : "1.5";
+          if (slot === "end") return usPress ? "20" : "1.5";
           const k = Number(slot.slice(1));
-          if (slot[0] === "m") return usUnits ? "" : (k * BOOST_TICK_BAR).toFixed(1);
-          if (slot[0] === "u") return usUnits ? String(k * BOOST_TICK_PSI) : "";
+          if (slot[0] === "m") return usPress ? "" : (k * BOOST_TICK_BAR).toFixed(1);
+          if (slot[0] === "u") return usPress ? String(k * BOOST_TICK_PSI) : "";
           return "";
         }
         if (tok.indexOf("setup:") === 0) {

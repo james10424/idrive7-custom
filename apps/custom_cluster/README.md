@@ -8,9 +8,9 @@ Redraws the whole instrument cluster: a 1987 Buick Grand National dash, switchin
 
 The look of BMW's newer Live Cockpit Sport view.
 
-- **Left:** speed as a blue bracket on BMW's 0 to 200 mph scale (0 to 320 km/h), with the digital speed and a fuel bar inside it.
+- **Left:** speed as a blue bracket on BMW's 0 to 200 mph scale (0 to 320 km/h), with a fuel bar inside it.
 - **Right:** revs as a red bracket on the M40i's 0 to 7000 rpm scale, with yellow and red marks around your redline, with the gear and an oil temperature bar inside it.
-- **Middle:** BMW's map while navigating, else black.
+- **Middle:** always open: BMW's map shows through whenever BMW draws it.
 - **Bottom:** boost and coolant in the blue and red strip, plus the clock, range and outside temperature.
 - **While navigating:** the strip becomes the route's progress, filling from the right, with the distance left and the time left at its ends.
 
@@ -24,11 +24,11 @@ The look of a 1987 Buick Grand National's dash: chrome frames, white numbers, pi
 
 - **Left pod:** a 12 V voltmeter (8 to 16 V), with the parking brake lamp (red PARK BRAKE, or green AUTO HOLD while Auto Hold holds the car), the gear number (in orange VFD digits, a dash when there is none), and under it P R N D S in see-through white with a red needle behind them, showing through the selected one (S also in M). It eases from letter to letter, passing N as BMW's selector does, and stays put when the car sends no gear.
 - **Right pod:** oil temperature (50 / 110 / 150 °C), with the CRUISE lamp (lit green while ACC is on), the clock and the outside temperature under it.
-- **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. Over the 55, the speed in big orange VFD digits (mph or km/h by the units setting); under it, a rolling odometer: six drums of white digits that turn as a real one's do (miles or km by the units setting; the last drum turns with the distance driven), and the needle sweeps over it. No turn signals: BMW's own indicator sound stays.
+- **Middle, top:** a needle over a straight row of mph numbers, 5 to 85, with 55 in amber at the centre. Over the 55, the speed in big orange VFD digits (mph or km/h by the Speed and distance setting); under it, a rolling odometer: six drums of white digits that turn as a real one's do (miles or km by the Speed and distance setting; the last drum turns with the distance driven), and the needle sweeps over it. No turn signals: BMW's own indicator sound stays.
 - **Middle, bottom:** the fuel gauge in the middle as the Grand National's (UNLEADED FUEL ONLY over it, PREMIUM FUEL under it, E, the pump and F standing on the line its marks split at), a yellow LED boost bar (0 to 1.5 bar) on its left, and on its right an LED rev bar from 0 to 7000 rpm, green with each 1000's segment orange, under a red mark from your redline to the end.
 - **Bottom:** BMW's belt light and gear letter. There is no map window.
 
-What never changes while driving (the chrome frames, the marks, the coloured zones and the labels) is drawn once, as one compressed image for each Units setting, and only what moves is drawn live over it: 1.5 MiB of cluster-render's pixel memory instead of 7.4, and a much smaller shader. It needs cluster-render 0.5.9 or later, as Custom HUD does.
+What never changes while driving (the chrome frames, the marks, the coloured zones and the labels) is drawn once, as one compressed image, and only what moves is drawn live over it: 1.5 MiB of cluster-render's pixel memory instead of 7.4, and a much smaller shader. It needs cluster-render 0.5.9 or later, as Custom HUD does.
 
 More themes are on the way.
 
@@ -42,7 +42,8 @@ More themes are on the way.
 
 - **Theme:** Grand National or Sport (or Off).
 - **While navigating:** Sport with the map, Grand National, Off, or no change.
-- **Units:** mph, °F, psi or km/h, °C, bar.
+- **Speed and distance, Temperature, Pressure, Fuel and consumption:** each Auto (as the car's iDrive is set), or US (mph and mi, °F, psi, gal and mpg) or metric (km/h and km, °C, bar, L and l/100km), so you can mix them.
+- **Fuel tank:** where the fuel gauge's full mark is. Auto takes it from the car's model (a G20 3 Series 59 L, a 330e 40 L, an X3 65 L; others: the app's default), or pick 40, 50, 59, 65 or 83 L.
 - **Clock:** 12-hour or 24-hour.
 - **Redline:** where Grand National's rev LEDs turn yellow, and where the red marks start on Sport's rev scale (they always cover at least the last 500 rpm, and the yellow marks sit in the 700 rpm before them).
 - **Demo data:** fake driving data for trying it out parked.

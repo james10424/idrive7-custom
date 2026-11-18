@@ -255,7 +255,8 @@ const AMBIENT_C_PER_BIT = 0.5,
 // statusNewCurrentUnitsStatusExt wire numbers (PRESS_UNITS, TEMP_UNITS in shared/car/consts.js)
 const UNIT_BAR = 1,
   UNIT_C = 1,
-  UNIT_KM = 1;
+  UNIT_KM = 1,
+  UNIT_LITER = 1;
 // TPMS: pressure in 0.1 bar, temperature raw - 40 C; the rear pair a notch higher
 const TYRE_RAW_PER_BAR = 10,
   TYRE_OFFSET_C = 40;
@@ -577,6 +578,7 @@ setInterval(() => {
       unitOfMeasurementAirPressure: UNIT_BAR,
       unitOfMeasurementTemperature: UNIT_C,
       unitOfMeasurementSpeedometerDigital: UNIT_KM,
+      unitOfMeasurementFuel: UNIT_LITER,
     },
   );
   stub.feed("de.bmw.infotainment.misc.MDrive", "dataDisplayGearbox", {
@@ -691,6 +693,11 @@ const CAR_SW = {
     stub.feed("de.bmw.infotainment.KombiIF", "displayRangeElectricVehicle", {
       displayRangeElectricVehicle: range,
       displayRangeMaximum: 4095,
+    });
+    // the model and engine type (the Fuel tank setting's Auto): a G20, an M340i on NONE, else a 330e
+    stub.feed("de.bmw.infotainment.vehicle.Vehicle2", "statusVehiclePartType", {
+      typeVehicle: "G20",
+      typeEngine: value === "none" ? "BENZIN_DIREKTEINSPRITZUNG" : "HYBRIDMOTOR",
     });
   },
   // the doors as the car sends them (enum names; car, Nov 16 2026): one open, all, or all shut

@@ -672,6 +672,7 @@ class HudApp {
     this.refused = null;
     clearTimeout(this.statusAskT);
     this.statusAskT = null;
+    this.unitsSig = this._unitsSig(); // what the labels painted once are painted in (car/values.js)
     this.car.setRedline(this.setting("redline"));
     const name = this._layoutName(),
       mode = this._mode();

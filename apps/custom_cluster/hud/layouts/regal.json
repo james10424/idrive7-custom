@@ -356,7 +356,7 @@
       "font": "r_lbl",
       "color": "vfd",
       "align": "left",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "gear_P",
@@ -471,7 +471,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "left",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "fuel_E",
@@ -567,7 +567,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "boost_0",
@@ -581,7 +581,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "boost_m1",
@@ -595,7 +595,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "boost_m2",
@@ -609,7 +609,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "boost_u1",
@@ -623,7 +623,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "boost_u2",
@@ -637,7 +637,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "boost_u3",
@@ -651,7 +651,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "boost_end",
@@ -665,7 +665,7 @@
       "font": "r_lbl",
       "color": "fg",
       "align": "center",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "rpm0",
@@ -957,7 +957,7 @@
       "font": "r_lbl",
       "color": "vfd",
       "align": "left",
-      "backdrop": true
+      "own": true
     },
     {
       "id": "pod_clock",

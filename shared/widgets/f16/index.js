@@ -135,7 +135,7 @@ module.exports = {
     state.gLong = ease(state.gLong, dead(data.gLong));
     state.gLat = ease(state.gLat, dead(data.gLat));
     // the tapes: the speed in the units setting's unit, the rpm / 10
-    const us = hud.setting("units") === "us",
+    const us = hud._us("speed"),
       unit = us ? "mph" : "kmh",
       kmh = hud._raw("speed"),
       speed = isNum(kmh) ? Math.max(0, us ? kmh * MI_PER_KM : kmh) : 0,

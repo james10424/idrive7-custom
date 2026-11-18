@@ -240,16 +240,19 @@ ndl.update({'id': 'regal_needle', 'needleOnly': True, 'class': 'content', 'z': 8
             'h': ndl['win2'][1] + ndl['win2'][3] - ndl['win1'][1]})
 wd.append(ndl)
 
-# the backdrop: what never changes while driving (the shader's frames, marks, zones and unlit LEDs, and the labels that
-# depend on the Units setting at most) is baked on the bench into one ETC2 image per Units setting
-# (hud/backdrops/regal-<units>.etc2, bench "Bake backdrop"); the app draws it under the live parts. Not baked: what
-# changes while driving, the see-through P R N D S letters (the gear needle shows through them) and the pods' scale
-# numbers (their needles sweep by them)
+# the backdrop: what never changes while driving (the shader's frames, marks, zones and unlit LEDs, and the labels with
+# no {{token}}) is baked on the bench into one ETC2 image (hud/backdrops/regal.etc2, bench "Bake backdrop"); the app
+# draws it under the live parts. Not baked: what changes while driving, the see-through P R N D S letters (the gear
+# needle shows through them), the pods' scale numbers (their needles sweep by them) and the labels with a token (the
+# unit names and the boost scale follow the unit settings, painted once)
 LIVE_TEXT = {'spd_val', 'odo', 'range_drums', 'lamp_brake', 'lamp_cruise', 'lamp_heat', 'pod_gear', 'pod_temp', 'pod_clock'}
 # the live text left over sits far apart (centre, both pods): each on a layer of its own ("own"), its own size, instead
 # of sheets spanning the gaps between them
 for w in wd[1:]:
     if w['id'].startswith('door_'):
+        continue
+    if w['type'] == 'text' and '{{' in w.get('text', '') and w['id'] not in LIVE_TEXT:
+        w['own'] = True
         continue
     if w['id'] == 'regal_needle' or w['id'] in LIVE_TEXT or w['id'].startswith('gear_') or w['id'].startswith('pod') and \
             w['id'][3:4] in 'LR' and w['id'][4:].isdigit():

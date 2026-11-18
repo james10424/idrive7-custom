@@ -306,7 +306,7 @@ module.exports = {
     // the boost bar: "led2Signal" over "led2Range" [lo, hi] in "led2N" segments
     const led2N = widget.led2N || LED2_N,
       // "led2RangeUs": the range with US units (Grand National's 0 .. 20 psi, in bar)
-      led2Range = (hud.setting("units") === "us" && widget.led2RangeUs) ||
+      led2Range = (hud._us("press") && widget.led2RangeUs) ||
         widget.led2Range || LED2_RANGE_BAR,
       boost = hud._raw(widget.led2Signal || "boost");
     const led2 = isNum(boost)

@@ -108,7 +108,7 @@
       <label class="chk" title="The HUD shows only its visible window (the part the driver sees through the windshield), scaled up to fill the width; off: the whole 800x480 target."><input type="checkbox" id="zoomWin" checked> visible window only</label>
       <label class="chk" title="The whole log under the displays; off: folded to its last line (click it to unfold), and the displays get its height."><input type="checkbox" id="logFull" checked> log</label>
       <label class="chk" title="Draw the displays (at most 30 times a second, as cluster-render; a screen only when something on it changed, an effect only when its inputs did). Off: the picture holds still and the page uses next to no CPU, and live2d-render (Miku Live2D, in Docker) is paused; the apps, the renderer and the layers table keep running."><input type="checkbox" id="redraw" checked> redraw</label>
-      <button id="bakeBackdrop" title="Backdrop bake mode only (the bench started with CLUSTER_BACKDROP_BAKE=1, launch config bench-backdrop): captures the cluster's display (outlines, backdrop and car view off) and writes it as the layout's ETC2 backdrop for the current Units setting, apps/&lt;app&gt;/hud/backdrops/ (engine/backdrop.js). Bake once per Units setting.">bake backdrop</button>
+      <button id="bakeBackdrop" title="Backdrop bake mode only (the bench started with CLUSTER_BACKDROP_BAKE=1, launch config bench-backdrop): captures the cluster's display (outlines, backdrop and car view off) and writes it as the layout's ETC2 backdrop, apps/&lt;app&gt;/hud/backdrops/ (engine/backdrop.js). Bake once per layout.">bake backdrop</button>
       <span id="fps"></span>
     </div>
     <div id="views"><canvas id="hud" class="view" width="800" height="480"></canvas></div>

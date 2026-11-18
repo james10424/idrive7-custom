@@ -74,7 +74,7 @@ module.exports = {
     // the drums of a mechanical odometer in the units setting's unit: the last turns with the distance, each other
     // rolls over only through its lower neighbours' last unit (9 -> 0), as the gears of a real one
     const drumCount = state.drums,
-      useMiles = hud.setting("units") === "us";
+      useMiles = hud._us("speed");
     // "source": "range": the range instead, whole, capped at all nines, already in the display unit
     let distanceNow = null;
     if (widget.source === "range") {

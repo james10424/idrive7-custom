@@ -60,7 +60,21 @@ const PRESS_UNITS = { 1: "BAR", 2: "KPA", 3: "PSI" },
   TEMP_UNITS = { 1: "C", 2: "F" },
   // the speedometer's: the car's distance unit (KombiIF displayRangeElectricVehicle comes in it: a US plug-in hybrid
   // sent 21 for the 21 mi BMW's app showed, Nov 18 2026)
-  DIST_UNITS = { 1: "KILOMETER", 2: "MEILEN" };
+  DIST_UNITS = { 1: "KILOMETER", 2: "MEILEN" },
+  FUEL_UNITS = { 1: "LITER", 2: "GALONEN__UK", 3: "GALONEN__US" };
+// the unit settings (speedUnits, tempUnits, pressUnits, fuelUnits): each "auto" (the car's own display unit), "us"
+// or "metric"; without them (Custom HUD) the "units" setting
+const UNIT_KINDS = ["speed", "temp", "press", "fuel"];
+// the tank by the car's model (Vehicle2 statusVehiclePartType typeVehicle, by name or wire number): litres
+// [combustion, plug-in hybrid (typeEngine HYBRIDMOTOR)]; another model takes config.tankLitres
+/** @type {Record<string, number[]>} */
+const TANK_BY_MODEL = {
+  G20: [59, 40], G21: [59, 40], G28: [59, 40], G22: [59, 59], G23: [59, 59], G26: [59, 59],
+  G01: [65, 50], G02: [65, 65], G05: [83, 69], G06: [83, 83], G07: [83, 83],
+};
+/** @type {Record<number, string>} */
+const MODEL_WIRE = { 81: "G01", 82: "G20", 83: "G05", 86: "G28", 88: "G21", 89: "G06", 92: "G22", 93: "G23", 94: "G26", 110: "G02", 111: "G07" };
+const HYBRID_ENGINE = { name: "HYBRIDMOTOR", wire: 9 };
 /** @type {Record<string, number>} */
 const PRESS_TO_BAR = { BAR: 1, KPA: 0.01, PSI: 1 / PSI_PER_BAR };
 /**
@@ -315,6 +329,11 @@ module.exports = {
   PRESS_UNITS,
   TEMP_UNITS,
   DIST_UNITS,
+  FUEL_UNITS,
+  UNIT_KINDS,
+  TANK_BY_MODEL,
+  MODEL_WIRE,
+  HYBRID_ENGINE,
   PRESS_TO_BAR,
   unitName,
   PROGRAMS,

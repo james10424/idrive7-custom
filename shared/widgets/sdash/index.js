@@ -192,7 +192,7 @@ module.exports = {
    */
   update(hud, state, now, force) {
     const widget = state.w;
-    const usUnits = hud.setting("units") === "us";
+    const usUnits = hud._us("speed");
     const speed = hud._raw("speed"),
       rpm = hud._raw("rpm"),
       fuel = hud._raw("fuel"),

@@ -2,7 +2,7 @@
   "id": "custom_cluster",
   "title": "Custom Cluster",
   "description": "Redraws the instrument cluster: a 1987 Grand National dash, or a Sport view round BMW's map while navigating",
-  "version": "0.1.65",
+  "version": "0.1.66",
   "vendor": "custom",
   "loggingId": "OCC1",
   "iconGlyph": "CLU",
@@ -35,7 +35,8 @@
     },
     "de.bmw.infotainment.vehicle.Vehicle2": {
       "statusCarSpeed2": "rs",
-      "statusStandstillFunctions": "rs"
+      "statusStandstillFunctions": "rs",
+      "statusVehiclePartType": "rs"
     },
     "de.bmw.infotainment.drivingexcitement.FES": {
       "statusSwitchDriveDynamicSport2": "rs",
@@ -187,18 +188,114 @@
       ]
     },
     {
-      "key": "units",
-      "label": "Units",
+      "key": "speedUnits",
+      "label": "Speed and distance",
       "type": "choice",
-      "default": "us",
+      "default": "auto",
       "options": [
         [
+          "auto",
+          "Auto (as the car's iDrive)"
+        ],
+        [
           "us",
-          "mph, °F, psi"
+          "mph, mi"
         ],
         [
           "metric",
-          "km/h, °C, bar"
+          "km/h, km"
+        ]
+      ]
+    },
+    {
+      "key": "tempUnits",
+      "label": "Temperature",
+      "type": "choice",
+      "default": "auto",
+      "options": [
+        [
+          "auto",
+          "Auto (as the car's iDrive)"
+        ],
+        [
+          "us",
+          "°F"
+        ],
+        [
+          "metric",
+          "°C"
+        ]
+      ]
+    },
+    {
+      "key": "pressUnits",
+      "label": "Pressure (boost, tyres)",
+      "type": "choice",
+      "default": "auto",
+      "options": [
+        [
+          "auto",
+          "Auto (as the car's iDrive)"
+        ],
+        [
+          "us",
+          "psi"
+        ],
+        [
+          "metric",
+          "bar"
+        ]
+      ]
+    },
+    {
+      "key": "fuelUnits",
+      "label": "Fuel and consumption",
+      "type": "choice",
+      "default": "auto",
+      "options": [
+        [
+          "auto",
+          "Auto (as the car's iDrive)"
+        ],
+        [
+          "us",
+          "gal, mpg"
+        ],
+        [
+          "metric",
+          "L, l/100km"
+        ]
+      ]
+    },
+    {
+      "key": "tank",
+      "label": "Fuel tank",
+      "type": "choice",
+      "default": "auto",
+      "options": [
+        [
+          "auto",
+          "Auto (by the car's model)"
+        ],
+        [
+          "40",
+          "40 L (330e)"
+        ],
+        [
+          "50",
+          "50 L (X3 30e)"
+        ],
+        [
+          "59",
+          "59 L (3 Series, M340i)"
+        ],
+        [
+          "65",
+          "65 L (X3)"
+        ],
+        [
+          "83",
+          "83 L (X5)"
         ]
       ]
     },
@@ -256,7 +353,7 @@
       "lon": -80.8431
     },
     "utcOffsetMinutes": null,
-    "_comment": "target panel: the whole 1920x720 instrument cluster, drawn over BMW's gauges. socketPath: cluster-render's documented default. location and utcOffsetMinutes: as in Custom HUD (the clock box). tankLitres: the fuel gauge's full mark (the car sends litres, not the tank size; a 2020 G20 M340i holds 59 L / 15.6 gal). engine: the peak crank torque (Nm) and power (kW) the {{torquePct}} and {{powerPct}} tokens count from (an M40i: 500 Nm, 285 kW / 382 hp). lamps: the Grand National theme's lamps (the brake lights, BMW's ACC display). hybrid: a plug-in hybrid's battery and electric range for Sport (nothing changes on a car that doesn't send them).",
+    "_comment": "target panel: the whole 1920x720 instrument cluster, drawn over BMW's gauges. socketPath: cluster-render's documented default. location and utcOffsetMinutes: as in Custom HUD (the clock box). tankLitres: the fuel gauge's full mark when the Fuel tank setting is Auto and the car's model isn't one the app knows (the car sends litres, not the tank size; models known: car/consts.js TANK_BY_MODEL, a 2020 G20 M340i 59 L / 15.6 gal, a 330e 40 L). engine: the peak crank torque (Nm) and power (kW) the {{torquePct}} and {{powerPct}} tokens count from (an M40i: 500 Nm, 285 kW / 382 hp). lamps: the Grand National theme's lamps (the brake lights, BMW's ACC display). hybrid: a plug-in hybrid's battery and electric range for Sport (nothing changes on a car that doesn't send them).",
     "dme": {
       "comment": "Boost from the engine unit (DME, ecu 18) over read-only UDS 0x22, only while the sport display sends no boost and a boost readout is shown. Absolute kPa, the outside air pressure (baro) is subtracted. Candidates tried in order, the first plausible one wins. From cauliflowermossgrape's car_vitals (MIT).",
       "ecu": 18,
@@ -423,8 +520,9 @@
       "m": "regal"
     },
     "fixedSettings": {
-      "_comment": "Settings no longer offered (0.1.48): the values the engine reads for them. Grand National's red mark over the rev scale starts at the Redline setting.",
-      "mapWindow": false,
+      "_comment": "Settings no longer offered (0.1.48): the values the engine reads for them. Grand National's red mark over the rev scale starts at the Redline setting. mapWindow: Sport's map window is always open (0.1.66). units: what the Auto unit settings take until the car says its own.",
+      "mapWindow": true,
+      "units": "us",
       "shiftBefore": 0,
       "coldGuard": false,
       "showBoost": true
