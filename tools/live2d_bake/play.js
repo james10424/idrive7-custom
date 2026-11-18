@@ -46,12 +46,17 @@ const SWITCHES = [
 ];
 
 /**
- * The expression checkboxes in groups, RetrynowMiku's (from rendering each one with and without the others): a group
- * with `needs` shows nothing until one of those is on, so it sits under them and dims while none is. Expressions not
- * listed go in "Other".
- * @type {{ title: string, items: string[], needs?: string[] }[]}
+ * @typedef {object} Group
+ * @property {string} title
+ * @property {string[]} items expressions by file name without .exp3.json
+ * @property {string[]} [needs] what it shows nothing without: it sits under them and dims while none of them is on
  */
-const GROUPS = [
+
+/**
+ * The expression checkboxes in groups, RetrynowMiku's (from rendering each one with and without the others).
+ * @type {Group[]}
+ */
+const MIKU_GROUPS = [
   {
     title: "Face",
     items: ["Blush", "Crying", "Dead Eyes", "Fanged Smile", "Gloom", "Pink Paint", "side Blush", "Squinny Eyes", "Star", "Sweat Drop", "Tears", "Wide Mouth"],
@@ -67,6 +72,50 @@ const GROUPS = [
   { title: "With the school uniform", needs: ["School Uniform"], items: ["Uniform Magic Eyes", "Open Arms"] },
 ];
 
+/**
+ * 多巴胺's: its expressions are named expression1..52, so these are what each one does, from the cdi3 name of the
+ * one parameter it sets (the file name shows on hover).
+ * @type {Record<string, string>}
+ */
+const DOPAMINE_NAMES = {
+  expression1: "Sweat", expression2: "Crying", expression3: "Surprised", expression4: "Angry",
+  expression5: "Question mark", expression6: "Speechless", expression7: "Stars", expression8: "Hearts",
+  expression9: "Microphone", expression10: "Fang", expression11: "Slime", expression51: "Dizzy",
+  expression12: "Pose 1", expression13: "Pose 2", expression14: "Pose 3", expression15: "Pose 4",
+  expression16: "Red", expression17: "Pink", expression18: "Yellow", expression19: "Green", expression20: "Blue",
+  expression21: "Purple", expression22: "Black",
+  expression23: "Cat", expression24: "Rabbit", expression25: "Fox", expression26: "Angel", expression27: "Devil",
+  expression52: "Ear colour",
+  expression28: "Hair colour", expression29: "Fringe 2", expression30: "Fringe 3", expression31: "Fringe 4",
+  expression32: "Fringe 5", expression33: "Hair 2", expression34: "Hair 3", expression35: "Hair 4", expression36: "Hair 5",
+  expression37: "Red", expression38: "Pink", expression39: "Yellow", expression40: "Green", expression41: "Blue",
+  expression42: "Purple", expression43: "White",
+  expression44: "Red", expression45: "Pink", expression46: "Yellow", expression47: "Green", expression48: "Blue",
+  expression49: "Purple", expression50: "White",
+};
+/** @type {(from: number, to: number) => string[]} expressionN for N from..to */
+const exprs = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => "expression" + (from + i));
+
+/** @type {Group[]} */
+const DOPAMINE_GROUPS = [
+  { title: "Face", items: exprs(1, 8).concat(["expression10", "expression51"]) },
+  { title: "Props", items: ["expression9", "expression11"] },
+  { title: "Poses", items: exprs(12, 15) },
+  { title: "Outfit colour", items: exprs(16, 22) },
+  { title: "Ears and wings", items: exprs(23, 27) },
+  { title: "Ear colour", needs: ["expression23", "expression25", "expression27"], items: ["expression52"] },
+  { title: "Hair", items: exprs(28, 36) },
+  { title: "Left eye colour", items: exprs(37, 43) },
+  { title: "Right eye colour", items: exprs(44, 50) },
+];
+
+/**
+ * Each model's groups and display names; the page takes the one whose expressions it has the most of. Expressions
+ * not in a group go in "Other".
+ * @type {{ groups: Group[], names?: Record<string, string> }[]}
+ */
+const MODELS = [{ groups: MIKU_GROUPS }, { groups: DOPAMINE_GROUPS, names: DOPAMINE_NAMES }];
+
 const BOX_MARGIN = 0.04; // margin round her idle box, of its height
 const SWITCH_NAMES_SHOWN = 2; // a switch's label names this many of the expressions that turn it on, then "+N"
 const SLIDER_STEPS = 100; // steps across a slider's range
@@ -81,6 +130,8 @@ const SLIDER_STEPS = 100; // steps across a slider's range
     /* global loadModel, Renderer, setParams, expressionParams, bounds */
     const g = /** @type {*} */ (window);
     const loaded = await g.loadModel();
+    // named after the model's .moc3 (RetrynowMiku, 多巴胺-1)
+    document.title = loaded.m3.FileReferences.Moc.replace(/^.*\//, "").replace(/\.moc3$/, "") + " toggles";
     const params = loaded.model.parameters;
     const names = /** @type {string[]} */ (
       await (await fetch("/expressions.json")).json()
@@ -128,14 +179,20 @@ const SLIDER_STEPS = 100; // steps across a slider's range
             : ""),
       );
     };
-    /** @type {(file: string) => string} */
-    const label = (file) => file.replace(/\.exp3\.json$/, "");
+    /** @type {(file: string) => string} the file name without .exp3.json, as the groups name it */
+    const stem = (file) => file.replace(/\.exp3\.json$/, "");
+    const stems = new Set(names.map(stem));
+    // this model's groups: the set with the most of its expressions
+    const counts = MODELS.map((m) => m.groups.reduce((n, g) => n + g.items.filter((s) => stems.has(s)).length, 0));
+    const { groups, names: shownNames = {} } = MODELS[counts.indexOf(Math.max(...counts))];
+    /** @type {(file: string) => string} what the page calls an expression */
+    const label = (file) => shownNames[stem(file)] || stem(file);
     const toggles = /** @type {HTMLElement} */ (
       document.getElementById("toggles")
     );
-    const byLabel = new Map(names.map((file) => [label(file), file]));
-    const listed = new Set(GROUPS.flatMap((g) => g.items));
-    const other = names.map(label).filter((name) => !listed.has(name));
+    const byLabel = new Map(names.map((file) => [stem(file), file]));
+    const listed = new Set(groups.flatMap((g) => g.items));
+    const other = names.map(stem).filter((name) => !listed.has(name));
     /** @type {{ el: HTMLElement, needs: string[] }[]} */
     const dependents = [];
     // a dependent group dims while none of what it needs is on
@@ -143,7 +200,7 @@ const SLIDER_STEPS = 100; // steps across a slider's range
       dependents.forEach(({ el, needs }) =>
         el.classList.toggle("idle", !needs.some((name) => on.has(/** @type {string} */ (byLabel.get(name))))),
       );
-    GROUPS.concat(other.length ? [{ title: "Other", items: other }] : []).forEach((group) => {
+    groups.concat(other.length ? [{ title: "Other", items: other }] : []).forEach((group) => {
       const files = group.items.filter((name) => byLabel.has(name));
       if (!files.length) return;
       const section = document.createElement("div"),
@@ -153,7 +210,7 @@ const SLIDER_STEPS = 100; // steps across a slider's range
       if (group.needs) {
         section.className = "needs";
         const hint = document.createElement("span");
-        hint.textContent = " needs " + group.needs.join(" or ");
+        hint.textContent = " needs " + group.needs.map((s) => label(s)).join(" or ");
         head.appendChild(hint);
         dependents.push({ el: section, needs: group.needs });
       }
@@ -170,7 +227,8 @@ const SLIDER_STEPS = 100; // steps across a slider's range
           draw();
         });
         row.appendChild(box);
-        row.appendChild(document.createTextNode(name));
+        row.appendChild(document.createTextNode(label(file)));
+        if (label(file) !== name) row.title = name;
         grid.appendChild(row);
       });
       section.appendChild(head);
