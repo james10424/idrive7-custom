@@ -1626,7 +1626,7 @@ const web = http.createServer(async (req, res) => {
     assist = {
       t: "assist",
       value:
-        reqBody.value === "acc" || reqBody.value === "off"
+        reqBody.value === "acc" || reqBody.value === "off" || reqBody.value === "noradar"
           ? reqBody.value
           : null,
     };

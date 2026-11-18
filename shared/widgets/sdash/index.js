@@ -63,7 +63,7 @@ const ROUTE_STEPS = 400; // the route strip is resent in steps of 1/400
 /** @typedef {import("../../engine/app").WidgetState} WidgetState */
 /** @typedef {import("../../engine/app").App} HudApp */
 
-const DOCS = `effect layer; the whole Sport theme (sdash/shader.js): "geo" [yTop, yBend, yBottom, xBend] and "k" [above, below, round] for the left bracket's outer line (the right one is mirrored), "band" width, "inner" (the inner line's distance from the outer one), "scale" [y of 0, y of the top mark], "ticks" [speed, rpm], "rpmMax" (speed follows SPEED_SCALE), "fuelSeg" / "oilSeg" [fullX, fullY, emptyX, emptyY] (the oil bar shows a plug-in hybrid's battery 0..100 % instead while the car sends one, its rail red at the empty end), "strip" [left end x, y, h, slant], "topEnd" x; the middle is black, and the map window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right (BMW draws bits of its own Sport view there), and "holeMask" [x, y, w, h] in target px: a rectangle in it kept black (BMW's speed-limit sign at the window's left edge); "holeFade" [x, y, w, h, feather (30), darkness (0.85)]: a rectangle darkened in it, fading out over feather px (behind the gear, so the map doesn't run through it); "stripSignals" [left, right] turns the strip into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r] ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown "gapGauge" { box: [x, y, w, h], max (150 m) }: the car ahead as an upright box filled from the bottom up to the gap, red while closing faster than config.acc.closingKmh (10 km/h), not drawn without a gap; "routeStrip": true makes the strip the route's progress while guiding (travelled / (travelled + left), filled from the right end leftwards); "vbars" [{ box: [x, y, w, h], signal, range: [lo, hi], color }] (up to 2): more upright boxes like it (boost, battery)`;
+const DOCS = `effect layer; the whole Sport theme (sdash/shader.js): "geo" [yTop, yBend, yBottom, xBend] and "k" [above, below, round] for the left bracket's outer line (the right one is mirrored), "band" width, "inner" (the inner line's distance from the outer one), "scale" [y of 0, y of the top mark], "ticks" [speed, rpm], "rpmMax" (speed follows SPEED_SCALE), "fuelSeg" / "oilSeg" [fullX, fullY, emptyX, emptyY] (the oil bar shows a plug-in hybrid's battery 0..100 % instead while the car sends one, its rail red at the empty end), "strip" [left end x, y, h, slant], "topEnd" x; the middle is black, and the map window is cut see-through while "holeWhen" is on ("hole", "holeInset", "holeRadius" as fill), with "holeCut" [topW, topH, botW, botH]: a triangle in each corner of it kept black, mirrored left / right (BMW draws bits of its own Sport view there), and "holeMask" [x, y, w, h] in target px: a rectangle in it kept black (BMW's speed-limit sign at the window's left edge); "holeFade" [x, y, w, h, feather (30), darkness (0.85)]: a rectangle darkened in it, fading out over feather px (behind the gear, so the map doesn't run through it); "stripSignals" [left, right] turns the strip into two bars filled from its middle out (blue left, red right) by those signals over "stripMax" [l, r] ([100, 10]), "stripHotWhen": "kickdown" draws the left bar's last tenth red in kickdown "gapGauge" { box: [x, y, w, h], max (150 m) }: the car ahead as an upright box filled from the bottom up to the gap, red while closing faster than config.acc.closingKmh (10 km/h), empty with no car ahead, not drawn on a car without the distance sensor (GapVehicleDrivingAhead gap 255, not available, or not sent); "routeStrip": true makes the strip the route's progress while guiding (travelled / (travelled + left), filled from the right end leftwards); "vbars" [{ box: [x, y, w, h], signal, range: [lo, hi], color }] (up to 2): more upright boxes like it (boost, battery)`;
 
 module.exports = {
   type: "sdash",
@@ -241,13 +241,16 @@ module.exports = {
       : null;
     const hot =
       !!stripSignals && widget.stripHotWhen === "kickdown" && hud._kickdown();
-    // the car-ahead gauge: the gap over its "max" m, in 300 steps; red while closing fast
+    // the car-ahead gauge: the gap over its "max" m, in 300 steps; red while closing fast; empty with no car ahead, and
+    // not drawn (-1) on a car without the distance sensor (assist.js _gapSensor)
     const gap = widget.gapGauge ? hud._acc("gap") : null;
     const gapFrac = isNum(gap)
       ? Math.round(
           Math.min(1, Math.max(0, gap / (widget.gapGauge.max || GAP_MAX_M))) * GAP_STEPS,
         ) / GAP_STEPS
-      : -1;
+      : widget.gapGauge && hud._gapSensor()
+        ? 0
+        : -1;
     const gHot = gapFrac >= 0 && hud._closing();
     // boost and battery boxes: each signal over its "range" [lo, hi], in 100 steps
     const vbv =

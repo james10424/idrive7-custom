@@ -28,7 +28,7 @@ const Module = require("module");
  *   | { t: "set", key: string, value: any }
  *   | { t: "drive", value: number | null }
  *   | { t: "nav", value: string | null }
- *   | { t: "assist", value: "acc" | "off" | null }
+ *   | { t: "assist", value: "acc" | "off" | "noradar" | null }
  *   | { t: "car", key: string, value: string | null }
  *   | { t: "click", name: string }} ToApp
  */
@@ -238,6 +238,7 @@ const GAP_SWING_MS = 4000; // sin(t / this): one swing in about 25 s
 const GAP_MEAN_RAW = 200,
   GAP_SWING_RAW = 50; // 20 m +- 5 m in 0.1 m steps
 const AHEAD_NONE = 253; // the gap and object id with nothing measured
+const GAP_UNAVAILABLE = 255; // GapVehicleDrivingAhead's gap without the sensor (the catalog's default)
 const FRONT_NO_OBJECT = 4093; // DataFrontVehicle's fields with no object
 const G_MPS2 = 9.80665; // one g, as car.js divides by
 // manual values the page has not sent yet
@@ -460,12 +461,16 @@ setInterval(() => {
   // the car ahead (de.bmw.dass.GapVehicleAhead) as an X3 sends it: only GapVehicleDrivingAhead, once a second, 253 and
   // "nothing measured" without a car; with ACC on here a measured car whose gap swings 15..25 m over ~25 s (raw in 0.1 m
   // steps, as the car's reading was 10 times BMW's own at 1:1)
+  // "noradar": a car without the distance sensor, the gap 255 (the catalog's default, no data), not available
+  const noRadar = state === "noradar";
   const t = Date.now() / GAP_SWING_MS,
     gap = on
       ? Math.round(GAP_MEAN_RAW + GAP_SWING_RAW * Math.sin(t))
-      : AHEAD_NONE;
+      : noRadar
+        ? GAP_UNAVAILABLE
+        : AHEAD_NONE;
   stub.feed("de.bmw.dass.GapVehicleAhead", "GapVehicleDrivingAhead", {
-    qualifierFunctionVehicleDrivingAhead: "FUNKTION_VERFUEGBAR",
+    qualifierFunctionVehicleDrivingAhead: noRadar ? "FUNKTION_NICHT_VERFUEGBAR" : "FUNKTION_VERFUEGBAR",
     statusMeasurementVehicleDrivingAhead: on
       ? "ELEMENT__GEMESSEN"
       : "KEIN_ELEMENT_GEMESSEN",

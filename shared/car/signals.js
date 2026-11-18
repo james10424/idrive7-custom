@@ -438,6 +438,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             );
           this.ahead2 = {
             gap: isNum(gap) && gap < GAP2_NONE_MIN ? gap : null,
+            raw: isNum(gap) ? gap : null,
             q: msg.qualifierFunctionVehicleDrivingAhead,
             measured:
               measurement >= AHEAD2_MEASURED.NEUES_ELEMENT__GEMESSEN &&

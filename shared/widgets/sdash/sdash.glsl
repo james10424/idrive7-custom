@@ -347,8 +347,8 @@ void main() {
         c = over(vec4(mix(BLUE_LINE, RED_LINE, step(u_size.x * 0.5, p.x)) * 0.8, cov(abs(p.y - u_geo.z) - 1.2)), c);
 #endif
 #ifndef SDASH_BAKE
-    // the car-ahead gauge: an upright box filled up to the gap, white (red while closing fast), none without a gap
-    // (no car ahead, or the car sends none); boost and battery boxes
+    // the car-ahead gauge: an upright box filled up to the gap, white (red while closing fast), empty with no car
+    // ahead, none on a car without the distance sensor (u_gapG.x < 0); boost and battery boxes
     if (u_gapG.x >= 0.0)
         c = vbox(p, u_gapRail, u_gapG.x, u_gapG.y > 0.5 ? vec3(1.0, 0.2, 0.22) : vec3(0.96, 0.97, 1.0), c);
     c = vbox(p, u_vbar0, u_vbarV.x, u_vbarC0, c);

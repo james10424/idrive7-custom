@@ -23,6 +23,8 @@ const ACC_SET_NONE = 65535; // cruiseCtrlSpeedHUD: no set speed
 const REL_MIN_DT_MS = 200; // the gap's rate: worked out over at least this long
 const KMH_PER_MS = 3.6;
 const CLOSING_KMH = 10; // config.acc.closingKmh when unset
+const GAP2_UNAVAILABLE = 255; // GapVehicleDrivingAhead's gap: the catalog's default, no data (a car without the sensor)
+const SENSOR_FRESH_MS = 5000; // the distance sensor counts as there this long after its last message
 
 module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   /**
@@ -147,6 +149,21 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     )
       return this._accScale("gap", ahead2.gap);
     return null;
+  },
+
+  /**
+   * Whether the car has a working distance sensor, a car ahead or not: GapVehicleDrivingAhead within SENSOR_FRESH_MS
+   * (it comes once a second) with a gap other than GAP2_UNAVAILABLE (255, the catalog's "no data") and a qualifier
+   * other than not available / unfilled. 253 and 254 (nothing measured) still count: no car ahead, the sensor is there.
+   * @returns {boolean}
+   */
+  _gapSensor() {
+    const ahead2 = this.ahead2;
+    return !!ahead2 &&
+      Date.now() - ahead2.at < SENSOR_FRESH_MS &&
+      isNum(ahead2.raw) &&
+      ahead2.raw !== GAP2_UNAVAILABLE &&
+      [AHEAD2_Q.FUNKTION_NICHT_VERFUEGBAR, AHEAD2_Q.SIGNAL_UNBEFUELLT].indexOf(enumNum(ahead2.q, AHEAD2_Q)) < 0;
   },
 
   /**

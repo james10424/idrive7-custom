@@ -26,7 +26,7 @@
  */
 /**
  * GapVehicleDrivingAhead, raw.
- * @typedef {{ gap: ?number, q: unknown, measured: boolean, at: number }} Ahead2
+ * @typedef {{ gap: ?number, raw: ?number, q: unknown, measured: boolean, at: number }} Ahead2
  */
 /**
  * The route while guiding (Guidance), raw distances.
