@@ -35,6 +35,8 @@
       await borrowPage();
       const g = /** @type {*} */ (window);
       const loaded = await g.loadModel();
+      // named after the model's .moc3 (RetrynowMiku, 多巴胺-1)
+      document.title = loaded.m3.FileReferences.Moc.replace(/^.*\//, "").replace(/\.moc3$/, "") + " replay";
       const ids = /** @type {string[]} */ (loaded.model.parameters.ids);
       const renderer = new (window.eval("Renderer"))(loaded);
 
@@ -136,9 +138,13 @@
         }
       };
 
+      let clipText = "",
+        clipName = "";
       /** @param {string} text @param {string} name the file's name */
       const openClip = (text, name) => {
         const parsed = JSON.parse(text);
+        clipText = text;
+        clipName = name;
         if (!parsed || !Array.isArray(parsed.names) || !Array.isArray(parsed.frames) || !parsed.frames.length)
           throw new Error(name + ": not a clip from vts_record.js");
         clip = parsed;
@@ -220,6 +226,28 @@
 
       draw();
       logLine("open a clip (vts_record.js): drop it anywhere on the page or pick it on the right. Space: play, arrows: frames");
+      // switching model reloads the page: the clip comes back, at the same time (sessionStorage, this tab only; a
+      // clip too big for it just isn't kept)
+      const KEPT = "replayClip";
+      await g.modelSwitch(() => {
+        try {
+          if (clipText) sessionStorage.setItem(KEPT, JSON.stringify({ text: clipText, name: clipName, t }));
+        } catch (err) {
+          /* not kept */
+        }
+      });
+      try {
+        const kept = sessionStorage.getItem(KEPT);
+        sessionStorage.removeItem(KEPT);
+        if (kept) {
+          const k = JSON.parse(kept);
+          openClip(k.text, k.name);
+          t = Math.min(k.t, duration());
+          draw();
+        }
+      } catch (err) {
+        /* nothing kept */
+      }
     } catch (err) {
       logLine("ERROR: " + ((err && /** @type {*} */ (err).stack) || err));
     }

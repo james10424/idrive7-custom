@@ -14,6 +14,9 @@
  * http://localhost:8095/replay plays a clip recorded from VTube Studio (vts_record.js) on the model.
  * --home play (or replay) serves that page at / as well (for a launcher that opens only the root); the bake page is
  * then at /bake (always there too).
+ * --models <folder> (instead of or with --model) serves every .model3.json found up to three folders down, and the
+ * playground and replay pages get a dropdown to switch between them (a cookie for this port; --model's is the default).
+ * --out is needed only to bake.
  *
  * After the page writes atlas.json, the atlases (atlas.rgba, close.rgba, idle.rgba, lean.rgba) are compressed to ETC2
  * (atlas.etc2, close.etc2, idle.etc2, lean.etc2, tools/etc2.js), which is what Custom HUD uploads: a quarter of the pixel memory.
@@ -45,15 +48,56 @@ const model = arg("model"),
   out = arg("out"),
   port = Number(arg("port", DEFAULT_PORT)),
   home = arg("home", "bake");
-if (!model || !core || !out) {
+const modelsDir = arg("models");
+const MODELS_DEPTH = 3; // folders down from --models to look for .model3.json files
+
+/**
+ * The .model3.json files in dir and up to depth folders down.
+ * @param {string} dir
+ * @param {number} depth
+ * @returns {string[]}
+ */
+function findModels(dir, depth) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    if (entry.name.startsWith(".")) return [];
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return depth > 0 ? findModels(full, depth - 1) : [];
+    return /\.model3\.json$/.test(entry.name) ? [full] : [];
+  });
+}
+
+/** @type {Map<string, string>} each model by its name (its file name without .model3.json) to its path; --model's first */
+const models = new Map();
+[model ? path.resolve(model) : null]
+  .concat(modelsDir ? findModels(path.resolve(modelsDir), MODELS_DEPTH).sort() : [])
+  .forEach((file) => {
+    if (!file) return;
+    const base = path.basename(file, ".model3.json");
+    let name = base;
+    for (let n = 2; models.has(name) && models.get(name) !== file; n++) name = base + " " + n;
+    models.set(name, file);
+  });
+if (!models.size || !core) {
   console.error(
-    "usage: node tools/live2d_bake/serve.js --model <model3.json> --core <live2dcubismcore.min.js> --config <bake.json> --out <folder> [--port " +
+    "usage: node tools/live2d_bake/serve.js --model <model3.json> | --models <folder> --core <live2dcubismcore.min.js> [--config <bake.json>] [--out <folder>] [--port " +
       DEFAULT_PORT +
       "]",
   );
   process.exit(1);
 }
-const modelDir = path.dirname(path.resolve(model));
+const DEFAULT_MODEL = /** @type {string} */ (models.keys().next().value);
+const COOKIE = "model_" + port; // per port: cookies on localhost are shared by every port
+
+/**
+ * The model a request is for: the cookie the pages' dropdown sets, else the default.
+ * @param {http.IncomingMessage} req
+ * @returns {string} its .model3.json
+ */
+function modelFor(req) {
+  const m = new RegExp("(?:^|;\\s*)" + COOKIE + "=([^;]*)").exec(req.headers.cookie || "");
+  const name = m ? decodeURIComponent(m[1]) : "";
+  return /** @type {string} */ (models.get(models.has(name) ? name : DEFAULT_MODEL));
+}
 /** @type {Record<string, string>} --home: the page served at / */
 const PAGES = { bake: "page.html", play: "play.html", replay: "replay.html" };
 /** @type {Record<string, string>} extension to Content-Type */
@@ -117,7 +161,14 @@ async function compressAtlases(dir) {
 http
   .createServer((req, res) => {
     const urlPath = decodeURIComponent(req.url.split("?")[0]);
+    const modelFile = modelFor(req),
+      modelDir = path.dirname(modelFile);
     if (req.method === "POST" && urlPath.indexOf(OUT_PREFIX) === 0) {
+      if (!out) {
+        res.writeHead(400);
+        res.end("no --out to write to");
+        return;
+      }
       // /out/<file> (or /out/inspect/<file>): written under --out, nowhere else
       const rel = path.normalize(urlPath.slice(OUT_PREFIX.length));
       if (
@@ -173,8 +224,14 @@ http
     if (urlPath === "/borrow.js")
       return send(res, path.join(__dirname, "borrow.js"));
     if (urlPath === "/expressions.json") {
+      // next to the model or one folder down (长离's are in EXP3/), as paths from the model's folder
       const names = fs
-        .readdirSync(modelDir)
+        .readdirSync(modelDir, { withFileTypes: true })
+        .flatMap((entry) =>
+          entry.isDirectory()
+            ? fs.readdirSync(path.join(modelDir, entry.name)).map((file) => entry.name + "/" + file)
+            : [entry.name],
+        )
         .filter((file) => /\.exp3\.json$/.test(file))
         .sort();
       res.writeHead(200, {
@@ -186,7 +243,13 @@ http
     if (urlPath === "/page.js")
       return send(res, path.join(__dirname, "page.js"));
     if (urlPath === "/core.js") return send(res, path.resolve(core));
-    if (urlPath === "/model.json") return send(res, path.resolve(model));
+    if (urlPath === "/model.json") return send(res, modelFile);
+    // the models the dropdown lists, and the one this request gets
+    if (urlPath === "/models.json") {
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      const current = Array.from(models.keys()).find((name) => models.get(name) === modelFile);
+      return res.end(JSON.stringify({ models: Array.from(models.keys()), current, cookie: COOKIE }));
+    }
     if (urlPath === "/config.json")
       return config
         ? send(res, path.resolve(config))

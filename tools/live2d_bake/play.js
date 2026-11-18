@@ -109,12 +109,48 @@ const DOPAMINE_GROUPS = [
   { title: "Right eye colour", items: exprs(44, 50) },
 ];
 
+/** IceGirl's: its expressions are named in Chinese; these follow its Read me.txt (the file name shows on hover). */
+const ICEGIRL_NAMES = {
+  "←歪嘴": "Crooked mouth left", "歪嘴→": "Crooked mouth right", "惊讶": "Surprised", "脸红": "Blush",
+  "脸黑": "Black face", "疑惑": "Question", "生气": "Angry", "爱心眼": "Love eyes", "星星眼": "Star eyes",
+  "金钱眼": "Money eyes", "白眼": "Blank stare", "流泪": "Tears", "舌头": "Tongue out",
+  "马尾": "Ponytail", "披发": "Hair down", "王冠": "Crown", "翅膀": "Ice wings", "猫耳": "Cat ears",
+  "手柄": "Game controller", "直播套装": "Streaming set",
+};
+
+/** @type {Group[]} */
+const ICEGIRL_GROUPS = [
+  { title: "Face", items: ["←歪嘴", "歪嘴→", "惊讶", "脸红", "脸黑", "疑惑", "生气", "流泪", "舌头"] },
+  { title: "Eyes", items: ["爱心眼", "星星眼", "金钱眼", "白眼"] },
+  { title: "Hair", items: ["马尾", "披发"] },
+  { title: "Accessories", items: ["王冠", "翅膀", "猫耳"] },
+  { title: "Props", items: ["直播套装", "手柄"] },
+];
+
+/** 长离's (her expressions are in EXP3/): named in Chinese, these are what each one does. */
+const CHANGLI_NAMES = {
+  "脸红": "Blush", "黑脸": "Black face", "生气": "Angry", "爱心眼": "Love eyes", "白眼": "Blank stare",
+  "眼罩": "Eye mask", "外套穿脱": "Coat off",
+};
+
+/** @type {Group[]} */
+const CHANGLI_GROUPS = [
+  { title: "Face", items: ["脸红", "黑脸", "生气"] },
+  { title: "Eyes", items: ["爱心眼", "白眼", "眼罩"] },
+  { title: "Outfit", items: ["外套穿脱"] },
+];
+
 /**
  * Each model's groups and display names; the page takes the one whose expressions it has the most of. Expressions
  * not in a group go in "Other".
  * @type {{ groups: Group[], names?: Record<string, string> }[]}
  */
-const MODELS = [{ groups: MIKU_GROUPS }, { groups: DOPAMINE_GROUPS, names: DOPAMINE_NAMES }];
+const MODELS = [
+  { groups: MIKU_GROUPS },
+  { groups: DOPAMINE_GROUPS, names: DOPAMINE_NAMES },
+  { groups: ICEGIRL_GROUPS, names: ICEGIRL_NAMES },
+  { groups: CHANGLI_GROUPS, names: CHANGLI_NAMES },
+];
 
 const BOX_MARGIN = 0.04; // margin round her idle box, of its height
 const SWITCH_NAMES_SHOWN = 2; // a switch's label names this many of the expressions that turn it on, then "+N"
@@ -179,8 +215,8 @@ const SLIDER_STEPS = 100; // steps across a slider's range
             : ""),
       );
     };
-    /** @type {(file: string) => string} the file name without .exp3.json, as the groups name it */
-    const stem = (file) => file.replace(/\.exp3\.json$/, "");
+    /** @type {(file: string) => string} the file name without its folder and .exp3.json, as the groups name it */
+    const stem = (file) => file.replace(/^.*\//, "").replace(/\.exp3\.json$/, "");
     const stems = new Set(names.map(stem));
     // this model's groups: the set with the most of its expressions
     const counts = MODELS.map((m) => m.groups.reduce((n, g) => n + g.items.filter((s) => stems.has(s)).length, 0));
@@ -322,6 +358,7 @@ const SLIDER_STEPS = 100; // steps across a slider's range
         draw();
       };
     await draw();
+    await g.modelSwitch();
   } catch (err) {
     logLine("ERROR: " + ((err && /** @type {*} */ (err).stack) || err));
   }

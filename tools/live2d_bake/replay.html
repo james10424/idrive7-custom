@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Miku replay</title>
+<title>Live2D replay</title>
 <style>
   :root { color-scheme: dark; }
   body { margin: 0; padding: 16px; background: #111; color: #ddd; font: 13px -apple-system, Helvetica, sans-serif; }
@@ -35,6 +35,7 @@
     <canvas id="big" width="900" height="1600"></canvas>
   </div>
   <div class="panel">
+    <div class="row"><label>Model <select id="model"></select></label></div>
     <h2>Clip</h2>
     <div class="row"><input type="file" id="file" accept=".json,application/json"></div>
     <p class="note">A clip from vts_record.js. Drop it anywhere on the page or pick it here.</p>
