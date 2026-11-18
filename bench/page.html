@@ -626,10 +626,58 @@
   if (/[?&]car=0/.test(location.search)) document.getElementById('carview').checked = false;
   if (/[?&]bmw=0/.test(location.search)) document.getElementById('bmwhud').checked = false;
   let frames = 0, lastFpsT = performance.now(), lastDraw = -Infinity;
+  /** A rect of an image layer's pixels into its canvas. */
+  function putPixels(image, bytes, msg) {
+    image.getContext('2d').putImageData(new ImageData(bytes, msg.w, msg.h), msg.x, msg.y);
+    image.stamp = (image.stamp || 0) + 1;
+    // a whole image's bytes are kept for WebGL (textureOf): uploading a big canvas copied it before WebKit had
+    // finished writing it once (Miku's even idle frames lost their top rows and she flickered on the bench)
+    const whole = msg.x === 0 && msg.y === 0 && msg.w === msg.iw && msg.h === msg.ih;
+    image.rgba = whole ? bytes : null;
+    image.rgbaStamp = whole ? image.stamp : -1;
+  }
+  // A video layer's frame buffer, as a video player's. live2d-render draws her evenly in Docker, but Docker Desktop's
+  // network forwarding (and a VM pause now and then) hands her frames over in clumps after stalls of 70 ms or more;
+  // drawing each as it came, the page could show only one a redraw and fell to 24-27 redraws a second at 30 fps.
+  // Here frames wait (VIDEO_PRIME of them before showing, VIDEO_MAX at most, the oldest dropped) and go out one at a
+  // time, as often as they arrive on average. Bench only: about two frames later; the car has no such hop.
+  const VIDEO_PRIME = 2, VIDEO_MAX = 4;
+  function queueVideo(image, bytes, msg) {
+    const now = performance.now();
+    if (!image.vq) { image.vq = []; image.vInt = 1000 / 30; image.vPrimed = false; image.vNext = 0; }
+    if (image.vLast) image.vInt = image.vInt * 0.95 + Math.max(5, Math.min(200, now - image.vLast)) * 0.05;
+    image.vLast = now;
+    image.vq.push({ bytes, msg });
+    if (image.vq.length > VIDEO_MAX) image.vq.shift();
+  }
+  /** Shows each video layer's next buffered frame when it's due. */
+  function releaseVideo(t) {
+    scene.forEach((layer) => {
+      if (layer.kind !== 'video') return;
+      const image = images.get(layer.key);
+      if (!image || !image.vq) return;
+      if (!image.vPrimed) {
+        if (image.vq.length < VIDEO_PRIME) return;
+        image.vPrimed = true;
+        image.vNext = t;
+      }
+      // not due yet, unless frames are piling up (the 60 Hz ticks run its pace a hair slow)
+      if (t + 4 < image.vNext && image.vq.length <= VIDEO_PRIME) return;
+      const f = image.vq.shift();
+      if (!f) { image.vPrimed = false; return; }
+      putPixels(image, f.bytes, f.msg);
+      dbgPx++;
+      markDirty(layer.target);
+      image.vNext = Math.max(image.vNext + image.vInt, t + image.vInt / 2);
+      if (!image.vq.length) image.vPrimed = false;
+    });
+  }
   // at most 30 redraws a second, as cluster-render's tick (cluster-render.conf fps = 30); a faster screen skips frames
   const FRAME_MS = 1000 / 30;
   function frame(t) {
     const redraw = document.getElementById('redraw').checked;
+    // a buffered video frame only goes out on a tick that redraws, so the next can't replace it unseen
+    if (redraw && t - lastDraw >= FRAME_MS - 2) releaseVideo(t);
     // the screens marked dirty, and every frame a screen with an effect on the renderer's clock (u_time)
     const due = redraw && t - lastDraw >= FRAME_MS - 2 ? views.filter((pane) => dirtyViews.has('*') || dirtyViews.has(pane.target) ||
       scene.some((layer) => layer.target === pane.target && layer.kind === 'effect' && layer.time && layer.visible)) : [];
@@ -835,14 +883,11 @@
         .then((buf) => {
           if (!buf || images.get(msg.key) !== image) return;
           const bytes = new Uint8ClampedArray(buf);
-          image.getContext('2d').putImageData(new ImageData(bytes, msg.w, msg.h), msg.x, msg.y);
-          image.stamp = (image.stamp || 0) + 1;
-          // a whole image's bytes are kept for WebGL (textureOf): uploading a big canvas copied it before WebKit had
-          // finished writing it once (Miku's even idle frames lost their top rows and she flickered on the bench)
-          const whole = msg.x === 0 && msg.y === 0 && msg.w === msg.iw && msg.h === msg.ih;
-          image.rgba = whole ? bytes : null;
-          image.rgbaStamp = whole ? image.stamp : -1;
-          dbgPx++; const owner = scene.find((layer) => layer.key === msg.key); markDirty(owner && owner.target);
+          const owner = scene.find((layer) => layer.key === msg.key);
+          // a video layer's frames (Miku Live2D's) wait in its frame buffer, shown evenly by the redraw loop
+          if (owner && owner.kind === 'video') return queueVideo(image, bytes, msg);
+          putPixels(image, bytes, msg);
+          dbgPx++; markDirty(owner && owner.target);
         }).catch(() => {});
     } else if (msg.t === 'nav' || msg.t === 'assist') {
       bmwState[msg.t] = msg.value; markDirty();
