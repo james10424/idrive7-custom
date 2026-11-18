@@ -131,6 +131,10 @@ struct l2d_model : public CubismUserModel {
     std::vector<float> defaults;
     std::vector<float> posePrev, poseNew;   /* l2d_blend: every drawable's vertices, the pose before and the newest */
     bool havePrev = false;
+    std::vector<char> isMask;   /* drawable i is some drawable's mask: blended always (masks are drawn hidden or not) */
+    double blendMs = 0;         /* l2d_blend's time and drawables blended, logged every 150 frames */
+    long blended = 0, blendTotal = 0;
+    int blendFrames = 0;
 
     ~l2d_model()
     {
@@ -181,6 +185,12 @@ struct l2d_model : public CubismUserModel {
         }
         GetRenderer<Rendering::CubismRenderer_OpenGLES2>()->IsPremultipliedAlpha(false);
         if (glGetError() != GL_NO_ERROR) { g_error = "OpenGL error loading the textures"; return false; }
+        isMask.assign(_model->GetDrawableCount(), 0);
+        for (int i = 0; i < _model->GetDrawableCount(); i++)
+            for (int k = 0; k < _model->GetDrawableMaskCounts()[i]; k++) {
+                const int j = _model->GetDrawableMasks()[i][k];
+                if (j >= 0 && j < (int)isMask.size()) isMask[j] = 1;
+            }
         const int n = _model->GetParameterCount();
         for (int i = 0; i < n; i++) {
             CubismIdHandle id = _model->GetParameterId(i);
@@ -243,6 +253,7 @@ void l2d_update(l2d_model *m, const float *values, const int *part_index, const 
 
 void l2d_blend(l2d_model *m, int keep, float t)
 {
+    const double t0 = now_ms();
     CubismModel *model = m->GetModel();
     const int n = model->GetDrawableCount();
     if (keep) {
@@ -260,11 +271,28 @@ void l2d_blend(l2d_model *m, int keep, float t)
     }
     if (m->poseNew.empty()) return;
     /* the vertices Core wrote, overwritten until its next update (it writes them all again; nothing reads them back):
-     * everything after reads them there, the masks' bounds as the drawing */
+     * everything after reads them there, the masks' bounds as the drawing.
+     * Only the drawables drawn are blended: not those hidden (Core's visibility flag, its newest pose) nor those wholly
+     * outside the picture last frame (the fast path's bounds), unless they are a mask. A drawable left out keeps
+     * Core's newest vertices, so the bounds still see it come into the picture, drawn there the frame after at
+     * most. CUBISM_BLEND_ALL=1 blends them all. */
+    static const bool all = getenv("CUBISM_BLEND_ALL") != nullptr;
+    const std::vector<unsigned char> &out = csmfast::g.out;
+    const bool useOut = csmfast::g.skipOut && (int)out.size() == n && (int)m->isMask.size() == n;
     const bool exact = t >= 1.0f || !m->havePrev;
     size_t at = 0;
     for (int i = 0; i < n; i++) {
         const size_t c = (size_t)model->GetDrawableVertexCount(i) * 2;
+        m->blendTotal++;
+        if (!all && !m->isMask.empty() && !m->isMask[i] &&
+            (!model->GetDrawableDynamicFlagIsVisible(i) || (useOut && out[i]))) {
+            /* one that left the picture mid-blend may hold blended vertices: the newest again on the exact frame (hidden
+             * ones can't: visibility only changes when Core runs, and Core wrote them all) */
+            if (!keep && c && exact && model->GetDrawableDynamicFlagIsVisible(i)) memcpy(const_cast<float *>(reinterpret_cast<const float *>(model->GetDrawableVertices(i))), &m->poseNew[at], c * sizeof(float));
+            at += c;
+            continue;
+        }
+        m->blended++;
         float *v = const_cast<float *>(reinterpret_cast<const float *>(model->GetDrawableVertices(i)));
         if (exact) {
             if (!keep && c) memcpy(v, &m->poseNew[at], c * sizeof(float));   /* after keep, Core's are the newest */
@@ -273,6 +301,14 @@ void l2d_blend(l2d_model *m, int keep, float t)
             for (size_t k = 0; k < c; k++) v[k] = a[k] + (b[k] - a[k]) * t;
         }
         at += c;
+    }
+    m->blendMs += now_ms() - t0;
+    if (++m->blendFrames >= 150) {
+        fprintf(stderr, "glue: blend %.3f ms a frame, %ld of %ld drawables blended\n", m->blendMs / m->blendFrames,
+                m->blended / m->blendFrames, m->blendTotal / m->blendFrames);
+        m->blendMs = 0;
+        m->blended = m->blendTotal = 0;
+        m->blendFrames = 0;
     }
 }
 
