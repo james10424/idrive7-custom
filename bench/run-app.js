@@ -688,7 +688,7 @@ const CAR_SW = {
   // "lsc": only from the charging service (LSCDataSink); "energy": only lastStateCallCharging's energy now / full
   hybrid: (value) => {
     const soc = value === "high" ? 80 : value === "low" ? 8 : 255,
-      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : value === "lsc" ? 26 : value === "energy" ? 20 : 4095;
+      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : value === "lsc" ? 26 : value === "energy" ? 20 : value === "chg" ? 15 : value === "segment" ? 11 : value === "route" ? 17 : 4095;
     stub.feed("de.bmw.infotainment.drivingexcitement.Efficiencytainment2", "statusChargeOfBatteryHybrid", {
       displayChargingConditionHighVoltageStorage: soc,
     });
@@ -700,6 +700,22 @@ const CAR_SW = {
       hvbActValueSoc: value === "charging" ? 97 : 255,
       energyContentActValueHvb: value === "energy" ? 72 : 511,
       energyContentMaxHvb: value === "energy" ? 120 : 511,
+    });
+    // "chg": the last-charge message only from the charging service; "segment": only the last drive segment's end;
+    // "route": only the route planner's energy now / full
+    const none = { displayActValueSoc: 255, hvbActValueSoc: 255, energyContentActValueHvb: 511, energyContentMaxHvb: 511 };
+    stub.feed("de.bmw.infotainment.lsc.LSCDataSink", "lastStateCallCharging", none);
+    stub.feed("de.bmw.infotainment.vehicle.Charging", "lastStateCallCharging",
+      value === "chg" ? Object.assign({}, none, { displayActValueSoc: 44 }) : none);
+    stub.feed("de.bmw.infotainment.vehicle.Charging", "infoChargingERoute5", {
+      EnergyDischargeHighVoltageStoragePresentStandard: value === "route" ? 5100 : 16777215,
+      EnergyDischargeHighVoltageStorageMaximalStandard: value === "route" ? 10200 : 65535,
+    });
+    stub.feed("de.bmw.infotainment.vehicle.Charging", "infoChargingERoute3", { ActAvailSOCFirstFullyChargedCell: 4095 });
+    stub.feed("de.bmw.infotainment.telematic.journeyhistory.BcPersonal", "driveSegment", {
+      bcBeSegmentId: 1,
+      bcBeHvSocStart: value === "segment" ? 40 : 255,
+      bcBeHvSocEnd: value === "segment" ? 33 : 255,
     });
     stub.feed("de.bmw.infotainment.KombiIF", "displayRangeElectricVehicle", {
       displayRangeElectricVehicle: range,

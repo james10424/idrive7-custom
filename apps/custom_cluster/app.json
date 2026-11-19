@@ -68,7 +68,18 @@
     },
     "de.bmw.infotainment.lsc.LSCDataSink": {
       "displayConditionHybrid": "s",
-      "_optional": "a plug-in hybrid's battery from the charging service, Sport's battery bar's fallback (config.hybrid)"
+      "lastStateCallCharging": "s",
+      "_optional": "a plug-in hybrid's battery from the charging data sink, Sport's battery bar's fallbacks (config.hybrid)"
+    },
+    "de.bmw.infotainment.vehicle.Charging": {
+      "lastStateCallCharging": "s",
+      "infoChargingERoute5": "s",
+      "infoChargingERoute3": "s",
+      "_optional": "a plug-in hybrid's battery from the charging service, Sport's battery bar's fallbacks (config.hybrid)"
+    },
+    "de.bmw.infotainment.telematic.journeyhistory.BcPersonal": {
+      "driveSegment": "rs",
+      "_optional": "a plug-in hybrid's battery at the end of the last drive segment, Sport's battery bar's last fallback (config.hybrid)"
     },
     "de.bmw.infotainment.navigation.guiding.Guidance": {
       "_instances": "Main_Instance",
