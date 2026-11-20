@@ -112,7 +112,7 @@ const PITCH_HEAD_MAX = 10;
 const PITCH_BODY_MAX = 5;
 const PITCH_G_TAU_MS = 350;
 const PITCH_G_DEAD = 0.02;
-const PITCH_SLOPE_TAU_MS = 1500;
+const PITCH_SLOPE_TAU_MS = 300; // quicker than the F-16's 1.5 s: the car's slope is already smooth, its 0.1 % flicker is ~0.06 deg of head
 const PITCH_SLOPE_FRESH_MS = 3000;
 // Holding a turn, she looks along it GLANCE_AWAY_MS, then glances back at you: her eyes swing to the side opposite
 // her turned head (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all,
