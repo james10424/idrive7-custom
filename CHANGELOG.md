@@ -4,6 +4,7 @@ Newest first. Dates are when the build was pushed.
 
 ## Nov 20 2026
 
+- **Custom Cluster 0.1.70: Sport's car-ahead distance fits three digits.** Its number's box was 64 px, but a three-digit gap ("134" ft, up to "150" m at the gauge's top) is 84 px in `s_val`, so the first digit was cut off; and FT (28 px) was cut to F in its 22 px box. The number's box is now 88 px (its right edge where it was), the unit's 30 px. Checked on the bench: "354 FT" whole.
 - **Custom HUD 0.1.59: Miku Live2D tilts with the F-16's flight path vector.** Her head and body tilt with the height the F-16 layout gives its flight path vector: the road's slope (`LaneSlope`, eased over 300 ms: quicker than the F-16's 1.5 s, which hid its 0.1 % flicker, about 0.06° of head) plus 12° a g of longitudinal g (eased over 350 ms past 0.02 g). With the nose: up uphill and pulling away, down downhill and braking. Her head (`ParamAngleY`) a degree a degree, at most ±10, her body (`ParamBodyAngleY`) half as much, at most ±5, on top of her bob's nod. LaneSlope is slow on the car (about 6 s onto a 5.4 % grade, Nov 16), so hills ease in and bumps don't show. Checked on the bench: +15 % and -15 % slope tip her head up and down. Unverified on the car.
 
 ## Nov 18 2026
