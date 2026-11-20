@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 20 2026
+
+- **Custom HUD 0.1.59: Miku Live2D rides the F-16's flight path vector up and down.** Her whole figure moves in her picture with the height the F-16 layout gives its flight path vector: the road's slope (`LaneSlope`, eased over 1.5 s) plus 12° a g of longitudinal g (eased over 350 ms past 0.02 g), 1 px a degree, up with the nose (uphill, pulling away), down downhill and braking, at most 6 px either way, on top of her bob (live2d-render's `offset`). LaneSlope is slow on the car (about 6 s onto a 5.4 % grade, Nov 16), so hills ease in and bumps don't show. Checked on the bench: 0.43 g reads 5.2° and moves her 5.2 px up, a 15 % downhill takes her down. Unverified on the car.
+
 ## Nov 18 2026
 
 - **Custom Cluster 0.1.69: five more places for a plug-in hybrid's battery, and which one worked.** After the four sources of 0.1.68, Sport's battery bar now also tries: the last-charge message from the charging data sink (`LSCDataSink` `lastStateCallCharging`) and from the charging service (`Charging` `lastStateCallCharging`), each its % then its energy ratio; the last drive segment's battery at its end (`BcPersonal` `driveSegment` `bcBeHvSocEnd`); the route planner's energy now over at full (`Charging` `infoChargingERoute5`, none past 100 %). `Charging` `infoChargingERoute3` (a cell's state of charge, scale unknown) is only logged. All in optional interfaces (`Charging`, `BcPersonal` new), so a car without them still installs. Each source's first value is logged (`hybrid battery source <name> gives a value: N %`), with every raw message on change and the source shown (`hybrid battery from <name>`). All unconfirmed on a car. Bench: the hybrid switch gains Charging service, drive segment and route planner options. Checked on the bench: each alone drives the bar (44 %, 33 %, 50 %), none brings the oil bar back.

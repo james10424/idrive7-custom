@@ -39,6 +39,9 @@ const hudData = require("../../hud_data");
  * @property {number[]} [wanderPhase] the wander's random phases (WANDER's three waves each, radians)
  * @property {number[]} [bobPhase] the bob's random phases (BOB's three waves)
  * @property {number} [bobY] px she's moved down in her picture by the bob
+ * @property {number} [pitchG] the longitudinal g, eased (the flight path vector's g part)
+ * @property {number} [pitchRoad] the road's slope, deg, eased
+ * @property {number} [pitchY] px she's moved down in her picture by the flight path vector (minus: up)
  * @property {number} [bobSent] the offset live2d-render has
  * @property {boolean} [noOffset] live2d-render is older than 0.1.1 (no "offset"): no bob
  * @property {number} [glanceN] the glances she's started in this turn hold
@@ -99,6 +102,17 @@ const BOB = [3, 0.21];
 const BOB_NOD = 10; // and her head nods with it: down this many degrees (ParamAngleY) at the bob's full dip
 const BOB_BODY = 5; // and her body bends forward with it (ParamBodyAngleY), degrees at the full dip
 const BOB_SEND_PX = 0.1; // an offset moving less than this isn't sent
+// and she rides the F-16 layout's flight path vector up and down (widgets/f16): the road's slope (LaneSlope) plus
+// PITCH_G_DEG a g of longitudinal acceleration (nose up pulling away, down braking), PITCH_PX_DEG px a degree, up with
+// the nose, at most PITCH_MAX_PX either way; the g eased over PITCH_G_TAU_MS past PITCH_G_DEAD, the slope over
+// PITCH_SLOPE_TAU_MS while it's fresher than PITCH_SLOPE_FRESH_MS (as the F-16 layout eases them)
+const PITCH_G_DEG = 12;
+const PITCH_PX_DEG = 1;
+const PITCH_MAX_PX = 6;
+const PITCH_G_TAU_MS = 350;
+const PITCH_G_DEAD = 0.02;
+const PITCH_SLOPE_TAU_MS = 1500;
+const PITCH_SLOPE_FRESH_MS = 3000;
 // Holding a turn, she looks along it GLANCE_AWAY_MS, then glances back at you: her eyes swing to the side opposite
 // her turned head (GLANCE_X of their range) and to her rest height, hold, and go back to the turn, GLANCE_MS in all,
 // easing GLANCE_EASE_MS each way; and again. She blinks as each glance starts. Her head stays turned.
@@ -330,6 +344,15 @@ function drive(hud, state, now) {
   // faded out as her idle loop comes in: it plays only with the expressions on and her head not turned (pose.js)
   const idleShown = y * (1 - Math.min(1, turned * Math.max(1, (state.rig && state.rig.turn && state.rig.turn.steps) || 1)));
   state.bobY = bob(state.bobPhase, now / 1000, 1 - idleShown);
+  // the flight path vector's height: the road's slope plus the g's pitch, eased, capped; up (minus) with the nose
+  const gDead = isNum(data.gLong) ? Math.sign(data.gLong) * Math.max(0, Math.abs(data.gLong) - PITCH_G_DEAD) : 0,
+    slopeTo = now - (hud.slopeAt || 0) < PITCH_SLOPE_FRESH_MS && isNum(hud.slopePitch) ? hud.slopePitch : 0;
+  state.pitchG = isNum(state.pitchG) ? state.pitchG + (gDead - state.pitchG) * (1 - Math.exp(-dt / PITCH_G_TAU_MS)) : gDead;
+  state.pitchRoad = isNum(state.pitchRoad)
+    ? state.pitchRoad + (slopeTo - state.pitchRoad) * (1 - Math.exp(-dt / PITCH_SLOPE_TAU_MS))
+    : slopeTo;
+  const pitchDeg = state.pitchRoad + state.pitchG * PITCH_G_DEG;
+  state.pitchY = -Math.max(-PITCH_MAX_PX, Math.min(PITCH_MAX_PX, pitchDeg * PITCH_PX_DEG));
   const extra = wander(state.wanderPhase, now / 1000, 1 - y);
   extra.ParamAngleY = (extra.ParamAngleY || 0) - (BOB_NOD * state.bobY) / BOB[0];   // her head dips as she does
   extra.ParamBodyAngleY = (extra.ParamBodyAngleY || 0) - (BOB_BODY * state.bobY) / BOB[0];   // and her body bends
@@ -444,8 +467,8 @@ module.exports = {
     if (force) state.sent = {};
     const list = changes(values, state.sent || (state.sent = {}), SEND_EPS);
     if (list) live.send({ t: "p", v: list });
-    // her bob, when live2d-render takes offsets (0.1.1 on)
-    const y = Math.round((state.bobY || 0) * 10) / 10;
+    // her bob and the flight path vector's height, when live2d-render takes offsets (0.1.1 on)
+    const y = Math.round(((state.bobY || 0) + (state.pitchY || 0)) * 10) / 10;
     if (!state.noOffset && (force || Math.abs(y - (state.bobSent || 0)) >= BOB_SEND_PX)) {
       state.bobSent = y;
       live.send({ t: "offset", x: 0, y });
