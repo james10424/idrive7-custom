@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 21 2026
+
+- **Custom Cluster 0.1.71: a plug-in hybrid's battery from its battery unit.** On the US plug-in hybrid the battery showed with 0.1.69 but went back to the oil bar on switching to Sport (likely the drive segment source emptying as a new segment starts). Sport's battery bar now first asks the battery unit itself (SME, 0x07) over the head unit's read-only diagnostic link: UDS 22 `DDBC`, 2 bytes, 0.1 %, the read cauliflowermossgrape's Redline and eDrive apps use (found in FDX100/KB). No drive mode or segment empties it. It's asked every 5 s, ahead of the pedal, 12 V and boost questions; after 3 unanswered in a row once a minute, and its value is dropped so the other sources take over. Never asked on a car whose `statusVehiclePartType` engine isn't a hybrid (so not on the M340i), nor on demo data. Logged: `hybrid battery: N % from the battery unit (SME 0x07, DDBC)` or `no answer from the battery unit (<why>)`, with the usual `hybrid battery source sme gives a value`. Bench: a fake diagnostic link answers the read while the Plug-in hybrid switch is "71% (battery unit, UDS)". Checked on the bench: 71.2 % on Sport's bar with every message empty; switched off, 3 unanswered reads, then the drive segment's 33 %. Unconfirmed on a car.
+
 ## Nov 20 2026
 
 - **Custom Cluster 0.1.70: Sport's car-ahead distance fits three digits.** Its number's box was 64 px, but a three-digit gap ("134" ft, up to "150" m at the gauge's top) is 84 px in `s_val`, so the first digit was cut off; and FT (28 px) was cut to F in its 22 px box. The number's box is now 88 px (its right edge where it was), the unit's 30 px. Checked on the bench: "354 FT" whole.

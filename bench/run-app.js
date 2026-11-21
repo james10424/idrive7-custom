@@ -97,6 +97,37 @@ const stub = headUnit(stage, {
 });
 const { spec, settings, ui } = stub;
 
+// the head unit's diagnostic link (InternalTasu), only as far as the bench needs it: the hybrid battery unit's read
+// (SME 0x07, UDS 22 DDBC) answers while the Plug-in hybrid switch is "sme"; every other question gets no reply
+const TASU_IFACE = "com.harman.infotainment.systemfunctions.tasu.tasu.InternalTasu";
+const SME_ECU = 0x07,
+  SME_SOC_RAW = 712; // 71.2 %
+/** @type {?(v: *) => void} */
+let tasuReply = null;
+let smeOn = false;
+const stubSignals = stub.ctx.signals,
+  realProxy = stubSignals.proxy,
+  realOn = stubSignals.on,
+  realCall = stubSignals.call;
+stubSignals.proxy = (iface, inst) =>
+  iface === TASU_IFACE ? Promise.resolve({ iface }) : realProxy(iface, inst);
+stubSignals.on = (p, ev, fn, lg) => {
+  if (!p || p.iface !== TASU_IFACE) return realOn(p, ev, fn, lg);
+  if (ev === "sendTasuResponse") tasuReply = fn;
+  return Promise.resolve();
+};
+stubSignals.call = (p, method, req, ms) => {
+  if (!p || p.iface !== TASU_IFACE) return realCall(p, method, req, ms);
+  const d = Array.from(req.udsData || []);
+  if (smeOn && tasuReply && req.targetAddress === SME_ECU && req.serviceID === 0x22 && d[0] === 0xdd && d[1] === 0xbc) {
+    // a TASU frame: the answering unit at byte 6, the UDS reply from byte 9
+    const frame = [0, 0, 0, 0, 0, 0, SME_ECU, 0, 0, 0x62, 0xdd, 0xbc, SME_SOC_RAW >> 8, SME_SOC_RAW & 0xff];
+    const reply = tasuReply;
+    setTimeout(() => reply({ udsResponse: Buffer.from(frame), errorCode: "NO_ERROR" }), 20);
+  }
+  return Promise.resolve({ TasuErrorEnum: "NO_ERROR" });
+};
+
 // the app's HudApp instance, for the values the page shows (hud.js is loaded by the app's main.js)
 /** @type {any} */
 let hud = null;
@@ -686,9 +717,11 @@ const CAR_SW = {
   // a plug-in hybrid's battery (%, 255 none) and electric range (the car's distance unit, km here; 4095 none), as the
   // catalog gives them; "charging": the battery only from Vehicle lastStateCallCharging, as a US car sent it
   // "lsc": only from the charging service (LSCDataSink); "energy": only lastStateCallCharging's energy now / full
+  // "sme": only from the battery unit over UDS (71.2 %)
   hybrid: (value) => {
+    smeOn = value === "sme"; // only the battery unit's own reading (UDS), every message empty
     const soc = value === "high" ? 80 : value === "low" ? 8 : 255,
-      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : value === "lsc" ? 26 : value === "energy" ? 20 : value === "chg" ? 15 : value === "segment" ? 11 : value === "route" ? 17 : 4095;
+      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : value === "lsc" ? 26 : value === "energy" ? 20 : value === "chg" ? 15 : value === "segment" ? 11 : value === "route" ? 17 : value === "sme" ? 30 : 4095;
     stub.feed("de.bmw.infotainment.drivingexcitement.Efficiencytainment2", "statusChargeOfBatteryHybrid", {
       displayChargingConditionHighVoltageStorage: soc,
     });

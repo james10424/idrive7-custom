@@ -53,8 +53,9 @@ const ROUTE_NOW_NONE = 16777215, // Charging infoChargingERoute5's energy now: n
 // a plug-in hybrid's battery sources, in the order tried (the first with a value is shown): the HMI's
 // (Efficiencytainment2), the charging data sink's (LSCDataSink displayConditionHybrid), the last-charge message's % and
 // energy ratio from Vehicle, LSCDataSink and Charging, the last drive segment's end (BcPersonal), the route planner's
-// energy ratio (Charging infoChargingERoute5)
-const HV_SOURCES = ["eff", "lsc", "charging", "energy", "lscLast", "lscLastEnergy", "chgLast", "chgLastEnergy", "segment", "route"];
+// energy ratio (Charging infoChargingERoute5). "sme" goes first: the battery unit's own reading (HV_UDS), which no
+// drive mode or drive segment empties
+const HV_SOURCES = ["sme", "eff", "lsc", "charging", "energy", "lscLast", "lscLastEnergy", "chgLast", "chgLastEnergy", "segment", "route"];
 /** @type {(v: *) => ?number} a battery % as sent, null when none (255) */
 const pct100 = (v) => (isNum(v) && v >= 0 && v <= HV_SOC_MAX ? v : null);
 const MILEAGE_NONE = 0xffffff; // a 24-bit mileage: none
@@ -73,6 +74,12 @@ const DME_ECU = 18; // config.dme.ecu when unset: the engine unit's address (0x1
 const BOOST_ASK_MS = 400; // the engine unit's boost: asked at most this often
 const BARO_ASK_MS = 60000; // the engine unit's outside air pressure: asked at most this often
 const DME_TICK_MS = 100; // the engine unit's question timer
+// A plug-in hybrid's battery from its battery unit (SME, 0x07): read-only UDS 22 DDBC, 2 bytes, 0.1 %. The read
+// cauliflowermossgrape's Redline and eDrive apps use (MIT), as FDX100/KB does; not checked on a car by us (Nov 21 2026)
+const HV_UDS = { ecu: 0x07, did: "DDBC", bytes: 2, at: 0, factor: 0.1, offset: 0, min: 0, max: 100, timeoutMs: 1000 };
+const HV_UDS_MS = 5000, // asked this often while it answers
+  HV_UDS_RETRY_MS = 60000, // and this often after HV_UDS_MISSES unanswered questions in a row
+  HV_UDS_MISSES = 3;
 const FONT_LOAD_MS = 2000; // the car's font: loaded this long after the media signals start
 const TZ_STEP_MIN = 15; // time zones are whole quarter hours
 const TZ_MIN_H = -12,
@@ -126,6 +133,7 @@ const TZ_MIN_H = -12,
  * @property {?string} autoHold Auto Hold: 'hold' (holding the car), 'armed', 'off', null until the car says
  * @property {?boolean} wheelHeat the heated steering wheel on, null until the car says
  * @property {?number} hvSoc a plug-in hybrid's battery, % (config.hybrid), null without one
+ * @property {?boolean} engineHybrid the car says its engine is a hybrid (Vehicle2 statusVehiclePartType), null until then
  * @property {?number} eRangeRaw its electric range as sent: in the car's distance unit (carUnits.dist), null without one
  * @property {?Record<string, ?boolean>} doors open by fl fr rl rr hood trunk (config.lamps), null until the car says
  * @property {string} doorsLine the last doors logged
@@ -217,6 +225,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     /** @type {Record<string, boolean>} the sources that have given a value, each logged the first time */
     this.hvSocSeen = {};
     this.hvSocFrom = null; // the source hvSoc came from, logged when it changes
+    this.engineHybrid = null; // Vehicle2 statusVehiclePartType's engine is a hybrid; null until it says (HV_UDS asked unless false)
     /** @type {Record<string, string>} each battery message as last logged */
     this.hvRawLogged = {};
     this.eRangeRaw = null; // and its electric range, in the car's distance unit (carUnits.dist)
@@ -879,6 +888,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       hybrid = rawEngine === HYBRID_ENGINE.name || rawEngine === HYBRID_ENGINE.wire;
     const tanks = model ? TANK_BY_MODEL[model] : null,
       litres = tanks ? tanks[hybrid ? 1 : 0] : null;
+    // the battery unit is only asked while this isn't false (a car that says it has no hybrid engine)
+    if (rawEngine !== undefined && rawEngine !== null) this.engineHybrid = hybrid;
     const line = JSON.stringify({ typeVehicle: rawModel, typeEngine: rawEngine }) + " -> " + (litres || "?") + " L";
     if (line !== this.partTypeLine) this.log.info("vehicle type: " + line);
     this.partTypeLine = line;
@@ -905,16 +916,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * @returns {void}
    */
   _startDme() {
-    const dme = this.config.dme;
-    if (
-      !dme ||
-      !["boost", "volt", "pedal"].some(
-        (k) => Array.isArray(dme[k]) && dme[k].length,
-      )
-    )
-      return;
+    const dme = this.config.dme || {},
+      hv = !!this.config.hybrid;
+    if (!hv && !["boost", "volt", "pedal"].some((k) => Array.isArray(dme[k]) && dme[k].length)) return;
     let reader = null,
       busy = false,
+      hvAskAt = 0,
+      hvMisses = 0,
       baro = STD_BARO_KPA,
       baroAt = 0,
       boostAskAt = 0;
@@ -940,27 +948,54 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         this._guard("engine unit boost", () => {
           const now = Date.now();
           if (busy || this._offScreen()) return;
-          // one question per tick, the pedal first (it moves the most), each only while a shown widget uses it
+          // one question per tick: the hybrid battery when due (every 5 s, so the pedal can't crowd it out), then the
+          // pedal (it moves the most), each engine unit question only while a shown widget uses it
+          const wantHv =
+            hv &&
+            this.engineHybrid !== false &&
+            now - hvAskAt >= (hvMisses >= HV_UDS_MISSES ? HV_UDS_RETRY_MS : HV_UDS_MS);
           const wantPedal =
+            !wantHv &&
             this.needsPedal &&
             Array.isArray(dme.pedal) &&
             now - this.pedalObdAt >= PEDAL_MS;
           const wantVolt =
+            !wantHv &&
             !wantPedal &&
             this.needsVolt &&
             Array.isArray(dme.volt) &&
             now - this.volt12At > VOLT_MS;
           const wantBoost =
+            !wantHv &&
             !wantPedal &&
             !wantVolt &&
             this.needsBoost &&
             Array.isArray(dme.boost) &&
             now - this.boostFesAt >= FRESH_MS &&
             now - boostAskAt >= BOOST_ASK_MS;
-          if (!wantPedal && !wantVolt && !wantBoost) return;
+          if (!wantPedal && !wantVolt && !wantBoost && !wantHv) return;
           if (this.car.data().demo) return;
           busy = true;
           (async () => {
+            if (wantHv) {
+              hvAskAt = now;
+              const soc = await reader.read(HV_UDS);
+              if (isNum(soc)) {
+                if (hvMisses >= HV_UDS_MISSES || this.hvSocSrc.sme === null)
+                  this.log.info("hybrid battery: " + soc.toFixed(1) + " % from the battery unit (SME 0x07, DDBC)");
+                hvMisses = 0;
+                this.hvSocSrc.sme = Math.round(soc * 10) / 10;
+                this._hvSocPick();
+              } else if (++hvMisses === HV_UDS_MISSES) {
+                const why = (reader.raws[reader.key(HV_UDS)] || {}).why || "?";
+                this.log.info("hybrid battery: no answer from the battery unit (" + why + "); asked once a minute");
+                if (this.hvSocSrc.sme !== null) {
+                  this.hvSocSrc.sme = null;
+                  this._hvSocPick();
+                }
+              }
+              return;
+            }
             if (wantPedal) {
               const pedal = await reader.value("pedal", dme.pedal);
               this.pedalObdAt = Date.now();
