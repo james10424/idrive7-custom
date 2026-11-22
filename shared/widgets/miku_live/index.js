@@ -74,6 +74,11 @@ const LEAN_K = 4; // her lean eases out: 1 - e^(-k x) of a full lean at x of LEA
 // still come from braking and pulling away
 const LEAN_LAT_G = 0.3;
 const LEAN_LAT_SIGN = -1;
+// Parked, the lateral g reads +-0.01..0.02 g of noise (and a camber's lean), which twitched her past LEAN_DEAD_G
+// (0.1.60): the lateral g has its own dead zone, LEAN_LAT_DEAD_G, and counts only while moving, from none at
+// STILL_KMH to all of it at LEAN_LAT_FULL_KMH (a car can't corner standing still)
+const LEAN_LAT_DEAD_G = 0.04;
+const LEAN_LAT_FULL_KMH = 10;
 const LEAN_SOFT = 1.15; // the faces' scale, as the lean's before (tanh gain): they still come on at the same g
 const POINT_K = 70; // the head turn's spring (1/s^2): about 1.3 Hz
 const POINT_C = 16.7; // critically damped
@@ -296,8 +301,10 @@ function drive(hud, state, now) {
   const gl = isNum(data.gLong) ? Math.sign(data.gLong) * Math.max(0, Math.abs(data.gLong) - LEAN_DEAD_G) : 0;
   const leanTarget = Math.max(-LEAN_G, Math.min(LEAN_G, gl)) / LEAN_G;
   state.lean = isNum(state.lean) ? state.lean + (leanTarget - state.lean) * (1 - Math.exp(-dt / LEAN_TAU_MS)) : leanTarget;
-  const glat = isNum(data.gLat) ? Math.sign(data.gLat) * Math.max(0, Math.abs(data.gLat) - LEAN_DEAD_G) : 0;
-  const latTarget = (LEAN_LAT_SIGN * Math.max(-LEAN_LAT_G, Math.min(LEAN_LAT_G, glat))) / LEAN_LAT_G;
+  const glat = isNum(data.gLat) ? Math.sign(data.gLat) * Math.max(0, Math.abs(data.gLat) - LEAN_LAT_DEAD_G) : 0;
+  const latKmh = hud._raw("speed"),
+    moving = isNum(latKmh) ? Math.max(0, Math.min(1, (latKmh - STILL_KMH) / (LEAN_LAT_FULL_KMH - STILL_KMH))) : 0;
+  const latTarget = (moving * LEAN_LAT_SIGN * Math.max(-LEAN_LAT_G, Math.min(LEAN_LAT_G, glat))) / LEAN_LAT_G;
   state.leanLat = isNum(state.leanLat)
     ? state.leanLat + (latTarget - state.leanLat) * (1 - Math.exp(-dt / LEAN_TAU_MS))
     : latTarget;
