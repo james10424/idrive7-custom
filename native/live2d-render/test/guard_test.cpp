@@ -41,6 +41,13 @@ int main(int argc, char **argv)
     /* boot-b's drawing file seen from boot-c: the unit went down while drawing; refused until removed */
     { Guard g(dir, "boot-c"); g.start(); CHECK(g.refusal().find("restarted") != std::string::npos); CHECK(exists(dir + "/drawing")); }
     { Guard g(dir, "boot-c"); g.start(); CHECK(!g.refusal().empty()); }
+    /* the file removed while it runs: the refusal lifts at the next look, no restart */
+    { Guard g(dir, "boot-c"); g.start(); CHECK(!g.refusal().empty()); std::string keep = dir + "/drawing.keep";
+      CHECK(rename((dir + "/drawing").c_str(), keep.c_str()) == 0); CHECK(g.refusal().empty());
+      CHECK(rename(keep.c_str(), (dir + "/drawing").c_str()) == 0); }
+    /* the owner's reset: the file and the count go, the refusal lifts */
+    { Guard g(dir, "boot-c"); g.start(); CHECK(!g.refusal().empty()); g.reset(); CHECK(g.refusal().empty());
+      CHECK(!exists(dir + "/drawing")); CHECK(!exists(dir + "/crashes")); g.begin(); }
     unlink((dir + "/drawing").c_str());
     { Guard g(dir, "boot-c"); g.start(); CHECK(g.refusal().empty()); }
 

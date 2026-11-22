@@ -14,6 +14,7 @@
 const mgu = require("./kit/mgu");
 const HudApp = require("./hud");
 const usage = require("./usage");
+const { restartService } = require("./widgets/miku_live/live2d_client");
 
 const USAGE_MS = 5000; // the CPU and temperature row's refresh while the page is shown
 const USAGE_FIRST_MS = 1000; // the first CPU figure after the page opens (or a Refresh right after a sample)
@@ -87,6 +88,15 @@ mgu.run({
     });
     hud.start();
     usageRows(ctx.ui);
+    // live2d-render's crash guard cleared and live2d-render restarted (after a head unit restart it refuses to draw
+    // until its drawing file goes); Miku Live2D reconnects and opens her again by herself
+    ctx.ui.onClick("BTN_LIVE2D_RESTART", () => {
+      ctx.log.info("restart Live2D Render asked from the menu");
+      restartService().then((what) => {
+        ctx.log.info("restart Live2D Render: " + what);
+        ctx.ui.text("DETAIL", "Live2D Render: " + what);
+      });
+    });
     process.on("exit", () => {
       try {
         hud.stop();

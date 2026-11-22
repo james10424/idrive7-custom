@@ -10,6 +10,7 @@ const { EventEmitter } = require("events");
 
 const SOCKET = "/dev/shm/live2d-render/render.sock";
 const RETRY_MS = 3000;
+const RESTART_WAIT_MS = 3000; // restartService: live2d-render's answer waited for this long
 
 class Live2dClient extends EventEmitter {
   /**
@@ -93,4 +94,53 @@ class Live2dClient extends EventEmitter {
   }
 }
 
-module.exports = { Live2dClient, SOCKET };
+/**
+ * Asks live2d-render to clear its crash guard (the drawing file and the crash count) and restart, over a connection
+ * of its own (live2d-render serves one app at a time: the widget's model goes with it, and the widget's client
+ * reconnects and opens her again once systemd has started live2d-render anew). Resolves with what happened.
+ * @param {string} [socketPath]
+ * @returns {Promise<string>}
+ */
+function restartService(socketPath) {
+  return new Promise((resolve) => {
+    const path = socketPath || process.env.HUD_LIVE2D_SOCKET || SOCKET;
+    const tcp = /^([\w.-]+):(\d+)$/.exec(path);
+    const sock = tcp ? net.connect(Number(tcp[2]), tcp[1]) : net.connect(path);
+    let buf = "",
+      done = false;
+    const finish = (/** @type {string} */ why) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      sock.destroy();
+      resolve(why);
+    };
+    const timer = setTimeout(() => finish("live2d-render didn't answer"), RESTART_WAIT_MS);
+    sock.setEncoding("utf8");
+    sock.on("connect", () => sock.write(JSON.stringify({ t: "restart" }) + "\n"));
+    sock.on("data", (/** @type {string} */ chunk) => {
+      buf += chunk;
+      let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl);
+        buf = buf.slice(nl + 1);
+        /** @type {*} */
+        let msg = null;
+        try {
+          msg = JSON.parse(line);
+        } catch (err) {
+          continue;
+        }
+        if (msg && msg.t === "restarting") finish("restarting, crash guard cleared");
+        else if (msg && msg.t === "error") finish("live2d-render refused: " + msg.reason + " (restart needs Live2D Render 0.1.9 or later)");
+      }
+    });
+    // it exits right after its answer
+    sock.on("close", () => finish("restarting"));
+    sock.on("error", (/** @type {NodeJS.ErrnoException} */ err) =>
+      finish(err.code === "ENOENT" ? "live2d-render isn't installed" : err.message),
+    );
+  });
+}
+
+module.exports = { Live2dClient, SOCKET, restartService };

@@ -44,6 +44,7 @@ void Guard::start()
 {
     mkdir(dir_.c_str(), 0755);
     refusal_.clear();
+    old_boot_ = false;
     const std::string was = read_word(path("drawing"));
     std::string crash_boot;
     int crashes = 0;
@@ -55,6 +56,7 @@ void Guard::start()
     if (!was.empty() && was != boot_) {
         refusal_ = "the head unit restarted while live2d-render was drawing; it draws nothing until " + path("drawing") +
                    " is removed";
+        old_boot_ = true;
         return;   /* the file stays: removing it is the owner's call */
     }
     if (!was.empty()) {
@@ -71,6 +73,25 @@ void Guard::start()
           << "nothing until the next start";
         refusal_ = o.str();
     }
+}
+
+const std::string &Guard::refusal()
+{
+    if (old_boot_ && access(path("drawing").c_str(), F_OK) != 0) {
+        old_boot_ = false;
+        refusal_.clear();
+        fprintf(stderr, "live2d-render: %s removed, drawing again\n", path("drawing").c_str());
+    }
+    return refusal_;
+}
+
+void Guard::reset()
+{
+    unlink(path("drawing").c_str());
+    unlink(path("crashes").c_str());
+    drawing_ = false;
+    old_boot_ = false;
+    refusal_.clear();
 }
 
 void Guard::begin()

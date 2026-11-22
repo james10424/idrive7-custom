@@ -109,8 +109,9 @@ function controller(renderPort, hostPort, log) {
       const script = [
         "socat UNIX-LISTEN:/tmp/cr.sock,fork TCP:host.docker.internal:" + renderPort + " &",
         "socat TCP-LISTEN:" + PORT_IN + ",fork,reuseaddr UNIX-CONNECT:/tmp/l2r.sock &",
-        "exec /lib64/ld-linux-x86-64.so.2 /w/prebuilt/live2d-render --software --socket /tmp/l2r.sock " +
-          "--cluster-socket /tmp/cr.sock --sdk /w/build/sdk --state /tmp/state --idle-exit 0",
+        // started again whenever it exits (a "restart" from the app's menu), as systemd's socket does on the car
+        "while true; do /lib64/ld-linux-x86-64.so.2 /w/prebuilt/live2d-render --software --socket /tmp/l2r.sock " +
+          "--cluster-socket /tmp/cr.sock --sdk /w/build/sdk --state /tmp/state --idle-exit 0; sleep 1; done",
       ].join("\n");
       const run = spawnSync(
         "docker",

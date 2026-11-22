@@ -3,7 +3,8 @@
 /* The crash guard. live2d-render is the one process here that drives the GPU
  * itself, and a GPU fault in it once restarted the whole head unit. So while
  * it draws it keeps a file, <dir>/drawing, holding the boot's id, and removes
- * it when it stops drawing:
+ * it when it stops drawing (a model closed, hidden, or the display gone: a car
+ * switching off takes the KOMBI first, so a normal power-off leaves no file):
  *   - found from an earlier boot: the head unit went down while it drew. It
  *     draws nothing again until the file is removed by hand (README.md
  *     "If the head unit restarted").
@@ -23,14 +24,19 @@ public:
     explicit Guard(const std::string &dir, const std::string &boot_id = "");
     /* Once at start: looks at what the last run left. */
     void start();
-    /* "" when drawing may start, else why not. */
-    const std::string &refusal() const { return refusal_; }
+    /* "" when drawing may start, else why not. A refusal over an earlier boot's
+     * file lifts once the file is gone (looked at again each call). */
+    const std::string &refusal();
+    /* The owner's reset (an app's "restart"): the drawing file and this boot's
+     * crash count go, and with them any refusal. */
+    void reset();
     void begin();   /* drawing starts */
     void end();     /* it stops cleanly */
 
 private:
     std::string dir_, boot_, refusal_;
     bool drawing_ = false;
+    bool old_boot_ = false;   /* refusal_ is over an earlier boot's file */
     std::string path(const char *name) const { return dir_ + "/" + name; }
 };
 

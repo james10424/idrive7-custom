@@ -414,6 +414,16 @@ void Service::handle(const std::string &line)
         return;
     }
     if (t == "close") return close_model();
+    if (t == "restart") {
+        /* the owner's reset from an app's menu: the crash guard's file and count go, then live2d-render exits;
+         * systemd's socket starts it again at the app's next connect (a few seconds) */
+        close_model();
+        guard_.reset();
+        fprintf(stderr, "live2d-render: restart asked: crash guard cleared, exiting\n");
+        send(cr::json_object({{"t", "\"restarting\""}}));
+        g_stop = 1;
+        return;
+    }
     reply_error("message", "unknown t \"" + t + "\"");
 }
 
@@ -564,6 +574,13 @@ int Service::run(int listen_fd, bool activated)
     while (!g_stop) {
         const int64_t now = now_ms();
         const bool drawing = model_ && visible_ && display_ready(now);
+        /* the crash guard's marker only while frames go to the GPU: when the display goes (the car switching off,
+         * the KOMBI first) or she's hidden, it's removed, so a head unit that powers off after that isn't taken for
+         * one that went down while she drew. Opening a model holds it too (open_model) */
+        if (model_) {
+            if (drawing) guard_.begin();
+            else guard_.end();
+        }
         int timeout = 250;
         if (drawing) {
             const double wait = next_ - now_fms();

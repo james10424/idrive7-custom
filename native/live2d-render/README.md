@@ -185,13 +185,22 @@ goes away (Docker, Mesa's software renderer); not yet on the car.
 
 A GPU fault in an earlier test program once restarted the whole head unit. So
 while live2d-render draws it keeps `/var/opt/live2d-render/state/drawing`, and
-removes it when it stops. Found after a restart, it means the unit went down
+removes it when it stops: the model closed, hidden, or the display gone (a car
+switching off loses the KOMBI first, so parking leaves no file; until 0.1.9 the
+file stayed the whole time a model was open, and a head unit powering off
+without stopping live2d-render left it behind). Found after a restart, it means the unit went down
 while it drew: live2d-render then refuses to draw (apps get the reason) until
 you remove the file:
 
 ```sh
 ssh root@$CAR_IP 'rm /var/opt/live2d-render/state/drawing'
 ```
+
+(since 0.1.9 the refusal lifts at the next open once the file is gone, no
+restart needed), or press **Restart Live2D Render** on Custom HUD's page: the
+app sends `{"t":"restart"}`, which removes the file and the crash count and
+ends live2d-render; systemd's socket starts it again at the app's next
+connect, and Miku opens again by herself.
 
 Found in the same boot it means live2d-render itself crashed; after 3 crashes
 in one boot it refuses until the next.
