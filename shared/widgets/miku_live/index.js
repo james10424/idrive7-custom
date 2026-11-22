@@ -27,6 +27,7 @@ const hudData = require("../../hud_data");
  * @property {string} [layer] the video layer's state, from cluster-render
  * @property {number} [statsAt] when stats were last logged (ms)
  * @property {number} [lean] eased -1..1
+ * @property {number} [leanLat] the lateral g's share of her lean, eased -1..1
  * @property {number} [point] -1..1, the head's turn toward the indicator (a spring)
  * @property {number} [pointV]
  * @property {number} [zoom] 0..1, linear: the expressions coming on
@@ -67,6 +68,12 @@ const LEAN_G = 0.4; // this longitudinal g is a full lean
 const LEAN_DEAD_G = 0.02;
 const LEAN_K = 4; // her lean eases out: 1 - e^(-k x) of a full lean at x of LEAN_G (0.1 g: 64%, 0.2 g: 88%), so
 // everyday pulls lean her well and hard ones add little
+// Cornering adds to the same sideways lean: thrown outward, as a passenger. A left turn (gLat +) throws her to the
+// HUD's right, the way braking leans her (pulling away leans her left: bench, Nov 22 2026), hence LEAN_LAT_SIGN -1.
+// LEAN_LAT_G of lateral g is a full lean on its own; the two together at most a full lean. Movement only: the faces
+// still come from braking and pulling away
+const LEAN_LAT_G = 0.3;
+const LEAN_LAT_SIGN = -1;
 const LEAN_SOFT = 1.15; // the faces' scale, as the lean's before (tanh gain): they still come on at the same g
 const POINT_K = 70; // the head turn's spring (1/s^2): about 1.3 Hz
 const POINT_C = 16.7; // critically damped
@@ -289,6 +296,11 @@ function drive(hud, state, now) {
   const gl = isNum(data.gLong) ? Math.sign(data.gLong) * Math.max(0, Math.abs(data.gLong) - LEAN_DEAD_G) : 0;
   const leanTarget = Math.max(-LEAN_G, Math.min(LEAN_G, gl)) / LEAN_G;
   state.lean = isNum(state.lean) ? state.lean + (leanTarget - state.lean) * (1 - Math.exp(-dt / LEAN_TAU_MS)) : leanTarget;
+  const glat = isNum(data.gLat) ? Math.sign(data.gLat) * Math.max(0, Math.abs(data.gLat) - LEAN_DEAD_G) : 0;
+  const latTarget = (LEAN_LAT_SIGN * Math.max(-LEAN_LAT_G, Math.min(LEAN_LAT_G, glat))) / LEAN_LAT_G;
+  state.leanLat = isNum(state.leanLat)
+    ? state.leanLat + (latTarget - state.leanLat) * (1 - Math.exp(-dt / LEAN_TAU_MS))
+    : latTarget;
   const turnSide = hud._turnSide();
   // she blinks as her head starts to turn, away or back, as in the turn recording
   if (isNum(state.turnWas) && turnSide !== state.turnWas) {
@@ -362,7 +374,11 @@ function drive(hud, state, now) {
   extra.ParamBodyAngleY += clampDeg(state.pitchDeg / 2, PITCH_BODY_MAX);
   return {
     extra,
-    lean: Math.sign(state.lean) * (1 - Math.exp(-LEAN_K * Math.abs(state.lean))) / (1 - Math.exp(-LEAN_K)),
+    lean: (() => {
+      // each eased out on its own scale (1 - e^(-k x)), then added, at most a full lean
+      const out = (/** @type {number} */ x) => (Math.sign(x) * (1 - Math.exp(-LEAN_K * Math.abs(x)))) / (1 - Math.exp(-LEAN_K));
+      return Math.max(-1, Math.min(1, out(state.lean) + out(state.leanLat || 0)));
+    })(),
     faceLean: Math.tanh(state.lean * LEAN_SOFT) / Math.tanh(LEAN_SOFT),
     turn: state.point,
     y,
