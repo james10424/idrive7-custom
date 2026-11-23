@@ -8,10 +8,11 @@
 # Changes nothing on the car: it only reads files and lists processes.
 #
 #   tools/display_probe.sh <car-ssh-host> [out-dir]           a snapshot: run it while the message is showing
-#   tools/display_probe.sh <car-ssh-host> --watch [out-dir]   follow until Ctrl-C (drive with it running until it
-#                                                              happens): the display service's ups and downs, what
-#                                                              was mapped, our apps' warnings, every 10 s the
-#                                                              display processes' pids (a new pid means it restarted)
+#   tools/display_probe.sh <car-ssh-host> --watch [out-dir]   record until Ctrl-C (drive with it running until it
+#                                                              happens): the display service's ups and downs, our
+#                                                              apps' warnings, the display processes' pids every 10 s
+#                                                              (a new pid means it restarted), the car's whole journal
+#                                                              and its DLT trace, streamed to the Mac
 set -euo pipefail
 
 CAR="${1:?usage: $(basename "$0") <car-ssh-host> [--watch] [out-dir]}"
@@ -29,23 +30,60 @@ PROCS='dcsm|ramses|display|kombi|cluster|hmi|live2d|navi|map'
 CR_KEYS='Dcsm2|DCSM provider|display service|went away|unavailable|target (hud|panel)|refused|error|warn|restart|lost'
 
 if [ "$WATCH" = 1 ]; then
-    echo "following $CAR until Ctrl-C, into $OUT/watch.txt"
-    echo "(drive as usual; when the message shows, note the time and leave it running a minute more)"
+    echo "following $CAR into $OUT/ until Ctrl-C"
+    echo "(drive as usual; when the message shows, leave it running a minute more, then Ctrl-C)"
+    # The car keeps only minutes of its journal and BMW's services log to DLT, so both are streamed to the Mac as
+    # they happen: cluster-render.log, apps_procs.txt (our apps' logs, the display processes' pids every 10 s),
+    # journal.txt (every unit), dlt.txt (dlt-daemon's whole trace). Nothing is written on the car.
+    # raw streams (the car's grep and sed may be BusyBox's, without line buffering): filtered on the Mac at the end
+    ssh "$CAR" "tail -n 0 -F $CR_LOG" > "$OUT/cluster-render.log" 2>/dev/null &
+    W0=$!
     # shellcheck disable=SC2029
     ssh "$CAR" "
-        tail -n 0 -F $CR_LOG 2>/dev/null | grep --line-buffered -E '$CR_KEYS' | sed -u 's/^/[cluster-render] /' &
         for f in $OAP/*/data/custom_hud.log $OAP/*/data/custom_cluster.log; do
-            [ -f \"\$f\" ] && tail -n 0 -F \"\$f\" | grep --line-buffered -i -E 'warn|error|refus|lost|unavailable|live2d|cluster-render' | sed -u \"s|^|[\$(basename \$f .log)] |\" &
+            [ -f \"\$f\" ] && tail -n 0 -F \"\$f\" &
         done
-        journalctl -f -n 0 -u live2d-render -u cluster-render 2>/dev/null | sed -u 's/^/[journal] /' &
         last=''
         while true; do
-            now=\$(ps -eo pid,comm 2>/dev/null | grep -i -E '$PROCS' | grep -v grep | tr '\n' ' ')
+            now=\$( (ps -eo pid,comm 2>/dev/null || ps) | grep -i -E '$PROCS' | grep -v grep | awk '{print \$1}' | tr '\n' ' ')
             if [ \"\$now\" != \"\$last\" ]; then echo \"[procs \$(date -u '+%Y-%m-%d %H:%M:%S')] \$now\"; last=\"\$now\"; fi
             sleep 10
         done
-    " | tee "$OUT/watch.txt"
-    exit 0
+    " > "$OUT/apps_procs.txt" 2>/dev/null &
+    W1=$!
+    ssh "$CAR" "journalctl -f -n 0 --utc -o short-precise --no-pager" > "$OUT/journal.txt" 2>/dev/null &
+    W2=$!
+    # -a: ASCII; dlt-daemon's default port on the head unit
+    ssh "$CAR" "dlt-receive -a 127.0.0.1" > "$OUT/dlt.txt" 2> "$OUT/dlt.err" &
+    W3=$!
+    stop() {
+        kill "$W0" "$W1" "$W2" "$W3" 2>/dev/null || true
+        wait 2>/dev/null || true
+        # the display side of the DLT trace and the journal, and where the display service dropped
+        grep -i -E 'dcsm|ramses|kombi|cluster|display|heartbeat|someip|scene|hud' "$OUT/dlt.txt" > "$OUT/dlt_display.txt" || true
+        {
+            grep -E "$CR_KEYS" "$OUT/cluster-render.log" | sed 's/^/[cluster-render] /'
+            grep -i -E 'warn|error|refus|lost|unavailable|live2d|cluster-render|^\[procs' "$OUT/apps_procs.txt"
+        } > "$OUT/watch.txt" || true
+        grep -E 'Dcsm2 (not )?available|no heartbeat' "$OUT/cluster-render.log" > "$OUT/drops.txt" || true
+        echo
+        echo "wrote $OUT/: drops.txt (when it went), watch.txt (the key lines), journal.txt, dlt_display.txt (dlt.txt is everything)"
+        wc -l "$OUT"/*.txt
+        exit 0
+    }
+    trap stop INT TERM
+    sleep 5
+    kill -0 "$W3" 2>/dev/null || echo "(no DLT: $(head -c 200 "$OUT/dlt.err"))"
+    echo "recording since $(date -u '+%H:%M:%S') UTC; Ctrl-C to stop"
+    seen=0
+    while true; do
+        sleep 10
+        n=$(grep -c 'Dcsm2 not available' "$OUT/cluster-render.log" 2>/dev/null || true)
+        if [ "${n:-0}" -gt "$seen" ]; then
+            seen=$n
+            echo "$(date -u '+%H:%M:%S') UTC: the display service dropped; keep it running a minute, then Ctrl-C"
+        fi
+    done
 fi
 
 echo "snapshot of $CAR into $OUT/"
