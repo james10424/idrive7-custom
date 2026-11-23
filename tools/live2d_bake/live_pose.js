@@ -40,6 +40,9 @@ const out = round({
   _about: "Miku Live2D's poses (tools/live2d_bake/live_pose.js from " + path.basename(cfgPath) + "): parameter values only",
   params: cfg.params || {},
   hide: cfg.hide || [],
+  // the parameters the wind moves (live2d-render's "wind" params: her hair, ribbons and lace, physics outputs), kept as
+  // the config names them
+  wind: cfg.wind || [],
   close: {
     centre: close.centre,
     height: close.height,

@@ -60,6 +60,15 @@ void l2d_draw(l2d_model *m, const float mvp[16]);
  * buffers, out[2] the vertex and index buffers. */
 void l2d_gpu_bytes(const l2d_model *m, long long out[3]);
 
+/* Optional (an older glue lacks it): the wind on the model's physics, a force added to gravity's (gravity is 1
+ * down): x to the right, y up. Kept until set again; a model without physics ignores it. */
+void l2d_set_wind(l2d_model *m, float x, float y);
+
+/* Optional too: the parameters the wind moves (comma-separated ids of physics outputs: her hair, ribbons), through a
+ * second, windy copy of the physics; the others keep the calm physics' values. "" puts the wind back on all of it.
+ * Returns how many of the ids the model has. */
+int l2d_set_wind_params(l2d_model *m, const char *csv);
+
 #ifdef __cplusplus
 }
 #endif
