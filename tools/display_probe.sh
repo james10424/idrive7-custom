@@ -85,6 +85,20 @@ ssh "$CAR" "
     journalctl -u live2d-render --since '-3h' --no-pager 2>/dev/null | grep -v -E ' fps, |glue: |fast path: ' | tail -40
 " > "$OUT/summary.txt" 2>&1 || true
 
+# the whole head unit's journal (every service, BMW's too) from 60 s before to 20 s after each display service drop
+# in this boot: what else went or complained when the cluster stopped answering
+# shellcheck disable=SC2029
+ssh "$CAR" "
+    cat $CR_LOG.1 $CR_LOG 2>/dev/null | grep 'Dcsm2 not available' | cut -c1-19 | tail -4 | while read -r d t; do
+        s=\$(date -u -d \"\$d \$t 60 seconds ago\" '+%Y-%m-%d %H:%M:%S' 2>/dev/null) || continue
+        e=\$(date -u -d \"\$d \$t 20 seconds\" '+%Y-%m-%d %H:%M:%S' 2>/dev/null) || continue
+        echo \"== journal \$s .. \$e UTC (drop at \$d \$t)\"
+        journalctl --utc -o short-precise --no-pager --since \"\$s\" --until \"\$e\" 2>/dev/null |
+            grep -v -E ' fps, |glue: |fast path: ' | tail -400
+        echo
+    done
+" > "$OUT/journal_around_drops.txt" 2>&1 || true
+
 echo "fetching logs"
 ssh "$CAR" "cat $CR_LOG.1 $CR_LOG 2>/dev/null" > "$OUT/cluster-render.log" || true
 ssh "$CAR" "journalctl -u cluster-render -u live2d-render --since '-6h' --no-pager 2>/dev/null" > "$OUT/journal.txt" || true
@@ -100,4 +114,4 @@ grep -n -E 'Dcsm2 not available|DCSM provider not available' "$OUT/cluster-rende
         echo
     done > "$OUT/around_drops.txt" || true
 
-echo "wrote $OUT/: summary.txt (start here), around_drops.txt, cluster-render.log, journal.txt, custom_hud.log, custom_cluster.log"
+echo "wrote $OUT/: summary.txt (start here), around_drops.txt, journal_around_drops.txt, cluster-render.log, journal.txt, custom_hud.log, custom_cluster.log"
