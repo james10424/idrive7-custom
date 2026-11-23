@@ -27,7 +27,7 @@ const hudData = require("../../hud_data");
  * @property {string} [layer] the video layer's state, from cluster-render
  * @property {number} [statsAt] when stats were last logged (ms)
  * @property {number} [lean] eased -1..1
- * @property {number} [leanLat] the lateral g's share of her lean, eased -1..1
+ * @property {number} [leanLat] the lateral g past its dead zone over LEAN_LAT_G, eased -1..1 (left turn +)
  * @property {number} [point] -1..1, the head's turn toward the indicator (a spring)
  * @property {number} [pointV]
  * @property {number} [zoom] 0..1, linear: the expressions coming on
@@ -68,16 +68,16 @@ const LEAN_G = 0.4; // this longitudinal g is a full lean
 const LEAN_DEAD_G = 0.02;
 const LEAN_K = 4; // her lean eases out: 1 - e^(-k x) of a full lean at x of LEAN_G (0.1 g: 64%, 0.2 g: 88%), so
 // everyday pulls lean her well and hard ones add little
-// Cornering adds to the same sideways lean: thrown outward, as a passenger. A left turn (gLat +) throws her to the
-// HUD's right, the way braking leans her (pulling away leans her left: bench, Nov 22 2026), hence LEAN_LAT_SIGN -1.
-// LEAN_LAT_G of lateral g is a full lean on its own; the two together at most a full lean. Movement only: the faces
-// still come from braking and pulling away
+// Cornering tilts her body only (ParamBodyAngleX, added on top of the lean's, the turn's and the wander's), thrown
+// outward as a passenger: a left turn (gLat +) the way braking tilts it (+, the lean chain's braking end has
+// ParamBodyAngleX +10), LEAN_LAT_BODY_DEG at LEAN_LAT_G past the dead zone, straight in between. Her head stays
+// out of it (0.1.60 to 0.1.61 fed the head's lean, which followed highway wobble). Small bumps and lane wobble are
+// left out: nothing under LEAN_LAT_DEAD_G, and the g eased over LEAN_LAT_TAU_MS so short spikes average away. It
+// counts only while moving, from none at STILL_KMH to all at LEAN_LAT_FULL_KMH (parked, the g's noise twitched her)
 const LEAN_LAT_G = 0.3;
-const LEAN_LAT_SIGN = -1;
-// Parked, the lateral g reads +-0.01..0.02 g of noise (and a camber's lean), which twitched her past LEAN_DEAD_G
-// (0.1.60): the lateral g has its own dead zone, LEAN_LAT_DEAD_G, and counts only while moving, from none at
-// STILL_KMH to all of it at LEAN_LAT_FULL_KMH (a car can't corner standing still)
-const LEAN_LAT_DEAD_G = 0.04;
+const LEAN_LAT_BODY_DEG = 10;
+const LEAN_LAT_DEAD_G = 0.06;
+const LEAN_LAT_TAU_MS = 600;
 const LEAN_LAT_FULL_KMH = 10;
 const LEAN_SOFT = 1.15; // the faces' scale, as the lean's before (tanh gain): they still come on at the same g
 const POINT_K = 70; // the head turn's spring (1/s^2): about 1.3 Hz
@@ -304,9 +304,9 @@ function drive(hud, state, now) {
   const glat = isNum(data.gLat) ? Math.sign(data.gLat) * Math.max(0, Math.abs(data.gLat) - LEAN_LAT_DEAD_G) : 0;
   const latKmh = hud._raw("speed"),
     moving = isNum(latKmh) ? Math.max(0, Math.min(1, (latKmh - STILL_KMH) / (LEAN_LAT_FULL_KMH - STILL_KMH))) : 0;
-  const latTarget = (moving * LEAN_LAT_SIGN * Math.max(-LEAN_LAT_G, Math.min(LEAN_LAT_G, glat))) / LEAN_LAT_G;
+  const latTarget = (moving * Math.max(-LEAN_LAT_G, Math.min(LEAN_LAT_G, glat))) / LEAN_LAT_G;
   state.leanLat = isNum(state.leanLat)
-    ? state.leanLat + (latTarget - state.leanLat) * (1 - Math.exp(-dt / LEAN_TAU_MS))
+    ? state.leanLat + (latTarget - state.leanLat) * (1 - Math.exp(-dt / LEAN_LAT_TAU_MS))
     : latTarget;
   const turnSide = hud._turnSide();
   // she blinks as her head starts to turn, away or back, as in the turn recording
@@ -379,13 +379,11 @@ function drive(hud, state, now) {
   const clampDeg = (/** @type {number} */ v, /** @type {number} */ max) => Math.max(-max, Math.min(max, v));
   extra.ParamAngleY += clampDeg(state.pitchDeg, PITCH_HEAD_MAX);
   extra.ParamBodyAngleY += clampDeg(state.pitchDeg / 2, PITCH_BODY_MAX);
+  // cornering tilts her body outward
+  extra.ParamBodyAngleX = (extra.ParamBodyAngleX || 0) + (state.leanLat || 0) * LEAN_LAT_BODY_DEG;
   return {
     extra,
-    lean: (() => {
-      // each eased out on its own scale (1 - e^(-k x)), then added, at most a full lean
-      const out = (/** @type {number} */ x) => (Math.sign(x) * (1 - Math.exp(-LEAN_K * Math.abs(x)))) / (1 - Math.exp(-LEAN_K));
-      return Math.max(-1, Math.min(1, out(state.lean) + out(state.leanLat || 0)));
-    })(),
+    lean: Math.sign(state.lean) * (1 - Math.exp(-LEAN_K * Math.abs(state.lean))) / (1 - Math.exp(-LEAN_K)),
     faceLean: Math.tanh(state.lean * LEAN_SOFT) / Math.tanh(LEAN_SOFT),
     turn: state.point,
     y,
