@@ -27,6 +27,8 @@ const hudData = require("../../hud_data");
  * @property {string} [layer] the video layer's state, from cluster-render
  * @property {number} [statsAt] when stats were last logged (ms)
  * @property {number} [lean] eased -1..1
+ * @property {number} [gLatAvg] the lateral g eased over LEAN_LAT_TAU_MS, raw (the jolt's reference)
+ * @property {number} [jolt] the lateral jolt, -1..1 (left +), eased
  * @property {number} [leanLat] the lateral g from its dead zone (0) to LEAN_LAT_G (1), eased -1..1 (left turn +)
  * @property {number} [point] -1..1, the head's turn toward the indicator (a spring)
  * @property {number} [pointV]
@@ -80,6 +82,15 @@ const LEAN_LAT_ROLL_DEG = 5;
 const LEAN_LAT_DEAD_G = 0.06;
 const LEAN_LAT_TAU_MS = 600;
 const LEAN_LAT_FULL_KMH = 10;
+// A short lateral spike (a speed bump or pothole tipping the car, which the eased corner lean averages away) jolts
+// her head's roll too, the same way: the lateral g's departure from its own LEAN_LAT_TAU_MS average, past
+// JOLT_G, up to JOLT_ROLL_DEG at JOLT_G + JOLT_SPAN_G; it comes on within JOLT_ATTACK_MS and springs back over
+// JOLT_RELEASE_MS (about half a second to all but gone). Highway wobble under JOLT_G stays out; only while moving
+const JOLT_G = 0.1;
+const JOLT_SPAN_G = 0.1;
+const JOLT_ROLL_DEG = 5;
+const JOLT_ATTACK_MS = 40;
+const JOLT_RELEASE_MS = 180;
 const LEAN_SOFT = 1.15; // the faces' scale, as the lean's before (tanh gain): they still come on at the same g
 const POINT_K = 70; // the head turn's spring (1/s^2): about 1.3 Hz
 const POINT_C = 16.7; // critically damped
@@ -310,6 +321,14 @@ function drive(hud, state, now) {
   state.leanLat = isNum(state.leanLat)
     ? state.leanLat + (latTarget - state.leanLat) * (1 - Math.exp(-dt / LEAN_LAT_TAU_MS))
     : latTarget;
+  // the jolt: how far the lateral g just left its own average, past JOLT_G
+  const gLatNow = isNum(data.gLat) ? data.gLat : 0;
+  state.gLatAvg = isNum(state.gLatAvg) ? state.gLatAvg + (gLatNow - state.gLatAvg) * (1 - Math.exp(-dt / LEAN_LAT_TAU_MS)) : gLatNow;
+  const off = gLatNow - state.gLatAvg,
+    joltTo = moving * Math.sign(off) * Math.min(1, Math.max(0, Math.abs(off) - JOLT_G) / JOLT_SPAN_G),
+    jolt = isNum(state.jolt) ? state.jolt : 0,
+    rising = Math.abs(joltTo) > Math.abs(jolt) || Math.sign(joltTo) * Math.sign(jolt) < 0;
+  state.jolt = jolt + (joltTo - jolt) * (1 - Math.exp(-dt / (rising ? JOLT_ATTACK_MS : JOLT_RELEASE_MS)));
   const turnSide = hud._turnSide();
   // she blinks as her head starts to turn, away or back, as in the turn recording
   if (isNum(state.turnWas) && turnSide !== state.turnWas) {
@@ -382,7 +401,7 @@ function drive(hud, state, now) {
   extra.ParamAngleY += clampDeg(state.pitchDeg, PITCH_HEAD_MAX);
   extra.ParamBodyAngleY += clampDeg(state.pitchDeg / 2, PITCH_BODY_MAX);
   // cornering rolls her head outward, her body after it through the model's physics
-  extra.ParamAngleZ = (extra.ParamAngleZ || 0) - (state.leanLat || 0) * LEAN_LAT_ROLL_DEG;
+  extra.ParamAngleZ = (extra.ParamAngleZ || 0) - (state.leanLat || 0) * LEAN_LAT_ROLL_DEG - (state.jolt || 0) * JOLT_ROLL_DEG;
   return {
     extra,
     lean: Math.sign(state.lean) * (1 - Math.exp(-LEAN_K * Math.abs(state.lean))) / (1 - Math.exp(-LEAN_K)),
