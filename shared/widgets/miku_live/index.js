@@ -68,15 +68,15 @@ const LEAN_G = 0.4; // this longitudinal g is a full lean
 const LEAN_DEAD_G = 0.02;
 const LEAN_K = 4; // her lean eases out: 1 - e^(-k x) of a full lean at x of LEAN_G (0.1 g: 64%, 0.2 g: 88%), so
 // everyday pulls lean her well and hard ones add little
-// Cornering tilts her body only (ParamBodyAngleX, added on top of the lean's, the turn's and the wander's), thrown
-// outward as a passenger: a left turn (gLat +) the way braking tilts it (+, the lean chain's braking end has
-// ParamBodyAngleX +10), LEAN_LAT_BODY_DEG at LEAN_LAT_G of lateral g (0.1.62's 0.3 g past the dead zone left
-// everyday corners at a degree or two, unseen), straight from the dead zone up to it. Her head stays
-// out of it (0.1.60 to 0.1.61 fed the head's lean, which followed highway wobble). Small bumps and lane wobble are
+// Cornering rolls her head (ParamAngleZ, added on top of the lean's, the turn's and the wander's), thrown outward as
+// a passenger: a left turn (gLat +) the way braking rolls it (-, the lean chain's braking end has ParamAngleZ -16.7),
+// LEAN_LAT_ROLL_DEG at LEAN_LAT_G of lateral g, straight from the dead zone up to it. The model's physics leans and
+// twists her body from the head's roll. 0.1.62 and 0.1.63 turned ParamBodyAngleX instead, which physics rewrites
+// every frame from her head (all the body angles are physics outputs), so it never showed. Small bumps and lane wobble are
 // left out: nothing under LEAN_LAT_DEAD_G, and the g eased over LEAN_LAT_TAU_MS so short spikes average away. It
 // counts only while moving, from none at STILL_KMH to all at LEAN_LAT_FULL_KMH (parked, the g's noise twitched her)
 const LEAN_LAT_G = 0.15;
-const LEAN_LAT_BODY_DEG = 10;
+const LEAN_LAT_ROLL_DEG = 5;
 const LEAN_LAT_DEAD_G = 0.06;
 const LEAN_LAT_TAU_MS = 600;
 const LEAN_LAT_FULL_KMH = 10;
@@ -381,8 +381,8 @@ function drive(hud, state, now) {
   const clampDeg = (/** @type {number} */ v, /** @type {number} */ max) => Math.max(-max, Math.min(max, v));
   extra.ParamAngleY += clampDeg(state.pitchDeg, PITCH_HEAD_MAX);
   extra.ParamBodyAngleY += clampDeg(state.pitchDeg / 2, PITCH_BODY_MAX);
-  // cornering tilts her body outward
-  extra.ParamBodyAngleX = (extra.ParamBodyAngleX || 0) + (state.leanLat || 0) * LEAN_LAT_BODY_DEG;
+  // cornering rolls her head outward, her body after it through the model's physics
+  extra.ParamAngleZ = (extra.ParamAngleZ || 0) - (state.leanLat || 0) * LEAN_LAT_ROLL_DEG;
   return {
     extra,
     lean: Math.sign(state.lean) * (1 - Math.exp(-LEAN_K * Math.abs(state.lean))) / (1 - Math.exp(-LEAN_K)),
