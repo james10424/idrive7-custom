@@ -27,7 +27,7 @@ const hudData = require("../../hud_data");
  * @property {string} [layer] the video layer's state, from cluster-render
  * @property {number} [statsAt] when stats were last logged (ms)
  * @property {number} [lean] eased -1..1
- * @property {number} [leanLat] the lateral g past its dead zone over LEAN_LAT_G, eased -1..1 (left turn +)
+ * @property {number} [leanLat] the lateral g from its dead zone (0) to LEAN_LAT_G (1), eased -1..1 (left turn +)
  * @property {number} [point] -1..1, the head's turn toward the indicator (a spring)
  * @property {number} [pointV]
  * @property {number} [zoom] 0..1, linear: the expressions coming on
@@ -70,11 +70,12 @@ const LEAN_K = 4; // her lean eases out: 1 - e^(-k x) of a full lean at x of LEA
 // everyday pulls lean her well and hard ones add little
 // Cornering tilts her body only (ParamBodyAngleX, added on top of the lean's, the turn's and the wander's), thrown
 // outward as a passenger: a left turn (gLat +) the way braking tilts it (+, the lean chain's braking end has
-// ParamBodyAngleX +10), LEAN_LAT_BODY_DEG at LEAN_LAT_G past the dead zone, straight in between. Her head stays
+// ParamBodyAngleX +10), LEAN_LAT_BODY_DEG at LEAN_LAT_G of lateral g (0.1.62's 0.3 g past the dead zone left
+// everyday corners at a degree or two, unseen), straight from the dead zone up to it. Her head stays
 // out of it (0.1.60 to 0.1.61 fed the head's lean, which followed highway wobble). Small bumps and lane wobble are
 // left out: nothing under LEAN_LAT_DEAD_G, and the g eased over LEAN_LAT_TAU_MS so short spikes average away. It
 // counts only while moving, from none at STILL_KMH to all at LEAN_LAT_FULL_KMH (parked, the g's noise twitched her)
-const LEAN_LAT_G = 0.3;
+const LEAN_LAT_G = 0.15;
 const LEAN_LAT_BODY_DEG = 10;
 const LEAN_LAT_DEAD_G = 0.06;
 const LEAN_LAT_TAU_MS = 600;
@@ -304,7 +305,8 @@ function drive(hud, state, now) {
   const glat = isNum(data.gLat) ? Math.sign(data.gLat) * Math.max(0, Math.abs(data.gLat) - LEAN_LAT_DEAD_G) : 0;
   const latKmh = hud._raw("speed"),
     moving = isNum(latKmh) ? Math.max(0, Math.min(1, (latKmh - STILL_KMH) / (LEAN_LAT_FULL_KMH - STILL_KMH))) : 0;
-  const latTarget = (moving * Math.max(-LEAN_LAT_G, Math.min(LEAN_LAT_G, glat))) / LEAN_LAT_G;
+  const latSpan = LEAN_LAT_G - LEAN_LAT_DEAD_G,
+    latTarget = (moving * Math.max(-latSpan, Math.min(latSpan, glat))) / latSpan;
   state.leanLat = isNum(state.leanLat)
     ? state.leanLat + (latTarget - state.leanLat) * (1 - Math.exp(-dt / LEAN_LAT_TAU_MS))
     : latTarget;
