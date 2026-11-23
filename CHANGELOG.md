@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 23 2026
+
+- **Live2D Render 0.1.10: back to CPU priority (nice) 19.** On a busy start (load average 6, BMW's own apps timing out), the car's display service went down about 20 s after Miku began drawing and stayed down: "target unavailable: display service not available" on the HUD and the cluster, BMW's map gone from the cluster, the gauges up (cluster-render logged the cluster's heartbeat replies stopping first). With live2d-render reniced to 19 and the car restarted, the map came back. 0.1.6 to 0.1.9 ran at nice 10, so a burst such as the Store starting wouldn't stall her frames; that is now the accepted cost. Not proven to be the cause: the same 0.1.9 ran a 14-minute drive fine that morning. Host tests pass; not checked on the bench (one constant). Also: `tools/display_probe.sh`, a read-only probe for that message: a snapshot (cluster-render's status and log, the display service's ups and downs, installed versions, display processes, live2d-render's state) and `--watch`, which streams cluster-render's log, our apps' logs, the car's journal and its DLT trace to the Mac until Ctrl-C (the car keeps only minutes of journal).
+
 ## Nov 22 2026
 
 - **Custom HUD 0.1.63: Miku's corner turn shows in everyday corners.** 0.1.62 reached its ±10° body turn at 0.3 g past the dead zone, so a 0.1 g corner turned her about 1°, unseen. It now reaches ±10° at 0.15 g, straight from the 0.06 g dead zone (kept for highway wobble): 0.1 g about 4.4°, 0.12 g about 6.7°. Unverified on the car.

@@ -682,9 +682,11 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    /* a low CPU priority, nice 10: BMW's own HMI wins most contests for a core, but a burst elsewhere (the Store
-       starting) no longer starves her frames as nice 19 did (about 1.5% of a contested core; nice 10 about 10%) */
-    setpriority(PRIO_PROCESS, 0, 10);
+    /* the lowest CPU priority, nice 19: BMW's own HMI always comes first. 0.1.6 to 0.1.9 ran at nice 10 (a burst
+       such as the Store starting stalled her frames at 19); with it, on a busy start (load 6, Nov 23 2026) the
+       display service went down about 20 s after she began drawing and stayed down (BMW's map gone from the
+       cluster) until the car restarted, and at 19 it came back. Stalled frames are the safer cost */
+    setpriority(PRIO_PROCESS, 0, 19);
     struct sigaction sa;
     memset(&sa, 0, sizeof sa);
     sa.sa_handler = [](int) { g_stop = 1; };
