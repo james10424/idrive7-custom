@@ -104,11 +104,11 @@ const JOLT_RELEASE_MS = 180;
 // Sent when it moves WIND_SEND or more
 const WIND_START_KMH = 5;
 const WIND_FULL_KMH = 120;
-const WIND_FLUTTER = 1.2;
-const WIND_LIFT = 0.35;
+const WIND_FLUTTER = 0.6;
+const WIND_LIFT = 0.2;
 // and the parting: the pose file's wind groups each have a side (-1 her pieces on the HUD's left, 1 the right), and
 // their wind is the flutter plus side x WIND_PART, so her twin tails, bows and hair part outward
-const WIND_PART = 0.8;
+const WIND_PART = 0.4;
 const WIND_HZ = [0.6, 1.6];
 const WIND_MIX = [[1, 0.55], [1.73, 0.3], [2.61, 0.15]]; // [frequency ratio, weight]
 const WIND_GUST_HZ = [0.13, 0.07];
