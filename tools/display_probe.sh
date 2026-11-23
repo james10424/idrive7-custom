@@ -53,8 +53,17 @@ if [ "$WATCH" = 1 ]; then
     W1=$!
     ssh "$CAR" "journalctl -f -n 0 --utc -o short-precise --no-pager" > "$OUT/journal.txt" 2>/dev/null &
     W2=$!
-    # -a: ASCII; dlt-daemon's default port on the head unit
-    ssh "$CAR" "dlt-receive -a 127.0.0.1" > "$OUT/dlt.txt" 2> "$OUT/dlt.err" &
+    # -a: ASCII. dlt-daemon's port 3490 on whatever address it listens on (127.0.0.1 refused on the car, Nov 23);
+    # without a TCP listener there is no trace to stream, and dlt.err says what is listening instead
+    # shellcheck disable=SC2016
+    ssh "$CAR" '
+        l=$(netstat -lnt 2>/dev/null | awk "\$4 ~ /:3490\$/ {print \$4; exit}")
+        a=${l%:3490}
+        case "$a" in ""|0.0.0.0|::|"[::]"|":::") a=127.0.0.1 ;; esac
+        echo "dlt-daemon listening: ${l:-not on TCP 3490}; dlt-receive -a $a" >&2
+        [ -n "$l" ] || { netstat -lnt 2>/dev/null >&2; ps | grep -i dlt | grep -v grep >&2; exit 1; }
+        exec dlt-receive -a "$a"
+    ' > "$OUT/dlt.txt" 2> "$OUT/dlt.err" &
     W3=$!
     stop() {
         kill "$W0" "$W1" "$W2" "$W3" 2>/dev/null || true
