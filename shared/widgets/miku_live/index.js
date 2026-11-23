@@ -47,10 +47,10 @@ const hudData = require("../../hud_data");
  * @property {number} [pitchDeg] the flight path vector's height, deg (nose up +)
  * @property {number[]} [windPh] the flutter's wave phases, rad
  * @property {number[]} [gustPh] the gusts' phases, rad
- * @property {{ x: number, y: number }} [wind] the wind now
- * @property {?{ x: number, y: number }} [windSent] the wind live2d-render has
+ * @property {{ x: number, part: number, y: number }} [wind] the wind now: the flutter, the parting, the lift
+ * @property {?Array<?{ x: number, y: number }>} [windSent] each wind group's wind live2d-render has
  * @property {boolean} [noWind] live2d-render is older than 0.1.11 (no "wind")
- * @property {boolean} [windParamsSent] the wind's parameters (the pose file's "wind") went with a "wind" since the open
+ * @property {boolean} [windParamsSent] the wind groups' parameters (the pose file's "wind") went since the open
  * @property {number} [bobSent] the offset live2d-render has
  * @property {boolean} [noOffset] live2d-render is older than 0.1.1 (no "offset"): no bob
  * @property {number} [glanceN] the glances she's started in this turn hold
@@ -106,6 +106,9 @@ const WIND_START_KMH = 5;
 const WIND_FULL_KMH = 120;
 const WIND_FLUTTER = 1.2;
 const WIND_LIFT = 0.35;
+// and the parting: the pose file's wind groups each have a side (-1 her pieces on the HUD's left, 1 the right), and
+// their wind is the flutter plus side x WIND_PART, so her twin tails, bows and hair part outward
+const WIND_PART = 0.8;
 const WIND_HZ = [0.6, 1.6];
 const WIND_MIX = [[1, 0.55], [1.73, 0.3], [2.61, 0.15]]; // [frequency ratio, weight]
 const WIND_GUST_HZ = [0.13, 0.07];
@@ -365,7 +368,7 @@ function drive(hud, state, now) {
     gust += Math.sin(state.gustPh[i]);
   });
   gust = 0.75 + 0.25 * (gust / WIND_GUST_HZ.length); // 0.5 .. 1
-  state.wind = { x: windK * WIND_FLUTTER * gust * flutter, y: windK * WIND_LIFT * gust };
+  state.wind = { x: windK * WIND_FLUTTER * gust * flutter, part: windK * WIND_PART * gust, y: windK * WIND_LIFT * gust };
   const turnSide = hud._turnSide();
   // she blinks as her head starts to turn, away or back, as in the turn recording
   if (isNum(state.turnWas) && turnSide !== state.turnWas) {
@@ -568,20 +571,24 @@ module.exports = {
       state.bobSent = y;
       live.send({ t: "offset", x: 0, y });
     }
-    // the wind on her hair, when live2d-render takes it (0.1.11 on; it keeps it until told again)
-    const w = state.wind || { x: 0, y: 0 },
-      ws = state.windSent;
-    if (!state.noWind && (force || !ws || Math.abs(w.x - ws.x) >= WIND_SEND || Math.abs(w.y - ws.y) >= WIND_SEND)) {
-      state.windSent = { x: w.x, y: w.y };
-      /** @type {Record<string, string | number | boolean>} */
-      const msg = { t: "wind", x: Math.round(w.x * 1000) / 1000, y: Math.round(w.y * 1000) / 1000 };
-      // the first since the open names the parameters it moves (her hair, ribbons, lace), so her body stays calm
-      const params = state.config && Array.isArray(state.config.wind) ? state.config.wind : [];
-      if (!state.windParamsSent && params.length) {
-        msg.params = params.join(",");
-        state.windParamsSent = true;
-      }
-      live.send(msg);
+    // the wind on her hair, when live2d-render takes it (0.1.11 on; it keeps it until told again): one message a
+    // group, the first since the open naming the group's parameters (her body stays calm)
+    const w = state.wind || { x: 0, part: 0, y: 0 },
+      groups = state.config && Array.isArray(state.config.wind) ? state.config.wind : [];
+    if (!state.noWind && groups.length) {
+      if (!state.windSent) state.windSent = groups.map(() => null);
+      const sent = state.windSent;
+      groups.forEach((/** @type {*} */ grp, /** @type {number} */ g) => {
+        const x = w.x + (grp.side || 0) * w.part,
+          ws = sent[g];
+        if (!force && state.windParamsSent && ws && Math.abs(x - ws.x) < WIND_SEND && Math.abs(w.y - ws.y) < WIND_SEND) return;
+        sent[g] = { x, y: w.y };
+        /** @type {Record<string, string | number | boolean>} */
+        const msg = { t: "wind", g, x: Math.round(x * 1000) / 1000, y: Math.round(w.y * 1000) / 1000 };
+        if (!state.windParamsSent && Array.isArray(grp.params)) msg.params = grp.params.join(",");
+        live.send(msg);
+      });
+      state.windParamsSent = true;
     }
   },
   /**

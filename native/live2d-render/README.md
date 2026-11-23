@@ -150,7 +150,7 @@ App to live2d-render:
 | `show`, `hide` | the layer shown or hidden; hidden, nothing is drawn |
 | `move` | `x`, `y`, `z`: the layer, whole pixels |
 | `offset` | `x`, `y`: the model moved inside its picture, in px (fractions too, at most a quarter of the picture each way); an app's own movement (Miku Live2D's bob). Since 0.1.1: 0.1.0 answers it with an `error` |
-| `wind` | `x`, `y`: the wind on the model's physics (hair, ribbons), x right and y up, against gravity's 1 down, at most 2 either way; kept until set again, calm at each open. `params` (optional, once per model): the comma-separated parameters it moves; the glue then runs a second, windy copy of the physics and keeps its values only for those, so the wind can be strong in her hair while her body's pendulums stay calm (without it the wind is on all of the physics). Since 0.1.11, and only with a glue that has `l2d_set_wind` (`make glue`, `make deploy-sdk`): otherwise logged once and ignored. 0.1.10 and before answer it with an `error` |
+| `wind` | `g` (0 to 3, default 0): a wind group; `x`, `y`: its wind on her physics, x right and y up, against gravity's 1 down, at most 2 either way, kept until set again; `params` (once per model): the group's comma-separated parameters. Each group with parameters runs its own copy of the physics with its wind and keeps its values only for those, the rest keep the calm physics' (so her left hair can blow left, her right hair right, and her body's pendulums stay calm). Calm, with no groups, at each open. Since 0.1.11, and only with a glue that has `l2d_set_wind` (`make glue`, `make deploy-sdk`): otherwise logged once and ignored. 0.1.10 and before answer it with an `error` |
 | `close` | the model goes |
 
 live2d-render to the app:

@@ -80,8 +80,8 @@ struct Glue {
     void (*draw)(l2d_model *, const float *);
     void (*blend)(l2d_model *, int, float) = nullptr;   /* optional: an older glue hasn't it */
     void (*gpu_bytes)(const l2d_model *, long long *) = nullptr;   /* optional too */
-    void (*set_wind)(l2d_model *, float, float) = nullptr;         /* optional too */
-    int (*set_wind_params)(l2d_model *, const char *) = nullptr;   /* optional too */
+    void (*set_wind)(l2d_model *, int, float, float) = nullptr;         /* optional too */
+    int (*set_wind_params)(l2d_model *, int, const char *) = nullptr;   /* optional too */
 
     bool load(const std::string &path, std::string *err)
     {
@@ -110,8 +110,8 @@ struct Glue {
         draw = (void (*)(l2d_model *, const float *))sym("l2d_draw");
         blend = (void (*)(l2d_model *, int, float))dlsym(h, "l2d_blend");
         gpu_bytes = (void (*)(const l2d_model *, long long *))dlsym(h, "l2d_gpu_bytes");
-        set_wind = (void (*)(l2d_model *, float, float))dlsym(h, "l2d_set_wind");
-        set_wind_params = (int (*)(l2d_model *, const char *))dlsym(h, "l2d_set_wind_params");
+        set_wind = (void (*)(l2d_model *, int, float, float))dlsym(h, "l2d_set_wind");
+        set_wind_params = (int (*)(l2d_model *, int, const char *))dlsym(h, "l2d_set_wind_params");
         if (!ok || api() != L2D_API) {
             *err = ok ? "the Cubism glue library is for another live2d-render (rebuild it: make glue)"
                       : "the Cubism glue library lacks a function (rebuild it: make glue)";
@@ -156,8 +156,7 @@ private:
     std::vector<float> hide_op_;
     float mvp_[16];
     float offset_x_ = 0, offset_y_ = 0;   /* "offset": px the model is moved in the picture */
-    float wind_x_ = 0, wind_y_ = 0;       /* "wind": on the model's physics (glue l2d_set_wind) */
-    std::string wind_params_;             /* "wind" params: the parameters it moves, as set on this model */
+    std::string wind_params_[L2D_WIND_GROUPS];   /* "wind" params: each group's parameters, as set on this model */
     bool wind_told_ = false;              /* "the glue has no wind" logged */
     uint32_t ref_ = 0;
     cr::LayerOptions lo_;
@@ -258,8 +257,7 @@ void Service::open_model(const cr::Json &m)
         defaults.push_back(glue_.param_default(model_, i));
     }
     params_.reset(ids, defaults);
-    wind_x_ = wind_y_ = 0;   /* a new model starts calm, as the app's next "wind" says */
-    wind_params_.clear();     /* and with the wind on all of its physics until the app names the parameters */
+    for (std::string &w : wind_params_) w.clear();   /* a new model starts calm, no group, until the app's "wind" */
     std::vector<std::string> unknown_ids;
     if (m.count("v") && params_.apply(m.at("v"), &unknown_ids) < 0) {
         glue_.close(model_);
@@ -424,31 +422,31 @@ void Service::handle(const std::string &line)
     }
     if (t == "close") return close_model();
     if (t == "wind") {
-        /* the wind on her physics (hair, ribbons): x right, y up, gravity 1 down; at most 2 either way */
+        /* group g's wind on her physics (x right, y up, gravity 1 down; at most 2 either way), and with "params"
+         * (once per model) the parameters it moves: each group runs its own copy of the physics (glue) */
+        const int g = m.count("g") ? atoi(m["g"].c_str()) : 0;
+        if (g < 0 || g >= L2D_WIND_GROUPS) return reply_error("wind", "g: 0 .. " + std::to_string(L2D_WIND_GROUPS - 1));
+        float x = 0, y = 0;
         auto get = [&](const char *k, float *out) {
             if (m.count(k)) {
                 float v = (float)atof(m[k].c_str());
                 *out = v > 2 ? 2 : v < -2 ? -2 : v;
             }
         };
-        get("x", &wind_x_);
-        get("y", &wind_y_);
-        /* "params": the parameters the wind moves (her hair, ribbons), once per model; the rest stay calm */
-        if (model_ && m.count("params") && m["params"] != wind_params_) {
-            wind_params_ = m["params"];
-            if (glue_.set_wind_params) {
-                const int found = glue_.set_wind_params(model_, wind_params_.c_str());
-                fprintf(stderr, "live2d-render: the wind moves %d of the parameters named\n", found);
-            } else {
-                fprintf(stderr, "live2d-render: the Cubism glue can't limit the wind to parameters (make glue, make deploy-sdk)\n");
-            }
-        }
-        if (!glue_.set_wind) {
+        get("x", &x);
+        get("y", &y);
+        if (!glue_.set_wind || !glue_.set_wind_params) {
             if (!wind_told_) fprintf(stderr, "live2d-render: the Cubism glue has no wind (make glue, make deploy-sdk)\n");
             wind_told_ = true;
             return;
         }
-        if (model_) glue_.set_wind(model_, wind_x_, wind_y_);
+        if (!model_) return;
+        if (m.count("params") && m["params"] != wind_params_[g]) {
+            wind_params_[g] = m["params"];
+            fprintf(stderr, "live2d-render: wind group %d moves %d of the parameters named\n", g,
+                    glue_.set_wind_params(model_, g, wind_params_[g].c_str()));
+        }
+        glue_.set_wind(model_, g, x, y);
         return;
     }
     if (t == "restart") {

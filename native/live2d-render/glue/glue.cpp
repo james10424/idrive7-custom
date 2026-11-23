@@ -138,19 +138,24 @@ struct l2d_model : public CubismUserModel {
     std::vector<char> isMask;   /* drawable i is some drawable's mask: blended always (masks are drawn hidden or not) */
     double blendMs = 0;         /* l2d_blend's time and drawables blended, logged every 150 frames */
     long blended = 0, blendTotal = 0;
-    /* The wind on chosen parameters only (l2d_set_wind_params): a second copy of the model's physics, with the wind,
-     * run after the first (without it); its results kept only for windMask's parameters (her hair, ribbons), the
-     * first's for the rest (her body's pendulums would tip over in a wind strong enough to show in her hair). */
+    /* The wind, in groups of parameters (l2d_set_wind_params): each group a copy of the model's physics with its
+     * own wind, run after the calm one, its results kept only for its own parameters (her left hair and ribbons
+     * blown left, her right ones right; her body's pendulums stay calm, which a wind strong enough to show in her
+     * hair would tip over). */
+    struct WindGroup {
+        CubismPhysics *physics = nullptr;
+        std::vector<char> mask;
+        float x = 0, y = 0;
+    };
     std::vector<csmByte> physicsJson;
-    CubismPhysics *windPhysics = nullptr;
-    std::vector<char> windMask;
-    std::vector<float> beforeWind;
-    float windX = 0, windY = 0;
+    WindGroup wind[L2D_WIND_GROUPS];
+    std::vector<float> calm, windy;
     int blendFrames = 0;
 
     ~l2d_model()
     {
-        if (windPhysics) CubismPhysics::Delete(windPhysics);
+        for (WindGroup &g : wind)
+            if (g.physics) CubismPhysics::Delete(g.physics);
         if (!textures.empty()) glDeleteTextures((GLsizei)textures.size(), textures.data());
         delete setting;
     }
@@ -285,7 +290,7 @@ struct l2d_model : public CubismUserModel {
             std::vector<csmByte> ph;
             if (read_file(dir + setting->GetPhysicsFileName(), &ph)) {
                 LoadPhysics(ph.data(), (csmSizeInt)ph.size());
-                physicsJson = ph;   /* kept for the wind's copy (l2d_set_wind_params) */
+                physicsJson = ph;   /* kept for the wind's copies (l2d_set_wind_params) */
             }
         }
         maskTextures = masks ? masks : 1;
@@ -331,55 +336,46 @@ l2d_model *l2d_open(const char *model3_json, unsigned w, unsigned h, unsigned ma
 
 void l2d_close(l2d_model *m) { delete m; }
 
-/* The wind on the model's physics (Cubism's own option, a force added to every pendulum's gravity: x to the right,
- * y up, in the same units as gravity's 1 down), kept until set again: on the parameters l2d_set_wind_params chose,
- * else on all of the physics. Optional for live2d-render. */
-void l2d_set_wind(l2d_model *m, float x, float y)
+/* Group g's wind (0 .. L2D_WIND_GROUPS - 1; Cubism's own physics option, a force added to every pendulum's gravity:
+ * x to the right, y up, in the same units as gravity's 1 down), kept until set again. A group without parameters
+ * (l2d_set_wind_params) has no physics to blow. Optional for live2d-render. */
+void l2d_set_wind(l2d_model *m, int g, float x, float y)
 {
-    m->windX = x;
-    m->windY = y;
-    CubismPhysics *p = m->windPhysics ? m->windPhysics : m->physics();
-    if (!p) return;
-    CubismPhysics::Options o = p->GetOptions();
+    if (g < 0 || g >= L2D_WIND_GROUPS) return;
+    l2d_model::WindGroup &w = m->wind[g];
+    w.x = x;
+    w.y = y;
+    if (!w.physics) return;
+    CubismPhysics::Options o = w.physics->GetOptions();
     o.Wind.X = x;
     o.Wind.Y = y;
-    p->SetOptions(o);
+    w.physics->SetOptions(o);
 }
 
-/* The parameters the wind moves, comma-separated ids (a physics output's): only these take the windy physics'
- * values, the rest keep the calm physics'. "" puts the wind back on all of the physics. Returns how many of the
- * ids the model has. Optional for live2d-render. */
-int l2d_set_wind_params(l2d_model *m, const char *csv)
+/* Group g's parameters, comma-separated ids of physics outputs: they take that group's windy physics' values, every
+ * other parameter the calm physics'. "" empties the group (no copy run). Returns how many of the ids the model has.
+ * Optional for live2d-render. */
+int l2d_set_wind_params(l2d_model *m, int g, const char *csv)
 {
-    CubismModel *model = m->GetModel();
-    const int n = model->GetParameterCount();
-    m->windMask.assign(n, 0);
+    if (g < 0 || g >= L2D_WIND_GROUPS) return 0;
+    l2d_model::WindGroup &w = m->wind[g];
+    const int n = m->GetModel()->GetParameterCount();
+    w.mask.assign(n, 0);
     int found = 0;
-    std::string list = csv ? csv : "";
+    const std::string list = csv ? csv : "";
     size_t at = 0;
     while (at <= list.size()) {
         size_t comma = list.find(',', at);
         if (comma == std::string::npos) comma = list.size();
         const std::string id = list.substr(at, comma - at);
         for (int i = 0; i < n && !id.empty(); i++)
-            if (m->ids[i] == id) { m->windMask[i] = 1; found++; break; }
+            if (m->ids[i] == id) { w.mask[i] = 1; found++; break; }
         at = comma + 1;
     }
-    if (m->windPhysics) { CubismPhysics::Delete(m->windPhysics); m->windPhysics = nullptr; }
-    if (m->physics()) {   /* the calm physics: no wind of its own from here */
-        CubismPhysics::Options o = m->physics()->GetOptions();
-        o.Wind.X = found ? 0 : m->windX;
-        o.Wind.Y = found ? 0 : m->windY;
-        m->physics()->SetOptions(o);
-    }
+    if (w.physics) { CubismPhysics::Delete(w.physics); w.physics = nullptr; }
     if (found && !m->physicsJson.empty()) {
-        m->windPhysics = CubismPhysics::Create(m->physicsJson.data(), (csmSizeInt)m->physicsJson.size());
-        if (m->windPhysics) {
-            CubismPhysics::Options o = m->windPhysics->GetOptions();
-            o.Wind.X = m->windX;
-            o.Wind.Y = m->windY;
-            m->windPhysics->SetOptions(o);
-        }
+        w.physics = CubismPhysics::Create(m->physicsJson.data(), (csmSizeInt)m->physicsJson.size());
+        l2d_set_wind(m, g, w.x, w.y);
     }
     return found;
 }
@@ -424,15 +420,22 @@ void l2d_update(l2d_model *m, const float *values, const int *part_index, const 
     static const bool noPhysics = getenv("CUBISM_NO_PHYSICS") != nullptr;   /* debugging: the pose without physics */
     if (m->physics() && dt > 0 && !noPhysics) {
         m->physics()->Evaluate(model, dt);
-        if (m->windPhysics) {
-            /* the windy copy after the calm one, every frame (its pendulums keep moving with hers); only the wind's
-             * parameters keep its values */
-            const int pc = model->GetParameterCount();
-            m->beforeWind.resize(pc);
-            for (int i = 0; i < pc; i++) m->beforeWind[i] = model->GetParameterValue(i);
-            m->windPhysics->Evaluate(model, dt);
-            for (int i = 0; i < pc; i++)
-                if (!m->windMask[i]) model->SetParameterValue(i, m->beforeWind[i]);
+        /* each wind group's copy after the calm one, every frame (its pendulums keep moving with hers); each
+         * keeps only its own parameters' values */
+        const int pc = model->GetParameterCount();
+        bool any = false;
+        for (const l2d_model::WindGroup &w : m->wind) any = any || w.physics;
+        if (any) {
+            m->calm.resize(pc);
+            for (int i = 0; i < pc; i++) m->calm[i] = model->GetParameterValue(i);
+            m->windy = m->calm;
+            for (l2d_model::WindGroup &w : m->wind) {
+                if (!w.physics) continue;
+                w.physics->Evaluate(model, dt);
+                for (int i = 0; i < pc; i++)
+                    if (w.mask[i]) m->windy[i] = model->GetParameterValue(i);
+            }
+            for (int i = 0; i < pc; i++) model->SetParameterValue(i, m->windy[i]);
         }
     }
     double p1 = now_ms();

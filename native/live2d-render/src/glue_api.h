@@ -18,6 +18,8 @@ extern "C" {
 /* Bumped whenever a function below changes; live2d-render refuses a glue
  * library of another version. */
 #define L2D_API 1
+/* How many wind groups (l2d_set_wind_params) a model takes. */
+#define L2D_WIND_GROUPS 4
 
 typedef struct l2d_model l2d_model;
 
@@ -60,14 +62,13 @@ void l2d_draw(l2d_model *m, const float mvp[16]);
  * buffers, out[2] the vertex and index buffers. */
 void l2d_gpu_bytes(const l2d_model *m, long long out[3]);
 
-/* Optional (an older glue lacks it): the wind on the model's physics, a force added to gravity's (gravity is 1
- * down): x to the right, y up. Kept until set again; a model without physics ignores it. */
-void l2d_set_wind(l2d_model *m, float x, float y);
-
-/* Optional too: the parameters the wind moves (comma-separated ids of physics outputs: her hair, ribbons), through a
- * second, windy copy of the physics; the others keep the calm physics' values. "" puts the wind back on all of it.
- * Returns how many of the ids the model has. */
-int l2d_set_wind_params(l2d_model *m, const char *csv);
+/* Optional (an older glue lacks them): the wind, in up to L2D_WIND_GROUPS groups of parameters. Each group with
+ * parameters (comma-separated ids of physics outputs: her left hair and ribbons, say) runs its own copy of the
+ * physics with its own wind (x right, y up, against gravity's 1 down) after the calm one, and keeps that copy's
+ * values only for its parameters; every other parameter keeps the calm physics' (her body). "" empties a group.
+ * l2d_set_wind_params returns how many of the ids the model has. */
+void l2d_set_wind(l2d_model *m, int group, float x, float y);
+int l2d_set_wind_params(l2d_model *m, int group, const char *csv);
 
 #ifdef __cplusplus
 }
