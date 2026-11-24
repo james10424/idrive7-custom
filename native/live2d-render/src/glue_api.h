@@ -69,6 +69,9 @@ void l2d_gpu_bytes(const l2d_model *m, long long out[3]);
  * l2d_set_wind_params returns how many of the ids the model has. */
 void l2d_set_wind(l2d_model *m, int group, float x, float y);
 int l2d_set_wind_params(l2d_model *m, int group, const char *csv);
+/* Optional too: group g's ripple, a wave from each chain's root to its tip on top of the wind; amount of each
+ * parameter's half range at the tip (0 .. 1, 0 none), hz its frequency. */
+void l2d_set_wind_ripple(l2d_model *m, int group, float amount, float hz);
 
 #ifdef __cplusplus
 }

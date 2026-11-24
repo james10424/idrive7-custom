@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
+#include <cmath>
 #include <set>
 #include <string>
 #include <vector>
@@ -24,6 +25,7 @@
 #include "Math/CubismMatrix44.hpp"
 #include "Model/CubismUserModel.hpp"
 #include "Physics/CubismPhysics.hpp"
+#include "Utils/CubismJson.hpp"
 #include "Rendering/OpenGL/CubismOffscreenManager_OpenGLES2.hpp"
 #include "Rendering/OpenGL/CubismRenderer_OpenGLES2.hpp"
 
@@ -146,8 +148,14 @@ struct l2d_model : public CubismUserModel {
         CubismPhysics *physics = nullptr;
         std::vector<char> mask;
         float x = 0, y = 0;
+        float ripple = 0, hz = 0;   /* l2d_set_wind_ripple */
     };
     std::vector<csmByte> physicsJson;
+    /* the ripple's chains, from the physics file: each output parameter's pendulum (chain, -1 none) and where on
+     * it it hangs (0 the root .. 1 the tip); each chain's own phase, so no two swing in step */
+    std::vector<int> chainOf;
+    std::vector<float> chainAt, chainPhase;
+    double rippleT = 0;
     WindGroup wind[L2D_WIND_GROUPS];
     std::vector<float> calm, windy;
     int blendFrames = 0;
@@ -158,6 +166,39 @@ struct l2d_model : public CubismUserModel {
             if (g.physics) CubismPhysics::Delete(g.physics);
         if (!textures.empty()) glDeleteTextures((GLsizei)textures.size(), textures.data());
         delete setting;
+    }
+
+    /* Each physics output's chain and place on it (the ripple, l2d_set_wind_ripple): the first setting naming a
+     * parameter wins */
+    void map_chains()
+    {
+        CubismModel *model = GetModel();
+        const int n = model->GetParameterCount();
+        chainOf.assign(n, -1);
+        chainAt.assign(n, 0);
+        chainPhase.clear();
+        Utils::CubismJson *js = Utils::CubismJson::Create(physicsJson.data(), (csmSizeInt)physicsJson.size());
+        if (!js) return;
+        Utils::Value &sets = js->GetRoot()["PhysicsSettings"];
+        unsigned seed = 12345;
+        for (int s = 0; s < sets.GetSize(); s++) {
+            seed = seed * 1103515245u + 12345u;
+            chainPhase.push_back((float)((seed >> 8) % 6283) / 1000.0f);
+            const int last = sets[s]["Vertices"].GetSize() - 1;
+            Utils::Value &outs = sets[s]["Output"];
+            for (int o = 0; o < outs.GetSize() && last > 0; o++) {
+                const std::string id = outs[o]["Destination"]["Id"].GetRawString();
+                for (int i = 0; i < n; i++)
+                    if (ids[i] == id) {
+                        if (chainOf[i] < 0) {
+                            chainOf[i] = s;
+                            chainAt[i] = (float)outs[o]["VertexIndex"].ToInt() / (float)last;
+                        }
+                        break;
+                    }
+            }
+        }
+        Utils::CubismJson::Delete(js);
     }
 
     /* Her textures, packed into atlas pages (CUBISM_NO_ATLAS=1: one texture each, as before). A page holds as
@@ -313,6 +354,7 @@ struct l2d_model : public CubismUserModel {
             handles.push_back(id);
             defaults.push_back(_model->GetParameterDefaultValue(i));
         }
+        if (!physicsJson.empty()) map_chains();   /* after the ids, which it matches */
         return true;
     }
 };
@@ -350,6 +392,16 @@ void l2d_set_wind(l2d_model *m, int g, float x, float y)
     o.Wind.X = x;
     o.Wind.Y = y;
     w.physics->SetOptions(o);
+}
+
+/* Group g's ripple: a wave running from each of its chains' roots to their tips on top of the wind (the wind alone
+ * bends a whole chain one way, so a tail swings as one piece), `amount` of each parameter's half range at the tip
+ * (half that at the root), `hz` its frequency; each chain in its own phase. 0 stops it. Optional for live2d-render. */
+void l2d_set_wind_ripple(l2d_model *m, int g, float amount, float hz)
+{
+    if (g < 0 || g >= L2D_WIND_GROUPS) return;
+    m->wind[g].ripple = amount < 0 ? 0 : amount > 1 ? 1 : amount;
+    m->wind[g].hz = hz < 0 ? 0 : hz > 8 ? 8 : hz;
 }
 
 /* Group g's parameters, comma-separated ids of physics outputs: they take that group's windy physics' values, every
@@ -434,6 +486,24 @@ void l2d_update(l2d_model *m, const float *values, const int *part_index, const 
                 w.physics->Evaluate(model, dt);
                 for (int i = 0; i < pc; i++)
                     if (w.mask[i]) m->windy[i] = model->GetParameterValue(i);
+            }
+            /* the ripple: per chain, a wave with a half wavelength along it (RIPPLE_LAG), plus a faster, smaller
+             * one, so a tail curls and its tip whips rather than the whole of it leaning */
+            static const float RIPPLE_LAG = 3.0f;
+            m->rippleT += dt;
+            for (l2d_model::WindGroup &w : m->wind) {
+                if (!w.physics || w.ripple <= 0 || w.hz <= 0) continue;
+                const double ph = 2 * 3.14159265358979 * w.hz * m->rippleT;
+                for (int i = 0; i < pc && i < (int)m->chainOf.size(); i++) {
+                    const int c = m->chainOf[i];
+                    if (!w.mask[i] || c < 0) continue;
+                    const float at = m->chainAt[i], p0 = m->chainPhase[c];
+                    const float wave = (float)(sin(ph - at * RIPPLE_LAG + p0) +
+                                               0.4 * sin(1.87 * ph - at * RIPPLE_LAG * 1.6f + 2 * p0));
+                    const float lo = model->GetParameterMinimumValue(i), hi = model->GetParameterMaximumValue(i);
+                    float v = m->windy[i] + w.ripple * (0.5f + 0.5f * at) * wave / 1.4f * (hi - lo) / 2;
+                    m->windy[i] = v < lo ? lo : v > hi ? hi : v;
+                }
             }
             for (int i = 0; i < pc; i++) model->SetParameterValue(i, m->windy[i]);
         }

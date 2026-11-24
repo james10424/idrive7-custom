@@ -82,6 +82,7 @@ struct Glue {
     void (*gpu_bytes)(const l2d_model *, long long *) = nullptr;   /* optional too */
     void (*set_wind)(l2d_model *, int, float, float) = nullptr;         /* optional too */
     int (*set_wind_params)(l2d_model *, int, const char *) = nullptr;   /* optional too */
+    void (*set_wind_ripple)(l2d_model *, int, float, float) = nullptr;  /* optional too (glue 0.1.12) */
 
     bool load(const std::string &path, std::string *err)
     {
@@ -112,6 +113,7 @@ struct Glue {
         gpu_bytes = (void (*)(const l2d_model *, long long *))dlsym(h, "l2d_gpu_bytes");
         set_wind = (void (*)(l2d_model *, int, float, float))dlsym(h, "l2d_set_wind");
         set_wind_params = (int (*)(l2d_model *, int, const char *))dlsym(h, "l2d_set_wind_params");
+        set_wind_ripple = (void (*)(l2d_model *, int, float, float))dlsym(h, "l2d_set_wind_ripple");
         if (!ok || api() != L2D_API) {
             *err = ok ? "the Cubism glue library is for another live2d-render (rebuild it: make glue)"
                       : "the Cubism glue library lacks a function (rebuild it: make glue)";
@@ -422,7 +424,8 @@ void Service::handle(const std::string &line)
     }
     if (t == "close") return close_model();
     if (t == "wind") {
-        /* group g's wind on her physics (x right, y up, gravity 1 down; at most 2 either way), and with "params"
+        /* group g's wind on her physics (x right, y up, gravity 1 down; at most 2 either way), "ripple" and "hz" a
+         * wave down its chains (glue 0.1.12), and with "params"
          * (once per model) the parameters it moves: each group runs its own copy of the physics (glue) */
         const int g = m.count("g") ? atoi(m["g"].c_str()) : 0;
         if (g < 0 || g >= L2D_WIND_GROUPS) return reply_error("wind", "g: 0 .. " + std::to_string(L2D_WIND_GROUPS - 1));
@@ -447,6 +450,10 @@ void Service::handle(const std::string &line)
                     glue_.set_wind_params(model_, g, wind_params_[g].c_str()));
         }
         glue_.set_wind(model_, g, x, y);
+        /* "ripple" and "hz": a wave down each chain of the group (an older glue: the wind alone) */
+        if (m.count("ripple") && glue_.set_wind_ripple)
+            glue_.set_wind_ripple(model_, g, (float)atof(m["ripple"].c_str()),
+                                  m.count("hz") ? (float)atof(m["hz"].c_str()) : 1.0f);
         return;
     }
     if (t == "restart") {

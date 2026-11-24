@@ -47,8 +47,9 @@ const hudData = require("../../hud_data");
  * @property {number} [pitchDeg] the flight path vector's height, deg (nose up +)
  * @property {number[]} [windPh] the flutter's wave phases, rad
  * @property {number[]} [gustPh] the gusts' phases, rad
- * @property {{ x: number, part: number, y: number }} [wind] the wind now: the flutter, the parting, the lift
- * @property {?Array<?{ x: number, y: number }>} [windSent] each wind group's wind live2d-render has
+ * @property {{ x: number, part: number, y: number, ripple: number, hz: number }} [wind] the wind now: the flutter,
+ *   the parting, the lift, the ripple down the chains and its frequency
+ * @property {?Array<?{ x: number, y: number, ripple: number, hz: number }>} [windSent] each wind group's wind live2d-render has
  * @property {boolean} [noWind] live2d-render is older than 0.1.11 (no "wind")
  * @property {boolean} [windParamsSent] the wind groups' parameters (the pose file's "wind") went since the open
  * @property {number} [bobSent] the offset live2d-render has
@@ -113,6 +114,11 @@ const WIND_HZ = [0.6, 1.6];
 const WIND_MIX = [[1, 0.55], [1.73, 0.3], [2.61, 0.15]]; // [frequency ratio, weight]
 const WIND_GUST_HZ = [0.13, 0.07];
 const WIND_SEND = 0.01;
+// and the ripple (live2d-render 0.1.12): a wave running down each tail, ribbon and lock from root to tip, so they
+// curl and their tips whip instead of each swinging as one piece; WIND_RIPPLE of a joint's half range at the tip
+// at WIND_FULL_KMH (with the gusts), quickening from WIND_RIPPLE_HZ[0] to [1]
+const WIND_RIPPLE = 0.15;
+const WIND_RIPPLE_HZ = [0.9, 2.4];
 const LEAN_SOFT = 1.15; // the faces' scale, as the lean's before (tanh gain): they still come on at the same g
 const POINT_K = 70; // the head turn's spring (1/s^2): about 1.3 Hz
 const POINT_C = 16.7; // critically damped
@@ -368,7 +374,13 @@ function drive(hud, state, now) {
     gust += Math.sin(state.gustPh[i]);
   });
   gust = 0.75 + 0.25 * (gust / WIND_GUST_HZ.length); // 0.5 .. 1
-  state.wind = { x: windK * WIND_FLUTTER * gust * flutter, part: windK * WIND_PART * gust, y: windK * WIND_LIFT * gust };
+  state.wind = {
+    x: windK * WIND_FLUTTER * gust * flutter,
+    part: windK * WIND_PART * gust,
+    y: windK * WIND_LIFT * gust,
+    ripple: windK * WIND_RIPPLE * gust,
+    hz: WIND_RIPPLE_HZ[0] + (WIND_RIPPLE_HZ[1] - WIND_RIPPLE_HZ[0]) * windK,
+  };
   const turnSide = hud._turnSide();
   // she blinks as her head starts to turn, away or back, as in the turn recording
   if (isNum(state.turnWas) && turnSide !== state.turnWas) {
@@ -573,7 +585,7 @@ module.exports = {
     }
     // the wind on her hair, when live2d-render takes it (0.1.11 on; it keeps it until told again): one message a
     // group, the first since the open naming the group's parameters (her body stays calm)
-    const w = state.wind || { x: 0, part: 0, y: 0 },
+    const w = state.wind || { x: 0, part: 0, y: 0, ripple: 0, hz: 0 },
       groups = state.config && Array.isArray(state.config.wind) ? state.config.wind : [];
     if (!state.noWind && groups.length) {
       if (!state.windSent) state.windSent = groups.map(() => null);
@@ -581,10 +593,20 @@ module.exports = {
       groups.forEach((/** @type {*} */ grp, /** @type {number} */ g) => {
         const x = w.x + (grp.side || 0) * w.part,
           ws = sent[g];
-        if (!force && state.windParamsSent && ws && Math.abs(x - ws.x) < WIND_SEND && Math.abs(w.y - ws.y) < WIND_SEND) return;
-        sent[g] = { x, y: w.y };
+        if (
+          !force &&
+          state.windParamsSent &&
+          ws &&
+          Math.abs(x - ws.x) < WIND_SEND &&
+          Math.abs(w.y - ws.y) < WIND_SEND &&
+          Math.abs(w.ripple - ws.ripple) < WIND_SEND / 4 &&
+          Math.abs(w.hz - ws.hz) < 0.05
+        )
+          return;
+        sent[g] = { x, y: w.y, ripple: w.ripple, hz: w.hz };
+        const r3 = (/** @type {number} */ v) => Math.round(v * 1000) / 1000;
         /** @type {Record<string, string | number | boolean>} */
-        const msg = { t: "wind", g, x: Math.round(x * 1000) / 1000, y: Math.round(w.y * 1000) / 1000 };
+        const msg = { t: "wind", g, x: r3(x), y: r3(w.y), ripple: r3(w.ripple), hz: r3(w.hz) };
         if (!state.windParamsSent && Array.isArray(grp.params)) msg.params = grp.params.join(",");
         live.send(msg);
       });
