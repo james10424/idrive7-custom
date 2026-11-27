@@ -2,6 +2,10 @@
 
 Newest first. Dates are when the build was pushed.
 
+## Nov 27 2026
+
+- **Custom Cluster 0.1.72: Sport's battery bar on Grand National's scale.** Sport's BAT box filled by the 12 V battery's charge (0..100 %) while the value beside it read volts, and Grand National's voltmeter reads 8..16 V. The bar and its riding value now follow the voltage over 8..16 V, as Grand National's: 12.6 V parked about half, 14.1 V running about three quarters. Sport's backdrop re-baked (the bar's range is in its key; same pixels). Checked on the bench: the demo's 14.1 V fills the bar to 76 % with 14.1V at its top. Unverified on the car.
+
 ## Nov 26 2026
 
 - **Live2D Render 0.1.13 and Custom HUD 0.1.68: Miku's wind eases in, and her back bow moves half as much.** The wind (flutter, parting, lift and ripple) now starts at 10 km/h (was 5) and eases in and out to all of it at 120 km/h (smoothstep, was a square root that rose steeply from the start): about 3% at 20 km/h, 16% at 40, 50% at 65, 84% at 90. Her back bow (`PhysicsSetting38` and 39's 16 outputs) looked janky, so it takes half the wind's push and ripple: the glue keeps a weight per parameter (`l2d_set_wind_weight`, the calm physics' value plus weight x the wind's change), set from live2d-render's `wind` `weighted` and `weight`, which the HUD sends once per open from the pose file's new `windWeights`. An older glue or live2d-render ignores it (the whole wind, as 0.1.12). **The glue is installed by hand** (`make glue`, `make deploy-sdk`). Host tests pass; checked on the bench: live2d-render logs the 16 at 0.5 and she draws as before. Unverified on the car.
