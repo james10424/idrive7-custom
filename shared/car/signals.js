@@ -48,6 +48,8 @@ const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the bin
 // KombiIF ranges: 4093..4095 are "not available" codes (a plug-in hybrid sent 4093 for its electric range, shown as
 // "0 + 4093 mi", Nov 27 2026), as DataFrontVehicle's
 const RANGE_NONE = 4093;
+const CCM_POLL_MS = 5000; // Check Control's list re-read (config.checkControl)
+const CCM_PROBE_MS = 20000; // and after this long, whether its service is there and what one read gives
 const HV_SOC_MAX = 100; // a hybrid's battery %: past this, none (255)
 const HV_ENERGY_NONE = 511; // lastStateCallCharging's energy fields: none
 const ROUTE_NOW_NONE = 16777215, // Charging infoChargingERoute5's energy now: none
@@ -657,6 +659,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       // BMW's Check Control messages (config.checkControl): logged on change only, to learn when its pop-ups show
       // (each entry's ccmId, reason, active state, filter and time; no app reads them yet)
       "de.bmw.infotainment.checkcontrol.CheckControlMaster": {
+        // re-read every 5 s too: nothing came on the car with 0.1.72, not even the first read (Nov 27 2026)
+        $pollMs: CCM_POLL_MS,
         basicList: (msg) => {
           const list = Array.isArray(msg) ? msg : msg && Array.isArray(msg.basicList) ? msg.basicList : null;
           const line = list
@@ -819,6 +823,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this._freshData = () => {
       snapshot = null;
     };
+    if (this.config.checkControl === true) setTimeout(() => this._probeCheckControl(), CCM_PROBE_MS);
     this.car.setRedline(this.setting("redline"));
     this.score = new ShiftScore(
       this.car,
@@ -1112,6 +1117,30 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           "route guidance not available: " + ((err && err.message) || err),
         ),
       );
+  },
+
+  /**
+   * Check Control's service, CCM_PROBE_MS after start (config.checkControl): logs whether the car offers it and what
+   * one read of its list gives, the error included (the kit's own first read drops errors). 0.1.72 logged nothing.
+   * @returns {void}
+   */
+  _probeCheckControl() {
+    const iface = "de.bmw.infotainment.checkcontrol.CheckControlMaster";
+    /** @type {*} */
+    const car = this.car;
+    const sub = car && Array.isArray(car.subs) ? car.subs.find((/** @type {*} */ s) => s && s.iface === iface) : null;
+    if (!sub) {
+      this.log.info("check control probe: no subscription");
+      return;
+    }
+    this.log.info(
+      "check control probe: " + (sub.error ? "error " + sub.error : "service " + (sub.available ? "available" : "not available")),
+    );
+    if (!sub.proxy) return;
+    Promise.resolve()
+      .then(() => sub.proxy.getValue("basicList", 3000))
+      .then((/** @type {*} */ v) => this.log.info("check control probe: read " + JSON.stringify(v)))
+      .catch((/** @type {*} */ err) => this.log.info("check control probe: read failed: " + ((err && err.message) || err)));
   },
 
   /**
