@@ -147,6 +147,7 @@ class ClusterRender extends EventEmitter {
         this.backoff = 0;
         this.timer = null;
         this.layers = new Map();     /* ref -> { kind, opts, uniforms, parts, binds, anims, image, dirty, whole } */
+        this.cuts = {};              /* target -> its "cutout" message, sent again on reconnect */
         this.nextRef = 1;
         this.pendingFrames = new Map();   /* ref -> frame message waiting for the socket */
         this.blocked = false;
@@ -196,6 +197,7 @@ class ClusterRender extends EventEmitter {
             }));
             this.layers.forEach((l) => Object.keys(l.binds).forEach((k) => this._send(l.binds[k].msg)));
             this.layers.forEach((l) => l.anims.forEach((m) => this._send(m)));
+            Object.keys(this.cuts).forEach((t) => this._send(this.cuts[t]));
         });
         /* A socket close() let go is not this.sock any more: its late events
          * are ignored. */
@@ -627,6 +629,19 @@ class ClusterRender extends EventEmitter {
     }
 
     status() { this._send({ op: 'status' }); }
+
+    /**
+     * A window through every layer of the target (cluster-render 0.6.3 "cutout"): the display's own content shows
+     * inside r; null: none. Kept and sent again on reconnect. An older service answers with an error event.
+     * @param {string} target
+     * @param {?{ x: number, y: number, w: number, h: number }} r
+     */
+    cutout(target, r) {
+        const m = r ? { op: 'cutout', target: target, x: r.x, y: r.y, w: r.w, h: r.h } : { op: 'cutout', target: target };
+        if (r) this.cuts[target] = m;
+        else delete this.cuts[target];
+        if (this.connected) this._send(m);
+    }
 }
 
 module.exports = { ClusterRender, DEFAULT_PATH };

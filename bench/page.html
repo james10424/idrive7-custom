@@ -674,6 +674,9 @@
   }
   // at most 30 redraws a second, as cluster-render's tick (cluster-render.conf fps = 30); a faster screen skips frames
   const FRAME_MS = 1000 / 30;
+  // each target's cut-out (cluster-render 0.6.3 "cutout"): no layer draws inside it, and the stock cluster shows a
+  // made-up pop-up there, as the KOMBI's own
+  let cutouts = {};
   function frame(t) {
     const redraw = document.getElementById('redraw').checked;
     // a buffered video frame only goes out on a tick that redraws, so the next can't replace it unseen
@@ -694,12 +697,23 @@
         .sort((a, b) => (CLASS_ORDER[a.class] - CLASS_ORDER[b.class]) || (a.z - b.z));
       let start = 0;
       hud.forEach((layer, i) => { if (layer.exclusive) start = i; });
+      const cut = cutouts[view];
+      if (cut) {
+        ctx.save();
+        ctx.fillStyle = '#1b1d22'; ctx.fillRect(cut.x, cut.y, cut.w, cut.h);
+        ctx.fillStyle = '#eee'; ctx.font = '26px sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText('BMW pop-up (cut-out)', cut.x + cut.w / 2, cut.y + cut.h / 2 + 9);
+        ctx.restore();
+        ctx.save();
+        ctx.beginPath(); ctx.rect(0, 0, VW, VH); ctx.rect(cut.x, cut.y, cut.w, cut.h); ctx.clip('evenodd');
+      }
       hud.slice(start).forEach((layer) => {
         ctx.globalAlpha = layer.opacity === undefined ? 1 : layer.opacity;
         if (layer.kind === 'image' || layer.kind === 'video') { const image = images.get(layer.key); if (image) ctx.drawImage(image, layer.x, layer.y, layer.w, layer.h); }
         else if (layer.kind === 'effect') { const image = drawEffect(layer, t); if (image) ctx.drawImage(image, layer.x, layer.y, layer.w, layer.h); }
         ctx.globalAlpha = 1;
       });
+      if (cut) ctx.restore();
       if (view === 'hud' && document.getElementById('bmwhud').checked) drawBmwHud();
       if (document.getElementById('outlines').checked) {
         ctx.font = '11px ui-monospace, Menlo, monospace';
@@ -868,6 +882,7 @@
       const before = scene;
       scene = msg.layers;
       sceneChanges(before, scene).forEach(markDirty);
+      if (JSON.stringify(msg.cutouts || {}) !== JSON.stringify(cutouts)) { cutouts = msg.cutouts || {}; markDirty('*'); }
       if (msg.pixels !== undefined) document.getElementById('pixels').textContent = 'pixels: ' + (msg.pixels / MIB).toFixed(1) + ' of ' + (pixelCap ? (pixelCap / MIB).toFixed(0) + ' MiB' : 'unlimited');
       const keys = new Set(scene.map((layer) => layer.key));
       Array.from(images.keys()).forEach((k) => { if (!keys.has(k)) images.delete(k); });
@@ -950,7 +965,7 @@
     ['wheelHeat', 'Heated steering wheel: SteeringWheelClimate heatingState (Grand National HEAT STR lamp)', [['', 'Wheel heat not sent'], ['on', 'ON'], ['off', 'OFF']]],
     ['hybrid', 'Plug-in hybrid: Efficiencytainment2 statusChargeOfBatteryHybrid (or Vehicle lastStateCallCharging) + KombiIF displayRangeElectricVehicle (Sport battery bar, fuel + electric range; the fuel range is KombiIF range less the electric)', [['', 'Hybrid not sent'], ['none', 'NONE'], ['high', '80% 35 km'], ['low', '8% 3 km'], ['charging', '100% 34 km (charging state)'], ['lsc', '62% 26 km (charging service)'], ['energy', '60% 20 km (energy now / full)'], ['chg', '44% (Charging service)'], ['segment', '33% (drive segment end)'], ['route', '50% (route planner energy)'], ['sme', '71% (battery unit, UDS)'], ['na', '62%, electric range not available (4093)']]],
     ['doors', 'Doors: DoorsWindowsRoofMirrors CentralLockingSystemAndPanelStatus2 (Grand National door lamps)', [['', 'Doors not sent'], ['shut', 'SHUT'], ['fl', 'FL'], ['fr', 'FR'], ['rl', 'RL'], ['rr', 'RR'], ['hood', 'HOOD'], ['trunk', 'TRUNK'], ['all', 'ALL']]],
-    ['checkControl', 'Check Control: KombiIF statusActiveCCMessage (logged only, "check control" in the app log)', [['', 'Check Control not sent'], ['none', 'NO MESSAGE'], ['one', 'MESSAGE 15'], ['two', 'MESSAGE 229']]],
+    ['checkControl', 'Check Control: KombiIF statusMenuCCMessage (the pop-up window, "check control" in the app log)', [['', 'Check Control not sent'], ['none', 'NO MESSAGE'], ['one', 'MESSAGE 15'], ['two', 'MESSAGE 40']]],
     ['selector', 'Selector: P R N (VehicleInformation statusGearboxDrive, manual drive only: the demo drive is always in gear), or D / S / M (the gear slider\'s gear, at least 1; MDrive dataDisplayGearbox for S and M, in demo too)', [['', 'Selector from the gear'], ['P', 'P'], ['R', 'R'], ['N', 'N'], ['D', 'D'], ['S', 'S'], ['M', 'M']]],
   ];
   const csw = document.getElementById('carsw');

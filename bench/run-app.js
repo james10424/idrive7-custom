@@ -775,15 +775,16 @@ const CAR_SW = {
       statusContactBootLid2: "SIGNAL_UNPLAUSIBEL",
     });
   },
-  // the Check Control message the cluster shows (logged only, config.checkControl): none, or one or two made up
+  // the cluster's Check Control message list (config.checkControl): none, or a made-up message (the pop-up window)
   checkControl: (value) => {
-    const id = value === "one" ? 15 : value === "two" ? 229 : 0;
-    stub.feed("de.bmw.infotainment.KombiIF", "statusActiveCCMessage", {
-      numberDisplayControlCheckControlMessage: id,
-      displayControlCheckControlMessage: id ? 1 : 0,
-      numberFrameDisplayControlCheckControlMessage: 0,
-      frameDisplayControlCheckControlMessage: 0,
-      utilityDataDisplayControlCheckControlMessage: 0,
+    const id = value === "one" ? 15 : value === "two" ? 40 : 0;
+    // as the car's cluster: its message list holds a pop-up's number while it shows
+    stub.feed("de.bmw.infotainment.KombiIF", "statusMenuCCMessage", {
+      numberFrameCheckControlMessageScroll: 0,
+      quantityFrameCheckControlMessageScroll: 0,
+      numberCheckControlMessage1: id,
+      numberCheckControlMessage2: 65534,
+      numberCheckControlMessage3: 65534,
     });
   },
 };

@@ -140,6 +140,7 @@ const TZ_MIN_H = -12,
  * @property {?Record<string, ?boolean>} doors open by fl fr rl rr hood trunk (config.lamps), null until the car says
  * @property {string} doorsLine the last doors logged
  * @property {Record<string, string>} [ccmLines] each Check Control field's last value logged
+ * @property {boolean} [ccmOpen] the window for BMW's pop-ups is open (config.checkControlWindow)
  * @property {?number} volt12 V, the 12 V system from the engine unit
  * @property {number} volt12At
  * @property {boolean} needsVolt a shown widget uses volt12 (the engine unit is only asked then)
@@ -301,7 +302,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         // unconfirmed on a car: the raw values are logged on change)
         // the Check Control message the cluster shows now, and its menu list (config.checkControl), logged raw on change
         statusActiveCCMessage: (msg) => this._logCcm("statusActiveCCMessage", msg),
-        statusMenuCCMessage: (msg) => this._logCcm("statusMenuCCMessage", msg),
+        statusMenuCCMessage: (msg) => {
+          this._logCcm("statusMenuCCMessage", msg);
+          this._ccmWindow(msg);
+        },
         displayRangeElectricVehicle: (msg) => {
           const raw = msg && msg.displayRangeElectricVehicle;
           const v = isNum(raw) && raw >= 0 && raw < RANGE_NONE ? raw : null;
@@ -1100,6 +1104,27 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           "route guidance not available: " + ((err && err.message) || err),
         ),
       );
+  },
+
+  /**
+   * The window for BMW's pop-ups (config.checkControlWindow [x, y, w, h], target px): a cut-out through every layer
+   * of the app's target (cluster-render 0.6.3) while the cluster's message list (KombiIF statusMenuCCMessage) holds
+   * a message. On the car a pop-up's number stays in it exactly as long as the pop-up shows (the drive-ready hint,
+   * 40, 10 s, twice, Nov 27 2026); 0 is none, 65534 an empty slot, 65535 not available.
+   * @param {*} msg
+   * @returns {void}
+   */
+  _ccmWindow(msg) {
+    const win = this.config.checkControlWindow;
+    if (!Array.isArray(win) || win.length !== 4 || !this.client) return;
+    const ids = [1, 2, 3]
+      .map((i) => msg && msg["numberCheckControlMessage" + i])
+      .filter((n) => isNum(n) && n > 0 && n < 65534);
+    const open = ids.length > 0;
+    if (open === !!this.ccmOpen) return;
+    this.ccmOpen = open;
+    this.client.cutout(this.target, open ? { x: win[0], y: win[1], w: win[2], h: win[3] } : null);
+    this.log.info("check control window " + (open ? "open (message " + ids.join(", ") + ")" : "closed"));
   },
 
   /**

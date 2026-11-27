@@ -310,6 +310,8 @@ function log(level, text) {
 
 /** @type {Map<string, BenchLayer>} */
 const layers = new Map(); // key "conn:ref" -> layer
+/** @type {Map<string, { x: number, y: number, w: number, h: number, conn: number }>} each target's cut-out (op "cutout", cluster-render 0.6.3): no layer draws inside it */
+const cutouts = new Map();
 let nextConn = 1;
 
 /**
@@ -404,7 +406,7 @@ function sceneChanged() {
   if (sceneTimer) return;
   sceneTimer = setTimeout(() => {
     sceneTimer = null;
-    send({ t: "scene", layers: sceneMeta(), pixels: pixelBytes() });
+    send({ t: "scene", layers: sceneMeta(), pixels: pixelBytes(), cutouts: Object.fromEntries(cutouts) });
   }, SCENE_MS);
 }
 /* Pixels never travel on the event stream: a 'px' notice names a rect of an image layer and the page fetches its
@@ -543,6 +545,9 @@ const renderServer = net.createServer((sock) => {
   sock.on("error", () => {});
   sock.on("close", () => {
     let dropped = 0;
+    cutouts.forEach((c, target) => {
+      if (c.conn === conn) cutouts.delete(target);
+    });
     layers.forEach((layer, k) => {
       if (layer.conn === conn) {
         layers.delete(k);
@@ -1017,6 +1022,17 @@ const renderServer = net.createServer((sock) => {
             (PIXEL_BYTES ? mib(PIXEL_BYTES) : "unlimited"),
         });
         return;
+      case "cutout": {
+        // as cluster-render 0.6.3: a window through every layer of the target; without w and h (or 0) the client's goes
+        const w = Number(msg.w) || 0,
+          h = Number(msg.h) || 0,
+          had = cutouts.get(msg.target);
+        if (w > 0 && h > 0) cutouts.set(msg.target, { x: Number(msg.x) || 0, y: Number(msg.y) || 0, w, h, conn });
+        else if (had && had.conn === conn) cutouts.delete(msg.target);
+        log("info", "renderer: " + session.app + " cut-out on " + msg.target + ": " + (w > 0 && h > 0 ? msg.x + "," + msg.y + " " + w + "x" + h : "off"));
+        sceneChanged();
+        return;
+      }
       default:
         bad('op "' + msg.op + '" not handled by the bench');
     }
