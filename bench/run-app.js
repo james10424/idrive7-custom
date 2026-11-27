@@ -775,24 +775,16 @@ const CAR_SW = {
       statusContactBootLid2: "SIGNAL_UNPLAUSIBEL",
     });
   },
-  // BMW's Check Control list (logged only, config.checkControl): empty, or one or two made-up active messages
+  // the Check Control message the cluster shows (logged only, config.checkControl): none, or one or two made up
   checkControl: (value) => {
-    /** @type {(id: number, s: number) => *} */
-    const ccm = (id, s) => ({
-      ccmId: id,
-      reason: "CCM_SHOWN_BY_IC",
-      requestorDiagAddr: 64,
-      timeStamp_s: s,
-      timeStamp_ms: 0,
-      syncMethod: 0,
-      filterInformation: "D0",
-      activeState: "AKTIV",
+    const id = value === "one" ? 15 : value === "two" ? 229 : 0;
+    stub.feed("de.bmw.infotainment.KombiIF", "statusActiveCCMessage", {
+      numberDisplayControlCheckControlMessage: id,
+      displayControlCheckControlMessage: id ? 1 : 0,
+      numberFrameDisplayControlCheckControlMessage: 0,
+      frameDisplayControlCheckControlMessage: 0,
+      utilityDataDisplayControlCheckControlMessage: 0,
     });
-    stub.feed(
-      "de.bmw.infotainment.checkcontrol.CheckControlMaster",
-      "basicList",
-      value === "one" ? [ccm(15, 1000)] : value === "two" ? [ccm(15, 1000), ccm(229, 1010)] : [],
-    );
   },
 };
 // sent when a switch changes (and once when the app starts), as the car's subscriptions report changes, not on a

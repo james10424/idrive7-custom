@@ -48,8 +48,6 @@ const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the bin
 // KombiIF ranges: 4093..4095 are "not available" codes (a plug-in hybrid sent 4093 for its electric range, shown as
 // "0 + 4093 mi", Nov 27 2026), as DataFrontVehicle's
 const RANGE_NONE = 4093;
-const CCM_POLL_MS = 5000; // Check Control's list re-read (config.checkControl)
-const CCM_PROBE_MS = 20000; // and after this long, whether its service is there and what one read gives
 const HV_SOC_MAX = 100; // a hybrid's battery %: past this, none (255)
 const HV_ENERGY_NONE = 511; // lastStateCallCharging's energy fields: none
 const ROUTE_NOW_NONE = 16777215, // Charging infoChargingERoute5's energy now: none
@@ -141,7 +139,7 @@ const TZ_MIN_H = -12,
  * @property {?number} eRangeRaw its electric range as sent: in the car's distance unit (carUnits.dist), null without one
  * @property {?Record<string, ?boolean>} doors open by fl fr rl rr hood trunk (config.lamps), null until the car says
  * @property {string} doorsLine the last doors logged
- * @property {string} ccmLine the last Check Control list logged
+ * @property {Record<string, string>} [ccmLines] each Check Control field's last value logged
  * @property {?number} volt12 V, the 12 V system from the engine unit
  * @property {number} volt12At
  * @property {boolean} needsVolt a shown widget uses volt12 (the engine unit is only asked then)
@@ -237,7 +235,6 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     /** @type {?Record<string, ?boolean>} */
     this.doors = null; // open (true / false / null unknown) by fl fr rl rr hood trunk, null until the car says
     this.doorsLine = "";
-    this.ccmLine = ""; // the last Check Control list logged (config.checkControl)
     this.volt12 = null;
     this.volt12At = 0; // V, the 12 V system from the engine unit
     this.needsVolt = false; // a shown widget uses volt12 (the engine unit is only asked then)
@@ -302,6 +299,9 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         },
         // a plug-in hybrid's electric range (app.json config.hybrid), in the car's unit (4093..4095 none, as the range;
         // unconfirmed on a car: the raw values are logged on change)
+        // the Check Control message the cluster shows now, and its menu list (config.checkControl), logged raw on change
+        statusActiveCCMessage: (msg) => this._logCcm("statusActiveCCMessage", msg),
+        statusMenuCCMessage: (msg) => this._logCcm("statusMenuCCMessage", msg),
         displayRangeElectricVehicle: (msg) => {
           const raw = msg && msg.displayRangeElectricVehicle;
           const v = isNum(raw) && raw >= 0 && raw < RANGE_NONE ? raw : null;
@@ -656,29 +656,10 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           this.doors = doors;
         },
       },
-      // BMW's Check Control messages (config.checkControl): logged on change only, to learn when its pop-ups show
-      // (each entry's ccmId, reason, active state, filter and time; no app reads them yet)
-      "de.bmw.infotainment.checkcontrol.CheckControlMaster": {
-        // re-read every 5 s too: nothing came on the car with 0.1.72, not even the first read (Nov 27 2026)
-        $pollMs: CCM_POLL_MS,
-        basicList: (msg) => {
-          const list = Array.isArray(msg) ? msg : msg && Array.isArray(msg.basicList) ? msg.basicList : null;
-          const line = list
-            ? JSON.stringify(
-                list.map((/** @type {*} */ m) => [
-                  m && m.ccmId,
-                  m && m.reason,
-                  m && m.activeState,
-                  m && m.filterInformation,
-                  m && m.requestorDiagAddr,
-                  m && m.timeStamp_s,
-                ]),
-              )
-            : "raw " + JSON.stringify(msg);
-          if (line !== this.ccmLine)
-            this.log.info("check control " + (list ? list.length + " [id, reason, state, filter, ecu, s]: " : "") + line);
-          this.ccmLine = line;
-        },
+      // the Check Control message the cluster gets (config.checkControl; CheckControlMaster isn't offered on the car,
+      // "Service unavailable", Nov 27 2026): logged raw on change, to learn when its pop-ups show
+      "de.bmw.infotainment.KombiInterface_2": {
+        newCCMessage: (msg) => this._logCcm("newCCMessage", msg),
       },
       // Auto Hold (the same lamp, green): statusAutoH 2 = on and holding the car, 1 = on, 0 = off
       "de.bmw.chassis.VehicleStabilizationManagement": {
@@ -780,8 +761,11 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       delete extra["de.bmw.infotainment.KombiIF"].displayRangeElectricVehicle;
       delete extra["de.bmw.infotainment.vehicle.Vehicle"].lastStateCallCharging;
     }
-    if (this.config.checkControl !== true)
-      delete extra["de.bmw.infotainment.checkcontrol.CheckControlMaster"];
+    if (this.config.checkControl !== true) {
+      delete extra["de.bmw.infotainment.KombiInterface_2"];
+      delete extra["de.bmw.infotainment.KombiIF"].statusActiveCCMessage;
+      delete extra["de.bmw.infotainment.KombiIF"].statusMenuCCMessage;
+    }
     if (!this._modesOn() && this.config.lamps !== true)
       delete extra["de.bmw.infotainment.displaydataserver.DisplayDataServer"];
     if (this.config.lamps !== true) {
@@ -823,7 +807,6 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     this._freshData = () => {
       snapshot = null;
     };
-    if (this.config.checkControl === true) setTimeout(() => this._probeCheckControl(), CCM_PROBE_MS);
     this.car.setRedline(this.setting("redline"));
     this.score = new ShiftScore(
       this.car,
@@ -1120,27 +1103,17 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
-   * Check Control's service, CCM_PROBE_MS after start (config.checkControl): logs whether the car offers it and what
-   * one read of its list gives, the error included (the kit's own first read drops errors). 0.1.72 logged nothing.
+   * One Check Control field's value (config.checkControl), logged when it changes: "check control <field>: <raw>".
+   * @param {string} field
+   * @param {*} msg
    * @returns {void}
    */
-  _probeCheckControl() {
-    const iface = "de.bmw.infotainment.checkcontrol.CheckControlMaster";
-    /** @type {*} */
-    const car = this.car;
-    const sub = car && Array.isArray(car.subs) ? car.subs.find((/** @type {*} */ s) => s && s.iface === iface) : null;
-    if (!sub) {
-      this.log.info("check control probe: no subscription");
-      return;
-    }
-    this.log.info(
-      "check control probe: " + (sub.error ? "error " + sub.error : "service " + (sub.available ? "available" : "not available")),
-    );
-    if (!sub.proxy) return;
-    Promise.resolve()
-      .then(() => sub.proxy.getValue("basicList", 3000))
-      .then((/** @type {*} */ v) => this.log.info("check control probe: read " + JSON.stringify(v)))
-      .catch((/** @type {*} */ err) => this.log.info("check control probe: read failed: " + ((err && err.message) || err)));
+  _logCcm(field, msg) {
+    const line = JSON.stringify(msg);
+    if (!this.ccmLines) this.ccmLines = {};
+    if (this.ccmLines[field] === line) return;
+    this.ccmLines[field] = line;
+    this.log.info("check control " + field + ": " + line);
   },
 
   /**

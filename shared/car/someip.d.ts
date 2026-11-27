@@ -226,28 +226,6 @@ export namespace de.bmw.environmentalmodel.common.Common {
   type CommonEventDataQualifier = "EVENT_DATA_AVAILABLE" | "EVENT_DATA_AVAILABLE_REDUCED" | "EVENT_DATA_NOT_AVAILABLE" | "EVENT_DATA_INVALID_OR_TIMEOUT" | number;
 }
 
-export namespace de.bmw.infotainment.checkcontroltypes.CheckControlTypes {
-  /** AKTIV 0, INAKTIV 1 */
-  type ActiveState = "AKTIV" | "INAKTIV" | number;
-
-  interface BasicCCMInfo {
-    ccmId?: number;
-    reason?: de.bmw.infotainment.checkcontroltypes.CheckControlTypes.Reason;
-    requestorDiagAddr?: number;
-    timeStamp_s?: number;
-    timeStamp_ms?: number;
-    syncMethod?: number;
-    filterInformation?: de.bmw.infotainment.checkcontroltypes.CheckControlTypes.FilterInformation;
-    activeState?: de.bmw.infotainment.checkcontroltypes.CheckControlTypes.ActiveState;
-  }
-
-  /** D0 0, D1 1 */
-  type FilterInformation = "D0" | "D1" | number;
-
-  /** DTC_MESSAGE 0, DTC_MAX_AMOUNT_REACHED 1, CCM_REQUESTED_BY_ECU 2, CCM_SHOWN_BY_IC 3, CC_MESSAGE 255 */
-  type Reason = "DTC_MESSAGE" | "DTC_MAX_AMOUNT_REACHED" | "CCM_REQUESTED_BY_ECU" | "CCM_SHOWN_BY_IC" | "CC_MESSAGE" | number;
-}
-
 export namespace de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes {
   interface ACC {
     symbolACC?: de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes.AccSymHUD;
@@ -1040,12 +1018,82 @@ export namespace de.bmw.infotainment.vehicletypes.VehicleTypes {
 }
 
 export namespace de.bmw.infotainmenttypes.InfotainmentTypes {
+  interface ActiveCCMessageWrapper {
+    numberDisplayControlCheckControlMessage?: number;
+    displayControlCheckControlMessage?: number;
+    numberFrameDisplayControlCheckControlMessage?: number;
+    frameDisplayControlCheckControlMessage?: number;
+    utilityDataDisplayControlCheckControlMessage?: number;
+  }
+
+  /** S0 0, S1 1, S2 2, S3 3, S4 4, S5 5 */
+  type BMWServiceEnum = "S0" | "S1" | "S2" | "S3" | "S4" | "S5" | number;
+
+  /** DEFAULT 0, RED 1, YELLOW 2, GREEN 3, ORANGE 4, WHITE 5 */
+  type CCColorEnum = "DEFAULT" | "RED" | "YELLOW" | "GREEN" | "ORANGE" | "WHITE" | number;
+
+  /** BUTTON_NOT_AVAILABLE 0, BUTTON_AVAILABLE 1 */
+  type CCCoordinationButtonEnum = "BUTTON_NOT_AVAILABLE" | "BUTTON_AVAILABLE" | number;
+
+  type CCHighlightPositionTypedef = number;
+
+  /** INDENT_LEVEL_0 0, INDENT_LEVEL_1 1 */
+  type CCListIndentationEnum = "INDENT_LEVEL_0" | "INDENT_LEVEL_1" | number;
+
+  interface CCMessageStruct {
+    cCTextType?: de.bmw.infotainmenttypes.InfotainmentTypes.CCTextTypeEnum;
+    cCName?: string;
+    bMWService?: de.bmw.infotainmenttypes.InfotainmentTypes.BMWServiceEnum;
+    cCType?: de.bmw.infotainmenttypes.InfotainmentTypes.CCTypeEnum;
+    cCCoordinationButton?: de.bmw.infotainmenttypes.InfotainmentTypes.CCCoordinationButtonEnum;
+    cCIdentifier?: number;
+    additionalDescription?: string;
+    cCColor?: de.bmw.infotainmenttypes.InfotainmentTypes.CCColorEnum;
+    cCSymbolID?: number;
+    cCHighlightPosition?: de.bmw.infotainmenttypes.InfotainmentTypes.CCHighlightPositionTypedef;
+    cCIndentation?: de.bmw.infotainmenttypes.InfotainmentTypes.CCListIndentationEnum;
+  }
+
+  /** a union: one of these members */
+  interface CCMessageUnion {
+    cCMessageStruct?: de.bmw.infotainmenttypes.InfotainmentTypes.CCMessageStruct;
+    cCMessageWithSymbol?: de.bmw.infotainmenttypes.InfotainmentTypes.CCMessageWithSymbolStruct;
+  }
+
+  interface CCMessageWithSymbolStruct {
+    cCMessage?: de.bmw.infotainmenttypes.InfotainmentTypes.CCMessageStruct;
+    cCSymbol?: de.bmw.infotainmenttypes.InfotainmentTypes.KISymbolStruct;
+  }
+
+  /** DEFAULT 0, CC_NAME 1, ADDITIONAL_CC_DESCRIPTION 2, CC_NAME_AND_ADDITONAL_CC_DESCRIPTION 3 */
+  type CCTextTypeEnum = "DEFAULT" | "CC_NAME" | "ADDITIONAL_CC_DESCRIPTION" | "CC_NAME_AND_ADDITONAL_CC_DESCRIPTION" | number;
+
+  /** TYP_A 0, TYP_B 1, TYP_C 2, TYP_D 3, TYP_E 4 */
+  type CCTypeEnum = "TYP_A" | "TYP_B" | "TYP_C" | "TYP_D" | "TYP_E" | number;
+
   /** MONTAG 1, DIENSTAG 2, MITTWOCH 3, DONNERSTAG 4, FREITAG 5, SAMSTAG 6, SONNTAG 7, SIGNAL_UNGUELTIG 15 */
   type DisplayDateWeekDay = "MONTAG" | "DIENSTAG" | "MITTWOCH" | "DONNERSTAG" | "FREITAG" | "SAMSTAG" | "SONNTAG" | "SIGNAL_UNGUELTIG" | number;
 
   interface DisplayRangeElectricVehicleWrapper {
     displayRangeElectricVehicle?: number;
     displayRangeMaximum?: number;
+  }
+
+  /** PNG 0, JPEG 1, RLE24 2, RLE32 3 */
+  type KISymbolFormatEnum = "PNG" | "JPEG" | "RLE24" | "RLE32" | number;
+
+  interface KISymbolStruct {
+    symbolID?: number;
+    symbolFormat?: de.bmw.infotainmenttypes.InfotainmentTypes.KISymbolFormatEnum;
+    symbolData?: number;
+  }
+
+  interface MenuCCMessageWrapper {
+    numberFrameCheckControlMessageScroll?: number;
+    quantityFrameCheckControlMessageScroll?: number;
+    numberCheckControlMessage1?: number;
+    numberCheckControlMessage2?: number;
+    numberCheckControlMessage3?: number;
   }
 
   interface RangeTankStatusWrapper {
@@ -1179,11 +1227,13 @@ export interface Fields {
   };
   "de.bmw.infotainment.KombiIF": {
     displayRangeElectricVehicle: de.bmw.infotainmenttypes.InfotainmentTypes.DisplayRangeElectricVehicleWrapper;
+    statusActiveCCMessage: de.bmw.infotainmenttypes.InfotainmentTypes.ActiveCCMessageWrapper;
+    statusMenuCCMessage: de.bmw.infotainmenttypes.InfotainmentTypes.MenuCCMessageWrapper;
     statusRangeTankStatus: de.bmw.infotainmenttypes.InfotainmentTypes.RangeTankStatusWrapper;
     statusShowTimeDate: de.bmw.infotainmenttypes.InfotainmentTypes.ShowTimeDateWrapper;
   };
-  "de.bmw.infotainment.checkcontrol.CheckControlMaster": {
-    basicList: de.bmw.infotainment.checkcontroltypes.CheckControlTypes.BasicCCMInfo;
+  "de.bmw.infotainment.KombiInterface_2": {
+    newCCMessage: de.bmw.infotainmenttypes.InfotainmentTypes.CCMessageUnion;
   };
   "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
     functionalLibraryData: de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes.FunctionalLibraryData;
