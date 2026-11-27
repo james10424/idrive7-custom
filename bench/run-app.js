@@ -717,11 +717,12 @@ const CAR_SW = {
   // a plug-in hybrid's battery (%, 255 none) and electric range (the car's distance unit, km here; 4095 none), as the
   // catalog gives them; "charging": the battery only from Vehicle lastStateCallCharging, as a US car sent it
   // "lsc": only from the charging service (LSCDataSink); "energy": only lastStateCallCharging's energy now / full
-  // "sme": only from the battery unit over UDS (71.2 %)
+  // "sme": only from the battery unit over UDS (71.2 %); "na": 62 % with the electric range "not available" (4093,
+  // as a US plug-in hybrid sent it, Nov 27 2026)
   hybrid: (value) => {
     smeOn = value === "sme"; // only the battery unit's own reading (UDS), every message empty
-    const soc = value === "high" ? 80 : value === "low" ? 8 : 255,
-      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : value === "lsc" ? 26 : value === "energy" ? 20 : value === "chg" ? 15 : value === "segment" ? 11 : value === "route" ? 17 : value === "sme" ? 30 : 4095;
+    const soc = value === "high" ? 80 : value === "low" ? 8 : value === "na" ? 62 : 255,
+      range = value === "high" ? 35 : value === "low" ? 3 : value === "charging" ? 34 : value === "lsc" ? 26 : value === "energy" ? 20 : value === "chg" ? 15 : value === "segment" ? 11 : value === "route" ? 17 : value === "sme" ? 30 : value === "na" ? 4093 : 4095;
     stub.feed("de.bmw.infotainment.drivingexcitement.Efficiencytainment2", "statusChargeOfBatteryHybrid", {
       displayChargingConditionHighVoltageStorage: soc,
     });

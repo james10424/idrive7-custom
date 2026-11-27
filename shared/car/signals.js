@@ -45,7 +45,9 @@ const BYTE_NONE = 255; // a byte signal's "none" (fuel, outside temperature, bat
 const SLOPE_LEVEL = 1280; // LaneSlope: the gradient count when level (car/signals.js _onSlope)
 const SLOPE_PCT = 0.1; // and its grade a count, %
 const SLOPE_VALID_WIRE = 2; // its qualifier's "valid" as a wire number (the binding may hand enums over as numbers)
-const RANGE_NONE = 4095; // KombiIF range: none
+// KombiIF ranges: 4093..4095 are "not available" codes (a plug-in hybrid sent 4093 for its electric range, shown as
+// "0 + 4093 mi", Nov 27 2026), as DataFrontVehicle's
+const RANGE_NONE = 4093;
 const HV_SOC_MAX = 100; // a hybrid's battery %: past this, none (255)
 const HV_ENERGY_NONE = 511; // lastStateCallCharging's energy fields: none
 const ROUTE_NOW_NONE = 16777215, // Charging infoChargingERoute5's energy now: none
@@ -272,7 +274,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   _setupVehicleData() {
     /** @type {Signals} */
     const extra = {
-      // fuel and range (cauliflowermossgrape's live_data, MIT): litres (255 = none) and km (4095 = none)
+      // fuel and range (cauliflowermossgrape's live_data, MIT): litres (255 = none) and km (4093..4095 none)
       "de.bmw.infotainment.KombiIF": {
         // the local time the cluster shows: its offset from UTC is the car's time zone (the app's own clock is UTC
         // on the car, so new Date() read 5 h ahead in Toronto, Nov 2026); follows summer time and the car's setting
@@ -294,7 +296,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             this.odoAcc = 0;
           }
         },
-        // a plug-in hybrid's electric range (app.json config.hybrid), taken as km (4095 = none, as the fuel range;
+        // a plug-in hybrid's electric range (app.json config.hybrid), in the car's unit (4093..4095 none, as the range;
         // unconfirmed on a car: the raw values are logged on change)
         displayRangeElectricVehicle: (msg) => {
           const raw = msg && msg.displayRangeElectricVehicle;
