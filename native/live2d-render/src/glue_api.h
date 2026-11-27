@@ -72,6 +72,9 @@ int l2d_set_wind_params(l2d_model *m, int group, const char *csv);
 /* Optional too: group g's ripple, a wave from each chain's root to its tip on top of the wind; amount of each
  * parameter's half range at the tip (0 .. 1, 0 none), hz its frequency. */
 void l2d_set_wind_ripple(l2d_model *m, int group, float amount, float hz);
+/* Optional too: how much of the wind (push and ripple) the comma-separated parameters take, 0 .. 1 (1 at first);
+ * returns how many of the ids the model has. */
+int l2d_set_wind_weight(l2d_model *m, const char *csv, float weight);
 
 #ifdef __cplusplus
 }

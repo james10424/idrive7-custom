@@ -100,10 +100,10 @@ const JOLT_ATTACK_MS = 40;
 const JOLT_RELEASE_MS = 180;
 // Wind on her hair and ribbons (live2d-render 0.1.11's "wind": Cubism's physics wind, gravity 1 down): air from the
 // front, which a flat model can't push back, so a flutter (quick left-right gusts around nothing, three mixed waves)
-// and a little lift. None under WIND_START_KMH, all of it at WIND_FULL_KMH (the square root between, so town has a
-// breeze); the flutter quickens from WIND_HZ[0] to WIND_HZ[1] with it, and slow gusts swell it (WIND_GUST_HZ).
+// and a little lift. None under WIND_START_KMH, all of it at WIND_FULL_KMH (eased in and out between: little in town);
+// the flutter quickens from WIND_HZ[0] to WIND_HZ[1] with it, and slow gusts swell it (WIND_GUST_HZ).
 // Sent when it moves WIND_SEND or more
-const WIND_START_KMH = 5;
+const WIND_START_KMH = 10;
 const WIND_FULL_KMH = 120;
 const WIND_FLUTTER = 0.6;
 const WIND_LIFT = 0.2;
@@ -358,7 +358,9 @@ function drive(hud, state, now) {
     rising = Math.abs(joltTo) > Math.abs(jolt) || Math.sign(joltTo) * Math.sign(jolt) < 0;
   state.jolt = jolt + (joltTo - jolt) * (1 - Math.exp(-dt / (rising ? JOLT_ATTACK_MS : JOLT_RELEASE_MS)));
   // the wind from the front: a flutter quickening and a lift growing with speed, swelled by slow gusts
-  const windK = isNum(latKmh) ? Math.sqrt(Math.max(0, Math.min(1, (latKmh - WIND_START_KMH) / (WIND_FULL_KMH - WIND_START_KMH)))) : 0;
+  // eased in and out (smoothstep): a breath of it just past WIND_START_KMH, steepest midway, settling into all of it
+  const windU = isNum(latKmh) ? Math.max(0, Math.min(1, (latKmh - WIND_START_KMH) / (WIND_FULL_KMH - WIND_START_KMH))) : 0,
+    windK = windU * windU * (3 - 2 * windU);
   if (!state.windPh) state.windPh = WIND_MIX.map(() => Math.random() * 2 * Math.PI);
   if (!state.gustPh) state.gustPh = WIND_GUST_HZ.map(() => Math.random() * 2 * Math.PI);
   const hz = WIND_HZ[0] + (WIND_HZ[1] - WIND_HZ[0]) * windK,
@@ -609,6 +611,12 @@ module.exports = {
         const msg = { t: "wind", g, x: r3(x), y: r3(w.y), ripple: r3(w.ripple), hz: r3(w.hz) };
         if (!state.windParamsSent && Array.isArray(grp.params)) msg.params = grp.params.join(",");
         live.send(msg);
+        // once per open, after the first group: the pose file's parameters that take less of the wind (her back bow)
+        if (!state.windParamsSent && g === 0 && state.config && Array.isArray(state.config.windWeights))
+          state.config.windWeights.forEach((/** @type {*} */ ww) => {
+            if (Array.isArray(ww.params) && isNum(ww.weight))
+              live.send({ t: "wind", g, x: r3(x), y: r3(w.y), ripple: r3(w.ripple), hz: r3(w.hz), weighted: ww.params.join(","), weight: ww.weight });
+          });
       });
       state.windParamsSent = true;
     }

@@ -158,6 +158,7 @@ struct l2d_model : public CubismUserModel {
     double rippleT = 0;
     WindGroup wind[L2D_WIND_GROUPS];
     std::vector<float> calm, windy;
+    std::vector<float> windWeight;   /* l2d_set_wind_weight: how much of the wind each parameter takes (1 all) */
     int blendFrames = 0;
 
     ~l2d_model()
@@ -404,6 +405,28 @@ void l2d_set_wind_ripple(l2d_model *m, int g, float amount, float hz)
     m->wind[g].hz = hz < 0 ? 0 : hz > 8 ? 8 : hz;
 }
 
+/* How much of the wind (its push and ripple) the comma-separated parameters take: 0 none (the calm physics'), 1 all
+ * (every parameter's at first); kept for the model. Returns how many of the ids the model has. Optional for
+ * live2d-render. */
+int l2d_set_wind_weight(l2d_model *m, const char *csv, float weight)
+{
+    const int n = m->GetModel()->GetParameterCount();
+    if ((int)m->windWeight.size() != n) m->windWeight.assign(n, 1.0f);
+    const float k = weight < 0 ? 0 : weight > 1 ? 1 : weight;
+    int found = 0;
+    const std::string list = csv ? csv : "";
+    size_t at = 0;
+    while (at <= list.size()) {
+        size_t comma = list.find(',', at);
+        if (comma == std::string::npos) comma = list.size();
+        const std::string id = list.substr(at, comma - at);
+        for (int i = 0; i < n && !id.empty(); i++)
+            if (m->ids[i] == id) { m->windWeight[i] = k; found++; break; }
+        at = comma + 1;
+    }
+    return found;
+}
+
 /* Group g's parameters, comma-separated ids of physics outputs: they take that group's windy physics' values, every
  * other parameter the calm physics'. "" empties the group (no copy run). Returns how many of the ids the model has.
  * Optional for live2d-render. */
@@ -485,7 +508,10 @@ void l2d_update(l2d_model *m, const float *values, const int *part_index, const 
                 if (!w.physics) continue;
                 w.physics->Evaluate(model, dt);
                 for (int i = 0; i < pc; i++)
-                    if (w.mask[i]) m->windy[i] = model->GetParameterValue(i);
+                    if (w.mask[i]) {
+                        const float k = i < (int)m->windWeight.size() ? m->windWeight[i] : 1.0f;
+                        m->windy[i] = m->calm[i] + k * (model->GetParameterValue(i) - m->calm[i]);
+                    }
             }
             /* the ripple: per chain, a wave with a half wavelength along it (RIPPLE_LAG), plus a faster, smaller
              * one, so a tail curls and its tip whips rather than the whole of it leaning */
@@ -501,7 +527,8 @@ void l2d_update(l2d_model *m, const float *values, const int *part_index, const 
                     const float wave = (float)(sin(ph - at * RIPPLE_LAG + p0) +
                                                0.4 * sin(1.87 * ph - at * RIPPLE_LAG * 1.6f + 2 * p0));
                     const float lo = model->GetParameterMinimumValue(i), hi = model->GetParameterMaximumValue(i);
-                    float v = m->windy[i] + w.ripple * (0.5f + 0.5f * at) * wave / 1.4f * (hi - lo) / 2;
+                    const float k = i < (int)m->windWeight.size() ? m->windWeight[i] : 1.0f;
+                    float v = m->windy[i] + k * w.ripple * (0.5f + 0.5f * at) * wave / 1.4f * (hi - lo) / 2;
                     m->windy[i] = v < lo ? lo : v > hi ? hi : v;
                 }
             }

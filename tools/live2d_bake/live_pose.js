@@ -43,6 +43,8 @@ const out = round({
   // the wind groups (live2d-render's "wind" g and params): each { side, params }, her hair, ribbons and lace on one
   // side (physics outputs; side -1 the HUD's left, 1 its right), kept as the config names them
   wind: cfg.wind || [],
+  // parameters taking less of the wind (live2d-render 0.1.13's "weighted" and "weight"): each { weight, params }
+  windWeights: cfg.windWeights || [],
   close: {
     centre: close.centre,
     height: close.height,
