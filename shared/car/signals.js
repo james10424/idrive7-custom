@@ -139,6 +139,7 @@ const TZ_MIN_H = -12,
  * @property {?number} eRangeRaw its electric range as sent: in the car's distance unit (carUnits.dist), null without one
  * @property {?Record<string, ?boolean>} doors open by fl fr rl rr hood trunk (config.lamps), null until the car says
  * @property {string} doorsLine the last doors logged
+ * @property {string} ccmLine the last Check Control list logged
  * @property {?number} volt12 V, the 12 V system from the engine unit
  * @property {number} volt12At
  * @property {boolean} needsVolt a shown widget uses volt12 (the engine unit is only asked then)
@@ -234,6 +235,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
     /** @type {?Record<string, ?boolean>} */
     this.doors = null; // open (true / false / null unknown) by fl fr rl rr hood trunk, null until the car says
     this.doorsLine = "";
+    this.ccmLine = ""; // the last Check Control list logged (config.checkControl)
     this.volt12 = null;
     this.volt12At = 0; // V, the 12 V system from the engine unit
     this.needsVolt = false; // a shown widget uses volt12 (the engine unit is only asked then)
@@ -652,6 +654,28 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
           this.doors = doors;
         },
       },
+      // BMW's Check Control messages (config.checkControl): logged on change only, to learn when its pop-ups show
+      // (each entry's ccmId, reason, active state, filter and time; no app reads them yet)
+      "de.bmw.infotainment.checkcontrol.CheckControlMaster": {
+        basicList: (msg) => {
+          const list = Array.isArray(msg) ? msg : msg && Array.isArray(msg.basicList) ? msg.basicList : null;
+          const line = list
+            ? JSON.stringify(
+                list.map((/** @type {*} */ m) => [
+                  m && m.ccmId,
+                  m && m.reason,
+                  m && m.activeState,
+                  m && m.filterInformation,
+                  m && m.requestorDiagAddr,
+                  m && m.timeStamp_s,
+                ]),
+              )
+            : "raw " + JSON.stringify(msg);
+          if (line !== this.ccmLine)
+            this.log.info("check control " + (list ? list.length + " [id, reason, state, filter, ecu, s]: " : "") + line);
+          this.ccmLine = line;
+        },
+      },
       // Auto Hold (the same lamp, green): statusAutoH 2 = on and holding the car, 1 = on, 0 = off
       "de.bmw.chassis.VehicleStabilizationManagement": {
         StandStillFunction: (msg) => {
@@ -752,6 +776,8 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
       delete extra["de.bmw.infotainment.KombiIF"].displayRangeElectricVehicle;
       delete extra["de.bmw.infotainment.vehicle.Vehicle"].lastStateCallCharging;
     }
+    if (this.config.checkControl !== true)
+      delete extra["de.bmw.infotainment.checkcontrol.CheckControlMaster"];
     if (!this._modesOn() && this.config.lamps !== true)
       delete extra["de.bmw.infotainment.displaydataserver.DisplayDataServer"];
     if (this.config.lamps !== true) {

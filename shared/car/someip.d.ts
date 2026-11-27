@@ -226,6 +226,28 @@ export namespace de.bmw.environmentalmodel.common.Common {
   type CommonEventDataQualifier = "EVENT_DATA_AVAILABLE" | "EVENT_DATA_AVAILABLE_REDUCED" | "EVENT_DATA_NOT_AVAILABLE" | "EVENT_DATA_INVALID_OR_TIMEOUT" | number;
 }
 
+export namespace de.bmw.infotainment.checkcontroltypes.CheckControlTypes {
+  /** AKTIV 0, INAKTIV 1 */
+  type ActiveState = "AKTIV" | "INAKTIV" | number;
+
+  interface BasicCCMInfo {
+    ccmId?: number;
+    reason?: de.bmw.infotainment.checkcontroltypes.CheckControlTypes.Reason;
+    requestorDiagAddr?: number;
+    timeStamp_s?: number;
+    timeStamp_ms?: number;
+    syncMethod?: number;
+    filterInformation?: de.bmw.infotainment.checkcontroltypes.CheckControlTypes.FilterInformation;
+    activeState?: de.bmw.infotainment.checkcontroltypes.CheckControlTypes.ActiveState;
+  }
+
+  /** D0 0, D1 1 */
+  type FilterInformation = "D0" | "D1" | number;
+
+  /** DTC_MESSAGE 0, DTC_MAX_AMOUNT_REACHED 1, CCM_REQUESTED_BY_ECU 2, CCM_SHOWN_BY_IC 3, CC_MESSAGE 255 */
+  type Reason = "DTC_MESSAGE" | "DTC_MAX_AMOUNT_REACHED" | "CCM_REQUESTED_BY_ECU" | "CCM_SHOWN_BY_IC" | "CC_MESSAGE" | number;
+}
+
 export namespace de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes {
   interface ACC {
     symbolACC?: de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes.AccSymHUD;
@@ -506,6 +528,80 @@ export namespace de.bmw.infotainment.hmi.hmimediastatetypes.HmiMediaStateTypes {
   type TrackId = number;
 }
 
+export namespace de.bmw.infotainment.lsctypes.LscTypes {
+  interface ActualValuePressureTyreWrapper {
+    ActualValuePressureTyreFLH?: number;
+    ActualValuePressureTyreFRH?: number;
+    ActualValuePressureTyreRLH?: number;
+    ActualValuePressureTyreRRH?: number;
+  }
+
+  /** AKUSTIKOPTIMALES_LADEN_AUTOMATISCH 0, AKUSTIKOPTIMALES_LADEN_NICHT_BEGRENZT 1, AKUSTIKOPTIMALES_LADEN_BEGRENZT 2, SIGNAL_UNBEFUELLT 3 */
+  type AdjustmentIdcc = "AKUSTIKOPTIMALES_LADEN_AUTOMATISCH" | "AKUSTIKOPTIMALES_LADEN_NICHT_BEGRENZT" | "AKUSTIKOPTIMALES_LADEN_BEGRENZT" | "SIGNAL_UNBEFUELLT" | number;
+
+  /** KEIN_LADEN 0, EIN_PHASIG 1, ZWEI_PHASIG 2, DREI_PHASIG 3, RESERVIERT_NICHT_VERFUEGBAR 5, RESERVIERT_FEHLER 6, SIGNAL_UNBEFUELLT 7 */
+  type AmountPhasesCharging = "KEIN_LADEN" | "EIN_PHASIG" | "ZWEI_PHASIG" | "DREI_PHASIG" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
+
+  /** KEIN_TRIGGER 0, LADESTART 1, PROGNOSE_UPDATE 2, LADESTECKER_GESTECKT 3, LADEN_BEENDET 4, LADEN_ABGEBROCHEN_EXTERNER_LADEFEHLER 5, LADEPAUSE 6, UEBERMITTLUNG_SPEZIFISCHE_LADESTATIONSDATEN 7, LADEN_ABGEBROCHEN_INTERNER_LADEFEHLER 9, NEUBERECHNUNG_LADEPLAN 12, RESERVIERT_NICHT_VERFUEGBAR 13, RESERVIERT_FEHLER 14, SIGNAL_UNBEFUELLT 15 */
+  type BasisLastStateCall = "KEIN_TRIGGER" | "LADESTART" | "PROGNOSE_UPDATE" | "LADESTECKER_GESTECKT" | "LADEN_BEENDET" | "LADEN_ABGEBROCHEN_EXTERNER_LADEFEHLER" | "LADEPAUSE" | "UEBERMITTLUNG_SPEZIFISCHE_LADESTATIONSDATEN" | "LADEN_ABGEBROCHEN_INTERNER_LADEFEHLER" | "NEUBERECHNUNG_LADEPLAN" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
+
+  /** KONDUKTIV_LADEN 0, INDUKTIV_LADEN 2, ROBOTER_LADEN 3, RESERVIERT_NICHT_VERFUEGBAR 5, RESERVIERT_FEHLER 6, SIGNAL_UNBEFUELLT 7 */
+  type ChargingContactModus = "KONDUKTIV_LADEN" | "INDUKTIV_LADEN" | "ROBOTER_LADEN" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
+
+  /** KEIN_LADEVERFAHREN 0, AC_LADEN_MIT_TYP_1_STECKER 1, AC_LADEN_MIT_TYP_2_STECKER 2, DC_LADEN_NACH_CHADEMO 3, DC_LADEN_MIT_DC_PINS_TYP_1 4, AC_LADEN_CHINA 5, AC_LADEN_TYP_1_COMBO_DOSE 6, AC_LADEN_TYP_2_COMBO_DOSE 7, DC_LADEN_KERNPINS 8, DC_LADEEN_MIT_DC_PINS_TYP_2 9, DC_LADEN_CHINA 16, RESERVIERT_NICHT_VERFUEGBAR 253, RESERVIERT_FEHLER 254, SIGNAL_UNBEFUELLT 255 */
+  type ChargingMethod = "KEIN_LADEVERFAHREN" | "AC_LADEN_MIT_TYP_1_STECKER" | "AC_LADEN_MIT_TYP_2_STECKER" | "DC_LADEN_NACH_CHADEMO" | "DC_LADEN_MIT_DC_PINS_TYP_1" | "AC_LADEN_CHINA" | "AC_LADEN_TYP_1_COMBO_DOSE" | "AC_LADEN_TYP_2_COMBO_DOSE" | "DC_LADEN_KERNPINS" | "DC_LADEEN_MIT_DC_PINS_TYP_2" | "DC_LADEN_CHINA" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
+
+  /** KEIN_LADEN 0, INITIALISIERUNG 1, LADEN_AKTIV 2, LADEPAUSE 3, LADEN_BEENDET 4, LADEFEHLER 5, RESERVIERT_NICHT_VERFUEGBAR 13, RESERVIERT_FEHLER 14, SIGNAL_UNBEFUELLT 15 */
+  type ChargingStatusLsc = "KEIN_LADEN" | "INITIALISIERUNG" | "LADEN_AKTIV" | "LADEPAUSE" | "LADEN_BEENDET" | "LADEFEHLER" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
+
+  interface DisplayConditionHybridWrapper {
+    displayChargingconditionHighvoltageStorage?: number;
+  }
+
+  interface LastStateCallChargingWrapper {
+    polyTimeValue1?: number;
+    polyTimeValue2?: number;
+    polyTimeValue3?: number;
+    polyTimeValue4?: number;
+    polyTimeValue5?: number;
+    statusChargingFlapLocking?: de.bmw.infotainment.lsctypes.LscTypes.StatusChargingFlapLocking;
+    statusPreConditioningReleaseAct?: de.bmw.infotainment.lsctypes.LscTypes.StatusPreConditioningReleaseAct;
+    temperatureHvb?: number;
+    displayActValueSoc?: number;
+    hvbActValueSoc?: number;
+    polySocValue1?: number;
+    polySocValue2?: number;
+    PolySocValue3?: number;
+    polySocValue4?: number;
+    polySocValue5?: number;
+    batterySize?: number;
+    deltaEngergyTargetSoc?: number;
+    energyContentActValueHvb?: number;
+    energyContentMaxHvb?: number;
+    plugSegmentIdAll?: number;
+    predictionChargingDuration?: number;
+    availRangeTargetSoc?: number;
+    chargingMethod?: de.bmw.infotainment.lsctypes.LscTypes.ChargingMethod;
+    chargingStatusLsc?: de.bmw.infotainment.lsctypes.LscTypes.ChargingStatusLsc;
+    basisLastStateCall?: de.bmw.infotainment.lsctypes.LscTypes.BasisLastStateCall;
+    chargingContactModus?: de.bmw.infotainment.lsctypes.LscTypes.ChargingContactModus;
+    amountPhasesCharging?: de.bmw.infotainment.lsctypes.LscTypes.AmountPhasesCharging;
+    adjustmentIdcc?: de.bmw.infotainment.lsctypes.LscTypes.AdjustmentIdcc;
+    reasonChargingEnd?: de.bmw.infotainment.lsctypes.LscTypes.ReasonChargingEnd;
+    customerAdjustmentCharging?: number;
+    predictedDestinationSoe?: number;
+  }
+
+  /** UNBEKANNT_DIAGNOSE_NICHT_MOEGLICH 0, SOC_ZIEL_ERREICHT 1, LADESTOPP_VOM_KUNDEN_ANGEFORDERT 2, LADESTECKER_ABGEZOGEN 3, NETZAUSFALL 4, FEHLER_IM_LADESYSTEM 5, FEHLER_AUSSERHALB_DES_FAHRZEUGS 6, RESERVIERT_NICHT_VERFUEGBAR 13, RESERVIERT_FEHLER 14, SIGNAL_UNBEFUELLT 15 */
+  type ReasonChargingEnd = "UNBEKANNT_DIAGNOSE_NICHT_MOEGLICH" | "SOC_ZIEL_ERREICHT" | "LADESTOPP_VOM_KUNDEN_ANGEFORDERT" | "LADESTECKER_ABGEZOGEN" | "NETZAUSFALL" | "FEHLER_IM_LADESYSTEM" | "FEHLER_AUSSERHALB_DES_FAHRZEUGS" | "RESERVIERT_NICHT_VERFUEGBAR" | "RESERVIERT_FEHLER" | "SIGNAL_UNBEFUELLT" | number;
+
+  /** LADEKLAPPE_ENTRIEGELT 0, LADEKLAPPE_VERRIEGELT 1, SIGNAL_UNBEFUELLT 3 */
+  type StatusChargingFlapLocking = "LADEKLAPPE_ENTRIEGELT" | "LADEKLAPPE_VERRIEGELT" | "SIGNAL_UNBEFUELLT" | number;
+
+  /** VOKO_NICHT_AKTIV 0, VOKO_AKTIV 1, SIGNAL_UNBEFUELLT 3 */
+  type StatusPreConditioningReleaseAct = "VOKO_NICHT_AKTIV" | "VOKO_AKTIV" | "SIGNAL_UNBEFUELLT" | number;
+}
+
 export namespace de.bmw.infotainment.misctypes.MiscTypes {
   interface DataDisplayGearboxWrapper {
     displayProgramGearbox?: de.bmw.infotainment.misctypes.MiscTypes.DisplayProgramGearbox;
@@ -702,6 +798,95 @@ export namespace de.bmw.infotainment.resetlogictypes.ResetLogicTypes {
   type StatusUnitConsumptionElectric = "DEFAULT" | "KWH" | "MI" | "KM" | "WH" | "KWH_100MI" | "WH_MI" | number;
 }
 
+export namespace de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes {
+  interface BcBeAnalysis {
+    activeTimeSegment?: number;
+    activeTimeTotal?: number;
+    brakeStarsWon?: number;
+    brakeStarsLost?: number;
+    brakeAvg?: number;
+    brakeTime5?: number;
+    acclStarsWon?: number;
+    acclStarsLost?: number;
+    acclAvg?: number;
+    acclTime5?: number;
+    shiftStarsWon?: number;
+    shiftStarsLost?: number;
+    shiftAvg?: number;
+    shiftTime5?: number;
+  }
+
+  /** UNDEFINED 0, NOTFINALIZED 1, PWF 2, REFUEL 3, RECHARGE 4, EXTERNAL 5, DRIVERCHANGED 6, RECHARGEANDREFUEL 7 */
+  type BcBeFinalizationReason = "UNDEFINED" | "NOTFINALIZED" | "PWF" | "REFUEL" | "RECHARGE" | "EXTERNAL" | "DRIVERCHANGED" | "RECHARGEANDREFUEL" | number;
+
+  interface BcBeTime {
+    startLocal?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.TimeSecondsSince2000;
+    endLocal?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.TimeSecondsSince2000;
+    startUtc?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.TimeSecondsSince2000;
+    endUtc?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.TimeSecondsSince2000;
+  }
+
+  /** UNDEFINDED 0, EVENTSTART 1, EVENTFINALIZED 2, INTERVALRUNNING 3, INTERVALFINALIZED 4, GETRUNNING 5, GETFINALIZED 6 */
+  type BcBeTriggerReason = "UNDEFINDED" | "EVENTSTART" | "EVENTFINALIZED" | "INTERVALRUNNING" | "INTERVALFINALIZED" | "GETRUNNING" | "GETFINALIZED" | number;
+
+  interface DriveSegment {
+    bcBeSegmentId?: number;
+    bcBeTriggerReason?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.BcBeTriggerReason;
+    bcBeFinalizationReason?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.BcBeFinalizationReason;
+    bcBePreSegmentImportantTriggerReason?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.BcBeFinalizationReason;
+    bcBeTime?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.BcBeTime;
+    bcBeDurationDrive?: number;
+    bcBeDurationMoving?: number;
+    bcBeTripDistanceKm?: number;
+    bcBeMileageStartKm?: number;
+    bcBeConsFuelVisible?: number;
+    bcBeConsElectricVisible?: number;
+    bcBeConsElectricMaxe?: number;
+    bcBeConsElectricEdrive?: number;
+    bcBeConsElectricAll?: number;
+    bcBeRecuperationAll?: number;
+    bcBeNvConsAll?: number;
+    bcBeCounterMsaTime?: number;
+    bcBeCounterSegelKm?: number;
+    bcBeTripElectricKm?: number;
+    bcBeTripBonusKm?: number;
+    bcBeSpeedAvgDrive?: number;
+    bcBeSpeedAvgMoving?: number;
+    bcBeHvSocStart?: number;
+    bcBeHvSocEnd?: number;
+    bcBeHvEnergyStart?: number;
+    bcBeHvEnergyEnd?: number;
+    bcBeElectricEnergyByVm?: number;
+    bcBeEnergyConsEM?: number;
+    bcBeTankLevelStart?: number;
+    bcBeTankLevelEnd?: number;
+    bcBeTankFuelStart?: number;
+    bcBeTankFuelEnd?: number;
+    bcBeRefuelThreshold?: number;
+    bcBeStyleEcoDistFrac?: number;
+    bcBeStyleComfortDistFrac?: number;
+    bcBeStyleSportDistFrac?: number;
+    bcBeStyleElectricDistFrac?: number;
+    bcBeStyleHvControlDistFrac?: number;
+    bcBeStyleEcoPlusDistFrac?: number;
+    bcBeEmodeMaxDistFrac?: number;
+    bcBeEmodeSaveBatDistFrac?: number;
+    bcBeEdriveTime?: number;
+    bcBeEdriveDist?: number;
+    bcBeVmOnDist?: number;
+    bcBeTempStart?: number;
+    bcBeTempEnd?: number;
+    bcBeAnalysis?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.BcBeAnalysis;
+    bcBeStatusTimeEndUtc?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.StatusUtcDateTime;
+    bcBeStatusTimeStartUtc?: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.StatusUtcDateTime;
+  }
+
+  /** MANUAL 0, DIAGNOSYS 1, GPSLESS4H 2, GPSMORE4H 3, UTCTIME 4, UTCDATE 5, FACTORY 6, UNPLAUSIBLE 8, NOTAVAILABLE 13, ERROR 14, INVALID 15 */
+  type StatusUtcDateTime = "MANUAL" | "DIAGNOSYS" | "GPSLESS4H" | "GPSMORE4H" | "UTCTIME" | "UTCDATE" | "FACTORY" | "UNPLAUSIBLE" | "NOTAVAILABLE" | "ERROR" | "INVALID" | number;
+
+  type TimeSecondsSince2000 = number;
+}
+
 export namespace de.bmw.infotainment.vehicletypes.VehicleTypes {
   interface CarSpeed2Wrapper {
     speedVehicleCentreOfGravity?: number;
@@ -710,6 +895,20 @@ export namespace de.bmw.infotainment.vehicletypes.VehicleTypes {
   interface EngineTemperatureWrapper {
     temperatureEngineDrive?: number;
     temperatureEngineOilDrive?: number;
+  }
+
+  interface InfoChargingERoute3Wrapper {
+    ActAvailSOCFirstFullyChargedCell?: number;
+    ActAvailSOHFirstFullyChargedCell?: number;
+    ActAvailWKFirstFullyChargedCell?: number;
+    ActAvailIndexFirstFullyChargedCell?: number;
+    ActAvailUpperSOCLimitFirstFullyChargedCell?: number;
+    ActAvailLowerSOCLimitFirstFullyChargedCell?: number;
+  }
+
+  interface InfoChargingERoute5Wrapper {
+    EnergyDischargeHighVoltageStoragePresentStandard?: number;
+    EnergyDischargeHighVoltageStorageMaximalStandard?: number;
   }
 
   /** KEINE_SPRACHE 0, DEUTSCH 1, ENGLISCH__UK 2, ENGLISCH__US 3, SPANISCH 4, ITALIENISCH 5, FRANZOESISCH 6, FLAEMISCH 7, NIEDERLAENDISCH 8, ARABISCH 9, CHINESISCH_TRADITIONELL 10, CHINESISCH_SIMPLE 11, KOREANISCH 12, JAPANISCH 13, RUSSISCH 14, FRANZOESISCH__CA 15, SPANISCH__US 16, PORTUGIESISCH 17, POLNISCH 18, GRIECHISCH 19, TUERKISCH 20, UNGARISCH 21, RUMAENISCH 22, SCHWEDISCH 23, PORTUGIESISCH__BR 24, KANTONESISCH_TRADITIONELL 25, KANTONESISCH_SIMPLE 26, SLOWAKISCH 27, TSCHECHISCH 28, SLOWENISCH 29, DAENISCH 30, NORWEGISCH 31, FINNISCH 32, INDONESISCH 33, THAI 34, HEBRAEISCH_IVRIT 35, VIETNAMESISCH 36, UKRAINISCH 37, SIGNAL_UNGUELTIG 255 */
@@ -983,6 +1182,9 @@ export interface Fields {
     statusRangeTankStatus: de.bmw.infotainmenttypes.InfotainmentTypes.RangeTankStatusWrapper;
     statusShowTimeDate: de.bmw.infotainmenttypes.InfotainmentTypes.ShowTimeDateWrapper;
   };
+  "de.bmw.infotainment.checkcontrol.CheckControlMaster": {
+    basicList: de.bmw.infotainment.checkcontroltypes.CheckControlTypes.BasicCCMInfo;
+  };
   "de.bmw.infotainment.displaydataserver.DisplayDataServer": {
     functionalLibraryData: de.bmw.infotainment.displaydataservertypes.DisplayDataServerTypes.FunctionalLibraryData;
   };
@@ -1002,6 +1204,12 @@ export interface Fields {
     trackSelection: de.bmw.infotainment.hmi.hmimediastatetypes.HmiMediaStateTypes.MediaTrackSelection;
     tracks: de.bmw.infotainment.hmi.hmimediastatetypes.HmiMediaStateTypes.MediaTracks;
   };
+  "de.bmw.infotainment.lsc.LSCDataSink": {
+    actualValuePressureTyre: de.bmw.infotainment.lsctypes.LscTypes.ActualValuePressureTyreWrapper;
+    displayConditionHybrid: de.bmw.infotainment.lsctypes.LscTypes.DisplayConditionHybridWrapper;
+    lastStateCallCharging: de.bmw.infotainment.lsctypes.LscTypes.LastStateCallChargingWrapper;
+    range: number;
+  };
   "de.bmw.infotainment.misc.MDrive": {
     dataDisplayGearbox: de.bmw.infotainment.misctypes.MiscTypes.DataDisplayGearboxWrapper;
   };
@@ -1018,6 +1226,9 @@ export interface Fields {
     bcDataAll: de.bmw.infotainment.resetlogictypes.ResetLogicTypes.BCDataAll;
     currentConsumption: de.bmw.infotainment.resetlogictypes.ResetLogicTypes.CurrentConsumptions;
   };
+  "de.bmw.infotainment.telematic.journeyhistory.BcPersonal": {
+    driveSegment: de.bmw.infotainment.telematic.journeyhistorytypes.JourneyHistoryTypes.DriveSegment;
+  };
   "de.bmw.infotainment.vehicle.CDS": {
     statusBattery2: de.bmw.infotainment.vehicletypes.VehicleTypes.StatusBattery2Wrapper;
     statusEngineSpeed2: de.bmw.infotainment.vehicletypes.VehicleTypes.StatusEngineSpeed2Wrapper;
@@ -1028,11 +1239,17 @@ export interface Fields {
     statusLateralAccelerationMassCenter: de.bmw.infotainment.vehicletypes.VehicleTypes.StatusLateralAccelerationMassCenterWrapper;
     statusLongitudinalAccelerationMassCenter: de.bmw.infotainment.vehicletypes.VehicleTypes.StatusLongitudinalAccelerationMassCenterWrapper;
   };
+  "de.bmw.infotainment.vehicle.Charging": {
+    infoChargingERoute3: de.bmw.infotainment.vehicletypes.VehicleTypes.InfoChargingERoute3Wrapper;
+    infoChargingERoute5: de.bmw.infotainment.vehicletypes.VehicleTypes.InfoChargingERoute5Wrapper;
+    lastStateCallCharging: de.bmw.infotainment.lsctypes.LscTypes.LastStateCallChargingWrapper;
+  };
   "de.bmw.infotainment.vehicle.TPMS": {
     statusTyrePressure: de.bmw.infotainment.vehicletypes.VehicleTypes.TyrePressureWrapper;
     statusTyreTemperature: de.bmw.infotainment.vehicletypes.VehicleTypes.TyreTemperatureWrapper;
   };
   "de.bmw.infotainment.vehicle.Vehicle": {
+    lastStateCallCharging: de.bmw.infotainment.lsctypes.LscTypes.LastStateCallChargingWrapper;
     statusNewCurrentUnitsStatusExt: de.bmw.infotainment.vehicletypes.VehicleTypes.NewCurrentUnitsStatusExtWrapper;
   };
   "de.bmw.infotainment.vehicle.Vehicle2": {
