@@ -122,11 +122,13 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
    * Whether a kind of unit shows in US units: its setting (speedUnits, tempUnits, pressUnits, fuelUnits) "us" or
    * "metric", or "auto": the car's own display unit (Vehicle statusNewCurrentUnitsStatusExt), until the car says the
    * "units" setting's. An app without these settings (Custom HUD) follows "units".
-   * speed: mph and mi (speed, range, odometer, the car ahead); temp: F; press: psi (boost, tyres); fuel: gal, mpg.
+   * speed: mph and mi (speed, range, odometer, the car ahead); temp: F; press: psi (boost, tyres); fuel: gal, mpg
+   * (fuel: _fuelMode "us"; "uk" is litres with mpg UK).
    * @param {string} kind speed, temp, press or fuel
    * @returns {boolean}
    */
   _us(kind) {
+    if (kind === "fuel") return this._fuelMode() === "us";
     const value = this.setting(kind + "Units");
     if (value === "us" || value === "metric") return value === "us";
     if (value === "auto") {
@@ -139,11 +141,29 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
   },
 
   /**
+   * The fuel units: "us" (gal, mpg US), "uk" (L, mpg UK) or "metric" (L, l/100km). The fuelUnits setting, or on
+   * "auto" the car's own (Vehicle statusNewCurrentUnitsStatusExt: UK gallons is "uk", the litres and mpg UK
+   * drivers there read; US gallons "us"; litres "metric"), until the car says the "units" setting's.
+   * @returns {string}
+   */
+  _fuelMode() {
+    const value = this.setting("fuelUnits");
+    if (value === "us" || value === "uk" || value === "metric") return value;
+    const car = value === "auto" && this.carUnits ? this.carUnits.fuel : null;
+    if (car) return car === "GALONEN__UK" ? "uk" : car.indexOf("GALONEN") === 0 ? "us" : "metric";
+    return this.setting("units") === "us" ? "us" : "metric";
+  },
+
+  /**
    * The units and tank as one string, to tell when the labels painted once need painting again.
    * @returns {string}
    */
   _unitsSig() {
-    return UNIT_KINDS.map((kind) => (this._us(kind) ? "us" : "si")).join(",") + "," + this._tankL();
+    return (
+      UNIT_KINDS.map((kind) => (kind === "fuel" ? this._fuelMode() : this._us(kind) ? "us" : "si")).join(",") +
+      "," +
+      this._tankL()
+    );
   },
 
   /**
@@ -544,11 +564,7 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
         this.consBc * (isNum(consCfg.factor) ? consCfg.factor : DEFAULT_CONS_FACTOR) +
         (isNum(consCfg.offset) ? consCfg.offset : 0);
     } else
-      return this.car.data().demo
-        ? this._us("fuel")
-          ? MPG_US_L100 / DEMO_L100
-          : DEMO_L100
-        : null;
+      return this.car.data().demo ? this._consFrom(DEMO_L100) : null;
     // the car sends it in its own unit: to l/100km, then to the units setting's (mpg US or l/100km)
     const unit =
       isNum(this.consUnit) && this.consUnit > 0
@@ -564,15 +580,25 @@ module.exports = /** @satisfies {ThisType<import("../engine/app").App>} */ ({
             ? 100 / avg
             : avg;
     if (!isNum(l100)) return null;
-    return this._us("fuel") ? MPG_US_L100 / l100 : l100;
+    return this._consFrom(l100);
   },
 
   /**
-   * The consumption's unit label, by the fuel units: mpg (US) or l/100km.
+   * A consumption in l/100km in the fuel units' (_fuelMode): mpg US, mpg UK or l/100km.
+   * @param {number} l100
+   * @returns {number}
+   */
+  _consFrom(l100) {
+    const mode = this._fuelMode();
+    return mode === "us" ? MPG_US_L100 / l100 : mode === "uk" ? MPG_UK_L100 / l100 : l100;
+  },
+
+  /**
+   * The consumption's unit label, by the fuel units: mpg (US or UK) or l/100km.
    * @returns {string}
    */
   _consUnit() {
-    return this._us("fuel") ? "mpg" : "l/100km";
+    return this._fuelMode() === "metric" ? "l/100km" : "mpg";
   },
 
   /**
